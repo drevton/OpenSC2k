@@ -1,0 +1,40 @@
+{
+  "kind": 214,
+  "source_selection": {
+    "kind": 214,
+    "name": "School",
+    "review": "assets/landscape/building-studies/approval-batch-213-216/214-school/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-213-216/214-school/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-213-216/214-school/registered-cutout-source.png",
+    "review_sha256": "c208680f107d0040b5d09255da9178f8cd5ae7f39c27144df41c4aa834e98e8b"
+  },
+  "installed_view_sha256": "0b1f87b8ed76837296e5ee66d999c175515ff5bcd8fa8885f50eb733469ed623",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-213-216/214-school/registered-full-plot-calibration.png",
+      "installed": "assets/landscape/civic/214-school/approved-original.png",
+      "sha256": "8c745c530d061afe040f9e0c198c1e9949fac1488c67bdbec6a660132db751f6"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-213-216/214-school/registered-cutout-source.png",
+      "installed": "assets/landscape/civic/214-school/approved-foreground.png",
+      "sha256": "0593eef0f4d47a118cbafa4a90f6c1fe2f495a8820d6fb76e119ae01120cd8c8"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-213-216/214-school/native-foundation-mask.png",
+      "installed": "assets/landscape/civic/214-school/approved-foundation-mask.png",
+      "sha256": "43284b370c3cb125f8a7e52ae2a9a8ee00369f488551b62ead439965678fbf8e"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-213-216/214-school/view-0.png",
+      "installed": "assets/landscape/civic/214-school/approved-view.png",
+      "sha256": "0b1f87b8ed76837296e5ee66d999c175515ff5bcd8fa8885f50eb733469ed623"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-213-216/214-school/ground-0.png",
+      "installed": "assets/landscape/civic/214-school/approved-ground.png",
+      "sha256": "cd3d1f52f25485e836f54964ceb3caa9e549228c229f3395c7d7b0412bfc20d8"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

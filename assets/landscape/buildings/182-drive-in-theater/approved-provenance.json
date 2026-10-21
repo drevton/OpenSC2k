@@ -1,0 +1,43 @@
+{
+  "kind": 182,
+  "source_selection": {
+    "kind": 182,
+    "name": "Drive-in theater",
+    "review": "assets/landscape/building-studies/daylight-cleanup/182-drive-in-theater/native-composited-daylight.png",
+    "recipe": "assets/landscape/building-studies/daylight-cleanup/182-drive-in-theater/bake.json",
+    "source": "assets/landscape/building-studies/daylight-cleanup/182-drive-in-theater/painted-daylight.png",
+    "review_sha256": "df11fb6761a90a493e19f3cb31ac0c72a72f70d06621c61184eaef5e2a0908c6",
+    "baked_sprite": "assets/landscape/building-studies/daylight-cleanup/182-drive-in-theater/view-0.png",
+    "source_sha256": "749c5296b64dff2044ed4951885fa2c0f714129ac5199262328f9318bebc2565",
+    "correction_scope": "Lighting only, approved architecture preserved"
+  },
+  "installed_view_sha256": "b9c40ac6c270fa127bd269fc37de3e45661fb915d0222c3eee72ddea22b04e59",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/182-drive-in-theater/calibration-source.png",
+      "installed": "assets/landscape/buildings/182-drive-in-theater/approved-original.png",
+      "sha256": "7a0fda8e749581564c9b1687f249ae6a8feba5ae1487f5c8319b12ec9d6f4bdb"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/182-drive-in-theater/registered-daylight.png",
+      "installed": "assets/landscape/buildings/182-drive-in-theater/approved-foreground.png",
+      "sha256": "b606237ceaacd253660df8ee5f21e921b4ffe3453906fa168f6f40f1d5f64229"
+    },
+    {
+      "source": "assets/landscape/buildings/182-drive-in-theater/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/182-drive-in-theater/approved-foundation-mask.png",
+      "sha256": "27391c77795bfdc04221cf586765e48dbe2a419caa2585d56ad3b0629e82c4fa"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/182-drive-in-theater/view-0.png",
+      "installed": "assets/landscape/buildings/182-drive-in-theater/approved-view.png",
+      "sha256": "b9c40ac6c270fa127bd269fc37de3e45661fb915d0222c3eee72ddea22b04e59"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/182-drive-in-theater/ground-0.png",
+      "installed": "assets/landscape/buildings/182-drive-in-theater/approved-ground.png",
+      "sha256": "23ef432c947446f86bb23fa9c272f56440691898eb655c630736d01c1b01f2c4"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

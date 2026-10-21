@@ -1,0 +1,40 @@
+{
+  "kind": 204,
+  "source_selection": {
+    "kind": 204,
+    "name": "Solar power plant",
+    "review": "assets/landscape/building-studies/approval-batch-201-204/204-solar-power-plant/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-201-204/204-solar-power-plant/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-201-204/204-solar-power-plant/registered-cutout-source.png",
+    "review_sha256": "90ad212dd640d2daeb346e085ec3bc50f8116f7d2c58c2bb217262f30076c6a2"
+  },
+  "installed_view_sha256": "2e17b5f797954bf8a412b037c1c66dc6874660524e9c2cd2198a143709d56440",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-201-204/204-solar-power-plant/registered-full-plot-calibration.png",
+      "installed": "assets/landscape/civic/204-solar-power-plant/approved-original.png",
+      "sha256": "b91897113bdfa002a02427cc148db968292488a02d2fd26628ca3526d8bbe3e8"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-201-204/204-solar-power-plant/registered-cutout-source.png",
+      "installed": "assets/landscape/civic/204-solar-power-plant/approved-foreground.png",
+      "sha256": "41b6bbce5420ca0511ba4790a78c9533fc13699608b646bd30a2be8ef51a9c97"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-201-204/204-solar-power-plant/native-foundation-mask.png",
+      "installed": "assets/landscape/civic/204-solar-power-plant/approved-foundation-mask.png",
+      "sha256": "7fbfc8b279db7f5077a762cc66e730cba1e14a4ba7247989084e6c7ec0dd94f8"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-201-204/204-solar-power-plant/view-0.png",
+      "installed": "assets/landscape/civic/204-solar-power-plant/approved-view.png",
+      "sha256": "2e17b5f797954bf8a412b037c1c66dc6874660524e9c2cd2198a143709d56440"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-201-204/204-solar-power-plant/ground-0.png",
+      "installed": "assets/landscape/civic/204-solar-power-plant/approved-ground.png",
+      "sha256": "10038e65c61e460faa2fad992a6ffe21fcd8c5a8220fd551dd4f5d61c646f763"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

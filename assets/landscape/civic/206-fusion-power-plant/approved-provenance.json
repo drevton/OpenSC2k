@@ -1,0 +1,40 @@
+{
+  "kind": 206,
+  "source_selection": {
+    "kind": 206,
+    "name": "Fusion power plant",
+    "review": "assets/landscape/building-studies/approval-batch-205-208/206-fusion-power-plant/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-205-208/206-fusion-power-plant/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-205-208/206-fusion-power-plant/vehicle-registered-source.png",
+    "review_sha256": "983979fdc2b254c05906886cc6fbfb595856f18996c18db51224d72ee5e7ade6"
+  },
+  "installed_view_sha256": "94788369b54d12b6dd2dbe15cdc086388afe22c31ac90956de3803c35ff9d365",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-205-208/206-fusion-power-plant/vehicle-full-plot-calibration.png",
+      "installed": "assets/landscape/civic/206-fusion-power-plant/approved-original.png",
+      "sha256": "5a6381518dfffd7d149eba47bd1c7107e7f4fc5a4f8b2eeb10fc666b19020841"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-205-208/206-fusion-power-plant/vehicle-registered-source.png",
+      "installed": "assets/landscape/civic/206-fusion-power-plant/approved-foreground.png",
+      "sha256": "9552bc24130ea153dfee8ae2a0c145d07e454d487979c3749d140bfc3cabc267"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-205-208/206-fusion-power-plant/native-foundation-mask.png",
+      "installed": "assets/landscape/civic/206-fusion-power-plant/approved-foundation-mask.png",
+      "sha256": "7fbfc8b279db7f5077a762cc66e730cba1e14a4ba7247989084e6c7ec0dd94f8"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-205-208/206-fusion-power-plant/view-0.png",
+      "installed": "assets/landscape/civic/206-fusion-power-plant/approved-view.png",
+      "sha256": "94788369b54d12b6dd2dbe15cdc086388afe22c31ac90956de3803c35ff9d365"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-205-208/206-fusion-power-plant/ground-0.png",
+      "installed": "assets/landscape/civic/206-fusion-power-plant/approved-ground.png",
+      "sha256": "87a63a414e60cb9491e64668932f951f5647ac13cded6437976d68d4cf0922b3"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

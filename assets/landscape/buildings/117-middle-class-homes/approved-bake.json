@@ -1,0 +1,29 @@
+{
+  "kind": 117,
+  "footprint_tiles": [
+    1,
+    1
+  ],
+  "mask": "approved-foundation-mask.png",
+  "terrain_masks": "../../opengfx2/detail128/terrain-masks.png",
+  "paving": "../../civic/211-fire-station/paving-texture.png",
+  "views": [
+    {
+      "original": "approved-original.png",
+      "foreground": "approved-foreground.png",
+      "plinth_pixels": 0
+    }
+  ],
+  "retain_painted_ground": false,
+  "omit_ground_in_sprite": true,
+  "corner_fill_color": [
+    139,
+    133,
+    109
+  ],
+  "content_inset_pixels": 2,
+  "reject_opaque_trim": true,
+  "edge_registration_pixels": 0,
+  "align_building_height": false,
+  "artwork_scale": 1
+}

@@ -1,0 +1,40 @@
+{
+  "kind": 120,
+  "source_selection": {
+    "kind": 120,
+    "name": "Luxury Homes",
+    "review": "assets/landscape/building-studies/approval-batch-120-123/120-luxury-homes/native-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-120-123/120-luxury-homes/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-120-123/120-luxury-homes/painted-height-study.png",
+    "review_sha256": "621c60ceaae24a61527743f4b4a44757bfe946d663adc9e20acf8c101a42f8db"
+  },
+  "installed_view_sha256": "c6f2c2f40467e111f794c285b31c5019f4ef3db3566c32eb44a60ace83f5105f",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-120-123/120-luxury-homes/painted-height-study.png",
+      "installed": "assets/landscape/buildings/120-luxury-homes/approved-original.png",
+      "sha256": "767c9b04bff43bd17896c2d4321d2db95e64058b46f619fd9b89d2366131d97f"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-120-123/120-luxury-homes/painted-height-study.png",
+      "installed": "assets/landscape/buildings/120-luxury-homes/approved-foreground.png",
+      "sha256": "767c9b04bff43bd17896c2d4321d2db95e64058b46f619fd9b89d2366131d97f"
+    },
+    {
+      "source": "assets/landscape/buildings/120-luxury-homes/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/120-luxury-homes/approved-foundation-mask.png",
+      "sha256": "bc879994f11a999eed1bb4e1e758fe2f84f09a417d2c3e563b246d22961d91a6"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-120-123/120-luxury-homes/view-0.png",
+      "installed": "assets/landscape/buildings/120-luxury-homes/approved-view.png",
+      "sha256": "c6f2c2f40467e111f794c285b31c5019f4ef3db3566c32eb44a60ace83f5105f"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-120-123/120-luxury-homes/ground-0.png",
+      "installed": "assets/landscape/buildings/120-luxury-homes/approved-ground.png",
+      "sha256": "bb8851f89c474cfeef33b1f936b8df4ebff4612583c7f351e45ba3bbfcd6da29"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

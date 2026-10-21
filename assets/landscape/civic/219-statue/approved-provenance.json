@@ -1,0 +1,40 @@
+{
+  "kind": 219,
+  "source_selection": {
+    "kind": 219,
+    "name": "Statue",
+    "review": "assets/landscape/building-studies/approval-batch-217-220/219-statue/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-217-220/219-statue/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-217-220/219-statue/painted-full-height-study.png",
+    "review_sha256": "e90b8c897ef1ccaf635ac7ab8b6108db6a6448add76a431ea3e2916290990cba"
+  },
+  "installed_view_sha256": "924a663ce8a7e24a1d4fcc97f57d4dcf0da15bf4f4eb2d582b03fa48c0e6920c",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-217-220/219-statue/painted-full-height-study.png",
+      "installed": "assets/landscape/civic/219-statue/approved-original.png",
+      "sha256": "e2942c8630e85277cd706358a662c82a010ba092e192603152784a3dc4306650"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-217-220/219-statue/painted-full-height-study.png",
+      "installed": "assets/landscape/civic/219-statue/approved-foreground.png",
+      "sha256": "e2942c8630e85277cd706358a662c82a010ba092e192603152784a3dc4306650"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-217-220/219-statue/native-foundation-mask.png",
+      "installed": "assets/landscape/civic/219-statue/approved-foundation-mask.png",
+      "sha256": "b9efb5f5ba43d7b1adcbe8c0a50d51781398d06a5355664208101d104686686b"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-217-220/219-statue/view-0.png",
+      "installed": "assets/landscape/civic/219-statue/approved-view.png",
+      "sha256": "924a663ce8a7e24a1d4fcc97f57d4dcf0da15bf4f4eb2d582b03fa48c0e6920c"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-217-220/219-statue/ground-0.png",
+      "installed": "assets/landscape/civic/219-statue/approved-ground.png",
+      "sha256": "a56743e852279b3142a07a0b5aae3644aaee241120b69bd68daf32eda7d8baef"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

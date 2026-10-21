@@ -1,0 +1,40 @@
+{
+  "kind": 251,
+  "source_selection": {
+    "kind": 251,
+    "name": "Plymoth Archology",
+    "review": "assets/landscape/building-studies/approval-batch-249-252/251-plymouth-arcology/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-249-252/251-plymouth-arcology/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-249-252/251-plymouth-arcology/calibrated-source.png",
+    "review_sha256": "a6c1bd1525a0a663ef6533adb11bb93f66695d56bc514ff199aa13a8b432bad7"
+  },
+  "installed_view_sha256": "a6c1bd1525a0a663ef6533adb11bb93f66695d56bc514ff199aa13a8b432bad7",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-249-252/251-plymouth-arcology/calibrated-source.png",
+      "installed": "assets/landscape/civic/251-plymouth-arcology/approved-original.png",
+      "sha256": "a2ca15b53b91c9ef2d1ed3539d2f6c0f3c265f5fa920ad74384e10057de0eabd"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-249-252/251-plymouth-arcology/calibrated-source.png",
+      "installed": "assets/landscape/civic/251-plymouth-arcology/approved-foreground.png",
+      "sha256": "a2ca15b53b91c9ef2d1ed3539d2f6c0f3c265f5fa920ad74384e10057de0eabd"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-249-252/251-plymouth-arcology/native-foundation-mask.png",
+      "installed": "assets/landscape/civic/251-plymouth-arcology/approved-foundation-mask.png",
+      "sha256": "e8abac0ac590557f3a7def5659fb83de46e86fe2cf4383b5ee9e623461a11f56"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-249-252/251-plymouth-arcology/view-0.png",
+      "installed": "assets/landscape/civic/251-plymouth-arcology/approved-view.png",
+      "sha256": "a6c1bd1525a0a663ef6533adb11bb93f66695d56bc514ff199aa13a8b432bad7"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-249-252/251-plymouth-arcology/ground-0.png",
+      "installed": "assets/landscape/civic/251-plymouth-arcology/approved-ground.png",
+      "sha256": "0ed12176c81c093fced196d68e1b481b25ace152076c566526ac244c012fd3fc"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

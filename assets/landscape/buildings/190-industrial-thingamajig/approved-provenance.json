@@ -1,0 +1,40 @@
+{
+  "kind": 190,
+  "source_selection": {
+    "kind": 190,
+    "name": "Industrial thingamajig",
+    "review": "assets/landscape/building-studies/approval-batch-188-191/190-industrial-thingamajig/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-188-191/190-industrial-thingamajig/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-188-191/190-industrial-thingamajig/daylight-registered-source.png",
+    "review_sha256": "866c926ca61c5a787779acb0def4780ec3896880a3cd009a490ffc95d8cf37bf"
+  },
+  "installed_view_sha256": "28a856f7728adea7ef3ae632c353f9e777a077f8e0baff13b8c1b58b13883efe",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-188-191/190-industrial-thingamajig/daylight-full-plot-calibration.png",
+      "installed": "assets/landscape/buildings/190-industrial-thingamajig/approved-original.png",
+      "sha256": "8bb4d055dcb27fbea96eb90389d7d4ed87e1fb5b1e597179769181cd42fd86df"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-188-191/190-industrial-thingamajig/daylight-registered-source.png",
+      "installed": "assets/landscape/buildings/190-industrial-thingamajig/approved-foreground.png",
+      "sha256": "9a06827fb51584c747a9992d6a8546be68d6009e4b9589e78fc8044d6744b218"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-188-191/190-industrial-thingamajig/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/190-industrial-thingamajig/approved-foundation-mask.png",
+      "sha256": "5b66f84868ee31d7ab0913aed644d93e5d62a12a4990b02f48175031cb64033c"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-188-191/190-industrial-thingamajig/view-0.png",
+      "installed": "assets/landscape/buildings/190-industrial-thingamajig/approved-view.png",
+      "sha256": "28a856f7728adea7ef3ae632c353f9e777a077f8e0baff13b8c1b58b13883efe"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-188-191/190-industrial-thingamajig/ground-0.png",
+      "installed": "assets/landscape/buildings/190-industrial-thingamajig/approved-ground.png",
+      "sha256": "e85efda4ee65314326a40989276eaf936af996c040ce2dcb5a52272f03979a49"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

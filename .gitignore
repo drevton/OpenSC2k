@@ -1,0 +1,7 @@
+/build/
+.DS_Store
+__pycache__/
+*.py[cod]
+/assets/landscape/opengfx2/landscape.dat
+/assets/audio/sound-effects.override.dat
+/assets/audio/sound-effects.override.json

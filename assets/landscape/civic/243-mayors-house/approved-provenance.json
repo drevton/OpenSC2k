@@ -1,0 +1,40 @@
+{
+  "kind": 243,
+  "source_selection": {
+    "kind": 243,
+    "name": "man",
+    "review": "assets/landscape/building-studies/approval-batch-241-244/243-mayors-house/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-241-244/243-mayors-house/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-241-244/243-mayors-house/calibrated-source.png",
+    "review_sha256": "f744050677afe41c56d17bdb734f42cec7099fbc88e46cb589d35faadc1a1803"
+  },
+  "installed_view_sha256": "f744050677afe41c56d17bdb734f42cec7099fbc88e46cb589d35faadc1a1803",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-241-244/243-mayors-house/calibrated-source.png",
+      "installed": "assets/landscape/civic/243-mayors-house/approved-original.png",
+      "sha256": "c2e9c071b05d27ae9f722969f101a290b1381a528593090d8f6443f83cc61fea"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-241-244/243-mayors-house/calibrated-source.png",
+      "installed": "assets/landscape/civic/243-mayors-house/approved-foreground.png",
+      "sha256": "c2e9c071b05d27ae9f722969f101a290b1381a528593090d8f6443f83cc61fea"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-241-244/243-mayors-house/native-foundation-mask.png",
+      "installed": "assets/landscape/civic/243-mayors-house/approved-foundation-mask.png",
+      "sha256": "f8b07175b4ed61f12c33a67b4ebecdb37e8335f027200593b68c18b8c7f2aa7f"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-241-244/243-mayors-house/view-0.png",
+      "installed": "assets/landscape/civic/243-mayors-house/approved-view.png",
+      "sha256": "f744050677afe41c56d17bdb734f42cec7099fbc88e46cb589d35faadc1a1803"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-241-244/243-mayors-house/ground-0.png",
+      "installed": "assets/landscape/civic/243-mayors-house/approved-ground.png",
+      "sha256": "6357623992e4bb633a011c09d426560c178aaab4236d5d580e1d386e3459a342"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

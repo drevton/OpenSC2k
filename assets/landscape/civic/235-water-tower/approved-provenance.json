@@ -1,0 +1,40 @@
+{
+  "kind": 235,
+  "source_selection": {
+    "kind": 235,
+    "name": "Water tower",
+    "review": "assets/landscape/building-studies/approval-batch-233-236/235-water-tower/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-233-236/235-water-tower/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-233-236/235-water-tower/alpha-clean-study.png",
+    "review_sha256": "abcd4b28b3eac125c158d7f5b2b065fedaef43e10b51fe6e4af82331981f502d"
+  },
+  "installed_view_sha256": "091c382c6fc25787b539ade1195e365ffcbbf7e1a483e9b17ac375a8fe522b65",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-233-236/235-water-tower/finish-full-plot-calibration.png",
+      "installed": "assets/landscape/civic/235-water-tower/approved-original.png",
+      "sha256": "1bdf906b3a01cc286e17019a18468c367c89ef0bc1212df6afb4aa984a82e6e7"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-233-236/235-water-tower/alpha-clean-study.png",
+      "installed": "assets/landscape/civic/235-water-tower/approved-foreground.png",
+      "sha256": "d07c4ad44d8ed7d0b373bf8c67c19d2850bcf0655f6791cf7087480d6e0d1da5"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-233-236/235-water-tower/native-foundation-mask.png",
+      "installed": "assets/landscape/civic/235-water-tower/approved-foundation-mask.png",
+      "sha256": "e238b2bff002b7e3233e4a3cf8781dc2c38494f2c8de21a52c181f133750b754"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-233-236/235-water-tower/view-0.png",
+      "installed": "assets/landscape/civic/235-water-tower/approved-view.png",
+      "sha256": "091c382c6fc25787b539ade1195e365ffcbbf7e1a483e9b17ac375a8fe522b65"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-233-236/235-water-tower/ground-0.png",
+      "installed": "assets/landscape/civic/235-water-tower/approved-ground.png",
+      "sha256": "37b2a328e9a1fcff00ea83e4d2fbd2a109cc41d541187546d0ec523ed1c505a3"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

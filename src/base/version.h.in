@@ -1,0 +1,23 @@
+#ifndef SC2K_BASE_VERSION_H
+#define SC2K_BASE_VERSION_H
+
+#define SC2K_VERSION_MAJOR @PROJECT_VERSION_MAJOR@
+#define SC2K_VERSION_MINOR @PROJECT_VERSION_MINOR@
+#define SC2K_VERSION_PATCH @PROJECT_VERSION_PATCH@
+// Save metadata release stages: 0 development, 1 alpha, 2 beta, 3 stable.
+#define SC2K_VERSION_STAGE @SC2K_VERSION_STAGE@
+#define SC2K_VERSION_NUMBER "@PROJECT_VERSION@"
+#define SC2K_VERSION_DISPLAY "@SC2K_VERSION_DISPLAY@"
+#define SC2K_APP_NAME "OpenSC2k"
+#define SC2K_APP_TITLE SC2K_APP_NAME " " SC2K_VERSION_DISPLAY
+#define SC2K_GIT_REVISION_CAPACITY 256
+#define SC2K_BUILD_VERSION_CAPACITY 320
+
+#ifndef RC_INVOKED
+#include <stddef.h>
+
+void ReadBuildRevision(char *text, size_t capacity);
+void FormatBuildVersion(char *text, size_t capacity);
+#endif
+
+#endif

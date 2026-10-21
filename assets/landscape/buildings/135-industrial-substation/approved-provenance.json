@@ -1,0 +1,40 @@
+{
+  "kind": 135,
+  "source_selection": {
+    "kind": 135,
+    "name": "Industrial substation",
+    "review": "assets/landscape/building-studies/approval-batch-132-135/135-industrial-substation/native-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-132-135/135-industrial-substation/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-132-135/135-industrial-substation/painted-taller-building-body-study.png",
+    "review_sha256": "4ffa901c3b56f4f5c988629ee988fb52c7f6888e791d3b7434435ae79ef30222"
+  },
+  "installed_view_sha256": "4ffa901c3b56f4f5c988629ee988fb52c7f6888e791d3b7434435ae79ef30222",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-132-135/135-industrial-substation/painted-taller-building-body-study.png",
+      "installed": "assets/landscape/buildings/135-industrial-substation/approved-original.png",
+      "sha256": "cc101420e84d24326124cd5f9eb4673fc9d11bbf06dee0fda8b6d032e3ee77a4"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-132-135/135-industrial-substation/painted-taller-building-body-study.png",
+      "installed": "assets/landscape/buildings/135-industrial-substation/approved-foreground.png",
+      "sha256": "cc101420e84d24326124cd5f9eb4673fc9d11bbf06dee0fda8b6d032e3ee77a4"
+    },
+    {
+      "source": "assets/landscape/buildings/135-industrial-substation/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/135-industrial-substation/approved-foundation-mask.png",
+      "sha256": "bc879994f11a999eed1bb4e1e758fe2f84f09a417d2c3e563b246d22961d91a6"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-132-135/135-industrial-substation/view-0.png",
+      "installed": "assets/landscape/buildings/135-industrial-substation/approved-view.png",
+      "sha256": "4ffa901c3b56f4f5c988629ee988fb52c7f6888e791d3b7434435ae79ef30222"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-132-135/135-industrial-substation/ground-0.png",
+      "installed": "assets/landscape/buildings/135-industrial-substation/approved-ground.png",
+      "sha256": "4c8acea798ab22854633cf9dc0b743fcf30c1ffe27ba23a2b22e170f13bce01f"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

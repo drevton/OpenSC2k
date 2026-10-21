@@ -1,0 +1,70 @@
+#ifndef SC2K_CITY_SAVELOAD_TYPES_H
+#define SC2K_CITY_SAVELOAD_TYPES_H
+
+#include "base/types.h"
+#include "base/version.h"
+
+typedef enum CityFileReleaseStage {
+  CITY_FILE_RELEASE_DEVELOPMENT, CITY_FILE_RELEASE_ALPHA, CITY_FILE_RELEASE_BETA, CITY_FILE_RELEASE_STABLE
+} CityFileReleaseStage;
+
+typedef struct {
+  u32 major, minor, patch;
+  u8 stage;
+  char revision[SC2K_GIT_REVISION_CAPACITY];
+} CityFileVersion;
+
+// Version words in the original scenario's raw tagged chunks.
+enum {
+  CITY_SCENARIO_METADATA_VERSION = 128,
+  CITY_SCENARIO_PREVIEW_VERSION = 128,
+  CITY_SCENARIO_INSTRUCTIONS_VERSION = 129,
+  CITY_SCENARIO_INSTRUCTION_BYTES = 768,
+};
+
+// Original CFileException cause IDs, selecting string resources531..545 in
+// ShowCityFileException. Fields remain i32. OsErrorToException
+// maps Win32 error5 to ACCESS_DENIED5 and error2 to FILE_NOT_FOUND2.
+typedef enum CityFileExceptionCause {
+  CITY_FILE_CAUSE_NONE = 0,
+  CITY_FILE_CAUSE_GENERIC = 1,
+  CITY_FILE_CAUSE_FILE_NOT_FOUND = 2,
+  CITY_FILE_CAUSE_BAD_PATH = 3,
+  CITY_FILE_CAUSE_TOO_MANY_OPEN_FILES = 4,
+  CITY_FILE_CAUSE_ACCESS_DENIED = 5,
+  CITY_FILE_CAUSE_INVALID_FILE = 6,
+  CITY_FILE_CAUSE_REMOVE_CURRENT_DIRECTORY = 7,
+  CITY_FILE_CAUSE_DIRECTORY_FULL = 8,
+  CITY_FILE_CAUSE_BAD_SEEK = 9,
+  CITY_FILE_CAUSE_HARDWARE = 10,
+  CITY_FILE_CAUSE_SHARING_VIOLATION = 11,
+  CITY_FILE_CAUSE_LOCK_VIOLATION = 12,
+  CITY_FILE_CAUSE_DISK_FULL = 13,
+  CITY_FILE_CAUSE_END_OF_FILE = 14,
+} CityFileExceptionCause;
+
+// MISC word positions are file-format IDs, independent of guest addresses.
+// Word29's role remains unidentified; retain its number rather than guessing.
+typedef enum CityMiscWordIndex {
+  CITY_MISC_WORD_VERSION = 0,
+  CITY_MISC_WORD_CASH = 5,
+  CITY_MISC_WORD_ASSET_VALUE = 9,
+  CITY_MISC_WORD_FIELD_29 = 29,
+  CITY_MISC_WORD_SPECIAL_FACILITY_AVAILABILITY = 30,
+  CITY_MISC_WORD_ACCOUNT_NAMES_FIRST = 438,
+  CITY_MISC_WORD_ECONOMY_FIRST = 479,
+  CITY_MISC_WORD_ECONOMY_END = 911,
+  CITY_MISC_WORD_NEWSPAPER_EDITION = 1027,
+  CITY_MISC_WORD_SAVED_VIEW_POSITION = 1028,
+  CITY_MISC_WORD_SAVED_VIEW_MODE = 1029,
+  CITY_MISC_WORD_LAST_SAVED = 1043,
+} CityMiscWordIndex;
+
+enum {
+  CITY_MISC_VERSION = 290,
+  CITY_MISC_ECONOMY_WORDS_PER_SECTOR = 27,
+  CITY_MISC_WORD_RESERVED_FIRST = CITY_MISC_WORD_LAST_SAVED + 1,
+  CITY_MISC_WORD_COUNT = 1200,
+};
+
+#endif

@@ -1,0 +1,29 @@
+{
+  "kind": 221,
+  "footprint_tiles": [
+    1,
+    1
+  ],
+  "mask": "approved-foundation-mask.png",
+  "terrain_masks": "../../opengfx2/detail128/terrain-masks.png",
+  "paving": "../../buildings/ground/asphalt-material.png",
+  "retain_painted_ground": true,
+  "omit_ground_in_sprite": false,
+  "content_inset_pixels": 0,
+  "reject_opaque_trim": true,
+  "edge_registration_pixels": 0,
+  "align_building_height": false,
+  "artwork_scale": 1,
+  "corner_fill_color": [
+    90,
+    92,
+    93
+  ],
+  "views": [
+    {
+      "original": "approved-original.png",
+      "foreground": "approved-foreground.png",
+      "plinth_pixels": 0
+    }
+  ]
+}

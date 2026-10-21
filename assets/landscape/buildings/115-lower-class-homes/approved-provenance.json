@@ -1,0 +1,39 @@
+{
+  "kind": 115,
+  "source_selection": {
+    "kind": 115,
+    "name": "Lower-class homes",
+    "review": "assets/landscape/building-studies/single-angle-housing/115-four-modest-homes/native-study.png",
+    "review_sha256": "d43f57f15a8f8b6ebdf14f9a532d3e1128cceb46643cb55053b3eb29a33d8b5e",
+    "source_scope": "Earlier housing view or installed smallpark; no current approval-batch native image"
+  },
+  "installed_view_sha256": "9cf29aaba16b388d8cbd1406e24a4804fdf3e909168e815b5557861110b620da",
+  "dependencies": [
+    {
+      "source": "build/artwork-studies/single-angle-housing/115-four-modest-homes/guide-0.png",
+      "installed": "assets/landscape/buildings/115-lower-class-homes/approved-original.png",
+      "sha256": "6a122b39ab9b369abbcc6b794f3ed383ee2fee015e457952f5659fd340c5285c"
+    },
+    {
+      "source": "build/artwork-studies/single-angle-housing/115-four-modest-homes/cutout-0.png",
+      "installed": "assets/landscape/buildings/115-lower-class-homes/approved-foreground.png",
+      "sha256": "6a122b39ab9b369abbcc6b794f3ed383ee2fee015e457952f5659fd340c5285c"
+    },
+    {
+      "source": "assets/landscape/buildings/115-lower-class-homes/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/115-lower-class-homes/approved-foundation-mask.png",
+      "sha256": "bc879994f11a999eed1bb4e1e758fe2f84f09a417d2c3e563b246d22961d91a6"
+    },
+    {
+      "source": "build/artwork-studies/single-angle-housing/115-four-modest-homes/view-0.png",
+      "installed": "assets/landscape/buildings/115-lower-class-homes/approved-view.png",
+      "sha256": "9cf29aaba16b388d8cbd1406e24a4804fdf3e909168e815b5557861110b620da"
+    },
+    {
+      "source": "build/artwork-studies/single-angle-housing/115-four-modest-homes/ground-0.png",
+      "installed": "assets/landscape/buildings/115-lower-class-homes/approved-ground.png",
+      "sha256": "bb8851f89c474cfeef33b1f936b8df4ebff4612583c7f351e45ba3bbfcd6da29"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

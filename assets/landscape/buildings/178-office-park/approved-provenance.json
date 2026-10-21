@@ -1,0 +1,40 @@
+{
+  "kind": 178,
+  "source_selection": {
+    "kind": 178,
+    "name": "Office park",
+    "review": "assets/landscape/building-studies/approval-batch-176-179/178-office-park/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-176-179/178-office-park/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-176-179/178-office-park/painted-final-ground-alpha-study.png",
+    "review_sha256": "e7519ad9575856dbdf4278dfb1e3f93496e41b9b9af6465a2ab2dbaf5d406c56"
+  },
+  "installed_view_sha256": "dca38ee57b50de126dfd231cc0b5a9d309dd8a999870737ded06792a8240ede9",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-176-179/178-office-park/painted-study.png",
+      "installed": "assets/landscape/buildings/178-office-park/approved-original.png",
+      "sha256": "1a12b434933920b98d99ea24244c3a5c0cb9aa76085658f51e948ae411a86ed9"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-176-179/178-office-park/painted-final-ground-alpha-study.png",
+      "installed": "assets/landscape/buildings/178-office-park/approved-foreground.png",
+      "sha256": "abc06278380649db041506d2f78cad6089b6ac0db8217e0c8f3b340cde6f23b2"
+    },
+    {
+      "source": "assets/landscape/buildings/178-office-park/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/178-office-park/approved-foundation-mask.png",
+      "sha256": "1f29e9376cda9499e0acf1ee1020cb4bc6fa1bb5da6fb1a883578df6e58c572b"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-176-179/178-office-park/view-0.png",
+      "installed": "assets/landscape/buildings/178-office-park/approved-view.png",
+      "sha256": "dca38ee57b50de126dfd231cc0b5a9d309dd8a999870737ded06792a8240ede9"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-176-179/178-office-park/ground-0.png",
+      "installed": "assets/landscape/buildings/178-office-park/approved-ground.png",
+      "sha256": "5f707af1bc2bcdf8447acf89ff7440a2e633b9952dc9a25779f52d6594ea1819"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

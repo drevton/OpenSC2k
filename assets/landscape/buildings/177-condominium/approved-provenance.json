@@ -1,0 +1,43 @@
+{
+  "kind": 177,
+  "source_selection": {
+    "kind": 177,
+    "name": "Condominium",
+    "review": "assets/landscape/building-studies/daylight-cleanup/177-condominium/native-composited-daylight.png",
+    "recipe": "assets/landscape/building-studies/daylight-cleanup/177-condominium/bake.json",
+    "source": "assets/landscape/building-studies/daylight-cleanup/177-condominium/painted-daylight.png",
+    "review_sha256": "8e90eaa10abdcba6d5ad5b5794c61aaa20b202f3ec5ffe036743774b8c583099",
+    "baked_sprite": "assets/landscape/building-studies/daylight-cleanup/177-condominium/view-0.png",
+    "source_sha256": "933122de70f5337fb728ab6eede0855c7ebbdca11babae01b53e4fc91fb2d7a9",
+    "correction_scope": "Lighting only, approved architecture preserved"
+  },
+  "installed_view_sha256": "a027afd2c85e43b29fa4a68aeb7500d9c8c7d70135eaf783b3fbdc6caffd49eb",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/177-condominium/calibration-source.png",
+      "installed": "assets/landscape/buildings/177-condominium/approved-original.png",
+      "sha256": "d9cffb437a0b0baf894f3eccb20c0287132cbb66a144cd2ddd71811a422ac7b5"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/177-condominium/registered-daylight.png",
+      "installed": "assets/landscape/buildings/177-condominium/approved-foreground.png",
+      "sha256": "ea5289bbd2eb59ddd9f0a6e321fb51fb05e09b587eef206f2eb63d253297edfa"
+    },
+    {
+      "source": "assets/landscape/buildings/177-condominium/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/177-condominium/approved-foundation-mask.png",
+      "sha256": "cb8c1e8d8f97e50b383f4fc7760ef1717cd0587ed7cd9e5e030ecfa34465bf4d"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/177-condominium/view-0.png",
+      "installed": "assets/landscape/buildings/177-condominium/approved-view.png",
+      "sha256": "a027afd2c85e43b29fa4a68aeb7500d9c8c7d70135eaf783b3fbdc6caffd49eb"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/177-condominium/ground-0.png",
+      "installed": "assets/landscape/buildings/177-condominium/approved-ground.png",
+      "sha256": "4cf652b7d5435972d9fff43478d685b22e8155c424a951235fd2086c3e912d9b"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

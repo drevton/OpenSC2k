@@ -1,0 +1,1 @@
+Add matching windows to exposed side and rear facades. Preserve the existing four-view registration, roof geometry, building height, silhouette, alpha transparency and front facade. New openings must correspond across genuine quarter-turn views of the same physical building. No new ground or vegetation.

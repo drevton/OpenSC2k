@@ -1,0 +1,66 @@
+{
+  "kind": 255,
+  "name": "Braun Llama Dome",
+  "footprint_tiles": [
+    4,
+    4
+  ],
+  "pixels_per_tile": 128,
+  "canvas": [
+    512,
+    704
+  ],
+  "baseline": 704,
+  "views": [
+    {
+      "angle": 0,
+      "file": "approved-view.png",
+      "ground_file": "approved-ground.png",
+      "mirror": false
+    },
+    {
+      "angle": 90,
+      "file": "approved-view.png",
+      "ground_file": "approved-ground.png",
+      "mirror": true
+    },
+    {
+      "angle": 180,
+      "file": "approved-view.png",
+      "ground_file": "approved-ground.png",
+      "mirror": false
+    },
+    {
+      "angle": 270,
+      "file": "approved-view.png",
+      "ground_file": "approved-ground.png",
+      "mirror": true
+    }
+  ],
+  "baker": "tools/bake_civic_sprites.py",
+  "config": "approved-bake.json",
+  "verification": "approved-bake-result.json",
+  "status": "approved single view; other directions share it pending rotation artwork",
+  "art_notes": "Approved daytime single view. Alternate directions mirror the shared image using resource references.",
+  "legacy_height_reference": {
+    "atlas": "LARGE.DAT",
+    "sprite_id": 1255,
+    "original_tile_width": 32,
+    "original_sprite_width": 128,
+    "original_sprite_height": 154,
+    "master_pixels_per_tile": 128,
+    "target_visible_height": 616,
+    "measured_guide_view0_height": 616
+  },
+  "occupied_heights": [
+    578,
+    517,
+    512,
+    537
+  ],
+  "ground": "painted",
+  "ground_separation": "ground-separation-result.json",
+  "encoding": "indexed",
+  "source_selection": "assets/landscape/building-studies/daylight-cleanup/selected-single-views.json",
+  "construction": {}
+}

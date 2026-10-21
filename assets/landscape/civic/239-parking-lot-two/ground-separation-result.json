@@ -1,0 +1,45 @@
+{
+  "source_sheet_sha256": "28812648a8d983372b9680f3a54a29712ffacfcc3193a9a98f99a767acd80b5e",
+  "source_canvas": [
+    1254,
+    1254
+  ],
+  "registered_canvas": [
+    2700,
+    2700
+  ],
+  "checks": [
+    {
+      "view": 0,
+      "upper_structure_coverage": 1.0,
+      "upper_structure_excess": 0.0,
+      "alignment": null
+    },
+    {
+      "view": 1,
+      "upper_structure_coverage": 1.0,
+      "upper_structure_excess": 0.0,
+      "alignment": null
+    },
+    {
+      "view": 2,
+      "upper_structure_coverage": 0.0,
+      "upper_structure_excess": 0.0,
+      "alignment": {
+        "scale": 0.9750000000000001,
+        "offset": [
+          4.5500908022328135,
+          39.12996677736328
+        ],
+        "colour_error": 0.08230048825482462,
+        "method": "masked architectural colour registration"
+      }
+    },
+    {
+      "view": 3,
+      "upper_structure_coverage": 1.0,
+      "upper_structure_excess": 0.0028339083292262196,
+      "alignment": null
+    }
+  ]
+}

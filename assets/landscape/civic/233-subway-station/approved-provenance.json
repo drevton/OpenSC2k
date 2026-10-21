@@ -1,0 +1,40 @@
+{
+  "kind": 233,
+  "source_selection": {
+    "kind": 233,
+    "name": "Subway Station",
+    "review": "assets/landscape/building-studies/approval-batch-233-236/233-subway-station/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-233-236/233-subway-station/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-233-236/233-subway-station/alpha-clean-study.png",
+    "review_sha256": "70656a2d60fd8309612968cdc1379ad2643a507065144cd03490100d8ea3a209"
+  },
+  "installed_view_sha256": "70656a2d60fd8309612968cdc1379ad2643a507065144cd03490100d8ea3a209",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-233-236/233-subway-station/building-base-calibration.png",
+      "installed": "assets/landscape/civic/233-subway-station/approved-original.png",
+      "sha256": "14d419bd905a6397c9e3472aeee8e81bb3851a6ee89c3e04de8d41de66761c8f"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-233-236/233-subway-station/alpha-clean-study.png",
+      "installed": "assets/landscape/civic/233-subway-station/approved-foreground.png",
+      "sha256": "03f917fa3ba11e5598ce3e6aa77f71cf4ef5e6923070879826e0654e51ec3824"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-233-236/233-subway-station/native-foundation-mask.png",
+      "installed": "assets/landscape/civic/233-subway-station/approved-foundation-mask.png",
+      "sha256": "ddc3b46015e06b04f795398dfbf27d0f88666d4828d279182d6abc3150fcc3dd"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-233-236/233-subway-station/view-0.png",
+      "installed": "assets/landscape/civic/233-subway-station/approved-view.png",
+      "sha256": "70656a2d60fd8309612968cdc1379ad2643a507065144cd03490100d8ea3a209"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-233-236/233-subway-station/ground-0.png",
+      "installed": "assets/landscape/civic/233-subway-station/approved-ground.png",
+      "sha256": "ee37bcca4969c908582aa86243d594943c5aabb57b6fc702d32ec46db28ecfe7"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

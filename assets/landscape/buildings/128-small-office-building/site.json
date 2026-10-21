@@ -1,0 +1,13 @@
+{
+  "layout": "compact building with setbacks",
+  "ground": "stone",
+  "content_inset_pixels": 2,
+  "direction": "Use the visible stock side/rear clearance as a proportional reference at 128 pixels per tile. Keep exposed windowed walls inside the plot, with a small visible gap on every side. Do not force side or rear walls to the boundary. Preserve useful entrance and service space. Exposed facades may have windows; avoid excessive empty paving or planted perimeter borders.",
+  "stock_spacing": "Building fills much of the small plot, but a narrow ground strip remains visible. Preserve a small side/rear gap instead of edge-to-edge walls.",
+  "guide_setbacks_fraction": [
+    0.06,
+    0.06,
+    0.06,
+    0.1
+  ]
+}

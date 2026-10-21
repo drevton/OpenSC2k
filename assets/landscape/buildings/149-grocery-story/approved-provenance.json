@@ -1,0 +1,40 @@
+{
+  "kind": 149,
+  "source_selection": {
+    "kind": 149,
+    "name": "Grocery story",
+    "review": "assets/landscape/building-studies/approval-batch-148-151/149-grocery-story/native-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-148-151/149-grocery-story/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-148-151/149-grocery-story/painted-no-english-text-study.png",
+    "review_sha256": "88ac29b82fe23e6d5dc04db9358f92a0a75663285fed994badd31fc4816afd29"
+  },
+  "installed_view_sha256": "88ac29b82fe23e6d5dc04db9358f92a0a75663285fed994badd31fc4816afd29",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-148-151/149-grocery-story/painted-no-english-text-study.png",
+      "installed": "assets/landscape/buildings/149-grocery-story/approved-original.png",
+      "sha256": "e9d7afa2d135c375ff4a8659b76ab998f724acacb0ae5c94625ae05cd0214a15"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-148-151/149-grocery-story/painted-no-english-text-study.png",
+      "installed": "assets/landscape/buildings/149-grocery-story/approved-foreground.png",
+      "sha256": "e9d7afa2d135c375ff4a8659b76ab998f724acacb0ae5c94625ae05cd0214a15"
+    },
+    {
+      "source": "assets/landscape/buildings/149-grocery-story/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/149-grocery-story/approved-foundation-mask.png",
+      "sha256": "a4a71c42a8833a38fd3fda56a864a26d36c28d0966615eec7ae437d9c202b1c9"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-148-151/149-grocery-story/view-0.png",
+      "installed": "assets/landscape/buildings/149-grocery-story/approved-view.png",
+      "sha256": "88ac29b82fe23e6d5dc04db9358f92a0a75663285fed994badd31fc4816afd29"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-148-151/149-grocery-story/ground-0.png",
+      "installed": "assets/landscape/buildings/149-grocery-story/approved-ground.png",
+      "sha256": "44a478f63ff3fa81fb75e2dd6c064a3a471ee2e607e9fcf9a4f4364cbb04ae06"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

@@ -1,0 +1,1617 @@
+[
+  {
+    "id": 3889,
+    "file": "geometry-0-0-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png",
+    "palettes": [
+      "palette-0.png",
+      "palette-1.png",
+      "palette-2.png",
+      "palette-3.png",
+      "palette-4.png",
+      "palette-5.png",
+      "palette-6.png",
+      "palette-7.png",
+      "palette-8.png",
+      "palette-9.png",
+      "palette-10.png",
+      "palette-11.png",
+      "palette-12.png"
+    ]
+  },
+  {
+    "id": 3890,
+    "file": "geometry-0-0-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3891,
+    "file": "geometry-0-1-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3892,
+    "file": "geometry-0-1-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3893,
+    "file": "geometry-0-2-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3894,
+    "file": "geometry-0-2-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3895,
+    "file": "geometry-0-3-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3896,
+    "file": "geometry-0-3-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3897,
+    "file": "geometry-0-4-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3898,
+    "file": "geometry-0-4-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3899,
+    "file": "geometry-0-5-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3900,
+    "file": "geometry-0-5-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3901,
+    "file": "geometry-1-0-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3902,
+    "file": "geometry-1-0-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3903,
+    "file": "geometry-1-1-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3904,
+    "file": "geometry-1-1-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3905,
+    "file": "geometry-1-2-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3906,
+    "file": "geometry-1-2-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3907,
+    "file": "geometry-1-3-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3908,
+    "file": "geometry-1-3-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3909,
+    "file": "geometry-1-4-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3910,
+    "file": "geometry-1-4-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3911,
+    "file": "geometry-1-5-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3912,
+    "file": "geometry-1-5-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3913,
+    "file": "geometry-2-0-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3914,
+    "file": "geometry-2-0-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3915,
+    "file": "geometry-2-1-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3916,
+    "file": "geometry-2-1-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3917,
+    "file": "geometry-2-2-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3918,
+    "file": "geometry-2-2-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3919,
+    "file": "geometry-2-3-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3920,
+    "file": "geometry-2-3-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3921,
+    "file": "geometry-2-4-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3922,
+    "file": "geometry-2-4-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3923,
+    "file": "geometry-2-5-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3924,
+    "file": "geometry-2-5-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3925,
+    "file": "geometry-3-0-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3926,
+    "file": "geometry-3-0-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3927,
+    "file": "geometry-3-1-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3928,
+    "file": "geometry-3-1-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3929,
+    "file": "geometry-3-2-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3930,
+    "file": "geometry-3-2-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3931,
+    "file": "geometry-3-3-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3932,
+    "file": "geometry-3-3-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3933,
+    "file": "geometry-3-4-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3934,
+    "file": "geometry-3-4-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3935,
+    "file": "geometry-3-5-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3936,
+    "file": "geometry-3-5-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3937,
+    "file": "geometry-4-0-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3938,
+    "file": "geometry-4-0-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3939,
+    "file": "geometry-4-1-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3940,
+    "file": "geometry-4-1-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3941,
+    "file": "geometry-4-2-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3942,
+    "file": "geometry-4-2-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3943,
+    "file": "geometry-4-3-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3944,
+    "file": "geometry-4-3-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3945,
+    "file": "geometry-4-4-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3946,
+    "file": "geometry-4-4-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3947,
+    "file": "geometry-4-5-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3948,
+    "file": "geometry-4-5-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3949,
+    "file": "geometry-5-0-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3950,
+    "file": "geometry-5-0-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3951,
+    "file": "geometry-5-1-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3952,
+    "file": "geometry-5-1-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3953,
+    "file": "geometry-5-2-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3954,
+    "file": "geometry-5-2-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3955,
+    "file": "geometry-5-3-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3956,
+    "file": "geometry-5-3-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3957,
+    "file": "geometry-5-4-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3958,
+    "file": "geometry-5-4-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3959,
+    "file": "geometry-5-5-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3960,
+    "file": "geometry-5-5-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3961,
+    "file": "geometry-6-0-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3962,
+    "file": "geometry-6-0-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3963,
+    "file": "geometry-6-1-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3964,
+    "file": "geometry-6-1-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3965,
+    "file": "geometry-6-2-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3966,
+    "file": "geometry-6-2-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3967,
+    "file": "geometry-6-3-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3968,
+    "file": "geometry-6-3-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3969,
+    "file": "geometry-6-4-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3970,
+    "file": "geometry-6-4-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3971,
+    "file": "geometry-6-5-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 3972,
+    "file": "geometry-6-5-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4331,
+    "file": "rail-geometry-0-0-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4332,
+    "file": "rail-geometry-0-0-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4333,
+    "file": "rail-geometry-0-1-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4334,
+    "file": "rail-geometry-0-1-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4335,
+    "file": "rail-geometry-0-2-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4336,
+    "file": "rail-geometry-0-2-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4337,
+    "file": "rail-geometry-0-3-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4338,
+    "file": "rail-geometry-0-3-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4339,
+    "file": "rail-geometry-0-4-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4340,
+    "file": "rail-geometry-0-4-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4341,
+    "file": "rail-geometry-0-5-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4342,
+    "file": "rail-geometry-0-5-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4343,
+    "file": "rail-geometry-1-0-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4344,
+    "file": "rail-geometry-1-0-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4345,
+    "file": "rail-geometry-1-1-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4346,
+    "file": "rail-geometry-1-1-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4347,
+    "file": "rail-geometry-1-2-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4348,
+    "file": "rail-geometry-1-2-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4349,
+    "file": "rail-geometry-1-3-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4350,
+    "file": "rail-geometry-1-3-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4351,
+    "file": "rail-geometry-1-4-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4352,
+    "file": "rail-geometry-1-4-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4353,
+    "file": "rail-geometry-1-5-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4354,
+    "file": "rail-geometry-1-5-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4355,
+    "file": "rail-geometry-2-0-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4356,
+    "file": "rail-geometry-2-0-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4357,
+    "file": "rail-geometry-2-1-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4358,
+    "file": "rail-geometry-2-1-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4359,
+    "file": "rail-geometry-2-2-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4360,
+    "file": "rail-geometry-2-2-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4361,
+    "file": "rail-geometry-2-3-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4362,
+    "file": "rail-geometry-2-3-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4363,
+    "file": "rail-geometry-2-4-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4364,
+    "file": "rail-geometry-2-4-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4365,
+    "file": "rail-geometry-2-5-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4366,
+    "file": "rail-geometry-2-5-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4367,
+    "file": "rail-geometry-3-0-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4368,
+    "file": "rail-geometry-3-0-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4369,
+    "file": "rail-geometry-3-1-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4370,
+    "file": "rail-geometry-3-1-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4371,
+    "file": "rail-geometry-3-2-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4372,
+    "file": "rail-geometry-3-2-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4373,
+    "file": "rail-geometry-3-3-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4374,
+    "file": "rail-geometry-3-3-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4375,
+    "file": "rail-geometry-3-4-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4376,
+    "file": "rail-geometry-3-4-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4377,
+    "file": "rail-geometry-3-5-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4378,
+    "file": "rail-geometry-3-5-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4379,
+    "file": "rail-geometry-4-0-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4380,
+    "file": "rail-geometry-4-0-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4381,
+    "file": "rail-geometry-4-1-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4382,
+    "file": "rail-geometry-4-1-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4383,
+    "file": "rail-geometry-4-2-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4384,
+    "file": "rail-geometry-4-2-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4385,
+    "file": "rail-geometry-4-3-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4386,
+    "file": "rail-geometry-4-3-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4387,
+    "file": "rail-geometry-4-4-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4388,
+    "file": "rail-geometry-4-4-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4389,
+    "file": "rail-geometry-4-5-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4390,
+    "file": "rail-geometry-4-5-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4391,
+    "file": "rail-geometry-5-0-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4392,
+    "file": "rail-geometry-5-0-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4393,
+    "file": "rail-geometry-5-1-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4394,
+    "file": "rail-geometry-5-1-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4395,
+    "file": "rail-geometry-5-2-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4396,
+    "file": "rail-geometry-5-2-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4397,
+    "file": "rail-geometry-5-3-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4398,
+    "file": "rail-geometry-5-3-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4399,
+    "file": "rail-geometry-5-4-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4400,
+    "file": "rail-geometry-5-4-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4401,
+    "file": "rail-geometry-5-5-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4402,
+    "file": "rail-geometry-5-5-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4403,
+    "file": "rail-geometry-6-0-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4404,
+    "file": "rail-geometry-6-0-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4405,
+    "file": "rail-geometry-6-1-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4406,
+    "file": "rail-geometry-6-1-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4407,
+    "file": "rail-geometry-6-2-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4408,
+    "file": "rail-geometry-6-2-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4409,
+    "file": "rail-geometry-6-3-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4410,
+    "file": "rail-geometry-6-3-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4411,
+    "file": "rail-geometry-6-4-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4412,
+    "file": "rail-geometry-6-4-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4413,
+    "file": "rail-geometry-6-5-0.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4414,
+    "file": "rail-geometry-6-5-1.png",
+    "baseline": 242,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4415,
+    "file": "head-road-wood-1.png",
+    "baseline": 112,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4416,
+    "file": "head-road-wood-2.png",
+    "baseline": 112,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4417,
+    "file": "head-road-wood-3.png",
+    "baseline": 112,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4418,
+    "file": "head-road-wood-4.png",
+    "baseline": 112,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4419,
+    "file": "head-road-wood-level-1.png",
+    "baseline": 112,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4420,
+    "file": "head-road-wood-level-2.png",
+    "baseline": 112,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4421,
+    "file": "head-road-wood-level-3.png",
+    "baseline": 112,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4422,
+    "file": "head-road-wood-level-4.png",
+    "baseline": 112,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4423,
+    "file": "head-road-general-1.png",
+    "baseline": 112,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4424,
+    "file": "head-road-general-2.png",
+    "baseline": 112,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4425,
+    "file": "head-road-general-3.png",
+    "baseline": 112,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4426,
+    "file": "head-road-general-4.png",
+    "baseline": 112,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4427,
+    "file": "head-road-general-level-1.png",
+    "baseline": 112,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4428,
+    "file": "head-road-general-level-2.png",
+    "baseline": 112,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4429,
+    "file": "head-road-general-level-3.png",
+    "baseline": 112,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4430,
+    "file": "head-road-general-level-4.png",
+    "baseline": 112,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4431,
+    "file": "head-rail-wood-1.png",
+    "baseline": 112,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4432,
+    "file": "head-rail-wood-2.png",
+    "baseline": 112,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4433,
+    "file": "head-rail-wood-3.png",
+    "baseline": 112,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4434,
+    "file": "head-rail-wood-4.png",
+    "baseline": 112,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4435,
+    "file": "head-rail-wood-level-1.png",
+    "baseline": 112,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4436,
+    "file": "head-rail-wood-level-2.png",
+    "baseline": 112,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4437,
+    "file": "head-rail-wood-level-3.png",
+    "baseline": 112,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4438,
+    "file": "head-rail-wood-level-4.png",
+    "baseline": 112,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4439,
+    "file": "head-rail-general-1.png",
+    "baseline": 112,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4440,
+    "file": "head-rail-general-2.png",
+    "baseline": 112,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4441,
+    "file": "head-rail-general-3.png",
+    "baseline": 112,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4442,
+    "file": "head-rail-general-4.png",
+    "baseline": 112,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4443,
+    "file": "head-rail-general-level-1.png",
+    "baseline": 112,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4444,
+    "file": "head-rail-general-level-2.png",
+    "baseline": 112,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4445,
+    "file": "head-rail-general-level-3.png",
+    "baseline": 112,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  },
+  {
+    "id": 4446,
+    "file": "head-rail-general-level-4.png",
+    "baseline": 112,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "palette": "palette-source.png"
+  }
+]

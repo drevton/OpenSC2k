@@ -1,0 +1,40 @@
+{
+  "kind": 210,
+  "source_selection": {
+    "kind": 210,
+    "name": "Police station",
+    "review": "assets/landscape/building-studies/approval-batch-209-212/210-police-station/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-209-212/210-police-station/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-209-212/210-police-station/registered-cutout-source.png",
+    "review_sha256": "a9f6ec43ad896cc1428d42ecefe95822cc7ebb6b27e46c03f66bbc7cc3df15cb"
+  },
+  "installed_view_sha256": "39fa62dd452142ebe079204e06167e57d916a6e2e9b7c8d96390af1a7ca2ba04",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-209-212/210-police-station/registered-full-plot-calibration.png",
+      "installed": "assets/landscape/civic/210-police-station/approved-original.png",
+      "sha256": "4b44b6b855a831932863ec07cc6ca525f26ab58782de82a574da687303f301b5"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-209-212/210-police-station/registered-cutout-source.png",
+      "installed": "assets/landscape/civic/210-police-station/approved-foreground.png",
+      "sha256": "c4ed4245201093db227117c7bdba87a5f21373370c57ae8237201dfcdeee2fa8"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-209-212/210-police-station/native-foundation-mask.png",
+      "installed": "assets/landscape/civic/210-police-station/approved-foundation-mask.png",
+      "sha256": "43284b370c3cb125f8a7e52ae2a9a8ee00369f488551b62ead439965678fbf8e"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-209-212/210-police-station/view-0.png",
+      "installed": "assets/landscape/civic/210-police-station/approved-view.png",
+      "sha256": "39fa62dd452142ebe079204e06167e57d916a6e2e9b7c8d96390af1a7ca2ba04"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-209-212/210-police-station/ground-0.png",
+      "installed": "assets/landscape/civic/210-police-station/approved-ground.png",
+      "sha256": "18a067bb110cb54bdbbdd58d5939e8be707ef0e602e9604ebb5cec0b500b1319"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

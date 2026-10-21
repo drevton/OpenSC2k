@@ -1,0 +1,1534 @@
+{
+  "camera_elevation": 30,
+  "tile_width": 128,
+  "frames": [
+    {
+      "model": "airplane",
+      "view": 0,
+      "file": "airplane-0.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 225,
+      "pitch": 0.0,
+      "sha256": "39b7a76dc8cacdf39acd023e1866ab1039e8e93b20302433c3f15537289751af"
+    },
+    {
+      "model": "airplane",
+      "view": 1,
+      "file": "airplane-1.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 180,
+      "pitch": 0.0,
+      "sha256": "b072440caa43c13ab5a2db2699922641d495233eb1fd0210d158cd65aab236b5"
+    },
+    {
+      "model": "airplane",
+      "view": 2,
+      "file": "airplane-2.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 135,
+      "pitch": 0.0,
+      "sha256": "3d3b4a45b4b5b5cc260a63cbe3d183abb4803a5140a805531d754110f127ebf9"
+    },
+    {
+      "model": "airplane",
+      "view": 3,
+      "file": "airplane-3.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 90,
+      "pitch": 0.0,
+      "sha256": "d07151db7955f3b95369ccce492e18baeab7a3663ba7fc6e06c38f84095b21a3"
+    },
+    {
+      "model": "airplane",
+      "view": 4,
+      "file": "airplane-4.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 45,
+      "pitch": 0.0,
+      "sha256": "5d199299b899c1ee84e9cb4230dc9ff568a9bb1533c455500792fccc24c4a145"
+    },
+    {
+      "model": "ship",
+      "view": 0,
+      "file": "ship-0.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 225,
+      "pitch": 0.0,
+      "sha256": "7d1eda5746687cebc3467f99253918999f805ddfb7033cb116306930b2320a43"
+    },
+    {
+      "model": "ship",
+      "view": 1,
+      "file": "ship-1.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 180,
+      "pitch": 0.0,
+      "sha256": "6a29402449d4fedbbfa8041a6dcf10f3e5ce1d971dacb379dc8c3e75eeaf8c99"
+    },
+    {
+      "model": "ship",
+      "view": 2,
+      "file": "ship-2.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 135,
+      "pitch": 0.0,
+      "sha256": "766e507878a016e3d9167253919fc94a1b57c31ee9b07fba2a857ea58e3b69a5"
+    },
+    {
+      "model": "ship",
+      "view": 3,
+      "file": "ship-3.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 90,
+      "pitch": 0.0,
+      "sha256": "468b982db40b21f3c1d99c4b12c05b2f9d5841fcf6b798cc641bf19e053ccc5b"
+    },
+    {
+      "model": "ship",
+      "view": 4,
+      "file": "ship-4.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 45,
+      "pitch": 0.0,
+      "sha256": "7b957b793ff484e9a2ae54d650f4770f3a4b45e2c0a2834c451eb68ae48738dd"
+    },
+    {
+      "model": "engine",
+      "view": 0,
+      "file": "engine-0.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 0,
+      "pitch": 0.0,
+      "sha256": "a3ce8977966d5eb7ef7cfb8d3ec63251ecce5b70d7011089902f82c9683fe01e"
+    },
+    {
+      "model": "engine",
+      "view": 1,
+      "file": "engine-1.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 90,
+      "pitch": 0.0,
+      "sha256": "3bc3ffc96ec4679b07b25ba402781dac5480ccb0776ca83af2e2011598ea65a6"
+    },
+    {
+      "model": "engine",
+      "view": 2,
+      "file": "engine-2.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 45,
+      "pitch": 0.0,
+      "sha256": "4b52fe9fdc32867397b98d93898ce3401b0c26f519ddb1b927880ef64f7cc4c3"
+    },
+    {
+      "model": "engine",
+      "view": 3,
+      "file": "engine-3.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 0,
+      "pitch": 14.0,
+      "sha256": "a12b472038a1b3cce7b97b12975f3a2edbd49a67b21507ffa4d31720c37c5e45"
+    },
+    {
+      "model": "engine",
+      "view": 4,
+      "file": "engine-4.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 90,
+      "pitch": 14.0,
+      "sha256": "11790cee76da98641194d3cef2bb16c87ae5ca11aaebf73170041e561c20818d"
+    },
+    {
+      "model": "coach",
+      "view": 0,
+      "file": "coach-0.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 0,
+      "pitch": 0.0,
+      "sha256": "7745cf1ba7a437200bae3b1f1396924ca28285faab1fe186e63907fd102fa492"
+    },
+    {
+      "model": "coach",
+      "view": 1,
+      "file": "coach-1.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 90,
+      "pitch": 0.0,
+      "sha256": "e2cfef640aef2e1624eadd85f2daf346cfdf0fdcca741dc0c662de758915eaf5"
+    },
+    {
+      "model": "coach",
+      "view": 2,
+      "file": "coach-2.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 45,
+      "pitch": 0.0,
+      "sha256": "2a628ed59b4cd5ec270ff56ec31711305fb1a01859bd85965814e624878cbeed"
+    },
+    {
+      "model": "coach",
+      "view": 3,
+      "file": "coach-3.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 0,
+      "pitch": 14.0,
+      "sha256": "d499b10d0c2ad889f10961558c39c0ed163c086b8fa6ba3218f904c570ec7894"
+    },
+    {
+      "model": "coach",
+      "view": 4,
+      "file": "coach-4.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 90,
+      "pitch": 14.0,
+      "sha256": "5d2a8ac1681ddfea18be9165404d06bfd29e3e006a7b2bb3b5dc062e8d00ae7f"
+    },
+    {
+      "model": "sailboat",
+      "view": 0,
+      "file": "sailboat-0.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 0,
+      "pitch": 0.0,
+      "sha256": "f8ea57848070413c8db6823c3acfabaa91777c4ad594a35e5d358e481d844c7c"
+    },
+    {
+      "model": "sailboat",
+      "view": 1,
+      "file": "sailboat-1.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 90,
+      "pitch": 0.0,
+      "sha256": "8022c4b90fac3ce1e6e145e097ac851081ddabf9f1ff438c798e2f804d662edd"
+    },
+    {
+      "model": "bulldozer",
+      "view": 0,
+      "file": "bulldozer-0.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 0,
+      "pitch": 0.0,
+      "sha256": "6f2cfbe2a78264c4aa87dd36548727d443ff333a26a61b96302c06ede518d5cf"
+    },
+    {
+      "model": "bulldozer",
+      "view": 1,
+      "file": "bulldozer-1.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 90,
+      "pitch": 0.0,
+      "sha256": "39ee5113bc1d79155f7488acd4e41a119a91af0660f043a103976fb0c48b6015"
+    },
+    {
+      "model": "drawbridge-closed",
+      "view": 0,
+      "file": "drawbridge-closed-0.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 0,
+      "pitch": 0.0,
+      "sha256": "07d0ec1696da95af41407feb4769ecdc1877305fe20dd67ce4948c41974d0e81"
+    },
+    {
+      "model": "drawbridge-open",
+      "view": 0,
+      "file": "drawbridge-open-0.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 0,
+      "pitch": 0.0,
+      "sha256": "53f9d2e92a2a77f8022c62653b4ab1c6697c3f2ecc4478eef8c66a3dc15b8e24"
+    },
+    {
+      "model": "crowd",
+      "view": 0,
+      "file": "crowd-0.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 0,
+      "pitch": 0.0,
+      "sha256": "9fc5fc3a5c3bd95ff106bc84da3c3e1ffe447df05d8b989930602785ec944066"
+    },
+    {
+      "model": "crowd",
+      "view": 1,
+      "file": "crowd-1.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 90,
+      "pitch": 0.0,
+      "sha256": "a526a300ff973bbd54ee2954808c67b3bf1831bd8a0b883ff39229ed51c1c7f7"
+    },
+    {
+      "model": "crawler",
+      "view": 0,
+      "file": "crawler-0.png",
+      "canvas": [
+        512,
+        640
+      ],
+      "anchor": [
+        256,
+        460
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 45,
+      "pitch": 0.0,
+      "sha256": "9e9d91e653354cad5e22e7deb20f56aa55486e10947d097cd8ffbee210e86a4e"
+    },
+    {
+      "model": "crawler",
+      "view": 1,
+      "file": "crawler-1.png",
+      "canvas": [
+        512,
+        640
+      ],
+      "anchor": [
+        256,
+        460
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 135,
+      "pitch": 0.0,
+      "sha256": "92e2bbbda1d91825b316d0a90607411ed0ffc182b25b64609f638f12ea55cd0a"
+    },
+    {
+      "model": "helicopter",
+      "view": 0,
+      "file": "helicopter-0.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 225,
+      "pitch": 0.0,
+      "rotor_frame": 0,
+      "sha256": "aaa89f1e676af8d6b809d731027fd6d9f4e4726ff2b15d7eddd857aafe61e59c"
+    },
+    {
+      "model": "helicopter",
+      "view": 0,
+      "file": "helicopter-0-01.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 225,
+      "pitch": 0.0,
+      "rotor_frame": 1,
+      "sha256": "74fcaaaff84b40e4c50ea0e73519c8e2626770d16cdbc1dc639b9c7ededd6703"
+    },
+    {
+      "model": "helicopter",
+      "view": 0,
+      "file": "helicopter-0-02.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 225,
+      "pitch": 0.0,
+      "rotor_frame": 2,
+      "sha256": "033b4619dce11b2d5ef7877bd1d959131e619eec6e446a0016cf9f6dfbfce06f"
+    },
+    {
+      "model": "helicopter",
+      "view": 0,
+      "file": "helicopter-0-03.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 225,
+      "pitch": 0.0,
+      "rotor_frame": 3,
+      "sha256": "6c12deb5453761a3c37eb8a2d73d6a8d1935aaefda41aa1e98f806b800b9b31f"
+    },
+    {
+      "model": "helicopter",
+      "view": 0,
+      "file": "helicopter-0-04.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 225,
+      "pitch": 0.0,
+      "rotor_frame": 4,
+      "sha256": "ca2fed031a79123e9382fbf13ea4fc568d6ac58deabbaf959170a526686f36f0"
+    },
+    {
+      "model": "helicopter",
+      "view": 0,
+      "file": "helicopter-0-05.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 225,
+      "pitch": 0.0,
+      "rotor_frame": 5,
+      "sha256": "a873ad2c1c3a392f2fdc927ae459292583c7264ba5ead493cb3b1222543fce8a"
+    },
+    {
+      "model": "helicopter",
+      "view": 0,
+      "file": "helicopter-0-06.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 225,
+      "pitch": 0.0,
+      "rotor_frame": 6,
+      "sha256": "f59392ddbe0552252ad8eadd311265c10292db9e348c4048cbce61f2bc0689cb"
+    },
+    {
+      "model": "helicopter",
+      "view": 0,
+      "file": "helicopter-0-07.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 225,
+      "pitch": 0.0,
+      "rotor_frame": 7,
+      "sha256": "372a8c1308f9f0e8f82b5a1ed0fc9bc5cdd30170a6e2aefd8e66a3e3df6c38d9"
+    },
+    {
+      "model": "helicopter",
+      "view": 1,
+      "file": "helicopter-1.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 180,
+      "pitch": 0.0,
+      "rotor_frame": 0,
+      "sha256": "5fa8212e60dcbb8a3a96716a57f3c5e712854713dd580c8246358fdb46b5a318"
+    },
+    {
+      "model": "helicopter",
+      "view": 1,
+      "file": "helicopter-1-01.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 180,
+      "pitch": 0.0,
+      "rotor_frame": 1,
+      "sha256": "8a72055c120e376c374372472e4f9db2cc52124f99d5dec171f522788d81c630"
+    },
+    {
+      "model": "helicopter",
+      "view": 1,
+      "file": "helicopter-1-02.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 180,
+      "pitch": 0.0,
+      "rotor_frame": 2,
+      "sha256": "7ac281f90b21b4e5adcf770b21dd5d3428c3e41562fe8867ee23381694fae03b"
+    },
+    {
+      "model": "helicopter",
+      "view": 1,
+      "file": "helicopter-1-03.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 180,
+      "pitch": 0.0,
+      "rotor_frame": 3,
+      "sha256": "6d3090a86bedb449f6b4c50aac98fc5c019bc78e4f71ead1eb48b42c9aec2fd0"
+    },
+    {
+      "model": "helicopter",
+      "view": 1,
+      "file": "helicopter-1-04.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 180,
+      "pitch": 0.0,
+      "rotor_frame": 4,
+      "sha256": "94a9f42f8288595db58e1917ac13bf8f1392c576bfeee2191bd04e3d00938155"
+    },
+    {
+      "model": "helicopter",
+      "view": 1,
+      "file": "helicopter-1-05.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 180,
+      "pitch": 0.0,
+      "rotor_frame": 5,
+      "sha256": "e6e3f27e2e13c9030a0a1fe9293818ed254700b64490a2bdcfb84766e1d5b025"
+    },
+    {
+      "model": "helicopter",
+      "view": 1,
+      "file": "helicopter-1-06.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 180,
+      "pitch": 0.0,
+      "rotor_frame": 6,
+      "sha256": "0d6483d683fd85af19d2f32614e3538f5d37ac57c20c44e15dc19017c8138bc1"
+    },
+    {
+      "model": "helicopter",
+      "view": 1,
+      "file": "helicopter-1-07.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 180,
+      "pitch": 0.0,
+      "rotor_frame": 7,
+      "sha256": "4a5c33dc0b87c233e6f395d2fdf5a232f9c631aa2a2143f8b8d1aa2a11f9cad7"
+    },
+    {
+      "model": "helicopter",
+      "view": 2,
+      "file": "helicopter-2.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 135,
+      "pitch": 0.0,
+      "rotor_frame": 0,
+      "sha256": "14f26412d434c3dd4e4ed3742d7eebac6800d8631932ae7025276abf9c9d1d59"
+    },
+    {
+      "model": "helicopter",
+      "view": 2,
+      "file": "helicopter-2-01.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 135,
+      "pitch": 0.0,
+      "rotor_frame": 1,
+      "sha256": "2c31df930400f10e9491836980a355f9708b8bcc18e1316a9ec89b3df8727bc5"
+    },
+    {
+      "model": "helicopter",
+      "view": 2,
+      "file": "helicopter-2-02.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 135,
+      "pitch": 0.0,
+      "rotor_frame": 2,
+      "sha256": "6d4b0bd093221c6750a2c9b9612d61e44aa217c0862c8c13dd306a96838488fb"
+    },
+    {
+      "model": "helicopter",
+      "view": 2,
+      "file": "helicopter-2-03.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 135,
+      "pitch": 0.0,
+      "rotor_frame": 3,
+      "sha256": "e59663a7e7c03b4295da9cc29d42f679cfc0427aaa87afb5918b46a57bc27720"
+    },
+    {
+      "model": "helicopter",
+      "view": 2,
+      "file": "helicopter-2-04.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 135,
+      "pitch": 0.0,
+      "rotor_frame": 4,
+      "sha256": "e4f7b1cba8c0975bcffb9dd6c93bd8e6712dd3d03b2e0c237fab671a1a47569c"
+    },
+    {
+      "model": "helicopter",
+      "view": 2,
+      "file": "helicopter-2-05.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 135,
+      "pitch": 0.0,
+      "rotor_frame": 5,
+      "sha256": "76bb73ca80f934ce7e5bf1f002ccfa6244211b914b6fc7fc72a74dd8cf11fd94"
+    },
+    {
+      "model": "helicopter",
+      "view": 2,
+      "file": "helicopter-2-06.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 135,
+      "pitch": 0.0,
+      "rotor_frame": 6,
+      "sha256": "001db1fa069f32eed2d2c03a346edebd7203242cbe0d6101045d6d92d6e0564d"
+    },
+    {
+      "model": "helicopter",
+      "view": 2,
+      "file": "helicopter-2-07.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 135,
+      "pitch": 0.0,
+      "rotor_frame": 7,
+      "sha256": "79fc45a9425687772610bd8abccdcaab77519a89f5d9e462558af7200a62fb50"
+    },
+    {
+      "model": "helicopter",
+      "view": 3,
+      "file": "helicopter-3.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 90,
+      "pitch": 0.0,
+      "rotor_frame": 0,
+      "sha256": "8774869aee227fc438128d824bf368831aac076960cc5d0f1bd2af079138c614"
+    },
+    {
+      "model": "helicopter",
+      "view": 3,
+      "file": "helicopter-3-01.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 90,
+      "pitch": 0.0,
+      "rotor_frame": 1,
+      "sha256": "e561c5dc693331e05150fd44730240e5e83dfab982847915e92b24de04eba4db"
+    },
+    {
+      "model": "helicopter",
+      "view": 3,
+      "file": "helicopter-3-02.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 90,
+      "pitch": 0.0,
+      "rotor_frame": 2,
+      "sha256": "b7b41ee12f8343560883bba4c11911ad5c48d4eb6b123f614648264493cd3366"
+    },
+    {
+      "model": "helicopter",
+      "view": 3,
+      "file": "helicopter-3-03.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 90,
+      "pitch": 0.0,
+      "rotor_frame": 3,
+      "sha256": "ea90dfe42a43c65377b0e37befc94f33ac8b9449cc3c549c1bde7e13b051e316"
+    },
+    {
+      "model": "helicopter",
+      "view": 3,
+      "file": "helicopter-3-04.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 90,
+      "pitch": 0.0,
+      "rotor_frame": 4,
+      "sha256": "fdf5fb7f0a6a194735d2fd837658172c01fe4e0a816af5644e711b706d3c213c"
+    },
+    {
+      "model": "helicopter",
+      "view": 3,
+      "file": "helicopter-3-05.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 90,
+      "pitch": 0.0,
+      "rotor_frame": 5,
+      "sha256": "6a3450e89db6744df15b54e914210a4f38b0126c25daf47e48fd8d118223c5d3"
+    },
+    {
+      "model": "helicopter",
+      "view": 3,
+      "file": "helicopter-3-06.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 90,
+      "pitch": 0.0,
+      "rotor_frame": 6,
+      "sha256": "4f308a9aebd06e36126dfb23c1888c8933f47e72ad70c3ba0eac416ac6d32894"
+    },
+    {
+      "model": "helicopter",
+      "view": 3,
+      "file": "helicopter-3-07.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 90,
+      "pitch": 0.0,
+      "rotor_frame": 7,
+      "sha256": "9a6b29699415af1af2931b984700335aa0ed9fb248f2cbbf997c8aa7d8f8cec3"
+    },
+    {
+      "model": "helicopter",
+      "view": 4,
+      "file": "helicopter-4.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 45,
+      "pitch": 0.0,
+      "rotor_frame": 0,
+      "sha256": "e27434ba67a64a8736464c0580250d47fa2ddc41f5fc56a8102ae9a9af44d58e"
+    },
+    {
+      "model": "helicopter",
+      "view": 4,
+      "file": "helicopter-4-01.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 45,
+      "pitch": 0.0,
+      "rotor_frame": 1,
+      "sha256": "20525c880fd6056f239ae95cf8107d9b3e6e9b9534195c82c31ce1fcc98526c0"
+    },
+    {
+      "model": "helicopter",
+      "view": 4,
+      "file": "helicopter-4-02.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 45,
+      "pitch": 0.0,
+      "rotor_frame": 2,
+      "sha256": "fe5c94ad99d30ad6a4da78d2fe49f3a398be2337dcf915f920bf699dcb3a8acb"
+    },
+    {
+      "model": "helicopter",
+      "view": 4,
+      "file": "helicopter-4-03.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 45,
+      "pitch": 0.0,
+      "rotor_frame": 3,
+      "sha256": "caf90e96bd59ecd2905405a0170df860d09a0f40a59faa1973d43335934dc277"
+    },
+    {
+      "model": "helicopter",
+      "view": 4,
+      "file": "helicopter-4-04.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 45,
+      "pitch": 0.0,
+      "rotor_frame": 4,
+      "sha256": "18adb54e95a9e8852b2359e412c604b94a7c0550eed36a669b9e5f67bff49b71"
+    },
+    {
+      "model": "helicopter",
+      "view": 4,
+      "file": "helicopter-4-05.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 45,
+      "pitch": 0.0,
+      "rotor_frame": 5,
+      "sha256": "6656b2b47c85bfe02e699ee8e8ef5831a8510717c04dd13b9694d1e8aaa29fa1"
+    },
+    {
+      "model": "helicopter",
+      "view": 4,
+      "file": "helicopter-4-06.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 45,
+      "pitch": 0.0,
+      "rotor_frame": 6,
+      "sha256": "2a01e5e72bc0c01c06c9a95177a317bf2ba20fc012feee162e287cb90b52213a"
+    },
+    {
+      "model": "helicopter",
+      "view": 4,
+      "file": "helicopter-4-07.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 45,
+      "pitch": 0.0,
+      "rotor_frame": 7,
+      "sha256": "0d846a8b3b9cab317d9ef3325eb84e57001ffdf3de3a50f739ef248c18b010ed"
+    },
+    {
+      "model": "rescue",
+      "view": 0,
+      "file": "rescue-0.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 225,
+      "pitch": 0.0,
+      "rotor_frame": 0,
+      "sha256": "fa67e24eaa5d742cfa920d0ddee32f11079e2e1359a145b4d89ed0df275d00a2"
+    },
+    {
+      "model": "rescue",
+      "view": 1,
+      "file": "rescue-1.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 180,
+      "pitch": 0.0,
+      "rotor_frame": 0,
+      "sha256": "e8ef3e0f2250d62276ec7124e843f625d5d3caecb2f701b3c9e5e8a4b2e8d183"
+    },
+    {
+      "model": "rescue",
+      "view": 2,
+      "file": "rescue-2.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 135,
+      "pitch": 0.0,
+      "rotor_frame": 0,
+      "sha256": "7ee4ef2e0cd5e5299941394800a1c08196732da149da2cbe74c2084b7ece1b27"
+    },
+    {
+      "model": "rescue",
+      "view": 2,
+      "file": "rescue-2-01.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 135,
+      "pitch": 0.0,
+      "rotor_frame": 1,
+      "sha256": "ada96b43aa6a276963f184223a704f2c96b0512a506233a2cdcaae00aed18a2e"
+    },
+    {
+      "model": "rescue",
+      "view": 2,
+      "file": "rescue-2-02.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 135,
+      "pitch": 0.0,
+      "rotor_frame": 2,
+      "sha256": "b160ee63b614011d0e45605305533369609a986a382a7868e8602455e1c3c8ae"
+    },
+    {
+      "model": "rescue",
+      "view": 2,
+      "file": "rescue-2-03.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 135,
+      "pitch": 0.0,
+      "rotor_frame": 3,
+      "sha256": "c4979fd8c6192bd23e60a4f9f39dbc01b3d66b434ea31235e70dcaa019700b6f"
+    },
+    {
+      "model": "rescue",
+      "view": 2,
+      "file": "rescue-2-04.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 135,
+      "pitch": 0.0,
+      "rotor_frame": 4,
+      "sha256": "b1a8c67318b83d1aa9b8b421497f9c51851a682ae7634b725e63dfc794e69e50"
+    },
+    {
+      "model": "rescue",
+      "view": 2,
+      "file": "rescue-2-05.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 135,
+      "pitch": 0.0,
+      "rotor_frame": 5,
+      "sha256": "4a3f3a0ee885fb55d7fcaf643c5fe9665956d7fdd09739b3bec434b1e7b05247"
+    },
+    {
+      "model": "rescue",
+      "view": 2,
+      "file": "rescue-2-06.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 135,
+      "pitch": 0.0,
+      "rotor_frame": 6,
+      "sha256": "e5a3c72d6cb0c71c24ce0b46ca72773ce947941a93cfcbe5f0b5a3c3b13ade0f"
+    },
+    {
+      "model": "rescue",
+      "view": 2,
+      "file": "rescue-2-07.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 135,
+      "pitch": 0.0,
+      "rotor_frame": 7,
+      "sha256": "b2c2154760391f5b7b582203c53e87f5eb1807047aef732e3fdb36f920295b1e"
+    },
+    {
+      "model": "rescue",
+      "view": 3,
+      "file": "rescue-3.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 90,
+      "pitch": 0.0,
+      "rotor_frame": 0,
+      "sha256": "d9e57c972d109ee9354ba1dd4973bd91003b665cb03541a8c2308bfc41de765a"
+    },
+    {
+      "model": "rescue",
+      "view": 4,
+      "file": "rescue-4.png",
+      "canvas": [
+        256,
+        256
+      ],
+      "anchor": [
+        128,
+        208
+      ],
+      "supersample": 2,
+      "scale_divisor": 4,
+      "yaw": 45,
+      "pitch": 0.0,
+      "rotor_frame": 0,
+      "sha256": "5475c2b83462f52e7d53ecf845b821c47b023f1e75e1917998b2cf79413a692f"
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "kind": 247,
+  "source_selection": {
+    "kind": 247,
+    "name": "Church",
+    "review": "assets/landscape/building-studies/approval-batch-245-248/247-church/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-245-248/247-church/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-245-248/247-church/calibrated-source.png",
+    "review_sha256": "c05d06f848283b79ffc7c3fdeeba0da8df5eb6476d07904a852c4f40c4025e6a"
+  },
+  "installed_view_sha256": "c05d06f848283b79ffc7c3fdeeba0da8df5eb6476d07904a852c4f40c4025e6a",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-245-248/247-church/calibrated-source.png",
+      "installed": "assets/landscape/civic/247-church/approved-original.png",
+      "sha256": "51b66cab648c1c5242a13a8911aacf2bc593069db4b8477b55627e8644359d86"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-245-248/247-church/calibrated-source.png",
+      "installed": "assets/landscape/civic/247-church/approved-foreground.png",
+      "sha256": "51b66cab648c1c5242a13a8911aacf2bc593069db4b8477b55627e8644359d86"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-245-248/247-church/native-foundation-mask.png",
+      "installed": "assets/landscape/civic/247-church/approved-foundation-mask.png",
+      "sha256": "b14ab49e8a4c7fb75407e763472562eaeb15d67d1d79fdc3abcce8504b0f5e0f"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-245-248/247-church/view-0.png",
+      "installed": "assets/landscape/civic/247-church/approved-view.png",
+      "sha256": "c05d06f848283b79ffc7c3fdeeba0da8df5eb6476d07904a852c4f40c4025e6a"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-245-248/247-church/ground-0.png",
+      "installed": "assets/landscape/civic/247-church/approved-ground.png",
+      "sha256": "5ea02d4023e72bce1ff1575ff249642fce87948bc699807c549dda6072d6b690"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

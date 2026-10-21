@@ -1,0 +1,8 @@
+Use case: stylized-concept
+Asset type: production material master for a 128-pixel-wide isometric railroad tile set in a SimCity-like city builder.
+Primary request: a beautiful seamless square texture of railroad ballast only, viewed directly from above in orthographic projection. Dense small angular crushed stones, irregular slate and granite, naturally mixed sizes with occasional tiny rust-brown grains. Carefully painted tactile game artwork, crisp and readable when reduced, restrained realistic shading matching polished OpenGFX-like transport graphics.
+Lighting: soft diffuse light from upper left, subtle ambient occlusion between stones, no overall directional brightness gradient.
+Palette: muted warm neutral gray stone, a few taupe and brown flecks; moderate contrast, medium brightness. No green, no saturation, no charcoal-black large gaps.
+Composition: fill the whole square uniformly; texture continues seamlessly across each opposite edge. Fine even grain at a scale appropriate to railway ballast. No railway rails, sleepers, ties, roads, terrain, vegetation, labels, border or watermark. No blur, no repeating bands or rows. This is a material, not a scene or a tile silhouette.
+
+Generated with the built-in ImageGen tool. The original master is retained beside this prompt.

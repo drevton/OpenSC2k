@@ -1,0 +1,40 @@
+{
+  "kind": 246,
+  "source_selection": {
+    "kind": 246,
+    "name": "Hangar",
+    "review": "assets/landscape/building-studies/approval-batch-245-248/246-hangar/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-245-248/246-hangar/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-245-248/246-hangar/calibrated-source.png",
+    "review_sha256": "91a696ff8804e270f0ab2a0b639c6b506592c1689fca40360ee0f457903360f7"
+  },
+  "installed_view_sha256": "91a696ff8804e270f0ab2a0b639c6b506592c1689fca40360ee0f457903360f7",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-245-248/246-hangar/calibrated-source.png",
+      "installed": "assets/landscape/civic/246-hangar/approved-original.png",
+      "sha256": "2d049ad126ad4231f131d3dc560d3cbb5e84519ef08e034915eff7330689c333"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-245-248/246-hangar/calibrated-source.png",
+      "installed": "assets/landscape/civic/246-hangar/approved-foreground.png",
+      "sha256": "2d049ad126ad4231f131d3dc560d3cbb5e84519ef08e034915eff7330689c333"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-245-248/246-hangar/native-foundation-mask.png",
+      "installed": "assets/landscape/civic/246-hangar/approved-foundation-mask.png",
+      "sha256": "4469ffc0881dca44f2dc6f1cdf51d682f73fd496d3262c053dc7322264caff37"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-245-248/246-hangar/view-0.png",
+      "installed": "assets/landscape/civic/246-hangar/approved-view.png",
+      "sha256": "91a696ff8804e270f0ab2a0b639c6b506592c1689fca40360ee0f457903360f7"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-245-248/246-hangar/ground-0.png",
+      "installed": "assets/landscape/civic/246-hangar/approved-ground.png",
+      "sha256": "65850c7f388239871d26434817b8277745a4c15e0620d8750ed99144648f541d"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

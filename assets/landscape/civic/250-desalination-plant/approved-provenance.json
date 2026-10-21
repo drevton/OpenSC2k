@@ -1,0 +1,40 @@
+{
+  "kind": 250,
+  "source_selection": {
+    "kind": 250,
+    "name": "Desalinization plant",
+    "review": "assets/landscape/building-studies/approval-batch-249-252/250-desalination-plant/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-249-252/250-desalination-plant/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-249-252/250-desalination-plant/calibrated-source.png",
+    "review_sha256": "3b971bdc9022084eece5c61965dd8181867ebb7229d779bc09a57a3487ab0c1f"
+  },
+  "installed_view_sha256": "3b971bdc9022084eece5c61965dd8181867ebb7229d779bc09a57a3487ab0c1f",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-249-252/250-desalination-plant/calibrated-source.png",
+      "installed": "assets/landscape/civic/250-desalination-plant/approved-original.png",
+      "sha256": "256c3d0c9f03896c938a76c9205ac2b83d1b44cabc52772e550dc666d5497691"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-249-252/250-desalination-plant/calibrated-source.png",
+      "installed": "assets/landscape/civic/250-desalination-plant/approved-foreground.png",
+      "sha256": "256c3d0c9f03896c938a76c9205ac2b83d1b44cabc52772e550dc666d5497691"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-249-252/250-desalination-plant/native-foundation-mask.png",
+      "installed": "assets/landscape/civic/250-desalination-plant/approved-foundation-mask.png",
+      "sha256": "9ea3873ddd96388a3c1dbe83fd99ab1a7dcc6a8b06d288a880d7c5e944924d6b"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-249-252/250-desalination-plant/view-0.png",
+      "installed": "assets/landscape/civic/250-desalination-plant/approved-view.png",
+      "sha256": "3b971bdc9022084eece5c61965dd8181867ebb7229d779bc09a57a3487ab0c1f"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-249-252/250-desalination-plant/ground-0.png",
+      "installed": "assets/landscape/civic/250-desalination-plant/approved-ground.png",
+      "sha256": "220f73cf3b2b7aab07b0516c53b576585945579c8dfa33394708fe070c1a7b8a"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

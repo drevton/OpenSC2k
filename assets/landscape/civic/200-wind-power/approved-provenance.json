@@ -1,0 +1,40 @@
+{
+  "kind": 200,
+  "source_selection": {
+    "kind": 200,
+    "name": "Wind power",
+    "review": "assets/landscape/building-studies/approval-batch-196-200/200-wind-power/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-196-200/200-wind-power/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-196-200/200-wind-power/registered-cutout-source.png",
+    "review_sha256": "79d3f6fd10b41ab08156e17ca442da82688f3cff37fd6d27573e39a23001bf8b"
+  },
+  "installed_view_sha256": "115b143906028c492dd8b8adab7ed3f4fa0f4a8ede582fdae1fdfc76cb641489",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-196-200/200-wind-power/registered-full-plot-calibration.png",
+      "installed": "assets/landscape/civic/200-wind-power/approved-original.png",
+      "sha256": "808ea502223b582f321cf8722310a4e501a8ea3b1d27b639e3ec3a8c7019aee8"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-196-200/200-wind-power/registered-cutout-source.png",
+      "installed": "assets/landscape/civic/200-wind-power/approved-foreground.png",
+      "sha256": "a41e6e95f7067a99103841ac376f802553336a419d58f37aab3e15baf7712ea0"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-196-200/200-wind-power/native-foundation-mask.png",
+      "installed": "assets/landscape/civic/200-wind-power/approved-foundation-mask.png",
+      "sha256": "0193224980ebb066fdd131027b80b26dd02b0417617b7b4f2090bf5f152f2b45"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-196-200/200-wind-power/view-0.png",
+      "installed": "assets/landscape/civic/200-wind-power/approved-view.png",
+      "sha256": "115b143906028c492dd8b8adab7ed3f4fa0f4a8ede582fdae1fdfc76cb641489"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-196-200/200-wind-power/ground-0.png",
+      "installed": "assets/landscape/civic/200-wind-power/approved-ground.png",
+      "sha256": "727f276ce9e20574037569882bd2df4d6e20ea442a4b1f89ef0359109f5dfcc5"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

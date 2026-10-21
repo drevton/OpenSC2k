@@ -1,0 +1,59 @@
+{
+  "kind": 211,
+  "footprint_tiles": [
+    3,
+    3
+  ],
+  "mask": "approved-foundation-mask.png",
+  "paving": "../../buildings/ground/concrete-material.png",
+  "views": [
+    {
+      "original": "approved-original.png",
+      "foreground": "approved-foreground.png",
+      "plinth_pixels": 0,
+      "ground_corners": [
+        [
+          90,
+          690.4229712795718
+        ],
+        [
+          747.0233932574578,
+          1044.3664552009502
+        ],
+        [
+          1413,
+          686.5058791399941
+        ]
+      ],
+      "foreground_ground_corners": [
+        [
+          90,
+          703.5259249376829
+        ],
+        [
+          751.5,
+          1034.3664552009502
+        ],
+        [
+          1413,
+          694.5948174663802
+        ]
+      ]
+    }
+  ],
+  "terrain_masks": "../../opengfx2/detail128/terrain-masks.png",
+  "retain_painted_ground": true,
+  "content_inset_pixels": 0,
+  "reject_opaque_trim": true,
+  "omit_ground_in_sprite": false,
+  "edge_registration_pixels": 0,
+  "retain_foreground_ground": false,
+  "align_building_height": false,
+  "artwork_scale": 1,
+  "ground_excludes_foreground": true,
+  "corner_fill_color": [
+    123,
+    123,
+    123
+  ]
+}

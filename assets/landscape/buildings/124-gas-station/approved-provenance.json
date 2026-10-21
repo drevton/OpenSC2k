@@ -1,0 +1,40 @@
+{
+  "kind": 124,
+  "source_selection": {
+    "kind": 124,
+    "name": "Gas Station",
+    "review": "assets/landscape/building-studies/approval-batch-124-127/124-gas-station/native-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-124-127/124-gas-station/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-124-127/124-gas-station/painted-taller-sign-larger-silver-car-study.png",
+    "review_sha256": "34a6788294377792239428c5b0d3ef07602bafe193bcb936dcafe50e8ee0c573"
+  },
+  "installed_view_sha256": "3c8ecb36be25fb69b8436a385cd5065f2d7bb6704b07234ca653c219d832b6c1",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-124-127/124-gas-station/painted-taller-sign-larger-silver-car-study.png",
+      "installed": "assets/landscape/buildings/124-gas-station/approved-original.png",
+      "sha256": "2e399409e3a29faa7d2d05fb6730765c83712c9372e6ad74cf45de01445e49d8"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-124-127/124-gas-station/painted-taller-sign-larger-silver-car-study.png",
+      "installed": "assets/landscape/buildings/124-gas-station/approved-foreground.png",
+      "sha256": "2e399409e3a29faa7d2d05fb6730765c83712c9372e6ad74cf45de01445e49d8"
+    },
+    {
+      "source": "assets/landscape/buildings/124-gas-station/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/124-gas-station/approved-foundation-mask.png",
+      "sha256": "c029caa2ab8ea9c96bece66c126afebe08a13a031d32daeec5337fc06091705b"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-124-127/124-gas-station/view-0.png",
+      "installed": "assets/landscape/buildings/124-gas-station/approved-view.png",
+      "sha256": "3c8ecb36be25fb69b8436a385cd5065f2d7bb6704b07234ca653c219d832b6c1"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-124-127/124-gas-station/ground-0.png",
+      "installed": "assets/landscape/buildings/124-gas-station/approved-ground.png",
+      "sha256": "f6e1afc40b4b7ab3309118e4ed66e3fdd1d4a2375f1bd06634c673a071609cf0"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

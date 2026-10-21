@@ -1,0 +1,141 @@
+#ifndef SC2K_DOMAIN_SRC_UI_STARTUP_STARTUP_H
+#define SC2K_DOMAIN_SRC_UI_STARTUP_STARTUP_H
+
+#include "ui/input.h"
+#include "city/engine/city_types.h"
+#include "drawing/canvas.h"
+#include "city/terrain/terrain.h"
+#include "city/types.h"
+#include "ui/dialogs/dialog_state.h"
+#include "ui/windows/state.h"
+
+typedef enum CitySetupDifficulty {
+  CITY_SETUP_DIFFICULTY_EASY = 0, CITY_SETUP_DIFFICULTY_MEDIUM = 1,
+  CITY_SETUP_DIFFICULTY_HARD = 2,
+  CITY_SETUP_DIFFICULTY_COUNT = 3,
+} CitySetupDifficulty;
+
+typedef enum CitySetupEra {
+  CITY_SETUP_ERA_1900 = 0, CITY_SETUP_ERA_1950 = 1,
+  CITY_SETUP_ERA_2000 = 2, CITY_SETUP_ERA_2050 = 3,
+  CITY_SETUP_ERA_COUNT = 4,
+} CitySetupEra;
+
+// Dialog State
+
+typedef struct CityNewCitySetupDialog {
+  CityStartupWindow base;
+  char city_name[33];
+  int era, difficulty;
+  int start_year; // Native year selection; zero retains the original era choice.
+  CityName previous_name;
+} CityNewCitySetupDialog;
+
+// Startup Layout
+
+enum { CITY_STARTUP_CANVAS_CONTROLS = 64, CITY_STARTUP_CANVAS_TEXT = 256 };
+enum {
+  CITY_RESOURCE_CONTROL_BUTTON = 0x80, CITY_RESOURCE_CONTROL_EDIT = 0x81,
+  CITY_RESOURCE_CONTROL_SLIDER = 0x90, CITY_RESOURCE_CONTROL_DROPDOWN = 0x91,
+  CITY_RESOURCE_STYLE_VISIBLE = 0x10000000, CITY_RESOURCE_STYLE_DISABLED = 0x08000000,
+  CITY_RESOURCE_BUTTON_DEFAULT = 1, CITY_RESOURCE_BUTTON_TYPE_MASK = 0x0F,
+  CITY_RESOURCE_BUTTON_RADIO = 9, CITY_RESOURCE_BUTTON_CHECKBOX = 3, CITY_RESOURCE_BUTTON_GROUP = 7,
+};
+typedef struct {
+  i32 id, visible, checked;
+  u16 control_class;
+  u32 style;
+  CityRect bounds; // Relative to the client area, in logical UI pixels.
+  char text[CITY_STARTUP_CANVAS_TEXT];
+  int text_caret, text_scroll;
+  const CityDropdownItem *items;
+  int item_count;
+  const char *tooltip; // Borrowed help, or NULL to use the control caption.
+} CityCanvasStartupControl;
+typedef struct CityCanvasStartupWindow {
+  char title[CITY_STARTUP_CANVAS_TEXT];
+  const CityTerrainMap *terrain_preview;
+  struct CityTerrainPreviewDrawing *drawing;
+  const u32 *water_colors; // Borrowed immutable landscape palette from Assets.
+  CityRect client_bounds;
+  i32 control_count, pressed_control, focused_control, selected_text;
+  double caret_blink_at;
+  int caret_control;
+  bool caret_visible;
+  bool terrain_setup, year_query, main_menu;
+  int map_width, map_height;
+  CityCanvasStartupControl controls[CITY_STARTUP_CANVAS_CONTROLS];
+} CityCanvasStartupWindow;
+
+// Registry
+
+enum { CITY_STARTUP_WINDOW_LIMIT = 16 };
+
+typedef struct {
+  void *dialog;
+  u32 window_id;
+  CityCanvasStartupWindow layout;
+  u32 resource;
+} CityStartupResourceWindow;
+
+// Startup Canvas
+
+int CityStartupMenuIcon(int control);
+bool PrepareCityStartupIcons(Game *game);
+void Sc2kCanvasDrawStartupWindow(Game *game, Canvas *canvas, const Window *window);
+i32 Sc2kCanvasStartupControlAt(const CityCanvasStartupWindow *layout,
+    const Window *window, i32 x, i32 y);
+
+// Startup Host
+
+enum {
+  NATIVE_STARTUP_CHECKPOINT_ENTER = 13, NATIVE_STARTUP_CHECKPOINT_LEAVE = 14,
+  NATIVE_STARTUP_DIALOG_RESOURCE_TYPE = 5,
+};
+bool SetCityStartupMenuPresentation(City *city, CityCanvasDesktop *desktop);
+void ClearCityStartupMenuPresentation(City *city);
+struct CityCreationOptions;
+typedef struct { const char *path; bool current; } CityCreationTerrain;
+// NULL options means cancellation. Values and the optional host path are borrowed only for the callback.
+typedef void CityCreationCallback(City *city, const struct CityCreationOptions *options,
+    CityCreationTerrain terrain, void *context);
+bool OpenCityCreationWindow(City *city, bool terrain, CityCreationCallback *callback, void *context);
+void CompleteCityCreationWindow(City *city);
+bool OpenCityStartupMenu(City *city);
+bool TakeCityStartupMenuChoice(City *city, int *choice);
+bool NativeStartupMenuWaiting(City *city);
+bool UpdateCityTextCarets(Game *game, double now);
+
+// Canvas registration; callers own dialog values, control text and lifetime.
+bool RegisterCityStartupWindow(City *city, CityStartupWindow *window, u32 resource);
+bool UnregisterCityStartupWindow(City *city, CityStartupWindow *window);
+const CityCanvasStartupWindow *ReadCityStartupWindowLayout(City *city, u32 canvas_window_id);
+
+// Startup Menu
+typedef struct City City;
+
+typedef CityStartupWindow CityStartupMenuDialog;
+typedef enum CityStartupMenuChoice {
+  CITY_STARTUP_LOAD_CITY = 1, CITY_STARTUP_NEW_CITY = 2,
+  CITY_STARTUP_EDIT_MAP = 3, CITY_STARTUP_LOAD_SCENARIO = 4,
+  CITY_STARTUP_QUIT = 5,
+  CITY_STARTUP_CHOICE_LAST = CITY_STARTUP_QUIT
+} CityStartupMenuChoice;
+enum {
+  CITY_STARTUP_CONTROL_LOAD_CITY = 111, CITY_STARTUP_CONTROL_NEW_CITY = 112,
+  CITY_STARTUP_CONTROL_EDIT_MAP = 113, CITY_STARTUP_CONTROL_LOAD_SCENARIO = 114,
+  CITY_STARTUP_CONTROL_QUIT = 115,
+  CITY_STARTUP_CONTROL_WATCH_WILLTV = 117, CITY_STARTUP_CONTROL_WEBSITE = 118,
+  CITY_STARTUP_CONTROL_SETTINGS = 119, CITY_STARTUP_CONTROL_JUKEBOX = 120
+};
+
+int ShowCityStartupMenu(City *city);
+bool InitializeCityStartupMenuDialog(City *city, CityStartupMenuDialog *dialog);
+bool CenterCityStartupWindow(City *city, u32 window_id);
+bool StartupMenuLoadCity(City *city, CityStartupMenuDialog *dialog);
+bool StartupMenuNewCity(City *city, CityStartupMenuDialog *dialog);
+bool StartupMenuEditMap(City *city, CityStartupMenuDialog *dialog);
+bool StartupMenuLoadScenario(City *city, CityStartupMenuDialog *dialog);
+bool StartupMenuQuit(City *city, CityStartupMenuDialog *dialog);
+
+#endif

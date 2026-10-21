@@ -1,0 +1,40 @@
+{
+  "kind": 193,
+  "source_selection": {
+    "kind": 193,
+    "name": "Warehouse",
+    "review": "assets/landscape/building-studies/approval-batch-192-195/193-warehouse/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-192-195/193-warehouse/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-192-195/193-warehouse/registered-cutout-source.png",
+    "review_sha256": "52c6fb39a6bd63f54130c6db5cde5beeafb3c2fb5b5b3443ff22decac408c9ce"
+  },
+  "installed_view_sha256": "397fa3c211ae2bb0603f1bf3fa9db39c36e147c50ad6fb7f1a8e537bf59aefa3",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-192-195/193-warehouse/registered-full-plot-calibration.png",
+      "installed": "assets/landscape/buildings/193-warehouse/approved-original.png",
+      "sha256": "15db64ec2ba99acc94ce52791189d7fe263b38aa4d8043d0a1b3539f44843350"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-192-195/193-warehouse/registered-cutout-source.png",
+      "installed": "assets/landscape/buildings/193-warehouse/approved-foreground.png",
+      "sha256": "a30e2b81edaa3a3e846596f5c34d5033a486da6b093a70fe0a351b33a9213214"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-192-195/193-warehouse/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/193-warehouse/approved-foundation-mask.png",
+      "sha256": "5b66f84868ee31d7ab0913aed644d93e5d62a12a4990b02f48175031cb64033c"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-192-195/193-warehouse/view-0.png",
+      "installed": "assets/landscape/buildings/193-warehouse/approved-view.png",
+      "sha256": "397fa3c211ae2bb0603f1bf3fa9db39c36e147c50ad6fb7f1a8e537bf59aefa3"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-192-195/193-warehouse/ground-0.png",
+      "installed": "assets/landscape/buildings/193-warehouse/approved-ground.png",
+      "sha256": "e85efda4ee65314326a40989276eaf936af996c040ce2dcb5a52272f03979a49"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

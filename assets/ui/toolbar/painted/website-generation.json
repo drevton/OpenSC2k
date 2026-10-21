@@ -1,0 +1,7 @@
+{
+  "tool": "built-in image_gen",
+  "file": "website.png",
+  "atlas_id": 106,
+  "sha256": "d0a1f92f49e181632f002211b1ce1717d17d08151ed429913f3cb49a0c3b3584",
+  "prompt": "Create a single polished hand-painted raster UI icon for the Website button in OpenSC2k, a classic city-building game. Subject: a bold blue-and-green Earth globe, a simple recognizable sphere with broad continent shapes, three-quarter illuminated from upper left, subtle dark contour and soft painterly shading. Match classic richly colored painted game toolbar artwork; strong compact silhouette readable at 24 pixels, restrained bright highlight. Globe only, no pedestal, no arrows, no lettering, no labels, no interface frame or surrounding objects. Square composition with the globe centered and nearly filling the image, modest transparent margin. Genuinely transparent background, no backdrop or cast shadow."
+}

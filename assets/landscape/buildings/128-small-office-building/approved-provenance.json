@@ -1,0 +1,40 @@
+{
+  "kind": 128,
+  "source_selection": {
+    "kind": 128,
+    "name": "Small office building",
+    "review": "assets/landscape/building-studies/approval-batch-128-131/128-small-office-building/native-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-128-131/128-small-office-building/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-128-131/128-small-office-building/painted-architecture-study.png",
+    "review_sha256": "3888a0d1800f7ed0e7167bd80064029a45029e70e9c5240706f7bd4704448782"
+  },
+  "installed_view_sha256": "abfffb1ca62473266e44d3fec35fd4cd6de7640e1c76a70a6af86133352e2df1",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-128-131/128-small-office-building/painted-architecture-study.png",
+      "installed": "assets/landscape/buildings/128-small-office-building/approved-original.png",
+      "sha256": "8369ea7d04fd06b1bfc85aff90fc9a5295ff738182ee1824773d29faf10d71d2"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-128-131/128-small-office-building/painted-architecture-study.png",
+      "installed": "assets/landscape/buildings/128-small-office-building/approved-foreground.png",
+      "sha256": "8369ea7d04fd06b1bfc85aff90fc9a5295ff738182ee1824773d29faf10d71d2"
+    },
+    {
+      "source": "assets/landscape/buildings/128-small-office-building/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/128-small-office-building/approved-foundation-mask.png",
+      "sha256": "222a013f0109efe76ac731a250857bbc63b074f1ca2e531c630ce5f907a4d317"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-128-131/128-small-office-building/view-0.png",
+      "installed": "assets/landscape/buildings/128-small-office-building/approved-view.png",
+      "sha256": "abfffb1ca62473266e44d3fec35fd4cd6de7640e1c76a70a6af86133352e2df1"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-128-131/128-small-office-building/ground-0.png",
+      "installed": "assets/landscape/buildings/128-small-office-building/approved-ground.png",
+      "sha256": "0690f2cfeeff90332c3b12b3114399320dba355f3bbc741670a77642304ca927"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

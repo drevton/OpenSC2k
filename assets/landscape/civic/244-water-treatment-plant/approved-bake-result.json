@@ -1,0 +1,45 @@
+[
+  {
+    "degrees": 0,
+    "file": "view-0.png",
+    "baseline": 256,
+    "canvas": [
+      256,
+      256
+    ],
+    "source_ground_corners": [
+      [
+        135,
+        678.9489269550953
+      ],
+      [
+        878.5412838081019,
+        1141.600567952144
+      ],
+      [
+        1660,
+        693.9855773599513
+      ]
+    ],
+    "source_front_slopes": [
+      0.622227240197806,
+      -0.5727941621451882
+    ],
+    "ground_owned_pixels": 16384,
+    "ground_mask_mismatches": 0,
+    "ground_source": "authored painting",
+    "ground_in_sprite": true,
+    "native_terrain_union_mismatches": 0,
+    "sprite_pixels_outside_site_prism": 0,
+    "foreground_opaque_pixels_trimmed": 0,
+    "content_inset_pixels": 1,
+    "foreground_opaque_pixels": 18848,
+    "occupied_bounds": [
+      1,
+      116,
+      255,
+      256
+    ],
+    "occupied_height": 140
+  }
+]

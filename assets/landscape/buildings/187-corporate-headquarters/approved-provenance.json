@@ -1,0 +1,43 @@
+{
+  "kind": 187,
+  "source_selection": {
+    "kind": 187,
+    "name": "Corporate headquarters",
+    "review": "assets/landscape/building-studies/daylight-cleanup/187-corporate-headquarters/native-composited-daylight.png",
+    "recipe": "assets/landscape/building-studies/daylight-cleanup/187-corporate-headquarters/bake.json",
+    "source": "assets/landscape/building-studies/daylight-cleanup/187-corporate-headquarters/painted-daylight.png",
+    "review_sha256": "50ac3f4805e9fa3d310c39b221cd1ec5a1df963ca3d2e739842bc54ddeff3eee",
+    "baked_sprite": "assets/landscape/building-studies/daylight-cleanup/187-corporate-headquarters/view-0.png",
+    "source_sha256": "6f71300b1b90826e8824d31d0dfd324170c044d05582f4a5638dd361f34b1aaf",
+    "correction_scope": "Lighting only, approved architecture preserved"
+  },
+  "installed_view_sha256": "d8202ffc2963371c7656b4acca1f9f9f3ea022f2557500e948f494f5ab1a678e",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/187-corporate-headquarters/registered-daylight.png",
+      "installed": "assets/landscape/buildings/187-corporate-headquarters/approved-original.png",
+      "sha256": "1a7b2db616b6f1f1abd411205d9c19279c4b4cb87513a142886446a4559ea0c6"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/187-corporate-headquarters/registered-daylight.png",
+      "installed": "assets/landscape/buildings/187-corporate-headquarters/approved-foreground.png",
+      "sha256": "1a7b2db616b6f1f1abd411205d9c19279c4b4cb87513a142886446a4559ea0c6"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-184-187/187-corporate-headquarters/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/187-corporate-headquarters/approved-foundation-mask.png",
+      "sha256": "2711cb9a759d799834d2dc84f4933e27e5b1da5b3f30a691faac4d7645c75348"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/187-corporate-headquarters/view-0.png",
+      "installed": "assets/landscape/buildings/187-corporate-headquarters/approved-view.png",
+      "sha256": "d8202ffc2963371c7656b4acca1f9f9f3ea022f2557500e948f494f5ab1a678e"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/187-corporate-headquarters/ground-0.png",
+      "installed": "assets/landscape/buildings/187-corporate-headquarters/approved-ground.png",
+      "sha256": "dccc99f1cef7247970de98724bab6780b150562f070aa573d8a5bf2534796cfc"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

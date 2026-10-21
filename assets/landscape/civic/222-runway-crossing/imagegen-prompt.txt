@@ -1,0 +1,6 @@
+Use case: sketch-to-render. Asset: FOUR-VIEW Runway Crossing isometric game sprite set.
+Input1 is the authoritative 2-by-2 geometry sheet: top-left0 degrees, top-right90, bottom-left180, bottom-right270.
+Create one large 2-by-2 transparent sheet with one COMPLETE separate site per equal quadrant. Generous clean transparent gutters, no labels or frame. Match each guide quadrant's camera, footprint, fixed layout and occlusion. A seamless flat charcoal asphalt tile with TWO perpendicular runway strips crossing, white center cross and dashes, short white edge sections exactly as in the guide. No curb or greenery.
+Four true quarter-turns of ONE object. Never mirror, relocate features or repeat front doors on rear views.
+Perfectly flat asphalt diamond with fine natural grain, no bevel, thickness, grass, raised border or under-edge shadow.
+Square ground in exact 2:1 isometric projection. Keep all four full sites separated and inside their quadrants. Genuine transparent background, no text, logos or watermark.

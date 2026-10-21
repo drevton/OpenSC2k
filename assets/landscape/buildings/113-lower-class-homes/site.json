@@ -1,0 +1,6 @@
+{
+  "layout": "compact detached cluster",
+  "ground": "terrain",
+  "content_inset_pixels": -3,
+  "height_padding": 16
+}

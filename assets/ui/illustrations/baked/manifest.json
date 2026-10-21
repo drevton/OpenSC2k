@@ -1,0 +1,190 @@
+{
+  "source": "../rendered-v1",
+  "pack": "../illustrations.dat",
+  "filter": {
+    "ink_strength": 0.14,
+    "saturation": 0.9,
+    "contrast": 0.94,
+    "grain_strength": 1.2,
+    "screen_period_pixels": 2.2,
+    "screen_angle_degrees": 45,
+    "colors": 256
+  },
+  "source_bytes": 46397215,
+  "pack_bytes": 210493,
+  "illustrations": [
+    {
+      "id": 128,
+      "name": "Key to the city",
+      "source": "128-key-to-the-city.png",
+      "file": "128.png",
+      "size": [
+        106,
+        53
+      ],
+      "uses": [
+        "notice"
+      ]
+    },
+    {
+      "id": 400,
+      "name": "Earthquake",
+      "source": "400-earthquake.png",
+      "file": "400.png",
+      "size": [
+        155,
+        100
+      ],
+      "uses": [
+        "newspaper"
+      ]
+    },
+    {
+      "id": 401,
+      "name": "Traffic",
+      "source": "401-traffic.png",
+      "file": "401.png",
+      "size": [
+        155,
+        100
+      ],
+      "uses": [
+        "newspaper"
+      ]
+    },
+    {
+      "id": 402,
+      "name": "Construction",
+      "source": "402-construction.png",
+      "file": "402.png",
+      "size": [
+        155,
+        100
+      ],
+      "uses": [
+        "newspaper"
+      ]
+    },
+    {
+      "id": 403,
+      "name": "Protest",
+      "source": "403-protest.png",
+      "file": "403.png",
+      "size": [
+        155,
+        100
+      ],
+      "uses": [
+        "newspaper",
+        "notice"
+      ]
+    },
+    {
+      "id": 404,
+      "name": "Government",
+      "source": "404-government.png",
+      "file": "404.png",
+      "size": [
+        155,
+        100
+      ],
+      "uses": [
+        "newspaper",
+        "intro"
+      ]
+    },
+    {
+      "id": 405,
+      "name": "Research",
+      "source": "405-research.png",
+      "file": "405.png",
+      "size": [
+        155,
+        100
+      ],
+      "uses": [
+        "newspaper"
+      ]
+    },
+    {
+      "id": 406,
+      "name": "National Guard",
+      "source": "406-national-guard.png",
+      "file": "406.png",
+      "size": [
+        155,
+        100
+      ],
+      "uses": [
+        "newspaper",
+        "notice"
+      ]
+    },
+    {
+      "id": 407,
+      "name": "Mayor's parade",
+      "source": "407-mayors-parade.png",
+      "file": "407.png",
+      "size": [
+        155,
+        100
+      ],
+      "uses": [
+        "newspaper",
+        "notice"
+      ]
+    },
+    {
+      "id": 408,
+      "name": "Fire",
+      "source": "408-fire.png",
+      "file": "408.png",
+      "size": [
+        155,
+        100
+      ],
+      "uses": [
+        "newspaper"
+      ]
+    },
+    {
+      "id": 409,
+      "name": "Tornado",
+      "source": "409-tornado.png",
+      "file": "409.png",
+      "size": [
+        155,
+        100
+      ],
+      "uses": [
+        "newspaper"
+      ]
+    },
+    {
+      "id": 410,
+      "name": "Police",
+      "source": "410-police.png",
+      "file": "410.png",
+      "size": [
+        155,
+        100
+      ],
+      "uses": [
+        "newspaper"
+      ]
+    },
+    {
+      "id": 411,
+      "name": "Industry and pollution",
+      "source": "411-industry-pollution.png",
+      "file": "411.png",
+      "size": [
+        154,
+        100
+      ],
+      "uses": [
+        "newspaper"
+      ]
+    }
+  ]
+}

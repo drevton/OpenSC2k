@@ -1,0 +1,3 @@
+# Offline artwork baking and packing. Zstandard output also needs the zstd executable.
+Pillow>=10
+numpy>=1.26

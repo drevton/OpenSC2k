@@ -1,0 +1,153 @@
+{
+  "repository": "https://github.com/OpenTTD/OpenGFX2",
+  "revision": "7a17fb370440aed7f2586715d606e9fe190b9dd3",
+  "author": "Richard Wheeler (Zephyris) and OpenGFX2 contributors",
+  "license": "GPL-2.0",
+  "template": "templates/zoom-sensitive.pnml: template_vehicle_rail_8view / template_vehicle_rail_4view",
+  "sources": [
+    {
+      "file": "sources/opengfx2-trains/rail_engines_temperate_32bpp.png",
+      "upstream": "graphics/vehicles/256/rail_engines_temperate_32bpp.png",
+      "sha256": "57ac379a18bf4c46269a745a72e2b4103daef75d20f93db84bd99e9d5ec487cf",
+      "row": 6,
+      "subject": "SH 125 diesel locomotive"
+    },
+    {
+      "file": "sources/opengfx2-trains/rail_wagons_32bpp.png",
+      "upstream": "graphics/vehicles/256/rail_wagons_32bpp.png",
+      "sha256": "7ec338d2f0b29129b1baa964abdb9408481e6858a6e1e050dce3d99108af016f",
+      "row": 0,
+      "subject": "Temperate passenger coach"
+    }
+  ],
+  "records": [
+    {
+      "id": 374,
+      "file": "../world/0374.png",
+      "baseline": 64,
+      "scale_divisor": 4,
+      "offset_x": 0,
+      "civic": true
+    },
+    {
+      "id": 375,
+      "file": "../world/0375.png",
+      "baseline": 64,
+      "scale_divisor": 4,
+      "offset_x": 0,
+      "civic": true
+    },
+    {
+      "id": 376,
+      "file": "../world/0376.png",
+      "baseline": 64,
+      "scale_divisor": 4,
+      "offset_x": 0,
+      "civic": true
+    },
+    {
+      "id": 377,
+      "file": "../world/0377.png",
+      "baseline": 64,
+      "scale_divisor": 4,
+      "offset_x": 0,
+      "civic": true
+    },
+    {
+      "id": 378,
+      "file": "../world/0378.png",
+      "baseline": 64,
+      "scale_divisor": 4,
+      "offset_x": 0,
+      "civic": true
+    },
+    {
+      "id": 483,
+      "file": "../world/0483.png",
+      "baseline": 64,
+      "scale_divisor": 4,
+      "offset_x": 0,
+      "civic": true
+    },
+    {
+      "id": 484,
+      "file": "../world/0484.png",
+      "baseline": 64,
+      "scale_divisor": 4,
+      "offset_x": 0,
+      "civic": true
+    },
+    {
+      "id": 485,
+      "file": "../world/0485.png",
+      "baseline": 64,
+      "scale_divisor": 4,
+      "offset_x": 0,
+      "civic": true
+    },
+    {
+      "id": 478,
+      "file": "../world/0478.png",
+      "baseline": 64,
+      "scale_divisor": 4,
+      "offset_x": 0,
+      "civic": true
+    },
+    {
+      "id": 479,
+      "file": "../world/0479.png",
+      "baseline": 64,
+      "scale_divisor": 4,
+      "offset_x": 0,
+      "civic": true
+    },
+    {
+      "id": 480,
+      "file": "../world/0480.png",
+      "baseline": 64,
+      "scale_divisor": 4,
+      "offset_x": 0,
+      "civic": true
+    },
+    {
+      "id": 481,
+      "file": "../world/0481.png",
+      "baseline": 64,
+      "scale_divisor": 4,
+      "offset_x": 0,
+      "civic": true
+    },
+    {
+      "id": 482,
+      "file": "../world/0482.png",
+      "baseline": 64,
+      "scale_divisor": 4,
+      "offset_x": 0,
+      "civic": true
+    },
+    {
+      "id": 486,
+      "file": "../world/0486.png",
+      "baseline": 64,
+      "scale_divisor": 4,
+      "offset_x": 0,
+      "civic": true
+    },
+    {
+      "id": 487,
+      "file": "../world/0487.png",
+      "baseline": 64,
+      "scale_divisor": 4,
+      "offset_x": 0,
+      "civic": true
+    },
+    {
+      "id": 488,
+      "file": "../world/0488.png",
+      "baseline": 64,
+      "scale_divisor": 4,
+      "offset_x": 0,
+      "civic": true
+    }
+  ]
+}

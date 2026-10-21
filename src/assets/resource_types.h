@@ -1,0 +1,75 @@
+#ifndef SC2K_ASSETS_RESOURCE_TYPES_H
+#define SC2K_ASSETS_RESOURCE_TYPES_H
+
+// Ui
+
+enum {
+  CITY_DIALOG_RESOURCE_STARTUP_MENU = 103,
+};
+
+// Setup/progress resources and frame control identifiers.
+enum {
+  CITY_DIALOG_RESOURCE_NEW_CITY = 101,
+  CITY_FRAME_CONTROL_120 = 120,
+};
+
+// Resource
+
+// ReadCityNameResource categories; these are not PE resource IDs.
+typedef enum CityNameResourceCategory {
+  CITY_NAME_CATEGORY_NEIGHBOR_CITY = 1000,
+  CITY_NAME_CATEGORY_COMPANY = 1001,
+  CITY_NAME_CATEGORY_TILE = 2000,
+  CITY_NAME_CATEGORY_ZONE = 2100,
+  CITY_NAME_CATEGORY_RATING = 2200,
+} CityNameResourceCategory;
+
+// DATA_USA.IDX/DAT IDs used by LoadCityNewspaperAndFacilityResources.
+typedef enum CityDataResourceId {
+  CITY_DATA_RESOURCE_NEWSPAPER_GROUP_STARTS = 1000,
+  CITY_DATA_RESOURCE_NEWSPAPER_GROUP_COUNTS = 1001,
+  CITY_DATA_RESOURCE_NEWSPAPER_TEMPLATE_OFFSETS = 1002,
+  CITY_DATA_RESOURCE_NEWSPAPER_TEMPLATE_BLOB = 1003,
+  CITY_DATA_RESOURCE_EVENT_SEVERITY = 1004,
+  CITY_DATA_RESOURCE_FACILITY_BASELINES = 1005,
+} CityDataResourceId;
+
+// Load order and owner/size slots, distinct from the DATA resource IDs.
+typedef enum CityDataResourceSlot {
+  CITY_DATA_SLOT_NEWSPAPER_TEMPLATE_BLOB = 0,
+  CITY_DATA_SLOT_NEWSPAPER_GROUP_STARTS = 1,
+  CITY_DATA_SLOT_NEWSPAPER_GROUP_COUNTS = 2,
+  CITY_DATA_SLOT_NEWSPAPER_TEMPLATE_OFFSETS = 3,
+  CITY_DATA_SLOT_EVENT_SEVERITY = 4,
+  CITY_DATA_SLOT_FACILITY_BASELINES = 5,
+  CITY_DATA_SLOT_COUNT = 6,
+} CityDataResourceSlot;
+
+// Tile-description indices are distinct from surface tile kinds.
+enum {
+  CITY_TILE_NAME_CLEAR_TERRAIN = 158, CITY_TILE_NAME_FRESH_WATER = 159,
+  CITY_TILE_NAME_SALT_WATER = 160, CITY_TILE_NAME_FIRST_LIGHT_SAILBOAT = 161,
+  // Additional localized templates have no English text in this executable.
+  CITY_FACILITY_TEMPLATE_12 = 12, CITY_FACILITY_TEMPLATE_23 = 23,
+  CITY_FACILITY_TEMPLATE_83 = 83, CITY_FACILITY_TEMPLATE_84 = 84,
+  CITY_FACILITY_TEMPLATE_85 = 85,
+};
+
+// Alert illustrations are reused by several original notices.
+typedef enum CityNoticeBitmapResourceId {
+  CITY_BITMAP_NOTICE_128 = 128, CITY_BITMAP_NOTICE_403 = 403,
+  CITY_BITMAP_NOTICE_406 = 406, CITY_BITMAP_NOTICE_407 = 407,
+} CityNoticeBitmapResourceId;
+
+enum { CITY_ADVISOR_PORTRAIT_FIRST = 197, CITY_ADVISOR_PORTRAIT_COUNT = 8,
+    CITY_ADVISOR_PORTRAIT_WIDTH = 256, CITY_ADVISOR_PORTRAIT_HEIGHT = 328,
+    CITY_ADVISOR_PORTRAIT_SCALE = 4 };
+
+enum { CITY_NEIGHBOR_ART_WIDTH = 512, CITY_NEIGHBOR_ART_HEIGHT = 256, CITY_NEIGHBOR_ART_COUNT = 8,
+    CITY_NEIGHBOR_ART_SCALE = 4, CITY_NEIGHBOR_ART_EMPTY = 0, CITY_NEIGHBOR_ART_HUGE_CITY = 6,
+    CITY_NEIGHBOR_ART_MEGACITY = 7 };
+
+// Original menu resources: application menu and all city-tool popup menus.
+typedef enum CityMenuResourceId { CITY_MENU_RESOURCE_MAIN = 3, CITY_MENU_RESOURCE_TOOLS = 136 } CityMenuResourceId;
+
+#endif

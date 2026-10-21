@@ -1,0 +1,43 @@
+{
+  "kind": 175,
+  "source_selection": {
+    "kind": 175,
+    "name": "Large apartment building",
+    "review": "assets/landscape/building-studies/daylight-cleanup/175-large-apartment-building/native-composited-daylight.png",
+    "recipe": "assets/landscape/building-studies/daylight-cleanup/175-large-apartment-building/bake.json",
+    "source": "assets/landscape/building-studies/daylight-cleanup/175-large-apartment-building/painted-daylight.png",
+    "review_sha256": "255e9d499a97a49b687b83c9e36656432e90d4372d178cfe07861dced27b5222",
+    "baked_sprite": "assets/landscape/building-studies/daylight-cleanup/175-large-apartment-building/view-0.png",
+    "source_sha256": "3ca1735e6cfcb36cce2d4b287c91d60cd2da1dd64ef7a3f140d33c5f9327582b",
+    "correction_scope": "Lighting only, approved architecture preserved"
+  },
+  "installed_view_sha256": "c3308d6da173713b437d927897c5e2b7eb7dc1a41f7e2a8aa39837e1d2518228",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/175-large-apartment-building/calibration-source.png",
+      "installed": "assets/landscape/buildings/175-large-apartment-building/approved-original.png",
+      "sha256": "031ae7069e3825082386f754f29ead9a0f9d7efd3f5c04caa8cd26395788f422"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/175-large-apartment-building/registered-daylight.png",
+      "installed": "assets/landscape/buildings/175-large-apartment-building/approved-foreground.png",
+      "sha256": "9ba04d3b7e8fbf1e0d1ca75f736cd9baf163cdbc5df39685dd3ad437996226f0"
+    },
+    {
+      "source": "assets/landscape/buildings/175-large-apartment-building/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/175-large-apartment-building/approved-foundation-mask.png",
+      "sha256": "882cee71ee4f2110b437211ced84f6dee099b7cd62ea2c64ac320979102d6e30"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/175-large-apartment-building/view-0.png",
+      "installed": "assets/landscape/buildings/175-large-apartment-building/approved-view.png",
+      "sha256": "c3308d6da173713b437d927897c5e2b7eb7dc1a41f7e2a8aa39837e1d2518228"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/175-large-apartment-building/ground-0.png",
+      "installed": "assets/landscape/buildings/175-large-apartment-building/approved-ground.png",
+      "sha256": "3582496159b509174d4442f1ca11e1e9b3b500c080a561a88bfc7f84414d8bbf"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

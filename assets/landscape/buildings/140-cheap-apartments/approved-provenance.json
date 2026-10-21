@@ -1,0 +1,43 @@
+{
+  "kind": 140,
+  "source_selection": {
+    "kind": 140,
+    "name": "Cheap apartments",
+    "review": "assets/landscape/building-studies/daylight-cleanup/140-cheap-apartments/native-composited-daylight.png",
+    "recipe": "assets/landscape/building-studies/daylight-cleanup/140-cheap-apartments/bake.json",
+    "source": "assets/landscape/building-studies/daylight-cleanup/140-cheap-apartments/painted-daylight.png",
+    "review_sha256": "efa1981c6947dac6efd282a3c0ed79168f55c4fab7eff60bc3be29c8aeebf56f",
+    "baked_sprite": "assets/landscape/building-studies/daylight-cleanup/140-cheap-apartments/view-0.png",
+    "source_sha256": "0a766cdf0e38491e6e56b910fcdfeed51d046d526c11ae0aeab5a083ca5423a0",
+    "correction_scope": "Lighting only, approved architecture preserved"
+  },
+  "installed_view_sha256": "5facccf3f1fd3b261668bc9bb8a1c57a0aac62e4301b36c170f7924c563a50cb",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/140-cheap-apartments/calibration-source.png",
+      "installed": "assets/landscape/buildings/140-cheap-apartments/approved-original.png",
+      "sha256": "698b40bf9bc801ebd3c09bddfb3a19484ebd912696ad177d388fb898825a1887"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/140-cheap-apartments/registered-daylight.png",
+      "installed": "assets/landscape/buildings/140-cheap-apartments/approved-foreground.png",
+      "sha256": "97dc0a6f4b033808c6849a7c7d7a0bf9e63ef6cdd4e52e058d9df1de15eab830"
+    },
+    {
+      "source": "assets/landscape/buildings/140-cheap-apartments/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/140-cheap-apartments/approved-foundation-mask.png",
+      "sha256": "3fd1206989d5f46551b5d27be1c122ae071337787dd02d940d0f1e71433f7bf9"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/140-cheap-apartments/view-0.png",
+      "installed": "assets/landscape/buildings/140-cheap-apartments/approved-view.png",
+      "sha256": "5facccf3f1fd3b261668bc9bb8a1c57a0aac62e4301b36c170f7924c563a50cb"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/140-cheap-apartments/ground-0.png",
+      "installed": "assets/landscape/buildings/140-cheap-apartments/approved-ground.png",
+      "sha256": "d3005040da6eb9ec6ccf462d9bfbbdb02f90baf0c1dff093872e8a00eca2a5e5"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

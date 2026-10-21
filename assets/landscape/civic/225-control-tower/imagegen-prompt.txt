@@ -1,0 +1,7 @@
+Use case: sketch-to-render. Asset: FOUR-VIEW Cream Control Tower game sprite set.
+Input1 is the authoritative 2-by-2 model sheet: top-left0 degrees, top-right90, bottom-left180, bottom-right270. Input2 is a hand-painted finish/style reference ONLY; do not copy its pump house or pipes.
+Output one large 2-by-2 transparent sprite sheet, one complete separate site in each equal quadrant with generous transparent gutters. Prefer 2048 pixels wide or larger. No text, labels, frame, separator lines or background.
+Paint the exact camera and rigid rotated layout of EACH guide quadrant. A slender cream airport control tower with one wide octagonal blue-glass cabin, silver balcony rim, flat pale roof and thin aerial, plus a low service entrance at its base. Modern warm concrete, vivid glass and two small planted margins.
+These are four genuine quarter-turns of ONE fixed object. Never mirror, move parts or repeat the front view in rear cells. Preserve side-specific doors and all occlusions.
+Detailed vivid slightly playful MATTE HAND-PAINTED illustration: finely textured concrete/brick, nuanced blue glass, painted metal trim, rich tiny shrubs and subtle brushwork. Soft upper-left daylight fixed to camera. Retain complete painted paving, planted margins, curbs and shadows, thin site edge and all four sharp corners.
+Each ground footprint is square at 2:1 isometric projection. Cleanly isolated genuine transparency outside all four sites. No bland low-poly appearance or thick floating plinth.

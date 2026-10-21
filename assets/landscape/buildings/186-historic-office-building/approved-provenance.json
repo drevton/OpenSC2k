@@ -1,0 +1,43 @@
+{
+  "kind": 186,
+  "source_selection": {
+    "kind": 186,
+    "name": "Historic office building",
+    "review": "assets/landscape/building-studies/daylight-cleanup/186-historic-office-building/native-composited-daylight.png",
+    "recipe": "assets/landscape/building-studies/daylight-cleanup/186-historic-office-building/bake.json",
+    "source": "assets/landscape/building-studies/daylight-cleanup/186-historic-office-building/painted-daylight.png",
+    "review_sha256": "4abff09765a016be8c4576bfe23b72b5ea237299c28c8ff7bc0c66b6e793974a",
+    "baked_sprite": "assets/landscape/building-studies/daylight-cleanup/186-historic-office-building/view-0.png",
+    "source_sha256": "ff1a0572f01f5ebab36b682bf3c0c38e8bec9a3b5842f11f3642c93bab5f2072",
+    "correction_scope": "Lighting only, approved architecture preserved"
+  },
+  "installed_view_sha256": "ec2daecd311d4e4b292ab279296334a91d675f3ccbcea38fe0d3e1af4cb30ce0",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/186-historic-office-building/calibration-source.png",
+      "installed": "assets/landscape/buildings/186-historic-office-building/approved-original.png",
+      "sha256": "ad0368672c05f9bc961261e86c9839d7a05f350293694424c3467ff8eda38c4e"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/186-historic-office-building/registered-daylight.png",
+      "installed": "assets/landscape/buildings/186-historic-office-building/approved-foreground.png",
+      "sha256": "95cd0de5a9e63caaaf8a34d3ec605f71349b80775eb99cd27b2d64cbdf1f6ae1"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-184-187/186-historic-office-building/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/186-historic-office-building/approved-foundation-mask.png",
+      "sha256": "2711cb9a759d799834d2dc84f4933e27e5b1da5b3f30a691faac4d7645c75348"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/186-historic-office-building/view-0.png",
+      "installed": "assets/landscape/buildings/186-historic-office-building/approved-view.png",
+      "sha256": "ec2daecd311d4e4b292ab279296334a91d675f3ccbcea38fe0d3e1af4cb30ce0"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/186-historic-office-building/ground-0.png",
+      "installed": "assets/landscape/buildings/186-historic-office-building/approved-ground.png",
+      "sha256": "dccc99f1cef7247970de98724bab6780b150562f070aa573d8a5bf2534796cfc"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

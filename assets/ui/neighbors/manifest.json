@@ -1,0 +1,104 @@
+{
+  "tool": "built-in image_gen",
+  "style": "Stylized rendered population stages from sparse settlements to dense skylines on matching 2:1 ground diamonds",
+  "width": 512,
+  "height": 256,
+  "logical_width": 128,
+  "logical_height": 64,
+  "style_references": [
+    "assets/landscape/buildings/112-modest-homes/design-reference.png",
+    "assets/landscape/buildings/140-cheap-apartments/design-reference.png",
+    "assets/landscape/buildings/152-office-building/design-reference.png"
+  ],
+  "stages": [
+    {
+      "id": 0,
+      "name": "empty-region",
+      "source": "0-empty-region.png",
+      "prompt": "Use case: stylized-concept. Create one original empty-region terrain painting for a city-building game UI. The supplied image is a rendering-style reference only; do not copy its island silhouette. IMPORTANT: output an opaque rectangular image with a 2:1 width-to-height ratio, entirely filled edge to edge with continuous softly varied muted sage-green meadow grass. No sky, no horizon, no black or transparent areas, no floating island, no bevel, no foundation, no surrounding void, no cast shadow at the edge. This painting will later be cropped to a mathematically exact 2:1 diamond; the top, bottom, left and right midpoints are the diamond corners. Treat that diamond as a very large mostly empty regional land tile, NOT a close-up garden. Same scale across all settlement stages. Orthographic game view, ground axes slope exactly 1 up for 2 across, vertical objects upright. Polished stylized rendered illustration, softly painted surfaces, not photographic. Inside the central 20 percent of the frame only: one very small blue-green natural pond, three tiny low trees and a few tiny shrubs. The outer 30 percent border is uninterrupted grass texture, no plants or rocks crossing any image edge or projected diamond edge. Subtle grass texture with very little contrast and broad detail, calm natural greens, no orange or marble. No buildings, streets, text, labels, icon borders or map lines. Light softly from upper left. This is the uninhabited region image; most of it must look like empty land.",
+      "sha256": "8082567e93c83c1a71c9d4484b99bd4eef51ecf0342c390e62f8ab2488c2ba7e"
+    },
+    {
+      "id": 1,
+      "name": "village",
+      "source": "1-village.png",
+      "prompt": "Use case: precise-object-edit. Edit the supplied opaque meadow painting to make one population-stage illustration in a coherent city-builder UI set. Preserve the full rectangular 2:1 canvas, the exact camera, grass color/texture, lighting, and every pixel outside the central settlement area as closely as possible. Do not turn the grass into an isolated island. This source will be cropped to an exact 2:1 diamond connecting the four edge midpoints. Keep all buildings, trees, paths and shadows inside that diamond and well away from its four diagonal boundaries. Ground lines use the game's 2:1 isometric projection; vertical walls stay upright. No rotation of the image, no camera tilt, no perspective convergence, no sky, no text or labels. Polished stylized rendered buildings with sage, dusty-blue and warm-gray painted facades, slate roofs, restrained stone and brick. No all-white-marble town and no orange-brick palette. This represents a LARGE REGION, so every house is a tiny model and most of the frame remains undeveloped meadow. Replace the central pond/trees as needed to place the settlement; preserve the surrounding grass. The lower quarter of the diamond must remain clear grass for overlaid labels. Deliver one opaque rectangular image, not a contact sheet.\nFEWER THAN 2,000 inhabitants: just TWO TINY modest cottages, one small tree and one short narrow dirt lane. The ENTIRE house cluster occupies only about 8 to 10 percent of the image width (about 45 pixels in the final 512-pixel-wide tile), centered slightly above the exact center. The houses are small flecks in a large empty region, NOT big dollhouses filling the tile. No fences, gardens full of flowers, apartment blocks, paved plaza, civic buildings or many trees. More than 90 percent of the diamond looks like uninterrupted grass.",
+      "sha256": "6ff8c9abc1788ec0f5c646e52a11a88fcca89803be56841327dcefa506b39668"
+    },
+    {
+      "id": 2,
+      "name": "town",
+      "source": "2-town.png",
+      "prompt": "Use case: precise-object-edit. Edit the supplied opaque meadow painting to make one population-stage illustration in a coherent city-builder UI set. Preserve the full rectangular 2:1 canvas, the exact camera, grass color/texture, lighting, and every pixel outside the central settlement area as closely as possible. Do not turn the grass into an isolated island. This source will be cropped to an exact 2:1 diamond connecting the four edge midpoints. Keep all buildings, trees, paths and shadows inside that diamond and well away from its four diagonal boundaries. Ground lines use the game's 2:1 isometric projection; vertical walls stay upright. No rotation of the image, no camera tilt, no perspective convergence, no sky, no text or labels. Polished stylized rendered buildings with sage, dusty-blue and warm-gray painted facades, slate roofs, restrained stone and brick. No all-white-marble town and no orange-brick palette. This represents a LARGE REGION, so every house is a tiny model and most of the frame remains undeveloped meadow. Replace the central pond/trees as needed to place the settlement; preserve the surrounding grass. The lower quarter of the diamond must remain clear grass for overlaid labels. Deliver one opaque rectangular image, not a contact sheet.\n2,000 to 9,999 inhabitants: a SMALL HAMLET, about six tiny low cottages and one tiny two-story shop around a short narrow T-junction. The ENTIRE settlement occupies about 18 percent of the image width, centered slightly above the exact center. Every building is very small relative to the meadow. No large town hall or clock tower, apartment blocks or ornate plaza. More than 80 percent of the diamond remains open grass.",
+      "sha256": "f6d3db7f6050a54a4f76dc1a225b1e9ec63424c8e0684c9e47654dc28559d6d0"
+    },
+    {
+      "id": 3,
+      "name": "small-city",
+      "source": "3-small-city.png",
+      "prompt": "Use case: precise-object-edit. Edit the supplied opaque meadow painting to make one population-stage illustration in a coherent city-builder UI set. Preserve the full rectangular 2:1 canvas, the exact camera, grass color/texture, lighting, and every pixel outside the central settlement area as closely as possible. Do not turn the grass into an isolated island. This source will be cropped to an exact 2:1 diamond connecting the four edge midpoints. Keep all buildings, trees, paths and shadows inside that diamond and well away from its four diagonal boundaries. Ground lines use the game's 2:1 isometric projection; vertical walls stay upright. No rotation of the image, no camera tilt, no perspective convergence, no sky, no text or labels. Polished stylized rendered buildings with sage, dusty-blue and warm-gray painted facades, slate roofs, restrained stone and brick. No all-white-marble town and no orange-brick palette. This represents a LARGE REGION, so every house is a tiny model and most of the frame remains undeveloped meadow. Replace the central pond/trees as needed to place the settlement; preserve the surrounding grass. The lower quarter of the diamond must remain clear grass for overlaid labels. Deliver one opaque rectangular image, not a contact sheet.\n10,000 to 49,999 inhabitants: a SMALL compact center of roughly twelve tiny building masses, chiefly one- and two-story houses with three modest three-story apartment/shop blocks on a small street grid. The ENTIRE settlement occupies at most 28 percent of the image width, centered slightly above center. No skyscrapers, monumental buildings or lavish courtyards. About 70 percent of the diamond remains open undeveloped meadow.",
+      "sha256": "120ccfd34687c862b3e1c93e7e9273d1d2f3c0e6d46ac555e3328edd715a569b"
+    },
+    {
+      "id": 4,
+      "name": "large-city",
+      "source": "4-large-city.png",
+      "prompt": "Use case: precise-object-edit. Edit the supplied opaque meadow painting to make one population-stage illustration in a coherent city-builder UI set. Preserve the full rectangular 2:1 canvas, the exact camera, grass color/texture, lighting, and every pixel outside the central settlement area as closely as possible. Do not turn the grass into an isolated island. This source will be cropped to an exact 2:1 diamond connecting the four edge midpoints. Keep all buildings, trees, paths and shadows inside that diamond and well away from its four diagonal boundaries. Ground lines use the game's 2:1 isometric projection; vertical walls stay upright. No rotation of the image, no camera tilt, no perspective convergence, no sky, no text or labels. Polished stylized rendered buildings with sage, dusty-blue and warm-gray painted facades, slate roofs, restrained stone and brick. No all-white-marble town and no orange-brick palette. This represents a LARGE REGION, so every house is a tiny model and most of the frame remains undeveloped meadow. Replace the central pond/trees as needed to place the settlement; preserve the surrounding grass. The lower quarter of the diamond must remain clear grass for overlaid labels. Deliver one opaque rectangular image, not a contact sheet.\n50,000 to 99,999 inhabitants: a compact recognizable small urban center, tiny houses and mid-rise apartments on a few short streets, with only two medium office blocks around six stories. The ENTIRE city cluster occupies at most 38 percent of the image width and is centered slightly above center. Clearly denser than the small-city stage, but still a small developed patch in a much larger green region. No skyline of huge towers. At least 60 percent of the diamond remains undeveloped grass.",
+      "sha256": "eebd3878301aac2c82e9a07921747dfdc37b4fcc2e9216821ea9fd3e6a960c66"
+    },
+    {
+      "id": 5,
+      "name": "metropolis",
+      "source": "5-metropolis.png",
+      "prompt": "Use case: precise-object-edit. Edit the supplied opaque meadow painting to make one population-stage illustration in a coherent city-builder UI set. Preserve the full rectangular 2:1 canvas, the exact camera, grass color/texture, lighting, and every pixel outside the central settlement area as closely as possible. Do not turn the grass into an isolated island. This source will be cropped to an exact 2:1 diamond connecting the four edge midpoints. Keep all buildings, trees, paths and shadows inside that diamond and well away from its four diagonal boundaries. Ground lines use the game's 2:1 isometric projection; vertical walls stay upright. No rotation of the image, no camera tilt, no perspective convergence, no sky, no text or labels. Polished stylized rendered buildings with sage, dusty-blue and warm-gray painted facades, slate roofs, restrained stone and brick. No all-white-marble town and no orange-brick palette. This represents a LARGE REGION, so every house is a tiny model and most of the frame remains undeveloped meadow. Replace the central pond/trees as needed to place the settlement; preserve the surrounding grass. The lower quarter of the diamond must remain clear grass for overlaid labels. Deliver one opaque rectangular image, not a contact sheet.\n100,000 or more inhabitants: the most developed stage, a compact dense city center made of about twenty tiny simple building masses including five distinct taller office buildings, surrounded by smaller housing blocks and a little park. The ENTIRE cluster occupies at most 48 percent of the image width, centered above the exact center; tallest building remains below the diamond's upper edge. Leave a broad visible grassy perimeter and the lower quarter clear for text. This is a city occupying part of a REGION, not a single tightly packed architectural diorama filling the frame.",
+      "sha256": "ccc8a0514205d930f0f4c461ffe4314b41d387665b8fa13322ad5e63c448cdbe"
+    },
+    {
+      "id": 6,
+      "name": "huge-city",
+      "source": "6-huge-city.png",
+      "prompt": "Use case: precise-object-edit. Asset type: neighbor population-stage artwork for a city-building game. Input image 1 is the edit target and rendering/camera/color reference. Keep the exact same opaque rectangular 2:1 canvas, isometric camera, continuous meadow texture, background green color, illumination and vertical wall direction. Replace only the settlement with the requested much larger population stage. Polished stylized rendered game illustration matching the reference, not photography, no white-marble city and no predominantly orange brick/stone. Render ground axes at exactly 2 across for 1 up. No rotation or perspective convergence. Final bake cuts terrain to a 2:1 diamond joining the four edge midpoints; put streets and building bases inside that ground diamond. Preserve complete building silhouettes, keep skyline within the image frame and give the top of the central towers room beneath the top edge. Surrounding meadow must be continuous edge to edge; no background void, island border, slab, shadow around image edge, sky, horizon, text, labels or watermark. Keep the bottom quarter mostly open grass. Deliver ONE image, not a grid.\nPopulation stage: 500,000\u2013999,999 inhabitants. Replace the small historic town with a clearly BIG CITY: about fifty tiny buildings on a compact connected street grid, densely packed midrise residential blocks and a distinct central skyline with about eight 12-to-20-story office towers. The developed ground footprint is roughly 65 to 70 percent of the image width, far wider than the reference settlement. Buildings are small-scale architectural miniatures distributed across a LARGE region, not individually giant enlarged buildings. Mix slate-roofed older lowrise perimeter housing with modern charcoal, dusty-blue glass, sage and warm-gray midrises. Leave a green perimeter and clear grass in the bottom quarter for UI labels. Clearly intermediate between a town of 100,000 and a million-person megacity.",
+      "sha256": "daa759429a75bf9888660c7cb9a34f19e75761ed2de1380c3982d54337b05e5e",
+      "foreground": {
+        "source": "6-huge-city-foreground.png",
+        "width": 410,
+        "prompt": "Use case: background-extraction. Edit target: the supplied city image. Extract ONLY the standing vertical objects (every building including complete roofs, spires and facades, plus trees and shrubs) onto a genuinely transparent background. Remove ALL flat ground: meadow, grass, roads, paths, plazas, paving, fountains, ground shadows and sky. Preserve the exact 2:1 canvas size, exact positions, scale, camera, colors and details of ALL standing objects. Do not recenter, crop, shrink, redraw, rotate or rearrange the city. This is a registered foreground layer for this exact image: each building must stay at the same pixel location and be complete from roof to its base. Keep antialiased silhouette edges. Transparent pixels everywhere between and outside the extracted standing objects. No new buildings, no new terrain or border, no text, no watermark. One transparent PNG foreground layer.",
+        "sha256": "1ab1cb532ed2b20dfc179ce2524e30056ce3a0303c57b3589fb19d67c95cdc9c",
+        "top": 0
+      }
+    },
+    {
+      "id": 7,
+      "name": "megacity",
+      "source": "7-megacity.png",
+      "prompt": "Use case: precise-object-edit. Asset type: neighbor population-stage artwork for a city-building game. Input image 1 is the edit target and rendering/camera/color reference. Keep the exact same opaque rectangular 2:1 canvas, isometric camera, continuous meadow texture, background green color, illumination and vertical wall direction. Replace only the settlement with the requested much larger population stage. Polished stylized rendered game illustration matching the reference, not photography, no white-marble city and no predominantly orange brick/stone. Render ground axes at exactly 2 across for 1 up. No rotation or perspective convergence. Final bake cuts terrain to a 2:1 diamond joining the four edge midpoints; put streets and building bases inside that ground diamond. Preserve complete building silhouettes, keep skyline within the image frame and give the top of the central towers room beneath the top edge. Surrounding meadow must be continuous edge to edge; no background void, island border, slab, shadow around image edge, sky, horizon, text, labels or watermark. Keep the bottom quarter mostly open grass. Deliver ONE image, not a grid.\nPopulation stage: 1,000,000 or more inhabitants. Replace the small historic town with a HUGE DENSE METROPOLIS: roughly eighty to a hundred tiny building masses with a broad connected city street grid, dense apartment blocks and a strong downtown skyline of about fifteen tall varied 20-to-40-story skyscrapers. The developed ground footprint spans roughly 85 percent of the image width. It must read immediately as much larger, denser and taller than both the supplied 100,000-person reference and a half-million city. Mix cool blue-gray glass, graphite, painted sage and dusty-blue facades, pale concrete accents, low slate roofs along the outer streets and small green parks. A full city skyline, not a rural hamlet, village, walled palace, suburban subdivision or cluster of five ornate civic buildings. Leave a narrow grassy perimeter and clear low grass in the bottom quarter for UI labels.",
+      "sha256": "dcf84e615808599074fbc75f70fa65019e78f0d0d9b3fb7ca404089bb639bbf2",
+      "foreground": {
+        "source": "7-megacity-foreground.png",
+        "width": 460,
+        "prompt": "Use case: background-extraction. Edit target: the supplied city image. Extract ONLY the standing vertical objects (every building including complete roofs, spires and facades, plus trees and shrubs) onto a genuinely transparent background. Remove ALL flat ground: meadow, grass, roads, paths, plazas, paving, fountains, ground shadows and sky. Preserve the exact 2:1 canvas size, exact positions, scale, camera, colors and details of ALL standing objects. Do not recenter, crop, shrink, redraw, rotate or rearrange the city. This is a registered foreground layer for this exact image: each building must stay at the same pixel location and be complete from roof to its base. Keep antialiased silhouette edges. Transparent pixels everywhere between and outside the extracted standing objects. No new buildings, no new terrain or border, no text, no watermark. One transparent PNG foreground layer.",
+        "sha256": "231f451b557f6d5c3f831152967480b4ed3917481d967dd01e1917f7e705211d",
+        "top": 12
+      }
+    }
+  ],
+  "source_geometry": "Opaque 2:1 scene paintings. Bake the whole frame with the shared ground stencil; stages with extracted foregrounds composite those intact onto stage 0 terrain at the specified width.",
+  "generation_references": {
+    "0": {
+      "path": "assets/ui/neighbors/sources/0-empty-region.png",
+      "revision": "f9a749357",
+      "sha256": "c1ab8b397b5255dd639d717e659736b39d02ac323ef8390e66b235985a9175cd",
+      "role": "Rendering-style reference for the replacement meadow painting"
+    },
+    "1-5": {
+      "path": "assets/ui/neighbors/sources/0-empty-region.png",
+      "sha256": "8082567e93c83c1a71c9d4484b99bd4eef51ecf0342c390e62f8ab2488c2ba7e",
+      "role": "Edit target; preserve surrounding meadow and camera"
+    },
+    "6-7": {
+      "path": "assets/ui/neighbors/sources/5-metropolis.png",
+      "sha256": "ccc8a0514205d930f0f4c461ffe4314b41d387665b8fa13322ad5e63c448cdbe",
+      "role": "Edit target and reference for expanded city stages; extract transparent foregrounds, then compose onto stage 0 terrain"
+    }
+  }
+}

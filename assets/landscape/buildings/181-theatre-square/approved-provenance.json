@@ -1,0 +1,43 @@
+{
+  "kind": 181,
+  "source_selection": {
+    "kind": 181,
+    "name": "Theatre Square",
+    "review": "assets/landscape/building-studies/daylight-cleanup/181-theatre-square/native-composited-daylight.png",
+    "recipe": "assets/landscape/building-studies/daylight-cleanup/181-theatre-square/bake.json",
+    "source": "assets/landscape/building-studies/daylight-cleanup/181-theatre-square/painted-daylight.png",
+    "review_sha256": "263652100bb6a10bb257b3bafc60c03c2c84b7ad0d200d9b0e28f2f2b8e0d1ad",
+    "baked_sprite": "assets/landscape/building-studies/daylight-cleanup/181-theatre-square/view-0.png",
+    "source_sha256": "9695507ee6532b7eaaa2d0324269cb225ededb12774f627881446a7cabce8fe5",
+    "correction_scope": "Lighting only, approved architecture preserved"
+  },
+  "installed_view_sha256": "267c8f530eb8e0e9ffaea4a911f82e1b21153c0a8f350407df69ad6100376cb5",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/181-theatre-square/calibration-source.png",
+      "installed": "assets/landscape/buildings/181-theatre-square/approved-original.png",
+      "sha256": "16d81293a2e2a0402d5d845e90d3bea7d63ac474c49a61f7fbd29b6e0ac8582b"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/181-theatre-square/registered-daylight.png",
+      "installed": "assets/landscape/buildings/181-theatre-square/approved-foreground.png",
+      "sha256": "ba563de468daf4499238cb1ea7dec1151c8efb5dcc84336a964938f99456a18a"
+    },
+    {
+      "source": "assets/landscape/buildings/181-theatre-square/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/181-theatre-square/approved-foundation-mask.png",
+      "sha256": "6bd4ecebd199b5e1c667d945cfd3def2c398bf93164845f25cf76f243a539cbf"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/181-theatre-square/view-0.png",
+      "installed": "assets/landscape/buildings/181-theatre-square/approved-view.png",
+      "sha256": "267c8f530eb8e0e9ffaea4a911f82e1b21153c0a8f350407df69ad6100376cb5"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/181-theatre-square/ground-0.png",
+      "installed": "assets/landscape/buildings/181-theatre-square/approved-ground.png",
+      "sha256": "d8244863d86a1167696a6161c1394311b0245a77f16adfde3258d117a47d5af2"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

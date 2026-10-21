@@ -1,0 +1,40 @@
+{
+  "kind": 133,
+  "source_selection": {
+    "kind": 133,
+    "name": "Chemical Storage",
+    "review": "assets/landscape/building-studies/approval-batch-132-135/133-chemical-storage/native-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-132-135/133-chemical-storage/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-132-135/133-chemical-storage/painted-lower-inset-sphere-study.png",
+    "review_sha256": "679889769a758b0a892cffb10a0bc66f93701796dc7f8f36569737911aafc71f"
+  },
+  "installed_view_sha256": "679889769a758b0a892cffb10a0bc66f93701796dc7f8f36569737911aafc71f",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-132-135/133-chemical-storage/painted-lower-inset-sphere-study.png",
+      "installed": "assets/landscape/buildings/133-chemical-storage/approved-original.png",
+      "sha256": "57c603099c77c9cd94899f062a51ae638f65a3dc42e00101f0ce33ec67235253"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-132-135/133-chemical-storage/painted-lower-inset-sphere-study.png",
+      "installed": "assets/landscape/buildings/133-chemical-storage/approved-foreground.png",
+      "sha256": "57c603099c77c9cd94899f062a51ae638f65a3dc42e00101f0ce33ec67235253"
+    },
+    {
+      "source": "assets/landscape/buildings/133-chemical-storage/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/133-chemical-storage/approved-foundation-mask.png",
+      "sha256": "222a013f0109efe76ac731a250857bbc63b074f1ca2e531c630ce5f907a4d317"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-132-135/133-chemical-storage/view-0.png",
+      "installed": "assets/landscape/buildings/133-chemical-storage/approved-view.png",
+      "sha256": "679889769a758b0a892cffb10a0bc66f93701796dc7f8f36569737911aafc71f"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-132-135/133-chemical-storage/ground-0.png",
+      "installed": "assets/landscape/buildings/133-chemical-storage/approved-ground.png",
+      "sha256": "0690f2cfeeff90332c3b12b3114399320dba355f3bbc741670a77642304ca927"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

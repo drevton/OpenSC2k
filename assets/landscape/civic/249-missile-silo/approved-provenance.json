@@ -1,0 +1,40 @@
+{
+  "kind": 249,
+  "source_selection": {
+    "kind": 249,
+    "name": "Missile silo",
+    "review": "assets/landscape/building-studies/approval-batch-249-252/249-missile-silo/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-249-252/249-missile-silo/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-249-252/249-missile-silo/calibrated-source.png",
+    "review_sha256": "cb701e407a261be4c23a7f1631d337a2ffae15976cbf0d6b74e0c6ea656d79bc"
+  },
+  "installed_view_sha256": "cb701e407a261be4c23a7f1631d337a2ffae15976cbf0d6b74e0c6ea656d79bc",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-249-252/249-missile-silo/calibrated-source.png",
+      "installed": "assets/landscape/civic/249-missile-silo/approved-original.png",
+      "sha256": "5ff44dda7238811b6544fe6c459ff1e19c5eb905ba3255ce884e2db10e8c16de"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-249-252/249-missile-silo/calibrated-source.png",
+      "installed": "assets/landscape/civic/249-missile-silo/approved-foreground.png",
+      "sha256": "5ff44dda7238811b6544fe6c459ff1e19c5eb905ba3255ce884e2db10e8c16de"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-249-252/249-missile-silo/native-foundation-mask.png",
+      "installed": "assets/landscape/civic/249-missile-silo/approved-foundation-mask.png",
+      "sha256": "9ea3873ddd96388a3c1dbe83fd99ab1a7dcc6a8b06d288a880d7c5e944924d6b"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-249-252/249-missile-silo/view-0.png",
+      "installed": "assets/landscape/civic/249-missile-silo/approved-view.png",
+      "sha256": "cb701e407a261be4c23a7f1631d337a2ffae15976cbf0d6b74e0c6ea656d79bc"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-249-252/249-missile-silo/ground-0.png",
+      "installed": "assets/landscape/civic/249-missile-silo/approved-ground.png",
+      "sha256": "fcfb292e058df4113fb232b191affc6cfa90fb89c0a03ec92f6175dd900af404"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

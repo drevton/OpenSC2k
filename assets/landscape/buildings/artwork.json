@@ -1,0 +1,1037 @@
+{
+  "pixels_per_tile": 128,
+  "buildings": [
+    {
+      "kind": 112,
+      "name": "Lower-class homes",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "112-modest-homes/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 113,
+      "name": "Lower-class homes",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "113-lower-class-homes/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 114,
+      "name": "Lower-class homes",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "114-lower-class-homes/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 115,
+      "name": "Lower-class homes",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "115-lower-class-homes/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 116,
+      "name": "Middle-class homes",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "116-middle-class-homes/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 117,
+      "name": "Middle-class homes",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "117-middle-class-homes/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 118,
+      "name": "Middle-class homes",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "118-middle-class-homes/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 119,
+      "name": "Middle-class homes",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "119-middle-class-homes/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 120,
+      "name": "Luxury Homes",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "120-luxury-homes/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 121,
+      "name": "Luxury Homes",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "121-luxury-homes/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 122,
+      "name": "Luxury Homes",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "122-luxury-homes/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 123,
+      "name": "Luxury Homes",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "123-luxury-homes/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 124,
+      "name": "Gas Station",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "124-gas-station/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 125,
+      "name": "Bed & Breakfast Inn",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "125-bed-breakfast-inn/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 126,
+      "name": "Convience Store",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "126-convience-store/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 127,
+      "name": "Gas Station",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "127-gas-station/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 128,
+      "name": "Small office building",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "128-small-office-building/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 129,
+      "name": "Office building",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "129-office-building/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 130,
+      "name": "Warehouse",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "130-warehouse/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 131,
+      "name": "Cassidy's Toy Store",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "131-cassidy-s-toy-store/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 132,
+      "name": "Warehouse",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "132-warehouse/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 133,
+      "name": "Chemical Storage",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "133-chemical-storage/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 134,
+      "name": "Warehouse",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "134-warehouse/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 135,
+      "name": "Industrial substation",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "135-industrial-substation/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 136,
+      "name": "Construction",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "status": "shared construction artwork",
+      "manifest": "136-construction/sprites.json",
+      "source_paintings": 1,
+      "baked_views": 4
+    },
+    {
+      "kind": 137,
+      "name": "Construction",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "status": "shared construction artwork",
+      "manifest": "137-construction/sprites.json",
+      "source_paintings": 1,
+      "baked_views": 4
+    },
+    {
+      "kind": 138,
+      "name": "Abandoned building",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "138-abandoned-building/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 139,
+      "name": "Abandoned building",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "139-abandoned-building/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 140,
+      "name": "Cheap apartments",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "140-cheap-apartments/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 141,
+      "name": "Apartments",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "141-apartments/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 142,
+      "name": "Apartments",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "142-apartments/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 143,
+      "name": "Nice Apartments",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "143-nice-apartments/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 144,
+      "name": "Nice Apartments",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "144-nice-apartments/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 145,
+      "name": "Condominium",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "145-condominium/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 146,
+      "name": "Condominium",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "146-condominium/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 147,
+      "name": "Condominium",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "147-condominium/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 148,
+      "name": "Shopping center",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "148-shopping-center/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 149,
+      "name": "Grocery story",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "149-grocery-story/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 150,
+      "name": "Office building",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "150-office-building/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 151,
+      "name": "Resort hotel",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "151-resort-hotel/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 152,
+      "name": "Office building",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "152-office-building/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 153,
+      "name": "Office / Retail",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "153-office-retail/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 154,
+      "name": "Office building",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "154-office-building/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 155,
+      "name": "Office building",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "155-office-building/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 156,
+      "name": "Office building",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "156-office-building/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 157,
+      "name": "Office building",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "157-office-building/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 158,
+      "name": "Warehouse",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "158-warehouse/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 159,
+      "name": "Chemical processing",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "159-chemical-processing/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 160,
+      "name": "Factory",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "160-factory/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 161,
+      "name": "Factory",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "161-factory/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 162,
+      "name": "Factory",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "162-factory/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 163,
+      "name": "Factory",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "163-factory/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 164,
+      "name": "Factory",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "164-factory/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 165,
+      "name": "Factory",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "165-factory/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 166,
+      "name": "Construction",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "status": "shared construction artwork",
+      "manifest": "166-construction/sprites.json",
+      "source_paintings": 1,
+      "baked_views": 4
+    },
+    {
+      "kind": 167,
+      "name": "Construction",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "status": "shared construction artwork",
+      "manifest": "167-construction/sprites.json",
+      "source_paintings": 1,
+      "baked_views": 4
+    },
+    {
+      "kind": 168,
+      "name": "Construction",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "status": "shared construction artwork",
+      "manifest": "168-construction/sprites.json",
+      "source_paintings": 1,
+      "baked_views": 4
+    },
+    {
+      "kind": 169,
+      "name": "Construction",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "status": "shared construction artwork",
+      "manifest": "169-construction/sprites.json",
+      "source_paintings": 1,
+      "baked_views": 4
+    },
+    {
+      "kind": 170,
+      "name": "Abandoned building",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "170-abandoned-building/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 171,
+      "name": "Abandoned building",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "171-abandoned-building/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 172,
+      "name": "Abandoned building",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "172-abandoned-building/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 173,
+      "name": "Abandoned building",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "173-abandoned-building/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 174,
+      "name": "Large apartment building",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "174-large-apartment-building/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 175,
+      "name": "Large apartment building",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "175-large-apartment-building/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 176,
+      "name": "Condominium",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "176-condominium/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 177,
+      "name": "Condominium",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "177-condominium/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 178,
+      "name": "Office park",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "178-office-park/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 179,
+      "name": "Office tower",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "179-office-tower/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 180,
+      "name": "Mini-mall",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "180-mini-mall/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 181,
+      "name": "Theatre Square",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "181-theatre-square/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 182,
+      "name": "Drive-in theater",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "182-drive-in-theater/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 183,
+      "name": "Office tower",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "183-office-tower/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 184,
+      "name": "Office tower",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "184-office-tower/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 185,
+      "name": "Parking lot",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "185-parking-lot/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 186,
+      "name": "Historic office building",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "186-historic-office-building/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 187,
+      "name": "Corporate headquarters",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "187-corporate-headquarters/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 188,
+      "name": "Chemical processing",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "188-chemical-processing/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 189,
+      "name": "Large factory",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "189-large-factory/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 190,
+      "name": "Industrial thingamajig",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "190-industrial-thingamajig/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 191,
+      "name": "Factory",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "191-factory/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 192,
+      "name": "Large warehouse",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "192-large-warehouse/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 193,
+      "name": "Warehouse",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "193-warehouse/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 194,
+      "name": "Construction",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "status": "shared construction artwork",
+      "manifest": "194-construction/sprites.json",
+      "source_paintings": 1,
+      "baked_views": 4
+    },
+    {
+      "kind": 195,
+      "name": "Construction",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "status": "shared construction artwork",
+      "manifest": "195-construction/sprites.json",
+      "source_paintings": 1,
+      "baked_views": 4
+    },
+    {
+      "kind": 196,
+      "name": "Abandoned building",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "196-abandoned-building/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    },
+    {
+      "kind": 197,
+      "name": "Abandoned building",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "status": "complete four-view artwork",
+      "manifest": "197-abandoned-building/sprites.json",
+      "source_paintings": 4,
+      "baked_views": 4
+    }
+  ]
+}

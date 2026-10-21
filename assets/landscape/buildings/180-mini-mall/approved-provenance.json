@@ -1,0 +1,43 @@
+{
+  "kind": 180,
+  "source_selection": {
+    "kind": 180,
+    "name": "Mini-mall",
+    "review": "assets/landscape/building-studies/daylight-cleanup/180-mini-mall/native-composited-daylight.png",
+    "recipe": "assets/landscape/building-studies/daylight-cleanup/180-mini-mall/bake.json",
+    "source": "assets/landscape/building-studies/daylight-cleanup/180-mini-mall/painted-daylight.png",
+    "review_sha256": "4b404025b45a0bc6eb058d2373332a5f2f3cc7fededd49d80ac42f2eaaed03d5",
+    "baked_sprite": "assets/landscape/building-studies/daylight-cleanup/180-mini-mall/view-0.png",
+    "source_sha256": "78af59c4938caad0ef1c687b9f1e49b03a3cd59ab8abe2cd0555bd15aa847c0c",
+    "correction_scope": "Lighting only, approved architecture preserved"
+  },
+  "installed_view_sha256": "d7b8e576d32b26762e268cb32604fd1faf674e88704f8a6c3fb201d8450a159e",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/180-mini-mall/calibration-source.png",
+      "installed": "assets/landscape/buildings/180-mini-mall/approved-original.png",
+      "sha256": "e91cc8bd351307188c6c2711b0b37f370f9034b1e18f7bf7f1d85b0b471969df"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/180-mini-mall/registered-daylight.png",
+      "installed": "assets/landscape/buildings/180-mini-mall/approved-foreground.png",
+      "sha256": "81734ea1df3804e81c1a018e5d9b8d217a663ae216f4d156fb216a4a436b9a98"
+    },
+    {
+      "source": "assets/landscape/buildings/180-mini-mall/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/180-mini-mall/approved-foundation-mask.png",
+      "sha256": "acc7f7f6406e2a619279d1dd3d6c72a55acec6aa802f4ae8c05bf9915a95947b"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/180-mini-mall/view-0.png",
+      "installed": "assets/landscape/buildings/180-mini-mall/approved-view.png",
+      "sha256": "d7b8e576d32b26762e268cb32604fd1faf674e88704f8a6c3fb201d8450a159e"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/180-mini-mall/ground-0.png",
+      "installed": "assets/landscape/buildings/180-mini-mall/approved-ground.png",
+      "sha256": "8b7e27b7879364702408a13be5004ed6119691afd749753513e5ab792d0b6235"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

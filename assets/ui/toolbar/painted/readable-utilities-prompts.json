@@ -1,0 +1,15 @@
+{
+  "tool": "built-in image_gen",
+  "icons": [
+    {
+      "file": "power-plants",
+      "id": 41,
+      "prompt": "Create ONE original hand-painted raster game toolbar icon for a POWER PLANTS building chooser. Transparent background. A compact, bold isometric power station: two very large pale ivory hyperboloid cooling towers with dark open rims, one slightly behind the other, a small deep blue generator building tightly at their feet, short white steam puffs close above the towers. The cooling towers occupy most of the icon. Large simple shapes, dark crisp contours, warm sunlight upper left, strong readable highlights and shadows, rich natural materials like a polished classic city-building game icon. A bright golden lightning bolt badge beside the lower right tower makes electricity unmistakable. Square composition, artwork fills almost the entire square, no large empty margins, no ground diamond, no grass, no plants, no huge steam plume, no text, no border, no button background, no photorealistic background. It must be immediately recognizable when downsampled to 32x32 or 48x48 pixels; prioritize silhouette and colour contrast over tiny facade detail."
+    },
+    {
+      "file": "water-buildings",
+      "id": 57,
+      "prompt": "Create ONE original hand-painted raster game toolbar icon for a WATER BUILDINGS chooser. Transparent background. One broad elevated water storage tank, rich white ivory cylinder with a bold red horizontal stripe and bright red conical roof, supported by four short sturdy dark steel legs, one thick glossy blue supply pipe visible below. A large vivid blue water droplet badge at lower right makes water unmistakable. Compact bold nearly square proportions: a wide tank, short legs, no thin spindly distant tower. Isometric three-quarter view, warm upper-left light, dark crisp outlines, dimensional illustrated materials like a polished classic city-building game icon. Fill almost the entire square. Clear silhouette and strong red/white/blue contrast readable at 32x32 and 48x48. No ground diamond, no grass, no plants, no text, no border, no button background, no surrounding scenery."
+    }
+  ]
+}

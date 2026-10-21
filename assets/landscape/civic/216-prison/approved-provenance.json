@@ -1,0 +1,40 @@
+{
+  "kind": 216,
+  "source_selection": {
+    "kind": 216,
+    "name": "Prison",
+    "review": "assets/landscape/building-studies/approval-batch-213-216/216-prison/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-213-216/216-prison/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-213-216/216-prison/registered-cutout-source.png",
+    "review_sha256": "3e3b7217d397d5c92ba11112dbc6a0486ee1ad2ad5d0dca3fa7da838067296fa"
+  },
+  "installed_view_sha256": "0ca31e7a844d7ddb7b64e2dd150d21a3a1f071b83bb38d52023b2180ff597e7f",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-213-216/216-prison/registered-full-plot-calibration.png",
+      "installed": "assets/landscape/civic/216-prison/approved-original.png",
+      "sha256": "9db1e6fd167bf871eeb50f43943dfa2841de4a7eaf52f3d4b021b7060984f87d"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-213-216/216-prison/registered-cutout-source.png",
+      "installed": "assets/landscape/civic/216-prison/approved-foreground.png",
+      "sha256": "b675919b14a52aa21c41e1066a189eedfd3890e2d568037e6ea66577991fc38e"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-213-216/216-prison/native-foundation-mask.png",
+      "installed": "assets/landscape/civic/216-prison/approved-foundation-mask.png",
+      "sha256": "7fbfc8b279db7f5077a762cc66e730cba1e14a4ba7247989084e6c7ec0dd94f8"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-213-216/216-prison/view-0.png",
+      "installed": "assets/landscape/civic/216-prison/approved-view.png",
+      "sha256": "0ca31e7a844d7ddb7b64e2dd150d21a3a1f071b83bb38d52023b2180ff597e7f"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-213-216/216-prison/ground-0.png",
+      "installed": "assets/landscape/civic/216-prison/approved-ground.png",
+      "sha256": "1b100a33b992cd539255f6628c0f2b36da83446e167eb9423ede7ecb7e2d43f1"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

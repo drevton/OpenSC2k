@@ -1,0 +1,45 @@
+{
+  "kind": 198,
+  "name": "Hydroelectric Plant",
+  "footprint_tiles": [
+    1,
+    1
+  ],
+  "pixels_per_tile": 128,
+  "canvas": [
+    128,
+    256
+  ],
+  "baseline": 256,
+  "views": [
+    {
+      "angle": 0,
+      "file": "view-0.png",
+      "ground_file": "ground-0.png"
+    },
+    {
+      "angle": 90,
+      "file": "view-1.png",
+      "ground_file": "ground-1.png"
+    },
+    {
+      "angle": 180,
+      "file": "view-2.png",
+      "ground_file": "ground-2.png"
+    },
+    {
+      "angle": 270,
+      "file": "view-3.png",
+      "ground_file": "ground-3.png"
+    }
+  ],
+  "baker": "tools/bake_civic_sprites.py",
+  "config": "bake.json",
+  "verification": "bake-result.json",
+  "status": "four authored quarter-turn views",
+  "art_notes": "Three spillways, four piers and one copper-roof control house; real upstream/downstream views. Generated with the current fire/police building art as style references; no mirrored aliases.",
+  "ground": "terrain",
+  "encoding": "indexed",
+  "construction": {},
+  "rotation_policy": "authored_four_views"
+}

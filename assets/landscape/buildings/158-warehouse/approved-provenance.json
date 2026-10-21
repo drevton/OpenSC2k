@@ -1,0 +1,43 @@
+{
+  "kind": 158,
+  "source_selection": {
+    "kind": 158,
+    "name": "Warehouse",
+    "review": "assets/landscape/building-studies/daylight-cleanup/158-warehouse/native-composited-daylight.png",
+    "recipe": "assets/landscape/building-studies/daylight-cleanup/158-warehouse/bake.json",
+    "source": "assets/landscape/building-studies/daylight-cleanup/158-warehouse/painted-daylight.png",
+    "review_sha256": "73664f670bada474120359c8fd8f955146f39a518f2f23cf884db9d65d57ca50",
+    "baked_sprite": "assets/landscape/building-studies/daylight-cleanup/158-warehouse/view-0.png",
+    "source_sha256": "859439dba5ba477461fabcddf384ce86efef2890adc3ba5c5a409c3605948556",
+    "correction_scope": "Lighting only, approved architecture preserved"
+  },
+  "installed_view_sha256": "9f29362fabceb1a401cc7a2815109c1d2a99037aa9da410c8f03ca0fa5a26bde",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/158-warehouse/calibration-source.png",
+      "installed": "assets/landscape/buildings/158-warehouse/approved-original.png",
+      "sha256": "ae4544ca488f346389d48cdd4704191922e7fa9ba3001f3aceb2989560cce1dd"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/158-warehouse/registered-daylight.png",
+      "installed": "assets/landscape/buildings/158-warehouse/approved-foreground.png",
+      "sha256": "17aed8bb17ab4c672769df56a002dc0f4d371bb9dca578ad500eed05ed75510d"
+    },
+    {
+      "source": "assets/landscape/buildings/158-warehouse/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/158-warehouse/approved-foundation-mask.png",
+      "sha256": "4d427119cc6ec95916140eb5ca196bb4a5fe1a4cb34bdf4058e6b023026f599b"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/158-warehouse/view-0.png",
+      "installed": "assets/landscape/buildings/158-warehouse/approved-view.png",
+      "sha256": "9f29362fabceb1a401cc7a2815109c1d2a99037aa9da410c8f03ca0fa5a26bde"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/158-warehouse/ground-0.png",
+      "installed": "assets/landscape/buildings/158-warehouse/approved-ground.png",
+      "sha256": "36933b9a65f5d9fffe097f91b1a49a5f0a2db92497f7a2473ccc505ff7df2a0d"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

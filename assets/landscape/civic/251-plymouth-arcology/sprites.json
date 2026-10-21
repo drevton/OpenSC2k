@@ -1,0 +1,66 @@
+{
+  "kind": 251,
+  "name": "Plymouth Arcology",
+  "footprint_tiles": [
+    4,
+    4
+  ],
+  "pixels_per_tile": 128,
+  "canvas": [
+    512,
+    832
+  ],
+  "baseline": 832,
+  "views": [
+    {
+      "angle": 0,
+      "file": "approved-view.png",
+      "ground_file": "approved-ground.png",
+      "mirror": false
+    },
+    {
+      "angle": 90,
+      "file": "approved-view.png",
+      "ground_file": "approved-ground.png",
+      "mirror": true
+    },
+    {
+      "angle": 180,
+      "file": "approved-view.png",
+      "ground_file": "approved-ground.png",
+      "mirror": false
+    },
+    {
+      "angle": 270,
+      "file": "approved-view.png",
+      "ground_file": "approved-ground.png",
+      "mirror": true
+    }
+  ],
+  "baker": "tools/bake_civic_sprites.py",
+  "config": "approved-bake.json",
+  "verification": "approved-bake-result.json",
+  "status": "approved single view; other directions share it pending rotation artwork",
+  "art_notes": "Approved daytime single view. Alternate directions mirror the shared image using resource references.",
+  "legacy_height_reference": {
+    "atlas": "LARGE.DAT",
+    "sprite_id": 1251,
+    "original_tile_width": 32,
+    "original_sprite_width": 128,
+    "original_sprite_height": 196,
+    "master_pixels_per_tile": 128,
+    "target_visible_height": 784,
+    "measured_guide_view0_height": 783
+  },
+  "occupied_heights": [
+    782,
+    740,
+    701,
+    655
+  ],
+  "ground": "painted",
+  "ground_separation": "ground-separation-result.json",
+  "encoding": "indexed",
+  "source_selection": "assets/landscape/building-studies/daylight-cleanup/selected-single-views.json",
+  "construction": {}
+}

@@ -1,0 +1,7 @@
+Use case: sketch-to-render. Asset: FOUR-VIEW Straight Runway game sprite set.
+Input1 is the authoritative 2-by-2 model sheet: top-left0 degrees, top-right90, bottom-left180, bottom-right270.
+Output one large 2-by-2 transparent sprite sheet, one complete separate site in each equal quadrant with generous transparent gutters. Prefer 2048 pixels wide or larger. No text, labels, frame, separator lines or background.
+Paint the exact camera and rigid rotated layout of EACH guide quadrant. A seamless flat charcoal asphalt runway tile with white center dashes and thin white edge lines. One straight strip runs in the guide direction. No curb, greenery, thick edge or extruded platform; asphalt fills the complete ground diamond.
+These are four genuine quarter-turns of ONE fixed object. Never mirror, move parts or repeat the front view in rear cells. Preserve side-specific doors and all occlusions.
+Render a perfectly FLAT ground surface with fine natural asphalt grain and crisp painted lines, no raised border, bevel, under-edge shadow, platform thickness, grass, shrubs, pipes, lamp posts or other added objects. The full square diamond is asphalt to its exact edges.
+Each ground footprint is square at 2:1 isometric projection. Cleanly isolated genuine transparency outside all four sites. No bland low-poly appearance or thick floating plinth.

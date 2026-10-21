@@ -1,0 +1,7 @@
+Use case: precise-object-edit. Input1 is a four-view zoo sprite sheet. Keep the canvas, four quadrant frames, ground layout, buildings, waterfall, fencing, palms, lighting, anatomy, style and genuine transparency unchanged.
+Correct only animal facing directions so these are real quarter-turns of fixed opposing animal poses.
+TOP-LEFT: leave both animals unchanged: giraffe head points screen-right, elephant head/trunk points screen-left.
+TOP-RIGHT: turn BOTH animals around in place. Giraffe head/neck should be toward screen-left end of its body. Elephant head/ears/trunk should be toward screen-right end of its body. Show appropriate back/side anatomy, not mirrored textures pasted elsewhere.
+BOTTOM-LEFT: leave both animals unchanged: giraffe points screen-left and elephant points screen-right.
+BOTTOM-RIGHT: turn ONLY the GIRAFFE around in place so its head/neck points screen-right. Leave elephant pointing screen-left as it is.
+Keep each animal's body center and size fixed; adjust head, neck, feet, tail and body pose coherently around that center. The animals face each other in the fixed habitat, and the whole habitat rotates. Do not move shelters or plants, add animals, change the crop, or change any other detail.

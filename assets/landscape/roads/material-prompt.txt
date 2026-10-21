@@ -1,0 +1,7 @@
+Use case: stylized-concept.
+Asset type: seamless asphalt material for high-quality isometric city-building game road sprites.
+Reference image: actual OpenGFX2 roads, use only the asphalt material character and tasteful game-art finish.
+
+Generate ONE square seamless tileable texture, viewed directly overhead, covering the entire image edge to edge with matte neutral charcoal-gray asphalt. Fine, restrained aggregate grain and delicate irregular worn flecks, visually convincing hand-painted game texture. Tiny grains, not large gravel, cracked stone, fabric, scratches, or swirls. Smooth enough to read cleanly on a road tile only128pixels wide. Rich subtle tonal variation, no obvious repeating motifs.
+Uniform ambient illumination. Base pavement approximately RGB100,100,99, with restrained variation. No directional illumination, spotlight, bright center, dark border, vignette or cast shadow. Lighting across road width will be applied by the game's sprite pipeline, so this texture must have even brightness.
+No road shape, white lines, lane markings, roadsides, curb, ground, perspective, labels, frames, transparency, objects or text. Just continuous finely textured asphalt over the whole square. Opposite edges should tile seamlessly. Polished material suitable for OpenGFX2-quality game sprites.

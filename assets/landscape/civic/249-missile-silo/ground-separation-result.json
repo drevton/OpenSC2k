@@ -1,0 +1,61 @@
+{
+  "source_sheet_sha256": "1f603b0f60fad1c88d00610f37ac40ba847c0b65563c865bfdccad718f1de4e7",
+  "source_canvas": [
+    1254,
+    1254
+  ],
+  "registered_canvas": [
+    2700,
+    2700
+  ],
+  "checks": [
+    {
+      "view": 0,
+      "upper_structure_coverage": 1.0,
+      "upper_structure_excess": 0.0,
+      "alignment": null
+    },
+    {
+      "view": 1,
+      "upper_structure_coverage": 1.0,
+      "upper_structure_excess": 0.0,
+      "alignment": {
+        "scale": 1.0199999999999998,
+        "offset": [
+          -13.718609996630537,
+          -49.47695847475576
+        ],
+        "colour_error": 0.023621907404281803,
+        "method": "masked architectural colour registration"
+      }
+    },
+    {
+      "view": 2,
+      "upper_structure_coverage": 1.0,
+      "upper_structure_excess": 0.0,
+      "alignment": {
+        "scale": 1.035,
+        "offset": [
+          -40.370701244481474,
+          -5.270721091834699
+        ],
+        "colour_error": 0.03022646195307147,
+        "method": "masked architectural colour registration"
+      }
+    },
+    {
+      "view": 3,
+      "upper_structure_coverage": 1.0,
+      "upper_structure_excess": 0.00204525118241084,
+      "alignment": {
+        "scale": 1.0374999999999999,
+        "offset": [
+          -34.158309731740125,
+          -15.727134165607714
+        ],
+        "colour_error": 0.04259669113053263,
+        "method": "masked architectural colour registration"
+      }
+    }
+  ]
+}

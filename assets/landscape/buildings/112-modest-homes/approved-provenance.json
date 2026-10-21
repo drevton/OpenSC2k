@@ -1,0 +1,39 @@
+{
+  "kind": 112,
+  "source_selection": {
+    "kind": 112,
+    "name": "Lower-class homes",
+    "review": "assets/landscape/buildings/112-modest-homes/view-0.png",
+    "review_sha256": "56bcf072517ef0c5d15219835c50de7d148e39db9a5170b6cc41c6edb5e4f6d3",
+    "source_scope": "Earlier housing view or installed smallpark; no current approval-batch native image"
+  },
+  "installed_view_sha256": "d43343f5d47fb316d431933e2964e344766720e36c2f7a782908afc3dbd6bedc",
+  "dependencies": [
+    {
+      "source": "assets/landscape/buildings/112-modest-homes/registration-guide-0.png",
+      "installed": "assets/landscape/buildings/112-modest-homes/approved-original.png",
+      "sha256": "b67a26cecd034f3e9a003ba12ca1d160802dcc188e85fb71544233faa56c6220"
+    },
+    {
+      "source": "assets/landscape/buildings/112-modest-homes/cutout-0.png",
+      "installed": "assets/landscape/buildings/112-modest-homes/approved-foreground.png",
+      "sha256": "f7e7cd52e8ba818d7b41eb43ea9638724854018355450940f57bf5d0c673e064"
+    },
+    {
+      "source": "assets/landscape/buildings/112-modest-homes/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/112-modest-homes/approved-foundation-mask.png",
+      "sha256": "c029caa2ab8ea9c96bece66c126afebe08a13a031d32daeec5337fc06091705b"
+    },
+    {
+      "source": "assets/landscape/buildings/112-modest-homes/view-0.png",
+      "installed": "assets/landscape/buildings/112-modest-homes/approved-view.png",
+      "sha256": "d43343f5d47fb316d431933e2964e344766720e36c2f7a782908afc3dbd6bedc"
+    },
+    {
+      "source": "assets/landscape/buildings/112-modest-homes/ground-0.png",
+      "installed": "assets/landscape/buildings/112-modest-homes/approved-ground.png",
+      "sha256": "f6e1afc40b4b7ab3309118e4ed66e3fdd1d4a2375f1bd06634c673a071609cf0"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

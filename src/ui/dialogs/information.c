@@ -1,0 +1,462 @@
+#include "city/maps/layers.h"
+#include "city/economy/facilities.h"
+#include "assets/graphics.h"
+#include "assets/resource_types.h"
+#include "city/events/events.h"
+#include "city/maps/map_types.h"
+#include "city/maps/tile_storage.h"
+#include "city/tools/types.h"
+#include "drawing/maps/map_view.h"
+#include "ui/tools/types.h"
+#include "ui/state.h"
+#include "game/application_internal.h"
+#include "ui/tools/tools.h"
+#include "city/saveload/map_format.h"
+#include "city/maps/map.h"
+#include "city/tools/tools.h"
+#include "assets/catalog.h"
+#include "drawing/drawing_internal.h"
+#include "assets/resources.h"
+
+// Drawing subsystem: information.
+
+CityRect CityNameEditorBounds(const Window *window, int control) {
+  CityRect b = window->bounds;
+  if (window->kind == CITY_CANVAS_STADIUM_TEAM) {
+    if (control == CITY_NAME_EDITOR_INPUT) return (CityRect){b.left + 9, b.top + 28, b.right - 9, b.top + 51};
+    if (control == CITY_NAME_EDITOR_OK) return (CityRect){b.left + 33, b.bottom - 29, b.left + 95, b.bottom - 10};
+    return (CityRect){b.right - 95, b.bottom - 29, b.right - 33, b.bottom - 10};
+  }
+  if (control == CITY_NAME_EDITOR_INPUT) return (CityRect){b.left + 2, b.top + 16, b.right - 2, b.top + 30};
+  int middle = (b.left + b.right) / 2;
+  if (control == CITY_NAME_EDITOR_OK) return (CityRect){b.left, b.bottom - 14, middle, b.bottom};
+  return (CityRect){middle, b.bottom - 14, b.right, b.bottom};
+}
+
+void CanvasDrawLabelEditor(Canvas *canvas, const Window *window) {
+  CityRect b = window->bounds;
+  DrawCanvasFrame(canvas, (CityRect){b.left, b.top + 14, b.right, b.bottom},
+      canvas_face, canvas_light, canvas_dark, true);
+  DrawCityWindowCaption(canvas, b, window->title, canvas_face, canvas_light, canvas_dark, 0);
+  DrawCityTextBox(canvas, CityNameEditorBounds(window, CITY_NAME_EDITOR_INPUT), window->message,
+      window->text_caret, window->text_scroll, true, window->text_select_all, true);
+  for (int control = CITY_NAME_EDITOR_OK; control <= CITY_NAME_EDITOR_CANCEL; ++control) {
+    CityRect button = CityNameEditorBounds(window, control);
+    DrawCanvasButtonFrame(canvas, button, canvas_face, canvas_light, canvas_dark, true);
+    DrawCityInterfaceTextCentered(canvas->interface_font, canvas, button,
+        control == CITY_NAME_EDITOR_OK ? "OK" : "Cancel", canvas_text, false, 10);
+  }
+}
+
+i32 Sc2kCanvasStadiumTeamAt(const Window *window, i32 x, i32 y) {
+  if (window->kind != CITY_CANVAS_STADIUM_TEAM || x < window->bounds.left + 9 ||
+      x >= window->bounds.right - 9)
+    return -1;
+  i32 row = 0;
+  for (i32 team = 0; team < CITY_TEAM_NAME_COUNT; ++team) {
+    if (!(window->stadium_team_choices & (1u << team)))
+      continue;
+    i32 top = window->bounds.top + 62 + row++ * 18;
+    if (y >= top && y < top + 17)
+      return team;
+  }
+  return -1;
+}
+
+void CanvasDrawStadiumTeamEditor(Canvas *canvas, const Window *window) {
+  CanvasDrawLabelEditor(canvas, window);
+  i32 row = 0;
+  for (i32 team = 0; team < CITY_TEAM_NAME_COUNT; ++team) {
+    if (!(window->stadium_team_choices & (1u << team)))
+      continue;
+    i32 top = window->bounds.top + 62 + row++ * 18;
+    i32 selected = team == window->stadium_team_selection;
+    DrawCanvasButtonBox(canvas, window->bounds.left + 9, top, window->bounds.right - 9, top + 17,
+        selected ? canvas_title : canvas_light, !selected);
+    CanvasTextAt(canvas, window->bounds.left + 14, top + 3, window->stadium_team_labels[team],
+        selected ? canvas_light : canvas_text);
+  }
+}
+
+void DrawCityFacilityInformationWindow(City *city, Canvas *canvas, const Window *window) {
+  CityRect bounds = window->bounds;
+  DrawCanvasFrame(canvas, (CityRect){bounds.left, bounds.top + 14, bounds.right, bounds.bottom},
+      canvas_face, canvas_light, canvas_dark, true);
+  DrawCityWindowCaption(canvas, bounds, window->title, canvas_face, canvas_light, canvas_dark, 0);
+  CityRect old_clip = canvas->clip;
+  canvas->clip = IntersectCityRects(old_clip,
+      (CityRect){bounds.left + 8, bounds.top + 25, bounds.right - 8, bounds.bottom - 29});
+  int facility = window->data_map_selection;
+  bool valid = facility >= 0 && facility < CityFacilityRecordLimit(city) &&
+      ReadCityFacilityRecord(city, facility)->type != TK_CLEAR;
+  const char *name = valid ? (const char *)ReadCityOverlayName(city, CityFacilityOverlay(facility))->character :
+      "Facility no longer exists";
+  CanvasTextAt(canvas, bounds.left + 12, bounds.top + 30, name, canvas_text);
+  bool show_age = valid && city->individual_facilities && city->annual_facilities.details;
+  if (show_age) {
+    char age[64];
+    snprintf(age, sizeof(age), "Age: %u years", city->annual_facilities.details[facility].years);
+    CanvasTextAt(canvas, bounds.left + 12, bounds.top + 48, age, canvas_text);
+  }
+  int first_line = show_age ? 64 : 48;
+  CityCanvasInformationCursor cursor = {canvas, bounds.left + 12, bounds.top + first_line, 0, 0, 1, canvas_text, 0, 0};
+  CityInformationText text = {.cursor = &cursor};
+  text.city = city;
+  for (int line = 0; valid && line < CITY_FACILITY_INFO_LINE_COUNT; ++line) {
+    cursor.x = bounds.left + 12;
+    cursor.y = bounds.top + first_line + line * 16;
+    DrawCityFacilityInformationTemplate(&text, facility, line);
+  }
+  canvas->clip = old_clip;
+  if (window->confirmed_command.id == CITY_COMMAND_EDIT_FACILITY_LABEL) {
+    CityRect rename = {bounds.left + 10, bounds.bottom - 24, bounds.left + 72, bounds.bottom - 9};
+    DrawCanvasButtonFrame(canvas, rename, canvas_face, canvas_light, canvas_dark, true);
+    DrawCityInterfaceTextCentered(canvas->interface_font, canvas, rename, "Rename", canvas_text, false, 10);
+  }
+  CityRect close = {bounds.right - 51, bounds.bottom - 24, bounds.right - 10, bounds.bottom - 9};
+  DrawCanvasButtonFrame(canvas, close, canvas_face, canvas_light, canvas_dark, true);
+  DrawCityInterfaceTextCentered(canvas->interface_font, canvas, close, "Close", canvas_text, false, 10);
+}
+
+i32 Sc2kCanvasDesktopOpenTileInformation(City *city, CityRect bounds, TileIndex tile) {
+  bounds.right = bounds.left + CITY_TILE_INFORMATION_WIDTH;
+  bounds.bottom = bounds.top + CITY_TILE_INFORMATION_HEIGHT;
+  return Sc2kCanvasDesktopOpen(&city->game->ui->desktop,
+      (Window){.kind = CITY_CANVAS_TILE_INFORMATION, .bounds = bounds,
+          .title = "Tile Information", .data_map_selection = tile, .city = city});
+}
+
+i32 Sc2kCanvasDesktopOpenFacilityInformation(CityCanvasDesktop *desktop, CityRect bounds, i32 facility) {
+  bounds.bottom = IntMax(bounds.bottom, bounds.top + 176);
+  if (facility < 0)
+    return 0;
+  return Sc2kCanvasDesktopOpen(desktop,
+      (Window){.kind = CITY_CANVAS_FACILITY_INFORMATION, .visible = 1, .bounds = bounds,
+          .title = "Facility Information", .data_map_selection = facility});
+}
+
+// Host-only DOS-style tool readout; the original cost/name tables remain authoritative.
+void FormatCityToolStatusText(const CityResourceState *assets, char *text, u32 capacity, int tool) {
+  if (tool == CITY_CANVAS_TOOL_RAISE_TERRAIN || tool == CITY_CANVAS_TOOL_LOWER_TERRAIN) {
+    CopyText(text, capacity, tool == CITY_CANVAS_TOOL_RAISE_TERRAIN ?
+        "Raise terrain: drag to select a range of tiles, then release to raise them" :
+        "Lower terrain: drag to select a range of tiles, then release to lower them");
+    return;
+  }
+  if (tool == CITY_CANVAS_TOOL_STREAM) {
+    CopyText(text, capacity, "Place stream: click a source to grow a gently winding downhill stream");
+    return;
+  }
+  if (tool == CITY_CANVAS_TOOL_LEVEL_TERRAIN || tool == CITY_CANVAS_TOOL_STRETCH_TERRAIN) {
+    CopyText(text, capacity, tool == CITY_CANVAS_TOOL_LEVEL_TERRAIN ?
+        "Level terrain: drag an area to flatten it to the starting elevation" :
+        "Stretch terrain: grab a tile and drag up or down to change its height");
+    return;
+  }
+  if (tool == CITY_CANVAS_TOOL_ROAD_BRIDGE || tool == CITY_CANVAS_TOOL_RAIL_BRIDGE) {
+    CopyText(text, capacity, tool == CITY_CANVAS_TOOL_ROAD_BRIDGE ?
+        "Road bridge: drag between two endpoints" : "Rail bridge: drag between two endpoints");
+    return;
+  }
+  i32 packed = Sc2kCanvasMapPointerTools(tool, 0);
+  if (packed < 0) {
+    snprintf(text, capacity, "%s", "Centering Tool");
+    return;
+  }
+  i32 group = packed & 255;
+  i32 variant = (packed >> 8) & 255;
+  const char *name = assets->tool_names.name[group][variant];
+  u32 cost = group < CITY_TOOL_GROUP_QUERY ? kCityToolCosts[group * CITY_TOOL_VARIANT_CAPACITY + variant] : 0;
+  if (cost)
+    snprintf(text, capacity, "%s $%u", name, cost);
+  else
+    snprintf(text, capacity, "%s", name);
+}
+
+void CanvasDrawToolStatus(Canvas *canvas, const Window *window) {
+  CityRect bounds = window->bounds;
+  CanvasBeveledBox(canvas, bounds.left, bounds.top, bounds.right, bounds.bottom, 0xFFBDBDBDu, 1);
+  CanvasTextFont(canvas, bounds.left + 5, bounds.top + 4, window->message, canvas_text, 1,
+      kCanvasHeadingFont);
+  if (window->policy_flags)
+    CanvasTextFont(canvas, bounds.left + 5, bounds.top + 20, "*PAUSED*", 0xFF00CC00u, 1,
+        kCanvasHeadingFont);
+}
+
+
+// Retain facts and presentation choices at opening; painting does not requery City.
+void CaptureCityTileInformation(City *city, CityTileInformationSnapshot *snapshot) {
+  CityTileInformation *information = &snapshot->data;
+  TileIndex tile = information->tile;
+  *snapshot = (CityTileInformationSnapshot){.window_id = snapshot->window_id};
+  *information = ReadCityTileInformation(city, tile);
+  int kind = information->cell.kind;
+  snapshot->sprite_flipped = LegacyCityTileFlip(city, tile);
+  char locale[4];
+  CopyText(locale, sizeof(locale), (const char *)city->country.character);
+  for (int i = 0; locale[i]; ++i)
+    if (locale[i] >= 'A' && locale[i] <= 'Z') locale[i] += 'a' - 'A';
+  snapshot->us_currency = strcmp(locale, "usa") == 0;
+  int overlay = ReadOverlay(city, tile);
+  bool sailboat = IsCityEventOverlay(overlay) &&
+      city->events.event[CityEventOverlaySlot(overlay)].type == CITY_MAP_EVENT_SAILBOAT;
+  if (sailboat) snapshot->sprite = 1380;
+  else if (IsTileKindExposedWater(kind) && (city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE))) {
+    CityTileGeometry geometry = ReadCityTileGeometry(city, tile);
+    int rotation = CityMapCameraRotation(city->game->drawing);
+    geometry.surface_shape = CityMapCameraShape(geometry.surface_shape, rotation);
+    snapshot->river = ReadCityRiverSprites(city, tile, CITY_MAP_ZOOM_LARGE, &geometry);
+    snapshot->sprite = CityWaterSprite(city, tile, CITY_MAP_ZOOM_LARGE, &geometry);
+  } else {
+    int terrain_sprite = ProjectCityTerrainToLegacy(city, tile, ReadTerrainCode(&information->cell));
+    snapshot->sprite = kind == TK_CLEAR || IsTileKindExposedWater(kind) ?
+        CityTerrainSprite(terrain_sprite) + CITY_SPRITE_CATALOG_LARGE_BASE :
+        MapSpriteZoomIndex(CityMapTileSpriteIndex(city, tile), CITY_MAP_ZOOM_LARGE);
+  }
+  int name = CityTileInformationCategory(kCityMapKindSprites[kind]);
+  if (name == CITY_TILE_CATEGORY_CLEAR) {
+    name = CITY_TILE_NAME_CLEAR_TERRAIN;
+    if (IsTileKindExposedWater(kind))
+      name = sailboat ? CITY_TILE_NAME_FIRST_LIGHT_SAILBOAT : information->cell.flags & TF_SALTWATER ?
+          CITY_TILE_NAME_SALT_WATER : CITY_TILE_NAME_FRESH_WATER;
+  }
+  CopyText(snapshot->name, sizeof(snapshot->name), ReadCityNameResource(CITY_NAME_CATEGORY_TILE, name));
+}
+
+static void DrawTileInformationRow(Canvas *canvas, CityRect content, int label_width, int row,
+    const char *label, const char *value, u32 color) {
+  int y = content.top + 16 + row * 11;
+  CanvasTextRight(canvas, content.left + label_width, y, label, canvas_text);
+  CanvasTextAt(canvas, content.left + label_width + 6, y, value, color);
+}
+
+// Cache families have different zoom strides; a native river sprite is not a legacy 500-slot layout.
+static int TileInformationPreviewSprite(const CityTileInformationSnapshot *snapshot, int piece, int zoom) {
+  int sprite = snapshot->river.count ? snapshot->river.sprite[piece] : snapshot->sprite;
+  if (sprite >= MAP_LANDSCAPE_SPRITE_FIRST)
+    return MAP_LANDSCAPE_SPRITE_FIRST + (sprite - MAP_LANDSCAPE_SPRITE_FIRST) % MAP_LANDSCAPE_SPRITES_PER_ZOOM +
+        zoom * MAP_LANDSCAPE_SPRITES_PER_ZOOM;
+  if (sprite >= MAP_SLOPED_WATER_SPRITE_FIRST)
+    return MAP_SLOPED_WATER_SPRITE_FIRST + (sprite - MAP_SLOPED_WATER_SPRITE_FIRST) % MAP_SELECTION_SPRITE_SHAPES +
+        zoom * MAP_SELECTION_SPRITE_SHAPES;
+  return MapSpriteZoomIndex(sprite % 500, zoom);
+}
+
+static CityRect TileInformationSpriteBounds(const MapSpriteCache *cache, int scale, int zoom, int id) {
+  const RunSprite *sprite = cache->sprites[scale][id];
+  int x = cache->offsets_x[scale][id];
+  if (sprite->mirrored) x = (8 << zoom) * cache->scales[scale] / 100 - sprite->width - x;
+  int y = -cache->baselines[scale][id];
+  return (CityRect){x, y, x + sprite->width, y + sprite->height};
+}
+
+static bool TileInformationPreviewBounds(const CityTileInformationSnapshot *snapshot, const MapSpriteCache *cache,
+    int scale, int zoom, CityRect *bounds) {
+  for (int i = 0; i < IntMax(1, snapshot->river.count); ++i) {
+    int id = TileInformationPreviewSprite(snapshot, i, zoom);
+    if (!cache->sprites[scale][id]) return false;
+    CityRect piece = TileInformationSpriteBounds(cache, scale, zoom, id);
+    *bounds = i ? UnionCityRects(*bounds, piece) : piece;
+  }
+  return true;
+}
+
+void DrawCityTileInformationWindow(Game *game, Canvas *canvas, const Window *window) {
+  const CityTileInformationSnapshot *snapshot = window->information;
+  const CityTileInformation *information = &snapshot->data;
+  CityRect bounds = window->bounds;
+  DrawCanvasFrame(canvas, (CityRect){bounds.left, bounds.top + 14, bounds.right, bounds.bottom},
+      canvas_face, canvas_light, canvas_dark, true);
+  DrawCityWindowCaption(canvas, bounds, window->title, canvas_face, canvas_light, canvas_dark, 0);
+  CityRect old_clip = canvas->clip;
+  CityRect content = {bounds.left + 5, bounds.top + 17, bounds.right - 5, bounds.bottom - 4};
+  canvas->clip = IntersectCityRects(old_clip, content);
+  if (window->policy_flags & 2) {
+    const TileInfo *tp = &information->cell;
+    const int values[][3] = {
+      {information->tile, information->x, information->y},
+      {tp->kind, tp->terrain, tp->underground},
+      {ReadCityLandHeight(tp), tp->altitude >> CITY_ALTITUDE_WATER_SHIFT & CITY_ALTITUDE_LAND_MASK,
+          tp->altitude >> CITY_ALTITUDE_TUNNEL_SHIFT & CITY_ALTITUDE_LAND_MASK},
+      {ReadTileZoneByte(tp), tp->flags, tp->overlay},
+      {information->density, information->density_history, information->traffic_density},
+      {information->land_value, information->crime, information->pollution},
+      {information->police, information->fire, 0}
+    };
+    const char *const labels[] = {"Tile %d   X %d   Y %d", "Building %d   Terrain %d   Underground %d",
+        information->building_stage ? "Elevation %d   Stage %d   Tunnel %d" :
+            "Elevation %d   Water %d   Tunnel %d",
+        "Zone 0x%02X   Flags 0x%02X   Overlay %d", "Density %d   Previous %d   Traffic %d",
+        "Land value %d   Crime %d   Pollution %d", "Police coverage %d   Fire coverage %d"};
+    for (int i = 0; i < 7; ++i) {
+      char line[160];
+      snprintf(line, sizeof(line), labels[i], values[i][0], values[i][1], values[i][2]);
+      CanvasTextAt(canvas, bounds.left + 12, bounds.top + 30 + i * 24, line, canvas_text);
+    }
+    canvas->clip = old_clip;
+    return;
+  }
+  Drawing *drawing = game->drawing;
+  CityRect preview_bounds = {content.left + (content.right - content.left) / 2 + 8,
+      content.top + 20, content.right - 4, content.bottom - 4};
+  CityRect box = CanvasRasterImageBounds(canvas, preview_bounds);
+  const MapSpriteCache *cache = &drawing->sprite_cache;
+  int preview_scale = -1, preview_zoom = 0, smallest_scale = -1, smallest_zoom = 0;
+  CityRect preview_bounds_pixels = {0}, smallest_bounds = {0};
+  // Fit every river layer together at a prepared scale, retaining their shared tile origin and baseline.
+  for (int scale = 0; scale < MAP_SPRITE_SCALE_COUNT; ++scale) {
+    for (int zoom = 0; zoom < 3; ++zoom) {
+      CityRect candidate;
+      if (!TileInformationPreviewBounds(snapshot, cache, scale, zoom, &candidate)) continue;
+      int width = candidate.right - candidate.left, height = candidate.bottom - candidate.top;
+      int area = width * height;
+      if (smallest_scale < 0 || area < (smallest_bounds.right - smallest_bounds.left) *
+          (smallest_bounds.bottom - smallest_bounds.top)) {
+        smallest_scale = scale;
+        smallest_zoom = zoom;
+        smallest_bounds = candidate;
+      }
+      if (width <= box.right - box.left && height <= box.bottom - box.top &&
+          (preview_scale < 0 || area > (preview_bounds_pixels.right - preview_bounds_pixels.left) *
+              (preview_bounds_pixels.bottom - preview_bounds_pixels.top))) {
+        preview_scale = scale;
+        preview_zoom = zoom;
+        preview_bounds_pixels = candidate;
+      }
+    }
+  }
+  if (preview_scale < 0) {
+    preview_scale = smallest_scale;
+    preview_zoom = smallest_zoom;
+    preview_bounds_pixels = smallest_bounds;
+  }
+  if (preview_scale >= 0) {
+    CanvasRaster raster = CanvasRasterView(canvas);
+    SpriteSurface surface = drawing->screen_surface;
+    surface.canvas = *canvas;
+    surface.canvas.width = raster.width;
+    surface.canvas.height = raster.height;
+    surface.canvas.clip = CanvasRasterRect(canvas, preview_bounds);
+    surface.canvas.raster = (CanvasRaster){0};
+    int x = box.left + (box.right - box.left - preview_bounds_pixels.right - preview_bounds_pixels.left) / 2;
+    int y = box.top + (box.bottom - box.top - preview_bounds_pixels.bottom - preview_bounds_pixels.top) / 2;
+    for (int i = 0; i < IntMax(1, snapshot->river.count); ++i) {
+      int id = TileInformationPreviewSprite(snapshot, i, preview_zoom);
+      CityRect piece = TileInformationSpriteBounds(cache, preview_scale, preview_zoom, id);
+      DrawRunSprite(&surface, cache->sprites[preview_scale][id], x + piece.left, y + piece.top, SPRITE_COPY, NULL);
+    }
+  }
+  DrawCityInterfaceTextCentered(canvas->interface_font, canvas,
+      (CityRect){content.left, content.top, content.right, content.top + 14},
+      snapshot->name, canvas_text, false, 10);
+  int zone = ReadCityZoneKind(&information->cell), label_width = 0, row = 0;
+  static const char *const kLabels[] = {
+    "Zone:",
+    "Traffic:",
+    "Elevation:",
+    "Land value:",
+    "Crime:",
+    "Pollution:",
+    "Electricity:",
+    "Water service:",
+  };
+  for (int i = 0; i < (int)(sizeof(kLabels) / sizeof(kLabels[0])); ++i)
+    label_width = IntMax(label_width, CityInterfaceTextWidth(canvas->interface_font, kLabels[i]));
+  char value[512];
+  if (zone != ZONE_NONE) {
+    DrawTileInformationRow(canvas, content, label_width, row++,
+        "Zone:", ReadCityNameResource(CITY_NAME_CATEGORY_ZONE, zone), canvas_text);
+    DrawTileInformationRow(canvas, content, label_width, row++,
+        "", ReadCityNameResource(CITY_NAME_CATEGORY_ZONE, zone + 16), canvas_text);
+  } else if (information->show_traffic) {
+    snprintf(value, sizeof(value), "%d%s", information->traffic,
+        " vehicles/min");
+    DrawTileInformationRow(canvas, content, label_width, row++,
+        "Traffic:", value, canvas_text);
+  }
+  if (information->has_facility_age) {
+    snprintf(value, sizeof(value), "%u years", information->facility_years);
+    DrawTileInformationRow(canvas, content, label_width, row++, "Age:", value, canvas_text);
+  }
+  snprintf(value, sizeof(value), "%d %s", information->altitude_feet, (information->underwater ? "feet deep" : "feet"));
+  DrawTileInformationRow(canvas, content, label_width, row++,
+      "Elevation:", value, canvas_text);
+  if (!information->rocky) {
+    snprintf(value, sizeof(value), "%s%d%s", snapshot->us_currency ? "$" : "", information->land_value + 1,
+        ",000 per acre");
+    DrawTileInformationRow(canvas, content, label_width, row++,
+        "Land value:", value, canvas_text);
+  }
+  for (int metric_row = 0; metric_row < 2; ++metric_row) {
+    int rating = metric_row ? information->pollution_rating : information->crime_rating;
+    DrawTileInformationRow(canvas, content, label_width, row++,
+        (metric_row ? "Pollution:" : "Crime:"), ReadCityNameResource(CITY_NAME_CATEGORY_RATING, rating), canvas_text);
+  }
+  if (information->show_services) {
+    u32 warning = drawing->map_state.tile_information_warning_color;
+    warning = 0xFF000000 | ((warning & 255) << 16) | (warning & 0xFF00) | ((warning >> 16) & 255);
+    bool powered = information->powered;
+    DrawTileInformationRow(canvas, content, label_width, row++,
+        "Electricity:",
+        (powered ? "Yes" : "No"),
+        powered ? canvas_text : warning);
+    bool watered = information->watered;
+    if (information->water_supply != CITY_TILE_WATER_SERVICE) {
+      snprintf(value, sizeof(value), "%d %s", information->water,
+          information->water_supply == CITY_TILE_WATER_PRODUCTION ? "gallons/month" : "gallons stored");
+      watered = true;
+    } else CopyText(value, sizeof(value),
+        (watered ? "Yes" : "No"));
+    DrawTileInformationRow(canvas, content, label_width, row,
+        "Water service:", value, watered ? canvas_text : warning);
+  }
+  if (window->policy_flags & 1) {
+    snprintf(value, sizeof(value), "X=%d  Y=%d%s  Txt=%d", information->y, information->x,
+        snapshot->sprite_flipped ? "flip" : "", information->cell.overlay);
+    CanvasTextAt(canvas, content.left + 10, content.bottom - 30, value, canvas_text);
+  }
+  canvas->clip = old_clip;
+}
+
+// Handles this window's painting and input; paint coordinates are local to the window.
+bool InformationWindowProcedure(Game *game, const Window *window, const WindowEvent *event) {
+  if (event->kind == WINDOW_PAINT) {
+    Canvas *canvas = event->canvas;
+    if (window->kind == CITY_CANVAS_TILE_INFORMATION)
+      DrawCityTileInformationWindow(game, canvas, window);
+    else DrawCityFacilityInformationWindow(game->city, canvas, window);
+    return true;
+  }
+  if (event->kind == WINDOW_INPUT && window->kind == CITY_CANVAS_FACILITY_INFORMATION &&
+      window->confirmed_command.id == CITY_COMMAND_EDIT_FACILITY_LABEL &&
+      event->input->kind == CANVAS_SDL_POINTER_DOWN && event->input->button == CANVAS_SDL_BUTTON_LEFT) {
+    CityRect b = window->bounds;
+    if (CanvasPointInRect((CityRect){b.left + 10, b.bottom - 24, b.left + 72, b.bottom - 9}, event->x, event->y)) {
+      TileIndex tile = MapTileXYOrInvalid(game->city, window->confirmed_command.parameter1,
+          window->confirmed_command.parameter2);
+      if (tile != INVALID_TILE) PresentCityLabelEditor(game->city, tile, true);
+      return true;
+    }
+  }
+  return false;
+}
+
+// Handles this window's painting and input; paint coordinates are local to the window.
+bool ToolStatusWindowProcedure(Game *game, const Window *window, const WindowEvent *event) {
+  if (event->kind == WINDOW_PAINT) {
+    Canvas *canvas = event->canvas;
+    CanvasDrawToolStatus(canvas, window);
+    return true;
+  }
+  if (event->kind != WINDOW_INPUT) return false;
+  const CanvasSDLEvent *input = event->input;
+  if (input->kind == CANVAS_SDL_POINTER_DOWN && input->button == CANVAS_SDL_BUTTON_LEFT) {
+    CityCanvasDesktop *desktop = &game->ui->desktop;
+    desktop->dragging = desktop->count - 1;
+    desktop->drag_x = event->x - window->bounds.left;
+    desktop->drag_y = event->y - window->bounds.top;
+    return true;
+  }
+  if (input->kind == CANVAS_SDL_KEY_DOWN && input->key == CITY_KEY_ESCAPE) return true;
+  return false;
+}

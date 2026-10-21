@@ -1,0 +1,40 @@
+{
+  "kind": 248,
+  "source_selection": {
+    "kind": 248,
+    "name": "Marina",
+    "review": "assets/landscape/building-studies/approval-batch-245-248/248-marina/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-245-248/248-marina/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-245-248/248-marina/calibrated-water-cutout.png",
+    "review_sha256": "db98b9165574699d21dcd2e33d2eb8171c818ed0ce572e0e0233cdc63fc1c293"
+  },
+  "installed_view_sha256": "e8dd50c58418f7646daeebc1fd84144591712484d11a074149d0f4ff78809dfc",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-245-248/248-marina/calibrated-source.png",
+      "installed": "assets/landscape/civic/248-marina/approved-original.png",
+      "sha256": "36db6abf78440ac9ba0cff266b5acdfe7523b3283771d8f32d97548961d1722c"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-245-248/248-marina/calibrated-water-cutout.png",
+      "installed": "assets/landscape/civic/248-marina/approved-foreground.png",
+      "sha256": "477bab1510fdf049cce29d197b086a6ec82c6f2d28eb7d4091b0b9a9c6b40d9e"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-245-248/248-marina/native-foundation-mask.png",
+      "installed": "assets/landscape/civic/248-marina/approved-foundation-mask.png",
+      "sha256": "275e0a1f347a4d7aab401840a7a620ab16aac537dd2fb500ba2e2d636363ba28"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-245-248/248-marina/view-0.png",
+      "installed": "assets/landscape/civic/248-marina/approved-view.png",
+      "sha256": "e8dd50c58418f7646daeebc1fd84144591712484d11a074149d0f4ff78809dfc"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-245-248/248-marina/ground-0.png",
+      "installed": "assets/landscape/civic/248-marina/approved-ground.png",
+      "sha256": "c8f8484033f927851b16e4cbd6c677dcb01af265811f0a0fcc9db2a018fda8dd"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

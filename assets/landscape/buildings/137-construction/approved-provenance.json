@@ -1,0 +1,40 @@
+{
+  "kind": 137,
+  "source_selection": {
+    "kind": 137,
+    "name": "Construction",
+    "review": "assets/landscape/building-studies/approval-batch-136-139/137-construction/native-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-136-139/137-construction/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-136-139/137-construction/painted-square-taller-construction-study.png",
+    "review_sha256": "8353847b439ee06cea67249e0c08778e66291fadf8603e9cf0cc59c68ea4bf9b"
+  },
+  "installed_view_sha256": "8353847b439ee06cea67249e0c08778e66291fadf8603e9cf0cc59c68ea4bf9b",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-136-139/137-construction/painted-square-taller-construction-study.png",
+      "installed": "assets/landscape/buildings/137-construction/approved-original.png",
+      "sha256": "948e8060971f6993ebf36567aa5e74a5985725b44ad686283fe57c10614a7caa"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-136-139/137-construction/painted-square-taller-construction-study.png",
+      "installed": "assets/landscape/buildings/137-construction/approved-foreground.png",
+      "sha256": "948e8060971f6993ebf36567aa5e74a5985725b44ad686283fe57c10614a7caa"
+    },
+    {
+      "source": "assets/landscape/buildings/137-construction/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/137-construction/approved-foundation-mask.png",
+      "sha256": "ef2c5272b91514563df1f00cc716874e9784cb31f3bdf6499de9dad8cdbd1cfc"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-136-139/137-construction/view-0.png",
+      "installed": "assets/landscape/buildings/137-construction/approved-view.png",
+      "sha256": "8353847b439ee06cea67249e0c08778e66291fadf8603e9cf0cc59c68ea4bf9b"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-136-139/137-construction/ground-0.png",
+      "installed": "assets/landscape/buildings/137-construction/approved-ground.png",
+      "sha256": "ff427ba9343d984842e70dca67595b979e9e0f02a3744b4b89514f44d385a69a"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

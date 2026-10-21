@@ -1,0 +1,9 @@
+Rotate the City Hall in reference image 1 exactly 90 degrees CLOCKWISE when viewed from above, with a fixed camera and the same orthographic isometric perspective. Produce ONE rotated view, on a genuinely transparent background.
+
+Reference image 1 is the authoritative original building. Reference image 2 is an additional view of the SAME intended building, supplied to show architectural detailing and parts obscured in image 1. Use both images to understand one coherent three-dimensional building, not two designs. Where their geometry or rooftop fixtures disagree, image 1 takes precedence.
+
+Preserve the original long rectangular three-storey wing, square copper-roofed council chamber, tower at their junction, recessed entrance section, roof proportions, windows, banners and fixed landscaping. Preserve the exact rooftop skylights and vents from image 1; do not copy additional skylights invented in image 2.
+
+A clockwise quarter turn is NOT a mirrored front. The original ceremonial entrance and navy-bannered facade must rotate to the far side and become largely hidden. Show the corresponding side/rear walls, with the long wing extending in its new direction and the council chamber correctly occluding the lower tower/connecting section. Do not reproduce the same front entrance and banners facing the viewer.
+
+Keep the detailed illustrated miniature game-art style and lively colors from both references: finely carved warm limestone, deep bronze window reveals, richly aged turquoise copper, varied slate, subtle amber interiors and lush planting. Keep the camera elevation, scale and screen-upper-left lighting fixed. Do not redesign the roof, move the tower, add wings, mirror the original, or show multiple views.

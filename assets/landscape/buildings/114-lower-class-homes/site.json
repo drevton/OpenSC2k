@@ -1,0 +1,13 @@
+{
+  "layout": "compact detached homes",
+  "ground": "stone",
+  "content_inset_pixels": 2,
+  "direction": "Compact housing with stock-proportioned side and rear setbacks. Preserve the observed number of separate houses and approximate storeys; do not replace a cluster with one large home. Keep useful gaps between houses and a little space around exposed windows. No excessive empty perimeter margin or uniform paved garden.",
+  "stock_spacing": "Very narrow visible outer margin around a dense cluster; retain internal gaps between houses. Hidden rear clearance is uncertain.",
+  "guide_setbacks_fraction": [
+    0.06,
+    0.06,
+    0.06,
+    0.1
+  ]
+}

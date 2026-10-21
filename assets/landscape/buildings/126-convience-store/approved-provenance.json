@@ -1,0 +1,40 @@
+{
+  "kind": 126,
+  "source_selection": {
+    "kind": 126,
+    "name": "Convience Store",
+    "review": "assets/landscape/building-studies/approval-batch-124-127/126-convience-store/native-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-124-127/126-convience-store/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-124-127/126-convience-store/painted-larger-vehicles-study.png",
+    "review_sha256": "463a32aff01fd945c0bc6bc6fd9760dd5718e880344e40d04d1a30ccc6eed91e"
+  },
+  "installed_view_sha256": "ecb65ea1fe66fef7795851a12d6c9f9147f8b95bb1707507952ac7b0d8f17067",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-124-127/126-convience-store/painted-larger-vehicles-study.png",
+      "installed": "assets/landscape/buildings/126-convience-store/approved-original.png",
+      "sha256": "f0e1d27a5d303f398220dfd338a49328139d555538b3dc1b5fb26fe13303b4ff"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-124-127/126-convience-store/painted-larger-vehicles-study.png",
+      "installed": "assets/landscape/buildings/126-convience-store/approved-foreground.png",
+      "sha256": "f0e1d27a5d303f398220dfd338a49328139d555538b3dc1b5fb26fe13303b4ff"
+    },
+    {
+      "source": "assets/landscape/buildings/126-convience-store/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/126-convience-store/approved-foundation-mask.png",
+      "sha256": "f614762ee540d39e4faf668363a640744407c4305caa5114f6730740c746d192"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-124-127/126-convience-store/view-0.png",
+      "installed": "assets/landscape/buildings/126-convience-store/approved-view.png",
+      "sha256": "ecb65ea1fe66fef7795851a12d6c9f9147f8b95bb1707507952ac7b0d8f17067"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-124-127/126-convience-store/ground-0.png",
+      "installed": "assets/landscape/buildings/126-convience-store/approved-ground.png",
+      "sha256": "0369a795e0e43110359337e505cab5e05f4096d3d3b17a2bde21f74beb0a5fde"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

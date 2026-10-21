@@ -1,0 +1,40 @@
+{
+  "kind": 127,
+  "source_selection": {
+    "kind": 127,
+    "name": "Gas Station",
+    "review": "assets/landscape/building-studies/approval-batch-124-127/127-gas-station/native-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-124-127/127-gas-station/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-124-127/127-gas-station/painted-larger-vehicles-study.png",
+    "review_sha256": "e1a0256027f0934a46bf2455ff89db010e9dd41a019735fbefe7a67d13b11882"
+  },
+  "installed_view_sha256": "49231de445b9614ba5745648abaff54cec5f3263f40b9934cf21accf1c588e88",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-124-127/127-gas-station/painted-larger-vehicles-study.png",
+      "installed": "assets/landscape/buildings/127-gas-station/approved-original.png",
+      "sha256": "7e24cb779da182479eeb479642440b58b7545d41b74f071a5e2fdd5cb1e9f6c1"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-124-127/127-gas-station/painted-larger-vehicles-study.png",
+      "installed": "assets/landscape/buildings/127-gas-station/approved-foreground.png",
+      "sha256": "7e24cb779da182479eeb479642440b58b7545d41b74f071a5e2fdd5cb1e9f6c1"
+    },
+    {
+      "source": "assets/landscape/buildings/127-gas-station/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/127-gas-station/approved-foundation-mask.png",
+      "sha256": "f614762ee540d39e4faf668363a640744407c4305caa5114f6730740c746d192"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-124-127/127-gas-station/view-0.png",
+      "installed": "assets/landscape/buildings/127-gas-station/approved-view.png",
+      "sha256": "49231de445b9614ba5745648abaff54cec5f3263f40b9934cf21accf1c588e88"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-124-127/127-gas-station/ground-0.png",
+      "installed": "assets/landscape/buildings/127-gas-station/approved-ground.png",
+      "sha256": "0369a795e0e43110359337e505cab5e05f4096d3d3b17a2bde21f74beb0a5fde"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

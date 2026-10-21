@@ -1,0 +1,39 @@
+{
+  "kind": 114,
+  "source_selection": {
+    "kind": 114,
+    "name": "Lower-class homes",
+    "review": "assets/landscape/buildings/114-lower-class-homes/view-0.png",
+    "review_sha256": "da7f3e4423846218326572c0bc7e33a641bdc15087e0f7ebf62e543f548b1c86",
+    "source_scope": "Earlier housing view or installed smallpark; no current approval-batch native image"
+  },
+  "installed_view_sha256": "72d3fc46eeae55e10091cb0cbb7c15fb68decf65109df7f037844bb5c14696ef",
+  "dependencies": [
+    {
+      "source": "assets/landscape/buildings/114-lower-class-homes/registration-guide-0.png",
+      "installed": "assets/landscape/buildings/114-lower-class-homes/approved-original.png",
+      "sha256": "36199981e585990628b807a18a7aa715057a09d694ae79f4610ba97af6b24a4d"
+    },
+    {
+      "source": "assets/landscape/buildings/114-lower-class-homes/cutout-0.png",
+      "installed": "assets/landscape/buildings/114-lower-class-homes/approved-foreground.png",
+      "sha256": "53ece96f6f8bc79498a1800f2cb503e9058023b46b5fa3724dd102d1c88bf093"
+    },
+    {
+      "source": "assets/landscape/buildings/114-lower-class-homes/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/114-lower-class-homes/approved-foundation-mask.png",
+      "sha256": "ddc3b46015e06b04f795398dfbf27d0f88666d4828d279182d6abc3150fcc3dd"
+    },
+    {
+      "source": "assets/landscape/buildings/114-lower-class-homes/view-0.png",
+      "installed": "assets/landscape/buildings/114-lower-class-homes/approved-view.png",
+      "sha256": "72d3fc46eeae55e10091cb0cbb7c15fb68decf65109df7f037844bb5c14696ef"
+    },
+    {
+      "source": "assets/landscape/buildings/114-lower-class-homes/ground-0.png",
+      "installed": "assets/landscape/buildings/114-lower-class-homes/approved-ground.png",
+      "sha256": "4f891b7975a5be2b31e9119feaa6c5abbf8c51d17a70c7c33ec5f17108f4c79e"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

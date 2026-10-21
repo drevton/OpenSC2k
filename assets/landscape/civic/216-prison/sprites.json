@@ -1,0 +1,50 @@
+{
+  "kind": 216,
+  "name": "Prison",
+  "footprint_tiles": [
+    4,
+    4
+  ],
+  "pixels_per_tile": 128,
+  "canvas": [
+    512,
+    720
+  ],
+  "baseline": 720,
+  "views": [
+    {
+      "angle": 0,
+      "file": "approved-view.png",
+      "ground_file": "approved-ground.png",
+      "mirror": false
+    },
+    {
+      "angle": 90,
+      "file": "approved-view.png",
+      "ground_file": "approved-ground.png",
+      "mirror": true
+    },
+    {
+      "angle": 180,
+      "file": "approved-view.png",
+      "ground_file": "approved-ground.png",
+      "mirror": false
+    },
+    {
+      "angle": 270,
+      "file": "approved-view.png",
+      "ground_file": "approved-ground.png",
+      "mirror": true
+    }
+  ],
+  "baker": "tools/bake_civic_sprites.py",
+  "config": "approved-bake.json",
+  "verification": "approved-bake-result.json",
+  "status": "approved single view; other directions share it pending rotation artwork",
+  "art_notes": "Approved daytime single view. Alternate directions mirror the shared image using resource references.",
+  "ground": "concrete",
+  "ground_separation": "ground-separation-result.json",
+  "encoding": "indexed",
+  "source_selection": "assets/landscape/building-studies/daylight-cleanup/selected-single-views.json",
+  "construction": {}
+}

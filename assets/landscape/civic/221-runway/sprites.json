@@ -1,0 +1,49 @@
+{
+  "kind": 221,
+  "name": "Runway",
+  "footprint_tiles": [
+    1,
+    1
+  ],
+  "pixels_per_tile": 128,
+  "canvas": [
+    128,
+    128
+  ],
+  "baseline": 128,
+  "views": [
+    {
+      "angle": 0,
+      "file": "approved-view.png",
+      "ground_file": "approved-ground.png",
+      "mirror": false
+    },
+    {
+      "angle": 90,
+      "file": "approved-view.png",
+      "ground_file": "approved-ground.png",
+      "mirror": true
+    },
+    {
+      "angle": 180,
+      "file": "approved-view.png",
+      "ground_file": "approved-ground.png",
+      "mirror": false
+    },
+    {
+      "angle": 270,
+      "file": "approved-view.png",
+      "ground_file": "approved-ground.png",
+      "mirror": true
+    }
+  ],
+  "baker": "tools/bake_civic_sprites.py",
+  "config": "approved-bake.json",
+  "verification": "approved-bake-result.json",
+  "status": "approved single painting with alternating runway axes",
+  "art_notes": "The painting follows the native X axis in views 0 and 2. Views 1 and 3 reflect it across the tile center to follow the Y axis. These share pixel data through resource mirror references.",
+  "ground": "painted",
+  "encoding": "indexed",
+  "source_selection": "assets/landscape/building-studies/daylight-cleanup/selected-single-views.json",
+  "construction": {}
+}

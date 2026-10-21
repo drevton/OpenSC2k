@@ -1,0 +1,58 @@
+#ifndef SC2K_CITY_INFRASTRUCTURE_SURFACE_LINES_H
+#define SC2K_CITY_INFRASTRUCTURE_SURFACE_LINES_H
+
+#include "city/maps/map.h"
+
+// Resolved transport surface, derived from TileInfo rather than retained drawing state.
+// shape is camera-relative for view queries; raised is a lift in map levels. layout names source artwork,
+// foundation is its source artwork bank (-1 means none), and bridge_approach preserves the original slope below it.
+typedef struct CityMapSurface {
+  int shape, raised, layout, foundation;
+  bool bridge_approach;
+} CityMapSurface;
+
+typedef struct Drawing Drawing;
+
+// Read stored ordinary-road connections; crossings derive their eligible directions without changing topology.
+int CityRoadConnectionMask(const City *city, TileIndex tile);
+// A valid edited cell must have all fields installed before reconnection. Neighbor order is significant for rails.
+void UpdateRoadConnections(City *city, TileIndex tile);
+void UpdateRailConnections(City *city, TileIndex tile);
+// Raw placement updates kind, statistics, crossings, nearby connections and damage. Caller owns admission/charging.
+void PlaceCityRoadCell(City *city, TileIndex tile);
+void PlaceCityRailCell(City *city, TileIndex tile);
+// Shared landscape visit for lines/crossings: refresh cover first, then paving for ground transport only.
+void TickCitySurfaceLineGround(City *city, TileIndex tile);
+
+// Read-only transition admission; invalid tiles return false. Surface rail takes precedence over buried subway.
+bool CanPlaceCitySubwayRailConnection(const City *city, TileIndex tile);
+// Requires a valid tile. Connects the first eligible neighbor, preserving subway placement and statistics updates.
+// Returns success or a negative gameplay error; there is no separate transition charge.
+i64 PlaceCitySubwayRailConnection(City *city, TileIndex tile);
+
+// These read-only queries accept any valid tile; non-line tiles retain their ordinary surface description.
+// View rotation is explicit and never changes world storage. Heights and lifts are in map levels.
+CityMapSurface ResolveCitySurfaceLineGround(const City *city, TileIndex tile);
+CityMapSurface ResolveCitySurfaceLineViewGround(const City *city, TileIndex tile, int rotation);
+// Source artwork (without zoom) to cardinal connections; independent of native tile-kind encoding.
+int CitySurfaceLineConnections(int layout);
+// Return a Drawing cache slot including zoom. Its diagonal layout also defines the decorative cars' centreline.
+int CitySurfaceLineSprite(const City *city, TileIndex tile, int layout, int zoom, int rotation);
+// Return the two-bit variant that omits foundation walls covered by adjacent ground.
+int CitySurfaceLineFoundationBlock(const City *city, TileIndex tile, CityMapSurface surface);
+// Composite prepared diagonal halves through the normal sprite API; ordinary sprites use the same direct blit.
+bool DrawCitySurfaceLineSprite(Drawing *drawing, int sprite, int x, int baseline, int flipped);
+
+// Paint foundations/ground in the current ground pass; return the raised object's baseline in every pass.
+// Geometry is camera-relative and must describe the same tile. No City mutation or RNG consumption.
+int DrawCityMapInfrastructureGround(City *city, TileIndex tile, int zoom, int screen_x, int ground_y,
+    CityMapSurface surface, const CityTileGeometry *geometry);
+// Compose transport artwork in the current depth pass, delegating bridge/highway geometry to those families.
+void DrawCityMapTransportArtwork(City *city, TileIndex tile, int layout, int zoom, int screen_x, int baseline,
+    const CityTileGeometry *geometry);
+// Fallback for visible transport details not handled by native family artwork. Caller owns visibility/clipping;
+// this paints terrain, the transport object, selection and power warning, without changing City.
+void DrawCityTransportTileFallback(City *city, TileIndex tile, int layout, int zoom, int screen_x, int ground_y,
+    const CityTileGeometry *geometry);
+
+#endif

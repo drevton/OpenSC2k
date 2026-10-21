@@ -1,0 +1,32 @@
+{
+  "pixels_per_tile": 128,
+  "sites": [
+    {
+      "footprint": 1,
+      "foundation": "foundation-1.png",
+      "foundation_baseline": 128,
+      "timber_step": 17,
+      "timber": "frame-timber-1.png",
+      "steel_step": 26,
+      "steel": "frame-steel-1.png"
+    },
+    {
+      "footprint": 2,
+      "foundation": "foundation-2.png",
+      "foundation_baseline": 192,
+      "timber_step": 40,
+      "timber": "frame-timber-2.png",
+      "steel_step": 35,
+      "steel": "frame-steel-2.png"
+    },
+    {
+      "footprint": 3,
+      "foundation": "foundation-3.png",
+      "foundation_baseline": 256,
+      "timber_step": 48,
+      "timber": "frame-timber-3.png",
+      "steel_step": 46,
+      "steel": "frame-steel-3.png"
+    }
+  ]
+}

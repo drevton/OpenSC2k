@@ -1,0 +1,40 @@
+{
+  "kind": 145,
+  "source_selection": {
+    "kind": 145,
+    "name": "Condominium",
+    "review": "assets/landscape/building-studies/approval-batch-144-147/145-condominium/native-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-144-147/145-condominium/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-144-147/145-condominium/painted-curved-gold-crown-palms-study.png",
+    "review_sha256": "99a0924fe246c582c3cfe0b6037a9fc0185ea98955f3aa4ee547349cb92b6f3b"
+  },
+  "installed_view_sha256": "99a0924fe246c582c3cfe0b6037a9fc0185ea98955f3aa4ee547349cb92b6f3b",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-144-147/145-condominium/painted-curved-gold-crown-palms-study.png",
+      "installed": "assets/landscape/buildings/145-condominium/approved-original.png",
+      "sha256": "02d90ce8425df3d18a1cd2873d2c5c688e3cf7d4db17483e4894ffb701d8cd33"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-144-147/145-condominium/painted-curved-gold-crown-palms-study.png",
+      "installed": "assets/landscape/buildings/145-condominium/approved-foreground.png",
+      "sha256": "02d90ce8425df3d18a1cd2873d2c5c688e3cf7d4db17483e4894ffb701d8cd33"
+    },
+    {
+      "source": "assets/landscape/buildings/145-condominium/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/145-condominium/approved-foundation-mask.png",
+      "sha256": "b14ab49e8a4c7fb75407e763472562eaeb15d67d1d79fdc3abcce8504b0f5e0f"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-144-147/145-condominium/view-0.png",
+      "installed": "assets/landscape/buildings/145-condominium/approved-view.png",
+      "sha256": "99a0924fe246c582c3cfe0b6037a9fc0185ea98955f3aa4ee547349cb92b6f3b"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-144-147/145-condominium/ground-0.png",
+      "installed": "assets/landscape/buildings/145-condominium/approved-ground.png",
+      "sha256": "b4b0bfc54d543320ea42a18fca9a1dd3596e075f8d636f5a21c6c763b8701587"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

@@ -1,0 +1,11 @@
+Use case: identity-preserve. One transparent isometric game sprite.
+Image 1: original ceremonial FRONT corner, the authoritative City Hall design.
+Image 2: first clockwise quarter turn, showing the council chamber in front of the plain rear long facade.
+Image 3: second clockwise quarter turn, showing the long wing in the foreground, its short end at lower-right and council chamber behind-left.
+These are three views of ONE building. Use them together to resolve hidden sides and fixed roof fixtures.
+
+Generate ONLY THE FOURTH CORNER, 270 degrees clockwise from image 1: one further clockwise quarter turn from image 3. The long wing should now extend from the NEAR LOWER-LEFT toward the FAR UPPER-RIGHT. Its short end wall is nearest the camera on the LEFT. The square copper-roofed council chamber is BEHIND on the RIGHT, partly hidden by the long wing. The clock tower rises at their far junction, behind the long wing near the RIGHT end. The long wing's original navy-bannered ceremonial facade is visible again on its right-facing long wall, with the unique entrance at the far junction only as far as real occlusion allows. This is NOT the view of any supplied image, and NOT a mirror of image 3.
+
+Change ONLY the camera azimuth/viewpoint while preserving the same physical building. Keep the long roof a single rectangle, with the SAME two sloping skylights, two squat metal ventilators, large capped chimney at the far end away from the tower, small masonry vents, turquoise roof trim and pale parapets in their fixed local positions. The chimney that is at the near lower-right in image 3 moves to the near lower-left in this fourth view. The council cupola stays centered on its same hipped roof. Tower, wing height, bay count, window rhythm, banners, stairs and planting beds are fixed, not redesigned.
+Keep the richly detailed illustrated game-art style of image 1: bright warm cream limestone with fine relief and deep windows, nuanced patinated turquoise roofs, charcoal tiles, natural lush fine foliage, small varied interior reflections. No simplified blockout look.
+Same fixed orthographic isometric camera elevation and scale, upper-left sunlight. Actual transparent alpha background; complete isolated building fully visible. One view only, no text, no frame, no checkerboard.

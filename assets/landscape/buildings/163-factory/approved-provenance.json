@@ -1,0 +1,40 @@
+{
+  "kind": 163,
+  "source_selection": {
+    "kind": 163,
+    "name": "Factory",
+    "review": "assets/landscape/building-studies/approval-batch-160-163/163-factory/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-160-163/163-factory/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-160-163/163-factory/painted-reduced-paving-aligned-stacks-study.png",
+    "review_sha256": "6ce475e1aed5c16c989f87059c4bf74ff5c936a4464c4b3409593f26ac701ab8"
+  },
+  "installed_view_sha256": "3f3f12801c08b5f8f5ace1b9dd06790c47e45ecd1b78fb58c94574a436c73361",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-160-163/163-factory/painted-study.png",
+      "installed": "assets/landscape/buildings/163-factory/approved-original.png",
+      "sha256": "bea96e574bf304f90a0b1454ed056ca4fee27dffeb0bc8f27d43e360e379d55b"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-160-163/163-factory/painted-reduced-paving-aligned-stacks-study.png",
+      "installed": "assets/landscape/buildings/163-factory/approved-foreground.png",
+      "sha256": "c47842a7b9a3fe5815171e1d59c173f0a4d43975646c9f6e5e1acb01fbe8cf70"
+    },
+    {
+      "source": "assets/landscape/buildings/163-factory/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/163-factory/approved-foundation-mask.png",
+      "sha256": "675fad7493cc2dc99056e5e6810f0e22cafbf45cd5c8f6526beeb2bb0ff3b2fe"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-160-163/163-factory/view-0.png",
+      "installed": "assets/landscape/buildings/163-factory/approved-view.png",
+      "sha256": "3f3f12801c08b5f8f5ace1b9dd06790c47e45ecd1b78fb58c94574a436c73361"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-160-163/163-factory/ground-0.png",
+      "installed": "assets/landscape/buildings/163-factory/approved-ground.png",
+      "sha256": "dcf9498456e34450282f211bf0202f94694efa1942e572d8f007b7928ba9dd50"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

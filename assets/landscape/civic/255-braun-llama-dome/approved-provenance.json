@@ -1,0 +1,40 @@
+{
+  "kind": 255,
+  "source_selection": {
+    "kind": 255,
+    "name": "Braun Llama-dome",
+    "review": "assets/landscape/building-studies/approval-batch-253-255/255-braun-llama-dome/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-253-255/255-braun-llama-dome/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-253-255/255-braun-llama-dome/calibrated-source.png",
+    "review_sha256": "40c1e653c80a046163ddab059a2d091a54b965f42b6e6f28422836cea2cb5b60"
+  },
+  "installed_view_sha256": "40c1e653c80a046163ddab059a2d091a54b965f42b6e6f28422836cea2cb5b60",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-253-255/255-braun-llama-dome/calibrated-source.png",
+      "installed": "assets/landscape/civic/255-braun-llama-dome/approved-original.png",
+      "sha256": "d87e3d496351b8e7d782b344b01bbcdfdf9d197442843cc9c3a38089181d8aa9"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-253-255/255-braun-llama-dome/calibrated-source.png",
+      "installed": "assets/landscape/civic/255-braun-llama-dome/approved-foreground.png",
+      "sha256": "d87e3d496351b8e7d782b344b01bbcdfdf9d197442843cc9c3a38089181d8aa9"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-253-255/255-braun-llama-dome/native-foundation-mask.png",
+      "installed": "assets/landscape/civic/255-braun-llama-dome/approved-foundation-mask.png",
+      "sha256": "523261dca8eecd672c7864dba0f3f1adaacbad90e6b9c1b010347c73cdd83440"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-253-255/255-braun-llama-dome/view-0.png",
+      "installed": "assets/landscape/civic/255-braun-llama-dome/approved-view.png",
+      "sha256": "40c1e653c80a046163ddab059a2d091a54b965f42b6e6f28422836cea2cb5b60"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-253-255/255-braun-llama-dome/ground-0.png",
+      "installed": "assets/landscape/civic/255-braun-llama-dome/approved-ground.png",
+      "sha256": "54e9859fcb143144f78d0cf4a9655187f3e3eedd466cf534900ab86aa6af1d28"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

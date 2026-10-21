@@ -1,0 +1,40 @@
+{
+  "kind": 222,
+  "source_selection": {
+    "kind": 222,
+    "name": "Runway",
+    "review": "assets/landscape/building-studies/approval-batch-221-224/222-runway-crossing/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-221-224/222-runway-crossing/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-221-224/222-runway-crossing/empty-foreground.png",
+    "review_sha256": "807ccdc8e687acf60384bb8579437f29ca40069f6d4a68ab30579a66539f8f09"
+  },
+  "installed_view_sha256": "807ccdc8e687acf60384bb8579437f29ca40069f6d4a68ab30579a66539f8f09",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-221-224/222-runway-crossing/alpha-clean-study.png",
+      "installed": "assets/landscape/civic/222-runway-crossing/approved-original.png",
+      "sha256": "7d2a2a8b605ac4a890aeef90b7ad9f612073c0b4fdd1e8981b4aefcc1653b72c"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-221-224/222-runway-crossing/empty-foreground.png",
+      "installed": "assets/landscape/civic/222-runway-crossing/approved-foreground.png",
+      "sha256": "da1517067f3b6aadec344433686a15b7f9e14a3d21c5798c913bbfbabbe09107"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-221-224/222-runway-crossing/native-foundation-mask.png",
+      "installed": "assets/landscape/civic/222-runway-crossing/approved-foundation-mask.png",
+      "sha256": "f614762ee540d39e4faf668363a640744407c4305caa5114f6730740c746d192"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-221-224/222-runway-crossing/view-0.png",
+      "installed": "assets/landscape/civic/222-runway-crossing/approved-view.png",
+      "sha256": "807ccdc8e687acf60384bb8579437f29ca40069f6d4a68ab30579a66539f8f09"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-221-224/222-runway-crossing/ground-0.png",
+      "installed": "assets/landscape/civic/222-runway-crossing/approved-ground.png",
+      "sha256": "807ccdc8e687acf60384bb8579437f29ca40069f6d4a68ab30579a66539f8f09"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

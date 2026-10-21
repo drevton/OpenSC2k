@@ -1,0 +1,40 @@
+{
+  "kind": 242,
+  "source_selection": {
+    "kind": 242,
+    "name": "Cargo yard",
+    "review": "assets/landscape/building-studies/approval-batch-241-244/242-cargo-yard/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-241-244/242-cargo-yard/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-241-244/242-cargo-yard/calibrated-source.png",
+    "review_sha256": "324f5b5fd3fe0ae93d95c70efbb7ad2c45e349fc795bc54513f4a84402632f60"
+  },
+  "installed_view_sha256": "324f5b5fd3fe0ae93d95c70efbb7ad2c45e349fc795bc54513f4a84402632f60",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-241-244/242-cargo-yard/calibrated-source.png",
+      "installed": "assets/landscape/civic/242-cargo-yard/approved-original.png",
+      "sha256": "5a92692034f006335328a83ab26e52028c89f4d15983dac72edc9f93588d1808"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-241-244/242-cargo-yard/calibrated-source.png",
+      "installed": "assets/landscape/civic/242-cargo-yard/approved-foreground.png",
+      "sha256": "5a92692034f006335328a83ab26e52028c89f4d15983dac72edc9f93588d1808"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-241-244/242-cargo-yard/native-foundation-mask.png",
+      "installed": "assets/landscape/civic/242-cargo-yard/approved-foundation-mask.png",
+      "sha256": "4469ffc0881dca44f2dc6f1cdf51d682f73fd496d3262c053dc7322264caff37"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-241-244/242-cargo-yard/view-0.png",
+      "installed": "assets/landscape/civic/242-cargo-yard/approved-view.png",
+      "sha256": "324f5b5fd3fe0ae93d95c70efbb7ad2c45e349fc795bc54513f4a84402632f60"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-241-244/242-cargo-yard/ground-0.png",
+      "installed": "assets/landscape/civic/242-cargo-yard/approved-ground.png",
+      "sha256": "65930b4494671929678c5620d7080b71c56af4bf9798d7d7cda28b5835b035de"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

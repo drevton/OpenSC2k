@@ -1,0 +1,40 @@
+{
+  "kind": 171,
+  "source_selection": {
+    "kind": 171,
+    "name": "Abandoned building",
+    "review": "assets/landscape/building-studies/approval-batch-168-171/171-abandoned-building/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-168-171/171-abandoned-building/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-168-171/171-abandoned-building/painted-distinct-concrete-flat-ground-study.png",
+    "review_sha256": "cdb1de31e4d4101f63ab78649ffb686d9e9be53de7cbdc3d03923b5747b2f1a2"
+  },
+  "installed_view_sha256": "a14f12cdd54d5843a8fb13f92b38c006901ebbb732510c739b0f437035f4fc7e",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-168-171/171-abandoned-building/painted-distinct-concrete-study.png",
+      "installed": "assets/landscape/buildings/171-abandoned-building/approved-original.png",
+      "sha256": "3aebe281f93c16063ccc7ec236e8af265c87dd5a938c67dcad453c945d02138f"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-168-171/171-abandoned-building/painted-distinct-concrete-flat-ground-study.png",
+      "installed": "assets/landscape/buildings/171-abandoned-building/approved-foreground.png",
+      "sha256": "fc8a26dd0424cc79f2d5bd1c385d078a3623dbdb0926fea2fb3ad2ea77df23df"
+    },
+    {
+      "source": "assets/landscape/buildings/171-abandoned-building/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/171-abandoned-building/approved-foundation-mask.png",
+      "sha256": "675fad7493cc2dc99056e5e6810f0e22cafbf45cd5c8f6526beeb2bb0ff3b2fe"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-168-171/171-abandoned-building/view-0.png",
+      "installed": "assets/landscape/buildings/171-abandoned-building/approved-view.png",
+      "sha256": "a14f12cdd54d5843a8fb13f92b38c006901ebbb732510c739b0f437035f4fc7e"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-168-171/171-abandoned-building/ground-0.png",
+      "installed": "assets/landscape/buildings/171-abandoned-building/approved-ground.png",
+      "sha256": "dcf9498456e34450282f211bf0202f94694efa1942e572d8f007b7928ba9dd50"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

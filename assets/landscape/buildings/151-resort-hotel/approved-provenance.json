@@ -1,0 +1,43 @@
+{
+  "kind": 151,
+  "source_selection": {
+    "kind": 151,
+    "name": "Resort hotel",
+    "review": "assets/landscape/building-studies/daylight-cleanup/151-resort-hotel/native-composited-daylight.png",
+    "recipe": "assets/landscape/building-studies/daylight-cleanup/151-resort-hotel/bake.json",
+    "source": "assets/landscape/building-studies/daylight-cleanup/151-resort-hotel/painted-daylight.png",
+    "review_sha256": "017ea188f8feaa656a843cbeff8f6443523e3bb8276b44ec33b17934e9089303",
+    "baked_sprite": "assets/landscape/building-studies/daylight-cleanup/151-resort-hotel/view-0.png",
+    "source_sha256": "6f0e352b5b0c8f1d111c851cd2f156378632b6f95193a6049ab930ab6382206c",
+    "correction_scope": "Lighting only, approved architecture preserved"
+  },
+  "installed_view_sha256": "b39896a28a5bc474e49e24b2eceb307c349d9777bcdcb139a71af239742b66da",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/151-resort-hotel/calibration-source.png",
+      "installed": "assets/landscape/buildings/151-resort-hotel/approved-original.png",
+      "sha256": "6214e88a42215aa1a7afba8c7fdbc5668ff75360f20f204e78918088716e9ea3"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/151-resort-hotel/registered-daylight.png",
+      "installed": "assets/landscape/buildings/151-resort-hotel/approved-foreground.png",
+      "sha256": "6b21cea42881007b3b08058a7b224110e1b18151afe6e91149162c3831b1e2a3"
+    },
+    {
+      "source": "assets/landscape/buildings/151-resort-hotel/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/151-resort-hotel/approved-foundation-mask.png",
+      "sha256": "a4a71c42a8833a38fd3fda56a864a26d36c28d0966615eec7ae437d9c202b1c9"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/151-resort-hotel/view-0.png",
+      "installed": "assets/landscape/buildings/151-resort-hotel/approved-view.png",
+      "sha256": "b39896a28a5bc474e49e24b2eceb307c349d9777bcdcb139a71af239742b66da"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/151-resort-hotel/ground-0.png",
+      "installed": "assets/landscape/buildings/151-resort-hotel/approved-ground.png",
+      "sha256": "44a478f63ff3fa81fb75e2dd6c064a3a471ee2e607e9fcf9a4f4364cbb04ae06"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

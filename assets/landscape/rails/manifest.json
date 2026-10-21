@@ -1,0 +1,551 @@
+[
+  {
+    "id": 44,
+    "file": "straight-a.png",
+    "width": 128,
+    "height": 64,
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 45,
+    "file": "straight-b.png",
+    "width": 128,
+    "height": 64,
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 46,
+    "file": "slope-1.png",
+    "width": 128,
+    "height": 80,
+    "baseline": 80,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 47,
+    "file": "slope-2.png",
+    "width": 128,
+    "height": 80,
+    "baseline": 80,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 48,
+    "file": "slope-3.png",
+    "width": 128,
+    "height": 80,
+    "baseline": 80,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 49,
+    "file": "slope-4.png",
+    "width": 128,
+    "height": 80,
+    "baseline": 80,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 50,
+    "file": "curve-1.png",
+    "width": 128,
+    "height": 64,
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 51,
+    "file": "curve-2.png",
+    "width": 128,
+    "height": 64,
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 52,
+    "file": "curve-3.png",
+    "width": 128,
+    "height": 64,
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 53,
+    "file": "curve-4.png",
+    "width": 128,
+    "height": 64,
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 54,
+    "file": "switch-1.png",
+    "width": 128,
+    "height": 64,
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 55,
+    "file": "switch-2.png",
+    "width": 128,
+    "height": 64,
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 56,
+    "file": "switch-3.png",
+    "width": 128,
+    "height": 64,
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 57,
+    "file": "switch-4.png",
+    "width": 128,
+    "height": 64,
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 58,
+    "file": "four-way-junction.png",
+    "width": 128,
+    "height": 64,
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 59,
+    "file": "transition-1.png",
+    "width": 128,
+    "height": 64,
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 60,
+    "file": "transition-2.png",
+    "width": 128,
+    "height": 64,
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 61,
+    "file": "transition-3.png",
+    "width": 128,
+    "height": 64,
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 62,
+    "file": "transition-4.png",
+    "width": 128,
+    "height": 64,
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 69,
+    "file": "road-crossing-a.png",
+    "width": 128,
+    "height": 128,
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 70,
+    "file": "road-crossing-b.png",
+    "width": 128,
+    "height": 128,
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 71,
+    "file": "power-crossing-a.png",
+    "width": 128,
+    "height": 128,
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 72,
+    "file": "power-crossing-b.png",
+    "width": 128,
+    "height": 128,
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 77,
+    "file": "highway-rail-a.png",
+    "width": 128,
+    "height": 128,
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 78,
+    "file": "highway-rail-b.png",
+    "width": 128,
+    "height": 128,
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 90,
+    "file": "girder-bridge-a.png",
+    "width": 256,
+    "height": 384,
+    "baseline": 384,
+    "scale_divisor": 4,
+    "offset_x": -64
+  },
+  {
+    "id": 91,
+    "file": "girder-bridge-b.png",
+    "width": 256,
+    "height": 384,
+    "baseline": 384,
+    "scale_divisor": 4,
+    "offset_x": -64
+  },
+  {
+    "id": 3367,
+    "file": "highway-rail-a-merge-1.png",
+    "width": 128,
+    "height": 128,
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 3368,
+    "file": "highway-rail-a-merge-2.png",
+    "width": 128,
+    "height": 128,
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 3369,
+    "file": "highway-rail-a-merge-3.png",
+    "width": 128,
+    "height": 128,
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 3370,
+    "file": "highway-rail-b-merge-1.png",
+    "width": 128,
+    "height": 128,
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 3371,
+    "file": "highway-rail-b-merge-2.png",
+    "width": 128,
+    "height": 128,
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 3372,
+    "file": "highway-rail-b-merge-3.png",
+    "width": 128,
+    "height": 128,
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 3418,
+    "file": "diagonal-1-1.png",
+    "width": 128,
+    "height": 64,
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 3419,
+    "file": "diagonal-1-2.png",
+    "width": 128,
+    "height": 64,
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 3420,
+    "file": "diagonal-1-3.png",
+    "width": 128,
+    "height": 64,
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 3421,
+    "file": "diagonal-2-1.png",
+    "width": 128,
+    "height": 64,
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 3422,
+    "file": "diagonal-2-2.png",
+    "width": 128,
+    "height": 64,
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 3423,
+    "file": "diagonal-2-3.png",
+    "width": 128,
+    "height": 64,
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 3424,
+    "file": "diagonal-3-1.png",
+    "width": 128,
+    "height": 64,
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 3425,
+    "file": "diagonal-3-2.png",
+    "width": 128,
+    "height": 64,
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 3426,
+    "file": "diagonal-3-3.png",
+    "width": 128,
+    "height": 64,
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 3427,
+    "file": "diagonal-4-1.png",
+    "width": 128,
+    "height": 64,
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 3428,
+    "file": "diagonal-4-2.png",
+    "width": 128,
+    "height": 64,
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 3429,
+    "file": "diagonal-4-3.png",
+    "width": 128,
+    "height": 64,
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 3430,
+    "file": "diagonal-transition-1-1.png",
+    "width": 128,
+    "height": 64,
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 3431,
+    "file": "diagonal-approach-1-1.png",
+    "width": 128,
+    "height": 64,
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 3432,
+    "file": "diagonal-transition-1-2.png",
+    "width": 128,
+    "height": 64,
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 3433,
+    "file": "diagonal-approach-1-2.png",
+    "width": 128,
+    "height": 64,
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 3434,
+    "file": "diagonal-transition-2-1.png",
+    "width": 128,
+    "height": 64,
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 3435,
+    "file": "diagonal-approach-2-1.png",
+    "width": 128,
+    "height": 64,
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 3436,
+    "file": "diagonal-transition-2-2.png",
+    "width": 128,
+    "height": 64,
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 3437,
+    "file": "diagonal-approach-2-2.png",
+    "width": 128,
+    "height": 64,
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 3438,
+    "file": "diagonal-transition-3-1.png",
+    "width": 128,
+    "height": 64,
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 3439,
+    "file": "diagonal-approach-3-1.png",
+    "width": 128,
+    "height": 64,
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 3440,
+    "file": "diagonal-transition-3-2.png",
+    "width": 128,
+    "height": 64,
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 3441,
+    "file": "diagonal-approach-3-2.png",
+    "width": 128,
+    "height": 64,
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 3442,
+    "file": "diagonal-transition-4-1.png",
+    "width": 128,
+    "height": 64,
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 3443,
+    "file": "diagonal-approach-4-1.png",
+    "width": 128,
+    "height": 64,
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 3444,
+    "file": "diagonal-transition-4-2.png",
+    "width": 128,
+    "height": 64,
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0
+  },
+  {
+    "id": 3445,
+    "file": "diagonal-approach-4-2.png",
+    "width": 128,
+    "height": 64,
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0
+  }
+]

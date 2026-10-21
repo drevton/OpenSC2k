@@ -1,0 +1,43 @@
+{
+  "kind": 156,
+  "source_selection": {
+    "kind": 156,
+    "name": "Office building",
+    "review": "assets/landscape/building-studies/daylight-cleanup/156-office-building/native-composited-daylight.png",
+    "recipe": "assets/landscape/building-studies/daylight-cleanup/156-office-building/bake.json",
+    "source": "assets/landscape/building-studies/daylight-cleanup/156-office-building/painted-daylight.png",
+    "review_sha256": "44e67e7acfa0125703ddb3961fd1359c1271ea93b94b9cde487c0ec4b5eb658e",
+    "baked_sprite": "assets/landscape/building-studies/daylight-cleanup/156-office-building/view-0.png",
+    "source_sha256": "ddcfbabc3df5585626a9d208741a628001b930401acdc9b63bd15254e46a2259",
+    "correction_scope": "Lighting only, approved architecture preserved"
+  },
+  "installed_view_sha256": "b0e911cd5c22287db4fd4d4d3ea1ddd07fae2232d862faed1c515365e567af0e",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/156-office-building/calibration-source.png",
+      "installed": "assets/landscape/buildings/156-office-building/approved-original.png",
+      "sha256": "141316301a0f96aa935799f9ceb6c76b1a9409eefea8f7cc4353b662daa8306e"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/156-office-building/registered-daylight.png",
+      "installed": "assets/landscape/buildings/156-office-building/approved-foreground.png",
+      "sha256": "ff03d46eac95dc091551fbbec8c30193b6ca6dce27fed94b2ec0640b386edaaa"
+    },
+    {
+      "source": "assets/landscape/buildings/156-office-building/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/156-office-building/approved-foundation-mask.png",
+      "sha256": "e238b2bff002b7e3233e4a3cf8781dc2c38494f2c8de21a52c181f133750b754"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/156-office-building/view-0.png",
+      "installed": "assets/landscape/buildings/156-office-building/approved-view.png",
+      "sha256": "b0e911cd5c22287db4fd4d4d3ea1ddd07fae2232d862faed1c515365e567af0e"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/156-office-building/ground-0.png",
+      "installed": "assets/landscape/buildings/156-office-building/approved-ground.png",
+      "sha256": "987fd097a7f9a76a88123d264b9ae51830b93b8584842eb13ebbc8c35166fe1b"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

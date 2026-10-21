@@ -1,0 +1,174 @@
+[
+  {
+    "degrees": 0,
+    "file": "view-0.png",
+    "baseline": 256,
+    "canvas": [
+      128,
+      256
+    ],
+    "source_ground_corners": [
+      [
+        -41.008333333333326,
+        740.8436359580114
+      ],
+      [
+        717.9329338174706,
+        1219.5036772962649
+      ],
+      [
+        1486.1583333333333,
+        767.1282877161927
+      ]
+    ],
+    "source_front_slopes": [
+      0.6306944450856199,
+      -0.5888576319725436
+    ],
+    "ground_owned_pixels": 4096,
+    "ground_mask_mismatches": 0,
+    "ground_source": "paving texture",
+    "ground_in_sprite": false,
+    "native_terrain_union_mismatches": 0,
+    "sprite_pixels_outside_site_prism": 0,
+    "foreground_opaque_pixels_trimmed": 0,
+    "content_inset_pixels": 4,
+    "foreground_opaque_pixels": 3339,
+    "occupied_bounds": [
+      24,
+      183,
+      110,
+      241
+    ],
+    "occupied_height": 58
+  },
+  {
+    "degrees": 90,
+    "file": "view-1.png",
+    "baseline": 256,
+    "canvas": [
+      128,
+      256
+    ],
+    "source_ground_corners": [
+      [
+        -24.333333333333314,
+        814.199129810034
+      ],
+      [
+        729.6323032145585,
+        1269.9480451666793
+      ],
+      [
+        1516.4814814814815,
+        814.865462296709
+      ]
+    ],
+    "source_front_slopes": [
+      0.604469080903127,
+      -0.5783606254407151
+    ],
+    "ground_owned_pixels": 4096,
+    "ground_mask_mismatches": 0,
+    "ground_source": "paving texture",
+    "ground_in_sprite": false,
+    "native_terrain_union_mismatches": 0,
+    "sprite_pixels_outside_site_prism": 0,
+    "foreground_opaque_pixels_trimmed": 0,
+    "content_inset_pixels": 4,
+    "foreground_opaque_pixels": 3228,
+    "occupied_bounds": [
+      26,
+      173,
+      105,
+      243
+    ],
+    "occupied_height": 70
+  },
+  {
+    "degrees": 180,
+    "file": "view-2.png",
+    "baseline": 256,
+    "canvas": [
+      128,
+      256
+    ],
+    "source_ground_corners": [
+      [
+        -92.47058823529414,
+        718.0369226035023
+      ],
+      [
+        805.6778085297865,
+        1311.203419239164
+      ],
+      [
+        1618.2941176470588,
+        820.1305943641966
+      ]
+    ],
+    "source_front_slopes": [
+      0.6604326175630977,
+      -0.6043108160214129
+    ],
+    "ground_owned_pixels": 4096,
+    "ground_mask_mismatches": 0,
+    "ground_source": "paving texture",
+    "ground_in_sprite": false,
+    "native_terrain_union_mismatches": 0,
+    "sprite_pixels_outside_site_prism": 0,
+    "foreground_opaque_pixels_trimmed": 0,
+    "content_inset_pixels": 4,
+    "foreground_opaque_pixels": 2302,
+    "occupied_bounds": [
+      21,
+      187,
+      102,
+      240
+    ],
+    "occupied_height": 53
+  },
+  {
+    "degrees": 270,
+    "file": "view-3.png",
+    "baseline": 256,
+    "canvas": [
+      128,
+      256
+    ],
+    "source_ground_corners": [
+      [
+        -123.81355932203394,
+        815.3409492681624
+      ],
+      [
+        680.4850895661207,
+        1301.6828836821876
+      ],
+      [
+        1641.5205811138014,
+        710.6077739454495
+      ]
+    ],
+    "source_front_slopes": [
+      0.6046782934253763,
+      -0.6150398345693278
+    ],
+    "ground_owned_pixels": 4096,
+    "ground_mask_mismatches": 0,
+    "ground_source": "paving texture",
+    "ground_in_sprite": false,
+    "native_terrain_union_mismatches": 0,
+    "sprite_pixels_outside_site_prism": 0,
+    "foreground_opaque_pixels_trimmed": 0,
+    "content_inset_pixels": 4,
+    "foreground_opaque_pixels": 2255,
+    "occupied_bounds": [
+      27,
+      189,
+      103,
+      240
+    ],
+    "occupied_height": 51
+  }
+]

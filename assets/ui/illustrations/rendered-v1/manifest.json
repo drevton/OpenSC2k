@@ -1,0 +1,238 @@
+{
+  "tool": "built-in image_gen",
+  "status": "Source artwork; newspaper uses the printed illustrations.dat pack and intro uses the full-color 404 source in ui/intro/intro.dat",
+  "art_direction": "Stylish rendered game illustrations with varied painted plaster, glass, steel, concrete and selective stone; less orange masonry; full-color newspaper ink/halftone texture.",
+  "references": [
+    "references/user-reference-1.png",
+    "references/user-reference-2.png",
+    "references/user-reference-3.png"
+  ],
+  "illustrations": [
+    {
+      "id": 400,
+      "name": "Earthquake",
+      "file": "400-earthquake.png",
+      "size": [
+        1536,
+        1024
+      ],
+      "uses": [
+        "newspaper"
+      ],
+      "original_size": [
+        155,
+        100
+      ],
+      "sha256": "bdd5239bd4b1f93d20d4aa3a6cb7f2226b400a6316c42eabb57709b1cb13841f"
+    },
+    {
+      "id": 401,
+      "name": "Traffic",
+      "file": "401-traffic.png",
+      "size": [
+        1536,
+        1024
+      ],
+      "uses": [
+        "newspaper"
+      ],
+      "original_size": [
+        155,
+        100
+      ],
+      "sha256": "6b9d5a716252de70b5c828c8eeee8bf730c22d109f115b2f70848762fd62628f"
+    },
+    {
+      "id": 402,
+      "name": "Construction",
+      "file": "402-construction.png",
+      "size": [
+        1536,
+        1024
+      ],
+      "uses": [
+        "newspaper"
+      ],
+      "original_size": [
+        155,
+        100
+      ],
+      "sha256": "b6bec653a943646fb13a320c639245103ae4a845e142559e0ce385a8a3ae26e3"
+    },
+    {
+      "id": 403,
+      "name": "Protest",
+      "file": "403-protest.png",
+      "size": [
+        1536,
+        1024
+      ],
+      "uses": [
+        "newspaper",
+        "notice"
+      ],
+      "original_size": [
+        155,
+        100
+      ],
+      "sha256": "8900e42a60e0a6643be889026e5c8fefff50c1a338ca4da8feeea1d3f60a0791"
+    },
+    {
+      "id": 404,
+      "name": "Government",
+      "file": "404-government.png",
+      "size": [
+        1536,
+        1024
+      ],
+      "uses": [
+        "newspaper",
+        "intro"
+      ],
+      "original_size": [
+        155,
+        100
+      ],
+      "sha256": "dfe5c98af07306d27d82ecfaf371dafc400146420da913fc07d52dd0289c3a5e"
+    },
+    {
+      "id": 405,
+      "name": "Research",
+      "file": "405-research.png",
+      "size": [
+        1536,
+        1024
+      ],
+      "uses": [
+        "newspaper"
+      ],
+      "original_size": [
+        155,
+        100
+      ],
+      "sha256": "cc90bf432eca5166f607fc754141fd4dd3e67289e89b891fa8dc88c3905f374d"
+    },
+    {
+      "id": 406,
+      "name": "National Guard",
+      "file": "406-national-guard.png",
+      "size": [
+        1536,
+        1024
+      ],
+      "uses": [
+        "newspaper",
+        "notice"
+      ],
+      "original_size": [
+        155,
+        100
+      ],
+      "sha256": "e13b9a819dc99fe7adc12dcf68a96e09e359a975fdd4fc93336777dc4681fe08"
+    },
+    {
+      "id": 407,
+      "name": "Mayor's parade",
+      "file": "407-mayors-parade.png",
+      "size": [
+        1536,
+        1024
+      ],
+      "uses": [
+        "newspaper",
+        "notice"
+      ],
+      "original_size": [
+        155,
+        100
+      ],
+      "sha256": "a1220ca7d33926df13ec8462fcfa9da2a5417e44bcb1a5a413748c95bfe6a64c"
+    },
+    {
+      "id": 408,
+      "name": "Fire",
+      "file": "408-fire.png",
+      "size": [
+        1536,
+        1024
+      ],
+      "uses": [
+        "newspaper"
+      ],
+      "original_size": [
+        155,
+        100
+      ],
+      "sha256": "adada2c132590652c991a5b9d9d9a9e2eaeb785192126c15edd481cc644a365b"
+    },
+    {
+      "id": 409,
+      "name": "Tornado",
+      "file": "409-tornado.png",
+      "size": [
+        1536,
+        1024
+      ],
+      "uses": [
+        "newspaper"
+      ],
+      "original_size": [
+        155,
+        100
+      ],
+      "sha256": "510d592459ea6d1426c6d1bdf308765ac0b3d927118d8a11d496e503d96d24e8"
+    },
+    {
+      "id": 410,
+      "name": "Police",
+      "file": "410-police.png",
+      "size": [
+        1536,
+        1024
+      ],
+      "uses": [
+        "newspaper"
+      ],
+      "original_size": [
+        155,
+        100
+      ],
+      "sha256": "835a5d2d871f64ba1a6918476a695242b68e0ba0f6532b8fb7a9a019e1402f6c"
+    },
+    {
+      "id": 411,
+      "name": "Industry and pollution",
+      "file": "411-industry-pollution.png",
+      "size": [
+        1536,
+        1024
+      ],
+      "uses": [
+        "newspaper"
+      ],
+      "original_size": [
+        154,
+        100
+      ],
+      "sha256": "263ce8101660d081c5b0e643122567d302dd1dbe59c5ce74595029ebe67606f4"
+    },
+    {
+      "id": 128,
+      "name": "Key to the city",
+      "file": "128-key-to-the-city.png",
+      "size": [
+        1774,
+        887
+      ],
+      "uses": [
+        "notice"
+      ],
+      "original_size": [
+        106,
+        53
+      ],
+      "sha256": "95bb632f90574c61ce9c58414003ca0541e74e9c9aca055f7896727f1717722f"
+    }
+  ],
+  "bake_manifest": "../baked/manifest.json"
+}

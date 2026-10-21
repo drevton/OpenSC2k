@@ -1,0 +1,43 @@
+{
+  "kind": 185,
+  "source_selection": {
+    "kind": 185,
+    "name": "Parking lot",
+    "review": "assets/landscape/building-studies/daylight-cleanup/185-parking-lot/native-composited-daylight.png",
+    "recipe": "assets/landscape/building-studies/daylight-cleanup/185-parking-lot/bake.json",
+    "source": "assets/landscape/building-studies/daylight-cleanup/185-parking-lot/painted-daylight.png",
+    "review_sha256": "3280cba92959c98fa3f3c2fc201ea38a0e7b4ee2f4b450dfbf47a4e9697ba759",
+    "baked_sprite": "assets/landscape/building-studies/daylight-cleanup/185-parking-lot/view-0.png",
+    "source_sha256": "63ae61fede67ffc99c6ce22c59fa3f2eb0ee6ac04ebb8d81efcd0bb7b65962a1",
+    "correction_scope": "Lighting only, approved architecture preserved"
+  },
+  "installed_view_sha256": "8dbeaacf2390aea487cc328558a98122c63c57a60500a62c4a66c542d3e9be38",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/185-parking-lot/calibration-source.png",
+      "installed": "assets/landscape/buildings/185-parking-lot/approved-original.png",
+      "sha256": "09a1c6be6cfaf18b67ce92860da6ebc62c68c432f7c969fdeeaf62cb4cb75628"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/185-parking-lot/registered-daylight.png",
+      "installed": "assets/landscape/buildings/185-parking-lot/approved-foreground.png",
+      "sha256": "e898adb6e6a746e3ea70017030257594f826b6d3d727c70fcff1891ad9bd36f3"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-184-187/185-parking-lot/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/185-parking-lot/approved-foundation-mask.png",
+      "sha256": "2711cb9a759d799834d2dc84f4933e27e5b1da5b3f30a691faac4d7645c75348"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/185-parking-lot/view-0.png",
+      "installed": "assets/landscape/buildings/185-parking-lot/approved-view.png",
+      "sha256": "8dbeaacf2390aea487cc328558a98122c63c57a60500a62c4a66c542d3e9be38"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/185-parking-lot/ground-0.png",
+      "installed": "assets/landscape/buildings/185-parking-lot/approved-ground.png",
+      "sha256": "7e426016beac495a6e07990e66fb07021536f03507ddd281c64c6a256889892c"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

@@ -1,0 +1,40 @@
+{
+  "kind": 143,
+  "source_selection": {
+    "kind": 143,
+    "name": "Nice Apartments",
+    "review": "assets/landscape/building-studies/approval-batch-140-143/143-nice-apartments/native-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-140-143/143-nice-apartments/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-140-143/143-nice-apartments/painted-extra-storey-vivid-study.png",
+    "review_sha256": "40d5da911a5202c21d7113faa4b9c80f2d9d7af950d44e5837b93774dbc8b4f0"
+  },
+  "installed_view_sha256": "40d5da911a5202c21d7113faa4b9c80f2d9d7af950d44e5837b93774dbc8b4f0",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-140-143/143-nice-apartments/painted-extra-storey-vivid-study.png",
+      "installed": "assets/landscape/buildings/143-nice-apartments/approved-original.png",
+      "sha256": "22770dcbfd898ee66ef49af4d4ce8d15b2236d5eab9e1eabc8bbcbcda036cf65"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-140-143/143-nice-apartments/painted-extra-storey-vivid-study.png",
+      "installed": "assets/landscape/buildings/143-nice-apartments/approved-foreground.png",
+      "sha256": "22770dcbfd898ee66ef49af4d4ce8d15b2236d5eab9e1eabc8bbcbcda036cf65"
+    },
+    {
+      "source": "assets/landscape/buildings/143-nice-apartments/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/143-nice-apartments/approved-foundation-mask.png",
+      "sha256": "675fad7493cc2dc99056e5e6810f0e22cafbf45cd5c8f6526beeb2bb0ff3b2fe"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-140-143/143-nice-apartments/view-0.png",
+      "installed": "assets/landscape/buildings/143-nice-apartments/approved-view.png",
+      "sha256": "40d5da911a5202c21d7113faa4b9c80f2d9d7af950d44e5837b93774dbc8b4f0"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-140-143/143-nice-apartments/ground-0.png",
+      "installed": "assets/landscape/buildings/143-nice-apartments/approved-ground.png",
+      "sha256": "dcf9498456e34450282f211bf0202f94694efa1942e572d8f007b7928ba9dd50"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

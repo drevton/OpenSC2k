@@ -1,0 +1,40 @@
+{
+  "kind": 141,
+  "source_selection": {
+    "kind": 141,
+    "name": "Apartments",
+    "review": "assets/landscape/building-studies/approval-batch-140-143/141-apartments/native-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-140-143/141-apartments/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-140-143/141-apartments/painted-playground-varied-roofs-study.png",
+    "review_sha256": "48f59a0bc745b7d2266c7f7a5250b6ab2766b5a67aa0640e2d3bab5d2dcb53f4"
+  },
+  "installed_view_sha256": "48f59a0bc745b7d2266c7f7a5250b6ab2766b5a67aa0640e2d3bab5d2dcb53f4",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-140-143/141-apartments/painted-playground-varied-roofs-study.png",
+      "installed": "assets/landscape/buildings/141-apartments/approved-original.png",
+      "sha256": "db62d411c18a42d1ba11b5100aab87fcce2a71e1d56466b3d7587affbd2a4945"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-140-143/141-apartments/painted-playground-varied-roofs-study.png",
+      "installed": "assets/landscape/buildings/141-apartments/approved-foreground.png",
+      "sha256": "db62d411c18a42d1ba11b5100aab87fcce2a71e1d56466b3d7587affbd2a4945"
+    },
+    {
+      "source": "assets/landscape/buildings/141-apartments/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/141-apartments/approved-foundation-mask.png",
+      "sha256": "675fad7493cc2dc99056e5e6810f0e22cafbf45cd5c8f6526beeb2bb0ff3b2fe"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-140-143/141-apartments/view-0.png",
+      "installed": "assets/landscape/buildings/141-apartments/approved-view.png",
+      "sha256": "48f59a0bc745b7d2266c7f7a5250b6ab2766b5a67aa0640e2d3bab5d2dcb53f4"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-140-143/141-apartments/ground-0.png",
+      "installed": "assets/landscape/buildings/141-apartments/approved-ground.png",
+      "sha256": "dcf9498456e34450282f211bf0202f94694efa1942e572d8f007b7928ba9dd50"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

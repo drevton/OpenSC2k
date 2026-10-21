@@ -1,0 +1,40 @@
+{
+  "kind": 201,
+  "source_selection": {
+    "kind": 201,
+    "name": "Natural gas power plant",
+    "review": "assets/landscape/building-studies/approval-batch-201-204/201-gas-power-plant/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-201-204/201-gas-power-plant/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-201-204/201-gas-power-plant/registered-cutout-source.png",
+    "review_sha256": "5aa080b87b213285f0c63bd462dbca8c877bc61560f966ab339368f6e3b495c2"
+  },
+  "installed_view_sha256": "506d4b81e23db98265f70ef67cd76c08b6c19024f8e2c2005047064a5bc0387e",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-201-204/201-gas-power-plant/registered-full-plot-calibration.png",
+      "installed": "assets/landscape/civic/201-gas-power-plant/approved-original.png",
+      "sha256": "e775621ce1505ed3299cf0d8693bfed56fa2546529e0e9f8c30ccd8b0dd3e74d"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-201-204/201-gas-power-plant/registered-cutout-source.png",
+      "installed": "assets/landscape/civic/201-gas-power-plant/approved-foreground.png",
+      "sha256": "cf1ef2087a090d6d8bef3c28a68a7613a9d57cc96bd0d8bc1dbf638d4d9f135d"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-201-204/201-gas-power-plant/native-foundation-mask.png",
+      "installed": "assets/landscape/civic/201-gas-power-plant/approved-foundation-mask.png",
+      "sha256": "7fbfc8b279db7f5077a762cc66e730cba1e14a4ba7247989084e6c7ec0dd94f8"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-201-204/201-gas-power-plant/view-0.png",
+      "installed": "assets/landscape/civic/201-gas-power-plant/approved-view.png",
+      "sha256": "506d4b81e23db98265f70ef67cd76c08b6c19024f8e2c2005047064a5bc0387e"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-201-204/201-gas-power-plant/ground-0.png",
+      "installed": "assets/landscape/civic/201-gas-power-plant/approved-ground.png",
+      "sha256": "87a63a414e60cb9491e64668932f951f5647ac13cded6437976d68d4cf0922b3"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

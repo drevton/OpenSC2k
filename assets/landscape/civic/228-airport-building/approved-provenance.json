@@ -1,0 +1,40 @@
+{
+  "kind": 228,
+  "source_selection": {
+    "kind": 228,
+    "name": "Building",
+    "review": "assets/landscape/building-studies/approval-batch-225-228/228-airport-building/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-225-228/228-airport-building/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-225-228/228-airport-building/alpha-clean-study.png",
+    "review_sha256": "efc19a66a79b0b74d90b47ff1fd526631bc5d641e78b731424532b4aea002af0"
+  },
+  "installed_view_sha256": "efc19a66a79b0b74d90b47ff1fd526631bc5d641e78b731424532b4aea002af0",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-225-228/228-airport-building/painted-width-corrected.png",
+      "installed": "assets/landscape/civic/228-airport-building/approved-original.png",
+      "sha256": "60b1f4e33412cb385f0538137c6db947a8b5b04d711fdcd715ef465710b980a2"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-225-228/228-airport-building/alpha-clean-study.png",
+      "installed": "assets/landscape/civic/228-airport-building/approved-foreground.png",
+      "sha256": "2b5e7b88e075b2254a40042b1d937356bc675ffb06846162d46442d99a3ed348"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-225-228/228-airport-building/native-foundation-mask.png",
+      "installed": "assets/landscape/civic/228-airport-building/approved-foundation-mask.png",
+      "sha256": "ddc3b46015e06b04f795398dfbf27d0f88666d4828d279182d6abc3150fcc3dd"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-225-228/228-airport-building/view-0.png",
+      "installed": "assets/landscape/civic/228-airport-building/approved-view.png",
+      "sha256": "efc19a66a79b0b74d90b47ff1fd526631bc5d641e78b731424532b4aea002af0"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-225-228/228-airport-building/ground-0.png",
+      "installed": "assets/landscape/civic/228-airport-building/approved-ground.png",
+      "sha256": "f148b9baa5ec7b0e6a63bea396184562dd12079fd758b14e6b6ce1c9a8c9ba13"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

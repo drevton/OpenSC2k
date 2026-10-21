@@ -1,0 +1,101 @@
+{
+  "revision": "d0bf8d4deda22d5a7f8d01953433cb2644663e9f",
+  "samples": [
+    {
+      "file": "effects/osfx_01.wav",
+      "url": "https://raw.githubusercontent.com/OpenTTD/OpenSFX/d0bf8d4deda22d5a7f8d01953433cb2644663e9f/src/wav/osfx_01.wav",
+      "sha256": "bf3863946adfb7cc1a47d7aee4bd5fe4fa36789c8817e8c7e22832f90c50841e",
+      "attribution": "\"src/wav/osfx_01.wav\" \"Bad Year\". By Janis Lukss. License: Creative Commons Attribution 3.0 Unported."
+    },
+    {
+      "file": "effects/osfx_02.wav",
+      "url": "https://raw.githubusercontent.com/OpenTTD/OpenSFX/d0bf8d4deda22d5a7f8d01953433cb2644663e9f/src/wav/osfx_02.wav",
+      "sha256": "716797035db9735f4073eff5dd7ecd64188c8e7ac038f355618ffbc5b791faa0",
+      "attribution": "\"src/wav/osfx_02.wav\" \"Splat (building docks/canals/river)\". Original \"splattt.mp3\" by \"SlykMrByches\". Edited by \"Wuzzy\". License: Creative Commons Zero 1.0."
+    },
+    {
+      "file": "effects/osfx_06.wav",
+      "url": "https://raw.githubusercontent.com/OpenTTD/OpenSFX/d0bf8d4deda22d5a7f8d01953433cb2644663e9f/src/wav/osfx_06.wav",
+      "sha256": "84a0d70af4ec25981ef645e94773bde5f0b49b14da3eb25849d1576e2d21b664",
+      "attribution": "\"src/wav/osfx_06.wav\" \"Ship horn\". Original \"ship2_bergen.aif\" by Leon Milo. Edited by Wuzzy. License: Creative Commons Attribution 3.0 Unported."
+    },
+    {
+      "file": "effects/osfx_09.wav",
+      "url": "https://raw.githubusercontent.com/OpenTTD/OpenSFX/d0bf8d4deda22d5a7f8d01953433cb2644663e9f/src/wav/osfx_09.wav",
+      "sha256": "2eb53b41a3e2dc3682b7d80047833395f10876b705f99419d136b7c173e5f855",
+      "attribution": "\"src/wav/osfx_09.wav\" \"Early jet take off\". Original \"Passenger jet departs 2.wav\" by \"www.digifishmusic.com\". Edited by \"Wuzzy\". License: Creative Commons Attribution 3.0 Unported."
+    },
+    {
+      "file": "effects/osfx_10.wav",
+      "url": "https://raw.githubusercontent.com/OpenTTD/OpenSFX/d0bf8d4deda22d5a7f8d01953433cb2644663e9f/src/wav/osfx_10.wav",
+      "sha256": "a5f6e9276db61da1688695d17944650cbf21322158b82e73a6da5727c357cc1c",
+      "attribution": "\"src/wav/osfx_10.wav\" \"Diesel/electric train station departure\". Original \"Locomotive 1 Distant horn.wav\" by \"patchen\". Edited by Janis Lukss. License: Creative Commons Attribution 3.0 Unported."
+    },
+    {
+      "file": "effects/osfx_12.wav",
+      "url": "https://raw.githubusercontent.com/OpenTTD/OpenSFX/d0bf8d4deda22d5a7f8d01953433cb2644663e9f/src/wav/osfx_12.wav",
+      "sha256": "6943af5b7d8bc3401d16c402bcb9f4bd2c17901828a7fe013c5b4fbcf6078bed",
+      "attribution": "\"src/wav/osfx_12.wav\" \"Electric sparking\". Original \"JacobsLadderLong2.flac\" by \"Halleck\". Edited by Janis Lukss. License: Creative Commons Attribution 3.0 Unported."
+    },
+    {
+      "file": "effects/osfx_18.wav",
+      "url": "https://raw.githubusercontent.com/OpenTTD/OpenSFX/d0bf8d4deda22d5a7f8d01953433cb2644663e9f/src/wav/osfx_18.wav",
+      "sha256": "27368044f8989223f46b18715e5b5bd7e2eccab8b7891611d08604ed76bf93a2",
+      "attribution": "\"src/wav/osfx_18.wav\" \"Explosion\". By Janis Lukss. License: Creative Commons Attribution 3.0 Unported."
+    },
+    {
+      "file": "effects/osfx_19.wav",
+      "url": "https://raw.githubusercontent.com/OpenTTD/OpenSFX/d0bf8d4deda22d5a7f8d01953433cb2644663e9f/src/wav/osfx_19.wav",
+      "sha256": "eed4f5c6dbd4e7a5105781a9a5a745f6a850388124ff9260f6eca2e2c08ef707",
+      "attribution": "\"src/wav/osfx_19.wav\" \"Big crash\". Original \"crash.wav\" by \"sagetyrtle\". Edited by Janis Lukss. License: Creative Commons Attribution 3.0 Unported."
+    },
+    {
+      "file": "effects/osfx_23.wav",
+      "url": "https://raw.githubusercontent.com/OpenTTD/OpenSFX/d0bf8d4deda22d5a7f8d01953433cb2644663e9f/src/wav/osfx_23.wav",
+      "sha256": "7a2f614830987285a8fe39c887024c466fed3e8eed9475faf41bf3475a22ac68",
+      "attribution": "\"src/wav/osfx_23.wav\" \"Plane wheels touching ground\". Original \"CarStartSkidCrash.wav\" by \"musicmasta1\". Edited by \"Wuzzy\". License: Creative Commons Zero 1.0."
+    },
+    {
+      "file": "effects/osfx_24.wav",
+      "url": "https://raw.githubusercontent.com/OpenTTD/OpenSFX/d0bf8d4deda22d5a7f8d01953433cb2644663e9f/src/wav/osfx_24.wav",
+      "sha256": "261d4e692534b534d3576b6234974eb6ab949ceaa7b6812e07c76f6459433507",
+      "attribution": "\"src/wav/osfx_24.wav\" \"Helicopter\". Original \"helicopterRaw_16sec.wav\" by \"lorenzosu\". Edited by \"Wuzzy\". License: Creative Commons Attribution-ShareAlike 3.0 Unported."
+    },
+    {
+      "file": "effects/osfx_27.wav",
+      "url": "https://raw.githubusercontent.com/OpenTTD/OpenSFX/d0bf8d4deda22d5a7f8d01953433cb2644663e9f/src/wav/osfx_27.wav",
+      "sha256": "cfbe2c8ae7ae41b0a27c9f35d8da423435145fb82492d3de11414af7deaea42c",
+      "attribution": "\"src/wav/osfx_27.wav\" \"Modern bus start\". Original \"london bus approaches & leaves.wav\" by \"icmusic\". Edited by Janis Lukss. License: Creative Commons Attribution 3.0 Unported."
+    },
+    {
+      "file": "effects/osfx_31.wav",
+      "url": "https://raw.githubusercontent.com/OpenTTD/OpenSFX/d0bf8d4deda22d5a7f8d01953433cb2644663e9f/src/wav/osfx_31.wav",
+      "sha256": "8228230e770a652c96ad53d3418003ca943663a74927bea9ee4aebdab7f4927b",
+      "attribution": "\"src/wav/osfx_31.wav\" \"Splat (terraform/non-rail builds\". By Janis Lukss. License: Creative Commons Attribution 3.0 Unported."
+    },
+    {
+      "file": "effects/osfx_33.wav",
+      "url": "https://raw.githubusercontent.com/OpenTTD/OpenSFX/d0bf8d4deda22d5a7f8d01953433cb2644663e9f/src/wav/osfx_33.wav",
+      "sha256": "70b776ab475625cbcb2bd4e011b647e365d1271fd0d55829559ad88f1bcf176f",
+      "attribution": "\"src/wav/osfx_33.wav\" \"Jackhammer\". Original \"air hammer half close.wav\" by \"Bluesy1905\". Cut and edited by \"Wuzzy\". License: Creative Commons Attribution 3.0 Unported."
+    },
+    {
+      "file": "effects/osfx_39.wav",
+      "url": "https://raw.githubusercontent.com/OpenTTD/OpenSFX/d0bf8d4deda22d5a7f8d01953433cb2644663e9f/src/wav/osfx_39.wav",
+      "sha256": "108555355e6aff383e2440ac8551c9bc8af6b462a8cc13c7173ed423e020559b",
+      "attribution": "\"src/wav/osfx_39.wav\" \"Building bridge\". Original \"in the smithy 2.wav\" by \"l0calh05t\". Edited by \"Wuzzy\". License: Creative Commons Attribution 3.0 Unported."
+    },
+    {
+      "file": "effects/osfx_66.wav",
+      "url": "https://raw.githubusercontent.com/OpenTTD/OpenSFX/d0bf8d4deda22d5a7f8d01953433cb2644663e9f/src/wav/osfx_66.wav",
+      "sha256": "5d4e6795a40ffbafa3a84227f53b6e713cef8f7f1c569a0d2c082c049f9ecd8e",
+      "attribution": "\"src/wav/osfx_66.wav\" \"Tropical: Bird (1)\". Original \"Bird Noise - 1.wav\" by \"SpaceJoe\". Edited by \"Wuzzy\". License: Creative Commons Zero 1.0."
+    },
+    {
+      "file": "selection.wav",
+      "url": "https://raw.githubusercontent.com/OpenTTD/OpenSFX/d0bf8d4deda22d5a7f8d01953433cb2644663e9f/src/wav/osfx_21.wav",
+      "sha256": "a37f8838398870d21bb6e21e1ef0cd38b76901bf0c8def4de33a4d86dd35fbbd",
+      "attribution": "\"src/wav/osfx_21.wav\" \"Beep\". By Janis Lukss. License: Creative Commons Attribution 3.0 Unported."
+    }
+  ]
+}

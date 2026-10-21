@@ -1,0 +1,46 @@
+[
+  {
+    "file": "passenger.png",
+    "sha256": "f6513c90c050fef5948bb7d1701a26ee3603dfbd0c2d71bb6961ae1474e5c23d"
+  },
+  {
+    "file": "utility.png",
+    "sha256": "d59cd859fb04f4aae2df4046643a620b93bee3f558c4a5b240c743150b2e9acb"
+  },
+  {
+    "file": "passenger-turns.png",
+    "sha256": "8548e71bb80edce6cc5c9dab38fc8bfa0002f5e68c6f36b7964f49937eaa293e"
+  },
+  {
+    "file": "utility-turns.png",
+    "sha256": "c8e80085429235c43fefed15a3f1f7a96d04891357e7108771b3494f1eb9c042"
+  },
+  {
+    "file": "hatchback-turns24.png",
+    "sha256": "a0d34d918fa1f49a09c40eee3197aedf321faa29feb1058b0b0dc83dae61d401"
+  },
+  {
+    "file": "sedan-turns24.png",
+    "sha256": "1db0be1e151ec495f6f90c5c7bd23f1d73e368eacadb8ab16accfd23e20d845b"
+  },
+  {
+    "file": "wagon-turns24.png",
+    "sha256": "8fa7aa7abc7f3c038b7d6d6d2d1536e5d837f246c8e871ef3f847ec328dabe45"
+  },
+  {
+    "file": "van-turns24.png",
+    "sha256": "267325720231cb5cfe6b3ffe8277fcad8388159b67d952661874b366904f780e"
+  },
+  {
+    "file": "pickup-turns24.png",
+    "sha256": "17e8027f86e1a312de117f06b4998618986f7fb0606e1ebbf5b0e699424cec86"
+  },
+  {
+    "file": "suv-turns24.png",
+    "sha256": "c484971f302b2806c7845370d74b7769d06ea5b3637e2ee3b38905f735f182eb"
+  },
+  {
+    "file": "coupe-turns24.png",
+    "sha256": "874a2640445ecd0654d72d4cd77b2aab68a6debc3418b33cf426a4e2692869ec"
+  }
+]

@@ -1,0 +1,40 @@
+{
+  "kind": 209,
+  "source_selection": {
+    "kind": 209,
+    "name": "Hospital",
+    "review": "assets/landscape/building-studies/approval-batch-209-212/209-hospital/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-209-212/209-hospital/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-209-212/209-hospital/registered-cutout-source.png",
+    "review_sha256": "c1599a9de7040faef4ccd224cc834a2a2b2d72ec48659caf39be68af116808c3"
+  },
+  "installed_view_sha256": "cc8d3cf770a332069dabec449c72a487902eceb631d0d5cbe8be9702ebcf2faa",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-209-212/209-hospital/registered-full-plot-calibration.png",
+      "installed": "assets/landscape/civic/209-hospital/approved-original.png",
+      "sha256": "4ebfa07e47492f07470e01e97b74a4ea2dabbfbd14ed3bcb85312a2a9ef32e40"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-209-212/209-hospital/registered-cutout-source.png",
+      "installed": "assets/landscape/civic/209-hospital/approved-foreground.png",
+      "sha256": "2882249812c822c846e78ce664235e15ff12ade079d0eee52343892e8f68f30b"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-209-212/209-hospital/native-foundation-mask.png",
+      "installed": "assets/landscape/civic/209-hospital/approved-foundation-mask.png",
+      "sha256": "43284b370c3cb125f8a7e52ae2a9a8ee00369f488551b62ead439965678fbf8e"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-209-212/209-hospital/view-0.png",
+      "installed": "assets/landscape/civic/209-hospital/approved-view.png",
+      "sha256": "cc8d3cf770a332069dabec449c72a487902eceb631d0d5cbe8be9702ebcf2faa"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-209-212/209-hospital/ground-0.png",
+      "installed": "assets/landscape/civic/209-hospital/approved-ground.png",
+      "sha256": "18a067bb110cb54bdbbdd58d5939e8be707ef0e602e9604ebb5cec0b500b1319"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

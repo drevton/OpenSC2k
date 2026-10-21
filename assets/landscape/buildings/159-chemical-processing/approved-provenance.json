@@ -1,0 +1,40 @@
+{
+  "kind": 159,
+  "source_selection": {
+    "kind": 159,
+    "name": "Chemical processing",
+    "review": "assets/landscape/building-studies/approval-batch-156-159/159-chemical-processing/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-156-159/159-chemical-processing/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-156-159/159-chemical-processing/painted-transparent-outer-course-study.png",
+    "review_sha256": "a23b401c3acb4cc80f83ffab4bd92885c68b55bf97a6c15747a6ac57a3b4620f"
+  },
+  "installed_view_sha256": "d4be4c988f8a9defc185c8e025edffb1e7724a388d6a868d615b69be23139126",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-156-159/159-chemical-processing/painted-study.png",
+      "installed": "assets/landscape/buildings/159-chemical-processing/approved-original.png",
+      "sha256": "ea1fb71956cb493a98b6de6c66da38986dc7a9c1f8ea438bb02df0877ac81474"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-156-159/159-chemical-processing/painted-transparent-outer-course-study.png",
+      "installed": "assets/landscape/buildings/159-chemical-processing/approved-foreground.png",
+      "sha256": "81c03077c7d4c5610c9221e30e3014e36af305d2f00eccb2b5901abad5f89a3a"
+    },
+    {
+      "source": "assets/landscape/buildings/159-chemical-processing/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/159-chemical-processing/approved-foundation-mask.png",
+      "sha256": "93a75465c2be6ba0d9934b6cd36f0490569e77409e7ee90b1ae53d3c53c4f498"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-156-159/159-chemical-processing/view-0.png",
+      "installed": "assets/landscape/buildings/159-chemical-processing/approved-view.png",
+      "sha256": "d4be4c988f8a9defc185c8e025edffb1e7724a388d6a868d615b69be23139126"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-156-159/159-chemical-processing/ground-0.png",
+      "installed": "assets/landscape/buildings/159-chemical-processing/approved-ground.png",
+      "sha256": "d5fb3d87c2f0a5cb8eb4da6fe404ec7f803a92aa0d36fb9f33845686d0fc7b8a"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

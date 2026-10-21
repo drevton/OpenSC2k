@@ -1,0 +1,40 @@
+{
+  "kind": 226,
+  "source_selection": {
+    "kind": 226,
+    "name": "Control tower",
+    "review": "assets/landscape/building-studies/approval-batch-225-228/226-control-tower/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-225-228/226-control-tower/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-225-228/226-control-tower/alpha-clean-study.png",
+    "review_sha256": "48245a2109cd6444b4fc91773f78d9c44582e8cfd071d9b5b6ef3cd30ccd5202"
+  },
+  "installed_view_sha256": "fec28daf33ea13f40b8e51ac9016e1ddc0a5ecf13e332620cf13d2ff2a826949",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-225-228/226-control-tower/width-full-plot-calibration.png",
+      "installed": "assets/landscape/civic/226-control-tower/approved-original.png",
+      "sha256": "0a69dd6877ec9f627ef3ac32cdd0be3bea4c0bfb8ec3450ce9e88c9f1bc2a231"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-225-228/226-control-tower/alpha-clean-study.png",
+      "installed": "assets/landscape/civic/226-control-tower/approved-foreground.png",
+      "sha256": "fd11cfdcdb47083bf801d4a14247bc7486acf31b07711a253489f1fe14eeeda6"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-225-228/226-control-tower/native-foundation-mask.png",
+      "installed": "assets/landscape/civic/226-control-tower/approved-foundation-mask.png",
+      "sha256": "d49886b50116ab72e9fa1ac1e62fc54c36fa3c22d93bf6c0ca85cdde63501ac4"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-225-228/226-control-tower/view-0.png",
+      "installed": "assets/landscape/civic/226-control-tower/approved-view.png",
+      "sha256": "fec28daf33ea13f40b8e51ac9016e1ddc0a5ecf13e332620cf13d2ff2a826949"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-225-228/226-control-tower/ground-0.png",
+      "installed": "assets/landscape/civic/226-control-tower/approved-ground.png",
+      "sha256": "ebb8d2ebebdf22e8b0a9d181b7b85268b9763766652855d82367599d3df90a0d"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

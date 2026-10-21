@@ -1,0 +1,40 @@
+{
+  "kind": 125,
+  "source_selection": {
+    "kind": 125,
+    "name": "Bed & Breakfast Inn",
+    "review": "assets/landscape/building-studies/approval-batch-124-127/125-bed-breakfast-inn/native-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-124-127/125-bed-breakfast-inn/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-124-127/125-bed-breakfast-inn/painted-small-fountain-study.png",
+    "review_sha256": "b7eacccda6c68530eed654add720a0135fd601981ab5b4237dedf9de625f54df"
+  },
+  "installed_view_sha256": "a9f23bb42aa8e8e08720dd6bcd53fc250b06423e428a6459a69d15678df509c0",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-124-127/125-bed-breakfast-inn/painted-small-fountain-study.png",
+      "installed": "assets/landscape/buildings/125-bed-breakfast-inn/approved-original.png",
+      "sha256": "5a2a7e40013467e46b9acc43d29169fdd59426f5b11f192898705c7792945afa"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-124-127/125-bed-breakfast-inn/painted-small-fountain-study.png",
+      "installed": "assets/landscape/buildings/125-bed-breakfast-inn/approved-foreground.png",
+      "sha256": "5a2a7e40013467e46b9acc43d29169fdd59426f5b11f192898705c7792945afa"
+    },
+    {
+      "source": "assets/landscape/buildings/125-bed-breakfast-inn/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/125-bed-breakfast-inn/approved-foundation-mask.png",
+      "sha256": "ddc3b46015e06b04f795398dfbf27d0f88666d4828d279182d6abc3150fcc3dd"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-124-127/125-bed-breakfast-inn/view-0.png",
+      "installed": "assets/landscape/buildings/125-bed-breakfast-inn/approved-view.png",
+      "sha256": "a9f23bb42aa8e8e08720dd6bcd53fc250b06423e428a6459a69d15678df509c0"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-124-127/125-bed-breakfast-inn/ground-0.png",
+      "installed": "assets/landscape/buildings/125-bed-breakfast-inn/approved-ground.png",
+      "sha256": "4f891b7975a5be2b31e9119feaa6c5abbf8c51d17a70c7c33ec5f17108f4c79e"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

@@ -1,0 +1,40 @@
+{
+  "kind": 148,
+  "source_selection": {
+    "kind": 148,
+    "name": "Shopping center",
+    "review": "assets/landscape/building-studies/approval-batch-148-151/148-shopping-center/native-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-148-151/148-shopping-center/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-148-151/148-shopping-center/painted-slightly-taller-walls-study.png",
+    "review_sha256": "fb584d5dcffe666838106aa8cdef47dc30d26486218969a04192fa91c52ccb0c"
+  },
+  "installed_view_sha256": "fb584d5dcffe666838106aa8cdef47dc30d26486218969a04192fa91c52ccb0c",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-148-151/148-shopping-center/painted-slightly-taller-walls-study.png",
+      "installed": "assets/landscape/buildings/148-shopping-center/approved-original.png",
+      "sha256": "57663c93d36d93c431774cc43f6041479aa317d339307c40906a5417aefa4c7d"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-148-151/148-shopping-center/painted-slightly-taller-walls-study.png",
+      "installed": "assets/landscape/buildings/148-shopping-center/approved-foreground.png",
+      "sha256": "57663c93d36d93c431774cc43f6041479aa317d339307c40906a5417aefa4c7d"
+    },
+    {
+      "source": "assets/landscape/buildings/148-shopping-center/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/148-shopping-center/approved-foundation-mask.png",
+      "sha256": "4d427119cc6ec95916140eb5ca196bb4a5fe1a4cb34bdf4058e6b023026f599b"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-148-151/148-shopping-center/view-0.png",
+      "installed": "assets/landscape/buildings/148-shopping-center/approved-view.png",
+      "sha256": "fb584d5dcffe666838106aa8cdef47dc30d26486218969a04192fa91c52ccb0c"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-148-151/148-shopping-center/ground-0.png",
+      "installed": "assets/landscape/buildings/148-shopping-center/approved-ground.png",
+      "sha256": "36933b9a65f5d9fffe097f91b1a49a5f0a2db92497f7a2473ccc505ff7df2a0d"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

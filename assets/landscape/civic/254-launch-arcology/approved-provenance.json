@@ -1,0 +1,40 @@
+{
+  "kind": 254,
+  "source_selection": {
+    "kind": 254,
+    "name": "Lanch Archology",
+    "review": "assets/landscape/building-studies/approval-batch-253-255/254-launch-arcology/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-253-255/254-launch-arcology/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-253-255/254-launch-arcology/calibrated-source.png",
+    "review_sha256": "70f75ec2ad1515c2b95cf7ea4f74713fc91f62d7be435d98cefb39b6658c91e1"
+  },
+  "installed_view_sha256": "70f75ec2ad1515c2b95cf7ea4f74713fc91f62d7be435d98cefb39b6658c91e1",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-253-255/254-launch-arcology/calibrated-source.png",
+      "installed": "assets/landscape/civic/254-launch-arcology/approved-original.png",
+      "sha256": "fb4f8a1261ccc99d86f3e062fffdc5908fd0512e6901e5917308c4d73113304c"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-253-255/254-launch-arcology/calibrated-source.png",
+      "installed": "assets/landscape/civic/254-launch-arcology/approved-foreground.png",
+      "sha256": "fb4f8a1261ccc99d86f3e062fffdc5908fd0512e6901e5917308c4d73113304c"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-253-255/254-launch-arcology/native-foundation-mask.png",
+      "installed": "assets/landscape/civic/254-launch-arcology/approved-foundation-mask.png",
+      "sha256": "3861b56b2a512989281efa5d55377167356af956b073188579e3f82ceb465a2a"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-253-255/254-launch-arcology/view-0.png",
+      "installed": "assets/landscape/civic/254-launch-arcology/approved-view.png",
+      "sha256": "70f75ec2ad1515c2b95cf7ea4f74713fc91f62d7be435d98cefb39b6658c91e1"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-253-255/254-launch-arcology/ground-0.png",
+      "installed": "assets/landscape/civic/254-launch-arcology/approved-ground.png",
+      "sha256": "f700c0f738fec27679670467e9fd14e4720857254eb1c91cf1c444f4615dd839"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

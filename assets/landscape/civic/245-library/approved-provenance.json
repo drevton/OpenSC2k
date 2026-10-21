@@ -1,0 +1,40 @@
+{
+  "kind": 245,
+  "source_selection": {
+    "kind": 245,
+    "name": "Library",
+    "review": "assets/landscape/building-studies/approval-batch-245-248/245-library/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-245-248/245-library/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-245-248/245-library/calibrated-source.png",
+    "review_sha256": "79ab9df4c9cc98fb2be3f0aa3d962665a5ebf9463489f6680e19f82852055110"
+  },
+  "installed_view_sha256": "79ab9df4c9cc98fb2be3f0aa3d962665a5ebf9463489f6680e19f82852055110",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-245-248/245-library/calibrated-source.png",
+      "installed": "assets/landscape/civic/245-library/approved-original.png",
+      "sha256": "81e469a6d0e4d1b33160a464469087f21968095166c453e6252f1e012a5a552f"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-245-248/245-library/calibrated-source.png",
+      "installed": "assets/landscape/civic/245-library/approved-foreground.png",
+      "sha256": "81e469a6d0e4d1b33160a464469087f21968095166c453e6252f1e012a5a552f"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-245-248/245-library/native-foundation-mask.png",
+      "installed": "assets/landscape/civic/245-library/approved-foundation-mask.png",
+      "sha256": "f8b07175b4ed61f12c33a67b4ebecdb37e8335f027200593b68c18b8c7f2aa7f"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-245-248/245-library/view-0.png",
+      "installed": "assets/landscape/civic/245-library/approved-view.png",
+      "sha256": "79ab9df4c9cc98fb2be3f0aa3d962665a5ebf9463489f6680e19f82852055110"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-245-248/245-library/ground-0.png",
+      "installed": "assets/landscape/civic/245-library/approved-ground.png",
+      "sha256": "47c051a310291226dee5965e7e1e83039fa0e73e2c835d245ac27131c888c491"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

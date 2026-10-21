@@ -1,0 +1,40 @@
+{
+  "kind": 136,
+  "source_selection": {
+    "kind": 136,
+    "name": "Construction",
+    "review": "assets/landscape/building-studies/approval-batch-136-139/136-construction/native-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-136-139/136-construction/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-136-139/136-construction/painted-taller-construction-study.png",
+    "review_sha256": "8b3d5e3b4f9df6af1d7e48838b1edb5c118d4fe05333d3fd17fb0eee4bcb130c"
+  },
+  "installed_view_sha256": "8b3d5e3b4f9df6af1d7e48838b1edb5c118d4fe05333d3fd17fb0eee4bcb130c",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-136-139/136-construction/painted-taller-construction-study.png",
+      "installed": "assets/landscape/buildings/136-construction/approved-original.png",
+      "sha256": "0b7871670e70c0af9c6be6ae2d7d638f4925f1765c4c6be83011df4fbc979f90"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-136-139/136-construction/painted-taller-construction-study.png",
+      "installed": "assets/landscape/buildings/136-construction/approved-foreground.png",
+      "sha256": "0b7871670e70c0af9c6be6ae2d7d638f4925f1765c4c6be83011df4fbc979f90"
+    },
+    {
+      "source": "assets/landscape/buildings/136-construction/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/136-construction/approved-foundation-mask.png",
+      "sha256": "53fafa42b901514a15668c43eb2a834068bdb8ac944227338eb13b773cfe44a1"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-136-139/136-construction/view-0.png",
+      "installed": "assets/landscape/buildings/136-construction/approved-view.png",
+      "sha256": "8b3d5e3b4f9df6af1d7e48838b1edb5c118d4fe05333d3fd17fb0eee4bcb130c"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-136-139/136-construction/ground-0.png",
+      "installed": "assets/landscape/buildings/136-construction/approved-ground.png",
+      "sha256": "13f8f5cfd73ec15af3065069b5d14192707b1ee098c91c5b3043c99025d16171"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

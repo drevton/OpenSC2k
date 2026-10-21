@@ -1,0 +1,40 @@
+{
+  "kind": 194,
+  "source_selection": {
+    "kind": 194,
+    "name": "Construction",
+    "review": "assets/landscape/building-studies/approval-batch-192-195/194-construction/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-192-195/194-construction/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-192-195/194-construction/registered-cutout-source.png",
+    "review_sha256": "da851af8bbe61880f89942286994801d6d24e8f30dd4645a696f9337e80997fd"
+  },
+  "installed_view_sha256": "09065a91a24c662d69a6ff4d6517f7fb62185a5371b42c376e91deed045e3362",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-192-195/194-construction/registered-full-plot-calibration.png",
+      "installed": "assets/landscape/buildings/194-construction/approved-original.png",
+      "sha256": "2d8631665c47fead8fe9f54aed165f6a80d0122d286671dda359450130263f0e"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-192-195/194-construction/registered-cutout-source.png",
+      "installed": "assets/landscape/buildings/194-construction/approved-foreground.png",
+      "sha256": "1bb605b0a0d82b7ba31d1f9a3fd78e3f3e2ebc5acd0c1603953d0795f8d7a81b"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-192-195/194-construction/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/194-construction/approved-foundation-mask.png",
+      "sha256": "5b66f84868ee31d7ab0913aed644d93e5d62a12a4990b02f48175031cb64033c"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-192-195/194-construction/view-0.png",
+      "installed": "assets/landscape/buildings/194-construction/approved-view.png",
+      "sha256": "09065a91a24c662d69a6ff4d6517f7fb62185a5371b42c376e91deed045e3362"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-192-195/194-construction/ground-0.png",
+      "installed": "assets/landscape/buildings/194-construction/approved-ground.png",
+      "sha256": "8e16ecb823fa01b8e8065d0a4c56f52eaaaa80764967eeb5204854cb47759814"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

@@ -1,0 +1,43 @@
+{
+  "kind": 179,
+  "source_selection": {
+    "kind": 179,
+    "name": "Office tower",
+    "review": "assets/landscape/building-studies/daylight-cleanup/179-office-tower/native-composited-daylight.png",
+    "recipe": "assets/landscape/building-studies/daylight-cleanup/179-office-tower/bake.json",
+    "source": "assets/landscape/building-studies/daylight-cleanup/179-office-tower/painted-daylight.png",
+    "review_sha256": "57de6814cbfbff2056626d204b56ff935f4407fb2fe72b9d0a44e6c32d6b555f",
+    "baked_sprite": "assets/landscape/building-studies/daylight-cleanup/179-office-tower/view-0.png",
+    "source_sha256": "a07c2a59d6db46975593250e7e98c5e6193fa53e681d18d510d221cf1a4a81c6",
+    "correction_scope": "Lighting only, approved architecture preserved"
+  },
+  "installed_view_sha256": "55760bbb99ae969b55e4a3e39f601cc28399f063c7f6df6e95e81aae9611366a",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/179-office-tower/calibration-source.png",
+      "installed": "assets/landscape/buildings/179-office-tower/approved-original.png",
+      "sha256": "d0b5236b5a15467b63a4071b724ea6fd6faa78742d271956b4a2176662ddaf73"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/179-office-tower/registered-daylight.png",
+      "installed": "assets/landscape/buildings/179-office-tower/approved-foreground.png",
+      "sha256": "055c78d028b4565f90bcc9cae1d7370fd1442e627f37caef40b66186cb1816ad"
+    },
+    {
+      "source": "assets/landscape/buildings/179-office-tower/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/179-office-tower/approved-foundation-mask.png",
+      "sha256": "882cee71ee4f2110b437211ced84f6dee099b7cd62ea2c64ac320979102d6e30"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/179-office-tower/view-0.png",
+      "installed": "assets/landscape/buildings/179-office-tower/approved-view.png",
+      "sha256": "55760bbb99ae969b55e4a3e39f601cc28399f063c7f6df6e95e81aae9611366a"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/179-office-tower/ground-0.png",
+      "installed": "assets/landscape/buildings/179-office-tower/approved-ground.png",
+      "sha256": "3582496159b509174d4442f1ca11e1e9b3b500c080a561a88bfc7f84414d8bbf"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

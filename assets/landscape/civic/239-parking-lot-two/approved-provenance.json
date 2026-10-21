@@ -1,0 +1,40 @@
+{
+  "kind": 239,
+  "source_selection": {
+    "kind": 239,
+    "name": "Parking lot",
+    "review": "assets/landscape/building-studies/approval-batch-237-240/239-parking-lot-two/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-237-240/239-parking-lot-two/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-237-240/239-parking-lot-two/calibrated-source.png",
+    "review_sha256": "4fc0046cdf1582c5a43452cfb6ea082520f29c28ab69c5e1e9e08f3423456d0d"
+  },
+  "installed_view_sha256": "3427ac2213aace4d147aaaad311e233426cfb1377bb4e8b1bacc5ebe3790f5e8",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-237-240/239-parking-lot-two/full-plot-calibration.png",
+      "installed": "assets/landscape/civic/239-parking-lot-two/approved-original.png",
+      "sha256": "9d27468fe35fc20fe097e0161de90a9447e74677ddd3321386fc683ac711d56f"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-237-240/239-parking-lot-two/calibrated-source.png",
+      "installed": "assets/landscape/civic/239-parking-lot-two/approved-foreground.png",
+      "sha256": "8c6088949c5fd0ce8b3113afa738e046bb8a1337e807502716c59c8261422fe3"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-237-240/239-parking-lot-two/native-foundation-mask.png",
+      "installed": "assets/landscape/civic/239-parking-lot-two/approved-foundation-mask.png",
+      "sha256": "675fad7493cc2dc99056e5e6810f0e22cafbf45cd5c8f6526beeb2bb0ff3b2fe"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-237-240/239-parking-lot-two/view-0.png",
+      "installed": "assets/landscape/civic/239-parking-lot-two/approved-view.png",
+      "sha256": "3427ac2213aace4d147aaaad311e233426cfb1377bb4e8b1bacc5ebe3790f5e8"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-237-240/239-parking-lot-two/ground-0.png",
+      "installed": "assets/landscape/civic/239-parking-lot-two/approved-ground.png",
+      "sha256": "bdc232eae7aace1b695e31b92f2de13b0f4b3d6fd44a71f59e43865b5bb6ea8a"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

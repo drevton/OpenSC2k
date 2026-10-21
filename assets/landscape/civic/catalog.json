@@ -1,0 +1,769 @@
+[
+  {
+    "kind": 13,
+    "name": "SMALL_PARK",
+    "tiles_wide": 1,
+    "rotations": [
+      "013-small-park/view-0.png",
+      "013-small-park/view-1.png",
+      "013-small-park/view-2.png",
+      "013-small-park/view-3.png"
+    ],
+    "owner": "SimCity 2000 #1",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 198,
+    "name": "HYDRO_POWER_FIRST",
+    "tiles_wide": 1,
+    "rotations": [
+      "198-hydro-power/view-0.png",
+      "198-hydro-power/view-1.png",
+      "198-hydro-power/view-2.png",
+      "198-hydro-power/view-3.png"
+    ],
+    "owner": "SimCity 2000 #1",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 199,
+    "name": "HYDRO_POWER_LAST",
+    "tiles_wide": 1,
+    "rotations": [
+      null,
+      null,
+      null,
+      null
+    ],
+    "owner": null,
+    "status": "legacy-only hydro variant; native kind198"
+  },
+  {
+    "kind": 200,
+    "name": "WIND_POWER",
+    "tiles_wide": 1,
+    "rotations": [
+      "200-wind-power/view-0.png",
+      "200-wind-power/view-1.png",
+      "200-wind-power/view-2.png",
+      "200-wind-power/view-3.png"
+    ],
+    "owner": "SimCity 2000 #1",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 201,
+    "name": "GAS_POWER_PLANT",
+    "tiles_wide": 4,
+    "rotations": [
+      "201-gas-power-plant/view-0.png",
+      "201-gas-power-plant/view-1.png",
+      "201-gas-power-plant/view-2.png",
+      "201-gas-power-plant/view-3.png"
+    ],
+    "owner": "SimCity 2000 #1",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 202,
+    "name": "OIL_POWER_PLANT",
+    "tiles_wide": 4,
+    "rotations": [
+      "202-oil-power-plant/view-0.png",
+      "202-oil-power-plant/view-1.png",
+      "202-oil-power-plant/view-2.png",
+      "202-oil-power-plant/view-3.png"
+    ],
+    "owner": "SimCity 2000 #1",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 203,
+    "name": "NUCLEAR_POWER_PLANT",
+    "tiles_wide": 4,
+    "rotations": [
+      "203-nuclear-power-plant/view-0.png",
+      "203-nuclear-power-plant/view-1.png",
+      "203-nuclear-power-plant/view-2.png",
+      "203-nuclear-power-plant/view-3.png"
+    ],
+    "owner": "SimCity 2000 #1",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 204,
+    "name": "SOLAR_POWER_PLANT",
+    "tiles_wide": 4,
+    "rotations": [
+      "204-solar-power-plant/view-0.png",
+      "204-solar-power-plant/view-1.png",
+      "204-solar-power-plant/view-2.png",
+      "204-solar-power-plant/view-3.png"
+    ],
+    "owner": "SimCity 2000 #1",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 205,
+    "name": "MICROWAVE_POWER_PLANT",
+    "tiles_wide": 4,
+    "rotations": [
+      "205-microwave-power-plant/view-0.png",
+      "205-microwave-power-plant/view-1.png",
+      "205-microwave-power-plant/view-2.png",
+      "205-microwave-power-plant/view-3.png"
+    ],
+    "owner": "SimCity 2000 #1",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 206,
+    "name": "FUSION_POWER_PLANT",
+    "tiles_wide": 4,
+    "rotations": [
+      "206-fusion-power-plant/view-0.png",
+      "206-fusion-power-plant/view-1.png",
+      "206-fusion-power-plant/view-2.png",
+      "206-fusion-power-plant/view-3.png"
+    ],
+    "owner": "SimCity 2000 #1",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 207,
+    "name": "COAL_POWER_PLANT",
+    "tiles_wide": 4,
+    "rotations": [
+      "207-coal-power-plant/view-0.png",
+      "207-coal-power-plant/view-1.png",
+      "207-coal-power-plant/view-2.png",
+      "207-coal-power-plant/view-3.png"
+    ],
+    "owner": "SimCity 2000 #1",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 208,
+    "name": "CITY_HALL",
+    "tiles_wide": 3,
+    "rotations": [
+      "208-city-hall/view-0.png",
+      "208-city-hall/view-1.png",
+      "208-city-hall/view-2.png",
+      "208-city-hall/view-3.png"
+    ],
+    "owner": "SimCity 2000 #3",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 209,
+    "name": "HOSPITAL",
+    "tiles_wide": 3,
+    "rotations": [
+      "209-hospital/view-0.png",
+      "209-hospital/view-1.png",
+      "209-hospital/view-2.png",
+      "209-hospital/view-3.png"
+    ],
+    "owner": "SimCity 2000 #3",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 210,
+    "name": "POLICE_STATION",
+    "tiles_wide": 3,
+    "rotations": [
+      "210-police-station/view-0.png",
+      "210-police-station/view-1.png",
+      "210-police-station/view-2.png",
+      "210-police-station/view-3.png"
+    ],
+    "owner": "SimCity 2000 #3",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 211,
+    "name": "FIRE_STATION",
+    "tiles_wide": 3,
+    "rotations": [
+      "211-fire-station/view-0.png",
+      "211-fire-station/view-1.png",
+      "211-fire-station/view-2.png",
+      "211-fire-station/view-3.png"
+    ],
+    "owner": "SimCity 2000 #1",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 212,
+    "name": "MUSEUM",
+    "tiles_wide": 3,
+    "rotations": [
+      "212-museum/view-0.png",
+      "212-museum/view-1.png",
+      "212-museum/view-2.png",
+      "212-museum/view-3.png"
+    ],
+    "owner": "SimCity 2000 #3",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 213,
+    "name": "LARGE_PARK",
+    "tiles_wide": 3,
+    "rotations": [
+      "213-park/view-0.png",
+      "213-park/view-1.png",
+      "213-park/view-2.png",
+      "213-park/view-3.png"
+    ],
+    "owner": "SimCity 2000 #1",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 214,
+    "name": "SCHOOL",
+    "tiles_wide": 3,
+    "rotations": [
+      "214-school/view-0.png",
+      "214-school/view-1.png",
+      "214-school/view-2.png",
+      "214-school/view-3.png"
+    ],
+    "owner": "SimCity 2000 #3",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 215,
+    "name": "STADIUM",
+    "tiles_wide": 4,
+    "rotations": [
+      "215-stadium/view-0.png",
+      "215-stadium/view-1.png",
+      "215-stadium/view-2.png",
+      "215-stadium/view-3.png"
+    ],
+    "owner": "SimCity 2000 #1",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 216,
+    "name": "PRISON",
+    "tiles_wide": 4,
+    "rotations": [
+      "216-prison/view-0.png",
+      "216-prison/view-1.png",
+      "216-prison/view-2.png",
+      "216-prison/view-3.png"
+    ],
+    "owner": "SimCity 2000 #1",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 217,
+    "name": "COLLEGE",
+    "tiles_wide": 4,
+    "rotations": [
+      "217-college/view-0.png",
+      "217-college/view-1.png",
+      "217-college/view-2.png",
+      "217-college/view-3.png"
+    ],
+    "owner": "SimCity 2000 #1",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 218,
+    "name": "ZOO",
+    "tiles_wide": 4,
+    "rotations": [
+      "218-zoo/view-0.png",
+      "218-zoo/view-1.png",
+      "218-zoo/view-2.png",
+      "218-zoo/view-3.png"
+    ],
+    "owner": "SimCity 2000 #1",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 219,
+    "name": "STATUE",
+    "tiles_wide": 1,
+    "rotations": [
+      "219-statue/view-0.png",
+      "219-statue/view-1.png",
+      "219-statue/view-2.png",
+      "219-statue/view-3.png"
+    ],
+    "owner": "SimCity 2000 #3",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 220,
+    "name": "WATER_PUMP",
+    "tiles_wide": 1,
+    "rotations": [
+      "220-water-pump/view-0.png",
+      "220-water-pump/view-1.png",
+      "220-water-pump/view-2.png",
+      "220-water-pump/view-3.png"
+    ],
+    "owner": "SimCity 2000 #1",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 221,
+    "name": "RUNWAY_FIRST",
+    "tiles_wide": 1,
+    "rotations": [
+      "221-runway/view-0.png",
+      "221-runway/view-1.png",
+      "221-runway/view-2.png",
+      "221-runway/view-3.png"
+    ],
+    "owner": "SimCity 2000 #1",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 222,
+    "name": "RUNWAY_LAST",
+    "tiles_wide": 1,
+    "rotations": [
+      "222-runway-crossing/view-0.png",
+      "222-runway-crossing/view-1.png",
+      "222-runway-crossing/view-2.png",
+      "222-runway-crossing/view-3.png"
+    ],
+    "owner": "SimCity 2000 #1",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 223,
+    "name": "PIER",
+    "tiles_wide": 1,
+    "rotations": [
+      "223-pier/view-0.png",
+      "223-pier/view-1.png",
+      "223-pier/view-2.png",
+      "223-pier/view-3.png"
+    ],
+    "owner": "SimCity 2000 #1",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 224,
+    "name": "CRANE",
+    "tiles_wide": 1,
+    "rotations": [
+      "224-crane/view-0.png",
+      "224-crane/view-1.png",
+      "224-crane/view-2.png",
+      "224-crane/view-3.png"
+    ],
+    "owner": "SimCity 2000 #1",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 225,
+    "name": "CONTROL_TOWER_1X1_1",
+    "tiles_wide": 1,
+    "rotations": [
+      "225-control-tower/view-0.png",
+      "225-control-tower/view-1.png",
+      "225-control-tower/view-2.png",
+      "225-control-tower/view-3.png"
+    ],
+    "owner": "SimCity 2000 #1",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 226,
+    "name": "CONTROL_TOWER_1X1_2",
+    "tiles_wide": 1,
+    "rotations": [
+      "226-control-tower/view-0.png",
+      "226-control-tower/view-1.png",
+      "226-control-tower/view-2.png",
+      "226-control-tower/view-3.png"
+    ],
+    "owner": "SimCity 2000 #1",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 227,
+    "name": "WAREHOUSE_1X1_4",
+    "tiles_wide": 1,
+    "rotations": [
+      "227-warehouse/view-0.png",
+      "227-warehouse/view-1.png",
+      "227-warehouse/view-2.png",
+      "227-warehouse/view-3.png"
+    ],
+    "owner": "SimCity 2000 #1",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 228,
+    "name": "BUILDING_1X1_1",
+    "tiles_wide": 1,
+    "rotations": [
+      "228-airport-building/view-0.png",
+      "228-airport-building/view-1.png",
+      "228-airport-building/view-2.png",
+      "228-airport-building/view-3.png"
+    ],
+    "owner": "SimCity 2000 #1",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 229,
+    "name": "BUILDING_1X1_2",
+    "tiles_wide": 1,
+    "rotations": [
+      "229-airport-building/view-0.png",
+      "229-airport-building/view-1.png",
+      "229-airport-building/view-2.png",
+      "229-airport-building/view-3.png"
+    ],
+    "owner": "SimCity 2000 #1",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 230,
+    "name": "TARMAC",
+    "tiles_wide": 1,
+    "rotations": [
+      "230-tarmac/view-0.png",
+      "230-tarmac/view-1.png",
+      "230-tarmac/view-2.png",
+      "230-tarmac/view-3.png"
+    ],
+    "owner": "SimCity 2000 #1",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 231,
+    "name": "F_15B",
+    "tiles_wide": 1,
+    "rotations": [
+      "231-fighter/view-0.png",
+      "231-fighter/view-1.png",
+      "231-fighter/view-2.png",
+      "231-fighter/view-3.png"
+    ],
+    "owner": "SimCity 2000 #1",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 232,
+    "name": "HANGAR_1X1",
+    "tiles_wide": 1,
+    "rotations": [
+      "232-hangar/view-0.png",
+      "232-hangar/view-1.png",
+      "232-hangar/view-2.png",
+      "232-hangar/view-3.png"
+    ],
+    "owner": "SimCity 2000 #1",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 233,
+    "name": "SUBWAY_STATION",
+    "tiles_wide": 1,
+    "rotations": [
+      "233-subway-station/view-0.png",
+      "233-subway-station/view-1.png",
+      "233-subway-station/view-2.png",
+      "233-subway-station/view-3.png"
+    ],
+    "owner": "SimCity 2000 #3",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 234,
+    "name": "RADAR",
+    "tiles_wide": 1,
+    "rotations": [
+      "234-radar/view-0.png",
+      "234-radar/view-1.png",
+      "234-radar/view-2.png",
+      "234-radar/view-3.png"
+    ],
+    "owner": "SimCity 2000 #1",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 235,
+    "name": "WATER_TOWER",
+    "tiles_wide": 2,
+    "rotations": [
+      "235-water-tower/view-0.png",
+      "235-water-tower/view-1.png",
+      "235-water-tower/view-2.png",
+      "235-water-tower/view-3.png"
+    ],
+    "owner": "SimCity 2000 #3",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 236,
+    "name": "BUS_STATION",
+    "tiles_wide": 2,
+    "rotations": [
+      "236-bus-station/view-0.png",
+      "236-bus-station/view-1.png",
+      "236-bus-station/view-2.png",
+      "236-bus-station/view-3.png"
+    ],
+    "owner": "SimCity 2000 #3",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 237,
+    "name": "RAIL_STATION",
+    "tiles_wide": 2,
+    "rotations": [
+      "237-rail-station/view-0.png",
+      "237-rail-station/view-1.png",
+      "237-rail-station/view-2.png",
+      "237-rail-station/view-3.png"
+    ],
+    "owner": "SimCity 2000 #3",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 238,
+    "name": "PARKING_LOT_2X2_1",
+    "tiles_wide": 2,
+    "rotations": [
+      "238-parking-lot-one/view-0.png",
+      "238-parking-lot-one/view-1.png",
+      "238-parking-lot-one/view-2.png",
+      "238-parking-lot-one/view-3.png"
+    ],
+    "owner": "SimCity 2000 #3",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 239,
+    "name": "PARKING_LOT_2X2_2",
+    "tiles_wide": 2,
+    "rotations": [
+      "239-parking-lot-two/view-0.png",
+      "239-parking-lot-two/view-1.png",
+      "239-parking-lot-two/view-2.png",
+      "239-parking-lot-two/view-3.png"
+    ],
+    "owner": "SimCity 2000 #3",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 240,
+    "name": "LOADING_BAY",
+    "tiles_wide": 2,
+    "rotations": [
+      "240-loading-bay/view-0.png",
+      "240-loading-bay/view-1.png",
+      "240-loading-bay/view-2.png",
+      "240-loading-bay/view-3.png"
+    ],
+    "owner": "SimCity 2000 #3",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 241,
+    "name": "TOP_SECRET",
+    "tiles_wide": 2,
+    "rotations": [
+      "241-top-secret/view-0.png",
+      "241-top-secret/view-1.png",
+      "241-top-secret/view-2.png",
+      "241-top-secret/view-3.png"
+    ],
+    "owner": "SimCity 2000 #3",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 242,
+    "name": "CARGO_YARD",
+    "tiles_wide": 2,
+    "rotations": [
+      "242-cargo-yard/view-0.png",
+      "242-cargo-yard/view-1.png",
+      "242-cargo-yard/view-2.png",
+      "242-cargo-yard/view-3.png"
+    ],
+    "owner": "SimCity 2000 #3",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 243,
+    "name": "MAYORS_HOUSE",
+    "tiles_wide": 2,
+    "rotations": [
+      "243-mayors-house/view-0.png",
+      "243-mayors-house/view-1.png",
+      "243-mayors-house/view-2.png",
+      "243-mayors-house/view-3.png"
+    ],
+    "owner": "SimCity 2000 #3",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 244,
+    "name": "WATER_TREATMENT_PLANT",
+    "tiles_wide": 2,
+    "rotations": [
+      "244-water-treatment-plant/view-0.png",
+      "244-water-treatment-plant/view-1.png",
+      "244-water-treatment-plant/view-2.png",
+      "244-water-treatment-plant/view-3.png"
+    ],
+    "owner": "SimCity 2000 #3",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 245,
+    "name": "LIBRARY",
+    "tiles_wide": 2,
+    "rotations": [
+      "245-library/view-0.png",
+      "245-library/view-1.png",
+      "245-library/view-2.png",
+      "245-library/view-3.png"
+    ],
+    "owner": "SimCity 2000 #3",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 246,
+    "name": "HANGAR_3X3",
+    "tiles_wide": 2,
+    "rotations": [
+      "246-hangar/view-0.png",
+      "246-hangar/view-1.png",
+      "246-hangar/view-2.png",
+      "246-hangar/view-3.png"
+    ],
+    "owner": "SimCity 2000 #3",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 247,
+    "name": "CHURCH",
+    "tiles_wide": 2,
+    "rotations": [
+      "247-church/view-0.png",
+      "247-church/view-1.png",
+      "247-church/view-2.png",
+      "247-church/view-3.png"
+    ],
+    "owner": "SimCity 2000 #3",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 248,
+    "name": "MARINA",
+    "tiles_wide": 3,
+    "rotations": [
+      "248-marina/view-0.png",
+      "248-marina/view-1.png",
+      "248-marina/view-2.png",
+      "248-marina/view-3.png"
+    ],
+    "owner": "SimCity 2000 #3",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 249,
+    "name": "MISSILE_SILO",
+    "tiles_wide": 3,
+    "rotations": [
+      "249-missile-silo/view-0.png",
+      "249-missile-silo/view-1.png",
+      "249-missile-silo/view-2.png",
+      "249-missile-silo/view-3.png"
+    ],
+    "owner": "SimCity 2000 #3",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 250,
+    "name": "DESALINATION_PLANT",
+    "tiles_wide": 3,
+    "rotations": [
+      "250-desalination-plant/view-0.png",
+      "250-desalination-plant/view-1.png",
+      "250-desalination-plant/view-2.png",
+      "250-desalination-plant/view-3.png"
+    ],
+    "owner": "SimCity 2000 #3",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 251,
+    "name": "PLYMOUTH_ARCOLOGY",
+    "tiles_wide": 4,
+    "rotations": [
+      "251-plymouth-arcology/view-0.png",
+      "251-plymouth-arcology/view-1.png",
+      "251-plymouth-arcology/view-2.png",
+      "251-plymouth-arcology/view-3.png"
+    ],
+    "owner": "SimCity 2000 #3",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 252,
+    "name": "FOREST_ARCOLOGY",
+    "tiles_wide": 4,
+    "rotations": [
+      "252-forest-arcology/view-0.png",
+      "252-forest-arcology/view-1.png",
+      "252-forest-arcology/view-2.png",
+      "252-forest-arcology/view-3.png"
+    ],
+    "owner": "SimCity 2000 #3",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 253,
+    "name": "DARCO_ARCOLOGY",
+    "tiles_wide": 4,
+    "rotations": [
+      "253-darco-arcology/view-0.png",
+      "253-darco-arcology/view-1.png",
+      "253-darco-arcology/view-2.png",
+      "253-darco-arcology/view-3.png"
+    ],
+    "owner": "SimCity 2000 #3",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 254,
+    "name": "LAUNCH_ARCOLOGY",
+    "tiles_wide": 4,
+    "rotations": [
+      "254-launch-arcology/view-0.png",
+      "254-launch-arcology/view-1.png",
+      "254-launch-arcology/view-2.png",
+      "254-launch-arcology/view-3.png"
+    ],
+    "owner": "SimCity 2000 #3",
+    "status": "installed four-view artwork"
+  },
+  {
+    "kind": 255,
+    "name": "BRAUN_LLAMA_DOME",
+    "tiles_wide": 4,
+    "rotations": [
+      "255-braun-llama-dome/view-0.png",
+      "255-braun-llama-dome/view-1.png",
+      "255-braun-llama-dome/view-2.png",
+      "255-braun-llama-dome/view-3.png"
+    ],
+    "owner": "SimCity 2000 #3",
+    "status": "installed four-view artwork"
+  }
+]

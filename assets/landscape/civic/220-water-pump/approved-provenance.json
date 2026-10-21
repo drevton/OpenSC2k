@@ -1,0 +1,40 @@
+{
+  "kind": 220,
+  "source_selection": {
+    "kind": 220,
+    "name": "Water pump",
+    "review": "assets/landscape/building-studies/approval-batch-217-220/220-water-pump/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-217-220/220-water-pump/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-217-220/220-water-pump/registered-cutout-source.png",
+    "review_sha256": "354f3f756061028e40c5a45378d60f923df7866e2566df75915a97fa2eaca7e7"
+  },
+  "installed_view_sha256": "fe7488933a88939623fd390c5f6f7280d72f3efe550954d00b13fc01f0a0eb37",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-217-220/220-water-pump/registered-full-plot-calibration.png",
+      "installed": "assets/landscape/civic/220-water-pump/approved-original.png",
+      "sha256": "12428d5b3bd03500c4106e5d8248bdb42aece0d68729ddf6f4d2894c20585d7d"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-217-220/220-water-pump/registered-cutout-source.png",
+      "installed": "assets/landscape/civic/220-water-pump/approved-foreground.png",
+      "sha256": "63f894ba8e61814f313022addf6169325f922a5bf948268032c74f19bc7a7d89"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-217-220/220-water-pump/native-foundation-mask.png",
+      "installed": "assets/landscape/civic/220-water-pump/approved-foundation-mask.png",
+      "sha256": "b9efb5f5ba43d7b1adcbe8c0a50d51781398d06a5355664208101d104686686b"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-217-220/220-water-pump/view-0.png",
+      "installed": "assets/landscape/civic/220-water-pump/approved-view.png",
+      "sha256": "fe7488933a88939623fd390c5f6f7280d72f3efe550954d00b13fc01f0a0eb37"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-217-220/220-water-pump/ground-0.png",
+      "installed": "assets/landscape/civic/220-water-pump/approved-ground.png",
+      "sha256": "9bd938d26d88d4de01c331bd1a387c161d9917e827117a83afd306b34048f5de"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

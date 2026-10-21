@@ -1,0 +1,40 @@
+{
+  "kind": 223,
+  "source_selection": {
+    "kind": 223,
+    "name": "Pier",
+    "review": "assets/landscape/building-studies/approval-batch-221-224/223-pier/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-221-224/223-pier/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-221-224/223-pier/alpha-clean-study.png",
+    "review_sha256": "cfb68441a5ad99a40fd3b1a131f223a975f4e953d01e93aeab32c1c95c0ab95a"
+  },
+  "installed_view_sha256": "cfb68441a5ad99a40fd3b1a131f223a975f4e953d01e93aeab32c1c95c0ab95a",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-221-224/223-pier/alpha-clean-study.png",
+      "installed": "assets/landscape/civic/223-pier/approved-original.png",
+      "sha256": "bac2d73888941e62c367ef78f1537956bf68bfd6384f84e3ce5846505df2cfb9"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-221-224/223-pier/alpha-clean-study.png",
+      "installed": "assets/landscape/civic/223-pier/approved-foreground.png",
+      "sha256": "bac2d73888941e62c367ef78f1537956bf68bfd6384f84e3ce5846505df2cfb9"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-221-224/223-pier/native-foundation-mask.png",
+      "installed": "assets/landscape/civic/223-pier/approved-foundation-mask.png",
+      "sha256": "ddc3b46015e06b04f795398dfbf27d0f88666d4828d279182d6abc3150fcc3dd"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-221-224/223-pier/view-0.png",
+      "installed": "assets/landscape/civic/223-pier/approved-view.png",
+      "sha256": "cfb68441a5ad99a40fd3b1a131f223a975f4e953d01e93aeab32c1c95c0ab95a"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-221-224/223-pier/ground-0.png",
+      "installed": "assets/landscape/civic/223-pier/approved-ground.png",
+      "sha256": "460c271ff045ede638e2092ba5191cddae6715bfc35b742fc6e26f1804d74cf7"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

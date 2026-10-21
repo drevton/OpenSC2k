@@ -1,0 +1,40 @@
+{
+  "kind": 238,
+  "source_selection": {
+    "kind": 238,
+    "name": "Parking lot",
+    "review": "assets/landscape/building-studies/approval-batch-237-240/238-parking-lot-one/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-237-240/238-parking-lot-one/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-237-240/238-parking-lot-one/calibrated-source.png",
+    "review_sha256": "0884848d12e875e7243985feae3b5cf18da7b8528474e26b1af9b3cb1c4eede6"
+  },
+  "installed_view_sha256": "0884848d12e875e7243985feae3b5cf18da7b8528474e26b1af9b3cb1c4eede6",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-237-240/238-parking-lot-one/calibrated-source.png",
+      "installed": "assets/landscape/civic/238-parking-lot-one/approved-original.png",
+      "sha256": "6cb1f2856f276fc2306b31b4e5fa88b1fc4c573abb5a2f94acd254096c7983c0"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-237-240/238-parking-lot-one/calibrated-source.png",
+      "installed": "assets/landscape/civic/238-parking-lot-one/approved-foreground.png",
+      "sha256": "6cb1f2856f276fc2306b31b4e5fa88b1fc4c573abb5a2f94acd254096c7983c0"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-237-240/238-parking-lot-one/native-foundation-mask.png",
+      "installed": "assets/landscape/civic/238-parking-lot-one/approved-foundation-mask.png",
+      "sha256": "a4a71c42a8833a38fd3fda56a864a26d36c28d0966615eec7ae437d9c202b1c9"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-237-240/238-parking-lot-one/view-0.png",
+      "installed": "assets/landscape/civic/238-parking-lot-one/approved-view.png",
+      "sha256": "0884848d12e875e7243985feae3b5cf18da7b8528474e26b1af9b3cb1c4eede6"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-237-240/238-parking-lot-one/ground-0.png",
+      "installed": "assets/landscape/civic/238-parking-lot-one/approved-ground.png",
+      "sha256": "8962702f01cec37a1e792be0861eae227b176f86d549becac750be5296af7ba3"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

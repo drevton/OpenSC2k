@@ -1,0 +1,7 @@
+{
+  "tool": "built-in image_gen",
+  "file": "jukebox.png",
+  "atlas_id": 107,
+  "prompt": "Use case: stylized-concept. Asset type: transparent painted game toolbar icon for the Music Jukebox button in OpenSC2k. Create one classic 1950s tabletop jukebox, with an unmistakable compact rounded arch silhouette, warm gold and cream illuminated arch, red side panels, a dark central speaker grille and a simple small record window. Match richly colored hand-painted game toolbar artwork with fine realistic material shading and a restrained dark contour, lit from upper left. Front three-quarter view, nearly frontal so the arch reads clearly. Large simple shapes readable when reduced to 28 pixels. Single centered jukebox nearly filling a square composition with modest transparent padding. Actual transparent background, no background scene, no floor or cast shadow, no text, no lettering, no logos, no UI frame, no extra objects.",
+  "sha256": "45e7fd9ad7752a329ac9beed6790d951601d6ec6ed294dff86bdaac065c42723"
+}

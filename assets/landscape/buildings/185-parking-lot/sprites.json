@@ -1,0 +1,51 @@
+{
+  "kind": 185,
+  "name": "Parking lot",
+  "footprint_tiles": [
+    3,
+    3
+  ],
+  "pixels_per_tile": 128,
+  "canvas": [
+    384,
+    720
+  ],
+  "baseline": 720,
+  "views": [
+    {
+      "angle": 0,
+      "file": "approved-view.png",
+      "ground_file": "approved-ground.png",
+      "mirror": false
+    },
+    {
+      "angle": 90,
+      "file": "approved-view.png",
+      "ground_file": "approved-ground.png",
+      "mirror": true
+    },
+    {
+      "angle": 180,
+      "file": "approved-view.png",
+      "ground_file": "approved-ground.png",
+      "mirror": false
+    },
+    {
+      "angle": 270,
+      "file": "approved-view.png",
+      "ground_file": "approved-ground.png",
+      "mirror": true
+    }
+  ],
+  "baker": "tools/bake_building_sprites.py",
+  "config": "approved-bake.json",
+  "verification": "approved-bake-result.json",
+  "construction": {
+    "family": 1
+  },
+  "ground": "concrete",
+  "status": "approved single view; other directions share it pending rotation artwork",
+  "encoding": "indexed",
+  "source_selection": "assets/landscape/building-studies/daylight-cleanup/selected-single-views.json",
+  "art_notes": "Approved daytime single view. Alternate directions mirror the shared image using resource references."
+}

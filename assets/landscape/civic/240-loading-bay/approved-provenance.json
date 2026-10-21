@@ -1,0 +1,40 @@
+{
+  "kind": 240,
+  "source_selection": {
+    "kind": 240,
+    "name": "Loading bay",
+    "review": "assets/landscape/building-studies/approval-batch-237-240/240-loading-bay/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-237-240/240-loading-bay/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-237-240/240-loading-bay/calibrated-source.png",
+    "review_sha256": "e68c89e21ef0a5f5e4edbc5fdaddd26b359f7c193a61a35a235fc16aecffd27e"
+  },
+  "installed_view_sha256": "30d825905c538202eac9d1da834ee30ef53aafe9df5f38ef6b1e810fb1c27b2f",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-237-240/240-loading-bay/full-plot-calibration.png",
+      "installed": "assets/landscape/civic/240-loading-bay/approved-original.png",
+      "sha256": "0c36db9e0eff57548f25b25b66e2e3665966ff497856cbd503af77f7351f5246"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-237-240/240-loading-bay/calibrated-source.png",
+      "installed": "assets/landscape/civic/240-loading-bay/approved-foreground.png",
+      "sha256": "b3451e76a0d064a97e86ee71ebc1ada175fa9d2c7c01beea1494addcb0b1ae1b"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-237-240/240-loading-bay/native-foundation-mask.png",
+      "installed": "assets/landscape/civic/240-loading-bay/approved-foundation-mask.png",
+      "sha256": "4469ffc0881dca44f2dc6f1cdf51d682f73fd496d3262c053dc7322264caff37"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-237-240/240-loading-bay/view-0.png",
+      "installed": "assets/landscape/civic/240-loading-bay/approved-view.png",
+      "sha256": "30d825905c538202eac9d1da834ee30ef53aafe9df5f38ef6b1e810fb1c27b2f"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-237-240/240-loading-bay/ground-0.png",
+      "installed": "assets/landscape/civic/240-loading-bay/approved-ground.png",
+      "sha256": "da24246e3a9c0ab09bf8cf8c988ed1ece54d0825cc2d5ce82d32731d3eeb55ee"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

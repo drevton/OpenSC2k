@@ -1,0 +1,40 @@
+{
+  "kind": 117,
+  "source_selection": {
+    "kind": 117,
+    "name": "Middle-class homes",
+    "review": "assets/landscape/building-studies/approval-batch-116-119/117-middle-class-homes/native-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-116-119/117-middle-class-homes/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-116-119/117-middle-class-homes/painted-lawn-study.png",
+    "review_sha256": "1c19a1bdac99fb91ae8359bbff29c18c1713530bb79499079075e0bbc10a368c"
+  },
+  "installed_view_sha256": "c0938a2dc6c794a3b8318f6031884a43f9b962f8121025327016c553e9f2ab04",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-116-119/117-middle-class-homes/painted-lawn-study.png",
+      "installed": "assets/landscape/buildings/117-middle-class-homes/approved-original.png",
+      "sha256": "de01129d88c917a7d18211c5cc56ae9b0fd2ba2e30352490ddbe7f9e8d8c7b69"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-116-119/117-middle-class-homes/painted-lawn-study.png",
+      "installed": "assets/landscape/buildings/117-middle-class-homes/approved-foreground.png",
+      "sha256": "de01129d88c917a7d18211c5cc56ae9b0fd2ba2e30352490ddbe7f9e8d8c7b69"
+    },
+    {
+      "source": "assets/landscape/buildings/117-middle-class-homes/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/117-middle-class-homes/approved-foundation-mask.png",
+      "sha256": "c029caa2ab8ea9c96bece66c126afebe08a13a031d32daeec5337fc06091705b"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-116-119/117-middle-class-homes/view-0.png",
+      "installed": "assets/landscape/buildings/117-middle-class-homes/approved-view.png",
+      "sha256": "c0938a2dc6c794a3b8318f6031884a43f9b962f8121025327016c553e9f2ab04"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-116-119/117-middle-class-homes/ground-0.png",
+      "installed": "assets/landscape/buildings/117-middle-class-homes/approved-ground.png",
+      "sha256": "f6e1afc40b4b7ab3309118e4ed66e3fdd1d4a2375f1bd06634c673a071609cf0"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

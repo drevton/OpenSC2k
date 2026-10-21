@@ -1,0 +1,63 @@
+[
+  {
+    "degrees": 0,
+    "file": "view-0.png",
+    "baseline": 600,
+    "canvas": [
+      384,
+      600
+    ],
+    "source_ground_corners": [
+      [
+        90,
+        690.4229712795718
+      ],
+      [
+        747.0233932574578,
+        1044.3664552009502
+      ],
+      [
+        1413,
+        686.5058791399941
+      ]
+    ],
+    "source_front_slopes": [
+      0.5387075826426229,
+      -0.5373470666054495
+    ],
+    "ground_owned_pixels": 36864,
+    "ground_mask_mismatches": 0,
+    "ground_source": "authored painting",
+    "ground_in_sprite": true,
+    "native_terrain_union_mismatches": 0,
+    "sprite_pixels_outside_site_prism": 0,
+    "foreground_opaque_pixels_trimmed": 0,
+    "content_inset_pixels": 0,
+    "foreground_opaque_pixels": 43616,
+    "source_foreground_corners": [
+      [
+        90,
+        703.5259249376829
+      ],
+      [
+        751.5,
+        1034.3664552009502
+      ],
+      [
+        1413,
+        694.5948174663802
+      ]
+    ],
+    "foreground_front_slopes": [
+      0.5001368560291266,
+      -0.5136381522820409
+    ],
+    "occupied_bounds": [
+      1,
+      308,
+      383,
+      600
+    ],
+    "occupied_height": 292
+  }
+]

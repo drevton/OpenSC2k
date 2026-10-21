@@ -1,0 +1,93 @@
+{
+  "kind": 198,
+  "footprint_tiles": [
+    1,
+    1
+  ],
+  "mask": "foundation-mask.png",
+  "terrain_masks": "../../opengfx2/detail128/terrain-masks.png",
+  "paving": "../211-fire-station/paving-texture.png",
+  "retain_painted_ground": false,
+  "content_inset_pixels": 4,
+  "reject_opaque_trim": true,
+  "views": [
+    {
+      "original": "design-v2-source-0.png",
+      "foreground": "design-v2-source-0.png",
+      "plinth_pixels": 0,
+      "ground_corners": [
+        [
+          -41.008333333333326,
+          740.8436359580114
+        ],
+        [
+          717.9329338174706,
+          1219.5036772962649
+        ],
+        [
+          1486.1583333333333,
+          767.1282877161927
+        ]
+      ]
+    },
+    {
+      "original": "design-v2-source-1.png",
+      "foreground": "design-v2-source-1.png",
+      "plinth_pixels": 0,
+      "ground_corners": [
+        [
+          -24.333333333333314,
+          814.199129810034
+        ],
+        [
+          729.6323032145585,
+          1269.9480451666793
+        ],
+        [
+          1516.4814814814815,
+          814.865462296709
+        ]
+      ]
+    },
+    {
+      "original": "design-v2-source-2.png",
+      "foreground": "design-v2-source-2.png",
+      "plinth_pixels": 0,
+      "ground_corners": [
+        [
+          -92.47058823529414,
+          718.0369226035023
+        ],
+        [
+          805.6778085297865,
+          1311.203419239164
+        ],
+        [
+          1618.2941176470588,
+          820.1305943641966
+        ]
+      ]
+    },
+    {
+      "original": "design-v2-source-3.png",
+      "foreground": "design-v2-source-3.png",
+      "plinth_pixels": 0,
+      "ground_corners": [
+        [
+          -123.81355932203394,
+          815.3409492681624
+        ],
+        [
+          680.4850895661207,
+          1301.6828836821876
+        ],
+        [
+          1641.5205811138014,
+          710.6077739454495
+        ]
+      ]
+    }
+  ],
+  "omit_ground_in_sprite": true,
+  "align_building_height": false
+}

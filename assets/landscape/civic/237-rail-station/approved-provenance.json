@@ -1,0 +1,40 @@
+{
+  "kind": 237,
+  "source_selection": {
+    "kind": 237,
+    "name": "Rail station",
+    "review": "assets/landscape/building-studies/approval-batch-237-240/237-rail-station/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-237-240/237-rail-station/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-237-240/237-rail-station/calibrated-source.png",
+    "review_sha256": "f5c9e30add4959899345c55cba091b5409575a069e2355083c268a221a87d574"
+  },
+  "installed_view_sha256": "0c70dcb3b888491d97a095f0f78f74fa157ede7e75a2ca29f5893e2d85aac5e3",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-237-240/237-rail-station/full-plot-calibration.png",
+      "installed": "assets/landscape/civic/237-rail-station/approved-original.png",
+      "sha256": "976cf71daa4140717cf698207b12d4d346f7f82d2d9efdb4452f719a67fedee1"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-237-240/237-rail-station/calibrated-source.png",
+      "installed": "assets/landscape/civic/237-rail-station/approved-foreground.png",
+      "sha256": "3ce9f1443986402fd083e878198e05dddad3920fedc3d48f49fcad180ee5ec34"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-237-240/237-rail-station/native-foundation-mask.png",
+      "installed": "assets/landscape/civic/237-rail-station/approved-foundation-mask.png",
+      "sha256": "f8b07175b4ed61f12c33a67b4ebecdb37e8335f027200593b68c18b8c7f2aa7f"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-237-240/237-rail-station/view-0.png",
+      "installed": "assets/landscape/civic/237-rail-station/approved-view.png",
+      "sha256": "0c70dcb3b888491d97a095f0f78f74fa157ede7e75a2ca29f5893e2d85aac5e3"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-237-240/237-rail-station/ground-0.png",
+      "installed": "assets/landscape/civic/237-rail-station/approved-ground.png",
+      "sha256": "61ed6f91505172ca9d83a0ff0de1aa6c43eb68a16bfce860674631ba1e03052e"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

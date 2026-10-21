@@ -1,0 +1,40 @@
+{
+  "kind": 123,
+  "source_selection": {
+    "kind": 123,
+    "name": "Luxury Homes",
+    "review": "assets/landscape/building-studies/approval-batch-120-123/123-luxury-homes/native-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-120-123/123-luxury-homes/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-120-123/123-luxury-homes/painted-dark-gray-roof-study.png",
+    "review_sha256": "24f5bc0c21b50e88bf802a0f2ae0d727eb9f8b98e941fa3876ff9d67364f58da"
+  },
+  "installed_view_sha256": "a532ecb83c5324e3c315ce99a46810d176c202987e381760861afdb566a1e7d0",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-120-123/123-luxury-homes/painted-dark-gray-roof-study.png",
+      "installed": "assets/landscape/buildings/123-luxury-homes/approved-original.png",
+      "sha256": "1e6a967c26abdff2129d663e9c8ad13e1525cbc0c13a694658999272f6552729"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-120-123/123-luxury-homes/painted-dark-gray-roof-study.png",
+      "installed": "assets/landscape/buildings/123-luxury-homes/approved-foreground.png",
+      "sha256": "1e6a967c26abdff2129d663e9c8ad13e1525cbc0c13a694658999272f6552729"
+    },
+    {
+      "source": "assets/landscape/buildings/123-luxury-homes/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/123-luxury-homes/approved-foundation-mask.png",
+      "sha256": "bc879994f11a999eed1bb4e1e758fe2f84f09a417d2c3e563b246d22961d91a6"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-120-123/123-luxury-homes/view-0.png",
+      "installed": "assets/landscape/buildings/123-luxury-homes/approved-view.png",
+      "sha256": "a532ecb83c5324e3c315ce99a46810d176c202987e381760861afdb566a1e7d0"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-120-123/123-luxury-homes/ground-0.png",
+      "installed": "assets/landscape/buildings/123-luxury-homes/approved-ground.png",
+      "sha256": "bb8851f89c474cfeef33b1f936b8df4ebff4612583c7f351e45ba3bbfcd6da29"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

@@ -1,0 +1,213 @@
+{
+  "frames": 16,
+  "fps": 3,
+  "baselines": [
+    128,
+    110
+  ],
+  "canvas": [
+    128,
+    128
+  ],
+  "anchors": [
+    [
+      40,
+      128
+    ],
+    [
+      64,
+      128
+    ]
+  ],
+  "kinds": [
+    {
+      "kind": 202,
+      "directory": "../202-oil-power-plant",
+      "views": [
+        [
+          {
+            "x": 209,
+            "y": 355,
+            "type": 0,
+            "flipped": false
+          },
+          {
+            "x": 268,
+            "y": 370,
+            "type": 0,
+            "flipped": false
+          }
+        ],
+        [
+          {
+            "x": 209,
+            "y": 355,
+            "type": 0,
+            "flipped": false
+          },
+          {
+            "x": 268,
+            "y": 370,
+            "type": 0,
+            "flipped": false
+          }
+        ],
+        [
+          {
+            "x": 209,
+            "y": 355,
+            "type": 0,
+            "flipped": false
+          },
+          {
+            "x": 268,
+            "y": 370,
+            "type": 0,
+            "flipped": false
+          }
+        ],
+        [
+          {
+            "x": 209,
+            "y": 355,
+            "type": 0,
+            "flipped": false
+          },
+          {
+            "x": 268,
+            "y": 370,
+            "type": 0,
+            "flipped": false
+          }
+        ]
+      ],
+      "registration": "Approved single-view artwork; offsets use its uncropped native canvas."
+    },
+    {
+      "kind": 203,
+      "directory": "../203-nuclear-power-plant",
+      "views": [
+        [
+          {
+            "x": 270,
+            "y": 408,
+            "type": 1,
+            "flipped": false
+          },
+          {
+            "x": 380,
+            "y": 450,
+            "type": 1,
+            "flipped": false
+          }
+        ],
+        [
+          {
+            "x": 270,
+            "y": 408,
+            "type": 1,
+            "flipped": false
+          },
+          {
+            "x": 380,
+            "y": 450,
+            "type": 1,
+            "flipped": false
+          }
+        ],
+        [
+          {
+            "x": 270,
+            "y": 408,
+            "type": 1,
+            "flipped": false
+          },
+          {
+            "x": 380,
+            "y": 450,
+            "type": 1,
+            "flipped": false
+          }
+        ],
+        [
+          {
+            "x": 270,
+            "y": 408,
+            "type": 1,
+            "flipped": false
+          },
+          {
+            "x": 380,
+            "y": 450,
+            "type": 1,
+            "flipped": false
+          }
+        ]
+      ],
+      "registration": "Approved single-view artwork; offsets use its uncropped native canvas."
+    },
+    {
+      "kind": 207,
+      "directory": "../207-coal-power-plant",
+      "views": [
+        [
+          {
+            "x": 231,
+            "y": 356,
+            "type": 0,
+            "flipped": false
+          },
+          {
+            "x": 295,
+            "y": 379,
+            "type": 0,
+            "flipped": false
+          }
+        ],
+        [
+          {
+            "x": 231,
+            "y": 356,
+            "type": 0,
+            "flipped": false
+          },
+          {
+            "x": 295,
+            "y": 379,
+            "type": 0,
+            "flipped": false
+          }
+        ],
+        [
+          {
+            "x": 231,
+            "y": 356,
+            "type": 0,
+            "flipped": false
+          },
+          {
+            "x": 295,
+            "y": 379,
+            "type": 0,
+            "flipped": false
+          }
+        ],
+        [
+          {
+            "x": 231,
+            "y": 356,
+            "type": 0,
+            "flipped": false
+          },
+          {
+            "x": 295,
+            "y": 379,
+            "type": 0,
+            "flipped": false
+          }
+        ]
+      ],
+      "registration": "Approved single-view artwork; offsets use its uncropped native canvas."
+    }
+  ]
+}

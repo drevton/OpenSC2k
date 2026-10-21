@@ -1,0 +1,286 @@
+{
+  "sample_rate": 44100,
+  "channels": 1,
+  "bits": 16,
+  "effects": [
+    {
+      "id": 500,
+      "role": "construction",
+      "source": "opensfx/effects/osfx_31.wav",
+      "match": "match",
+      "note": "OpenTTD non-rail construction placement; short road/building confirmation",
+      "frames": 15197,
+      "sha256": "8228230e770a652c96ad53d3418003ca943663a74927bea9ee4aebdab7f4927b"
+    },
+    {
+      "id": 501,
+      "role": "placement rejected",
+      "source": "opensfx/effects/osfx_01.wav",
+      "match": "approximation",
+      "note": "Negative year cue; no rejection recording",
+      "frames": 35712,
+      "sha256": "bf3863946adfb7cc1a47d7aee4bd5fe4fa36789c8817e8c7e22832f90c50841e"
+    },
+    {
+      "id": 502,
+      "role": "earthquake",
+      "source": "generated/earthquake.wav",
+      "match": "generated",
+      "note": "Original low rumble and debris impacts",
+      "frames": 176400,
+      "sha256": "bd870940ceae0f637d182dc0448228c6393b9f73d290c565e764f1ceeeba8cd4"
+    },
+    {
+      "id": 503,
+      "role": "tree or zone placement",
+      "source": "opensfx/effects/osfx_31.wav",
+      "match": "approximation",
+      "note": "Generic construction placement",
+      "frames": 15197,
+      "sha256": "8228230e770a652c96ad53d3418003ca943663a74927bea9ee4aebdab7f4927b"
+    },
+    {
+      "id": 504,
+      "role": "explosion",
+      "source": "opensfx/effects/osfx_18.wav",
+      "match": "match",
+      "note": "Explosion",
+      "frames": 71218,
+      "sha256": "27368044f8989223f46b18715e5b5bd7e2eccab8b7891611d08604ed76bf93a2"
+    },
+    {
+      "id": 505,
+      "role": "query",
+      "source": "opensfx/selection.wav",
+      "match": "approximation",
+      "note": "Generic interface beep",
+      "frames": 3841,
+      "sha256": "a37f8838398870d21bb6e21e1ef0cd38b76901bf0c8def4de33a4d86dd35fbbd"
+    },
+    {
+      "id": 506,
+      "role": "police or hospital",
+      "source": "generated/emergency-siren.wav",
+      "match": "generated",
+      "note": "Original emergency vehicle wail",
+      "frames": 105840,
+      "sha256": "e2b1044081c6a5376e4118130b90dfcf286dad132253b537b67f40338139b284"
+    },
+    {
+      "id": 507,
+      "role": "fire",
+      "source": "generated/fire.wav",
+      "match": "generated",
+      "note": "Original filtered noise and crackles",
+      "frames": 176400,
+      "sha256": "0391da00eb2691e8439081efecc3a59291ab82610fd2652c167fe839fc334889"
+    },
+    {
+      "id": 508,
+      "role": "bulldozer work",
+      "source": "freesound/bulldozer.wav",
+      "match": "match",
+      "note": "Bulldozer engine recorded by mr101986",
+      "frames": 66150,
+      "sha256": "0f780ad5c1389d3650081f387677625d0097fb190df4f9846b33ef565fc2ee7d"
+    },
+    {
+      "id": 509,
+      "role": "fire dispatch",
+      "source": "generated/fire-engine.wav",
+      "match": "generated",
+      "note": "Original alternating fire-engine tones",
+      "frames": 105840,
+      "sha256": "3993bcec79beb049828cfa355008b5639a0e3eeb2bc4d0e49fb085109357aff4"
+    },
+    {
+      "id": 510,
+      "role": "helicopter flight",
+      "source": "opensfx/effects/osfx_24.wav",
+      "match": "match",
+      "note": "Helicopter",
+      "frames": 108862,
+      "sha256": "261d4e692534b534d3576b6234974eb6ab949ceaa7b6812e07c76f6459433507"
+    },
+    {
+      "id": 511,
+      "role": "water",
+      "source": "opensfx/effects/osfx_02.wav",
+      "match": "match",
+      "note": "Water placement splat",
+      "frames": 35097,
+      "sha256": "716797035db9735f4073eff5dd7ecd64188c8e7ac038f355618ffbc5b791faa0"
+    },
+    {
+      "id": 512,
+      "role": "demolition",
+      "source": "freesound/demolition.wav",
+      "match": "match",
+      "note": "Wooden house demolition recorded by relwin",
+      "frames": 119070,
+      "sha256": "f2546f4a1f8c573ca83fa77692de3557ef1d112dc48f361c269b2ea0555f193d"
+    },
+    {
+      "id": 513,
+      "role": "civic placement",
+      "source": "generated/civic-chime.wav",
+      "match": "generated",
+      "note": "Original three-note completion chime",
+      "frames": 52920,
+      "sha256": "3682a348128d8a00144692c8c2a0aaa16d8d8eefa16693cccddd6bf67b7a7051"
+    },
+    {
+      "id": 514,
+      "role": "power lines",
+      "source": "opensfx/effects/osfx_12.wav",
+      "match": "match",
+      "note": "Electric sparking",
+      "frames": 126721,
+      "sha256": "6943af5b7d8bc3401d16c402bcb9f4bd2c17901828a7fe013c5b4fbcf6078bed"
+    },
+    {
+      "id": 515,
+      "role": "aircraft crash",
+      "source": "opensfx/effects/osfx_19.wav",
+      "match": "approximation",
+      "note": "Big crash; not an aircraft-specific recording",
+      "frames": 76625,
+      "sha256": "eed4f5c6dbd4e7a5105781a9a5a745f6a850388124ff9260f6eca2e2c08ef707"
+    },
+    {
+      "id": 516,
+      "role": "helicopter stage",
+      "source": "freesound/helicopter-start.wav",
+      "match": "approximation",
+      "note": "Helicopter ignition recorded by Paul368; exact stage role unproved",
+      "frames": 97020,
+      "sha256": "098b66ede5fc37b0d0dbc18ce6a6b62b31c7380fbce0969b346dcb51315e4e7f"
+    },
+    {
+      "id": 517,
+      "role": "ship",
+      "source": "opensfx/effects/osfx_06.wav",
+      "match": "match",
+      "note": "Ship horn",
+      "frames": 105966,
+      "sha256": "84a0d70af4ec25981ef645e94773bde5f0b49b14da3eb25849d1576e2d21b664"
+    },
+    {
+      "id": 518,
+      "role": "airplane takeoff",
+      "source": "opensfx/effects/osfx_09.wav",
+      "match": "match",
+      "note": "Jet takeoff",
+      "frames": 146991,
+      "sha256": "2eb53b41a3e2dc3682b7d80047833395f10876b705f99419d136b7c173e5f855"
+    },
+    {
+      "id": 519,
+      "role": "airplane landing",
+      "source": "opensfx/effects/osfx_23.wav",
+      "match": "match",
+      "note": "Plane wheels touching ground",
+      "frames": 7128,
+      "sha256": "7a2f614830987285a8fe39c887024c466fed3e8eed9475faf41bf3475a22ac68"
+    },
+    {
+      "id": 520,
+      "role": "disaster warning",
+      "source": "generated/disaster-warning.wav",
+      "match": "generated",
+      "note": "Original slow civil-warning siren",
+      "frames": 176400,
+      "sha256": "ae19b832c35cd4d05325bddc5b4d8a63a2aa991514485565fb28f87e22b9530c"
+    },
+    {
+      "id": 521,
+      "role": "bus depot",
+      "source": "opensfx/effects/osfx_27.wav",
+      "match": "match",
+      "note": "Bus start",
+      "frames": 127138,
+      "sha256": "cfbe2c8ae7ae41b0a27c9f35d8da423435145fb82492d3de11414af7deaea42c"
+    },
+    {
+      "id": 522,
+      "role": "prison",
+      "source": "freesound/prison-door.wav",
+      "match": "match",
+      "note": "Prison cell door recorded by kd_jack",
+      "frames": 88200,
+      "sha256": "3ed086981310add96ea3cb9055616992bb845a0923f441031ca7818f5038a014"
+    },
+    {
+      "id": 523,
+      "role": "education",
+      "source": "freesound/school-bell.wav",
+      "match": "match",
+      "note": "Electric school bell recorded in a school hall by sbyandiji",
+      "frames": 44100,
+      "sha256": "d8ad06ea04506e67b4e447172f868f021fc08be8315d031a17f3d8de07cd217b"
+    },
+    {
+      "id": 524,
+      "role": "train",
+      "source": "opensfx/effects/osfx_10.wav",
+      "match": "match",
+      "note": "Train departure horn",
+      "frames": 87741,
+      "sha256": "a5f6e9276db61da1688695d17944650cbf21322158b82e73a6da5727c357cc1c"
+    },
+    {
+      "id": 525,
+      "role": "military dispatch",
+      "source": "freesound/dispatch-radio.wav",
+      "match": "match",
+      "note": "All units proceed to your post-assignments, recorded by klankbeeld",
+      "frames": 198450,
+      "sha256": "583b3c1d1e3b041eb3c768739561ba5b9a5c254d52466da88996f4ab14bd5ff8"
+    },
+    {
+      "id": 526,
+      "role": "unknown 526",
+      "source": "opensfx/selection.wav",
+      "match": "approximation",
+      "note": "Unidentified original role; neutral beep placeholder",
+      "frames": 3841,
+      "sha256": "a37f8838398870d21bb6e21e1ef0cd38b76901bf0c8def4de33a4d86dd35fbbd"
+    },
+    {
+      "id": 527,
+      "role": "sailboat or zoo",
+      "source": "opensfx/effects/osfx_66.wav",
+      "match": "approximation",
+      "note": "Outdoor bird cue shared by both roles",
+      "frames": 94610,
+      "sha256": "5d4e6795a40ffbafa3a84227f53b6e713cef8f7f1c569a0d2c082c049f9ecd8e"
+    },
+    {
+      "id": 528,
+      "role": "unknown 528",
+      "source": "opensfx/selection.wav",
+      "match": "approximation",
+      "note": "Unidentified original role; neutral beep placeholder",
+      "frames": 3841,
+      "sha256": "a37f8838398870d21bb6e21e1ef0cd38b76901bf0c8def4de33a4d86dd35fbbd"
+    },
+    {
+      "id": 529,
+      "role": "terrain generation",
+      "source": "opensfx/effects/osfx_31.wav",
+      "match": "approximation",
+      "note": "Terrain placement; replaces the spoken announcement",
+      "frames": 15197,
+      "sha256": "8228230e770a652c96ad53d3418003ca943663a74927bea9ee4aebdab7f4927b"
+    },
+    {
+      "id": 531,
+      "role": "bridge construction",
+      "source": "opensfx/effects/osfx_39.wav",
+      "match": "match",
+      "note": "OpenTTD bridge construction; smithy/anvil recording",
+      "frames": 106954,
+      "sha256": "108555355e6aff383e2440ac8551c9bc8af6b462a8cc13c7173ed423e020559b"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "generator": "Built-in ImageGen",
+  "prompts": [
+    {
+      "file": "passenger-turns.png",
+      "prompt": "Use case: stylized-concept. Asset type: transparent isometric road vehicle turn sprites. Reference image shows exact four vehicle models and painted style to preserve. Generate the FOUR MISSING headings for those same models. EXACT 4 columns x4 rows with ample transparent padding inside each cell and absolutely no background, floor, glow, shadows, labels or grid. Real alpha cutouts. Bodies saturated magenta/pink for palette recoloring; windows neutral charcoal, tires black, trim silver.\nRows match reference: row1 compact hatchback, row2 family sedan, row3 station wagon, row4 delivery van.\nColumns are screen directions, NOT isometric diagonals: column1 vehicle points exactly RIGHT, full horizontal side profile with nose on right; column2 points exactly DOWN toward viewer, symmetric FRONT view; column3 points exactly LEFT, full horizontal side profile with nose left; column4 points exactly UP away from viewer, symmetric REAR view. Camera still looks down30 degrees so roofs are visible. These must NOT be diagonal three-quarter views. Match each model's details, body dimensions and materials. Four views of each vehicle, centered in equal grid cells. Original realistic painted miniatures, no pixel art or thick outlines. Transparent background."
+    },
+    {
+      "file": "utility-turns.png",
+      "prompt": "Use case: stylized-concept. Asset type: transparent isometric road vehicle turn sprites. Reference image shows exact four vehicle models and painted style to preserve. Generate their FOUR MISSING headings. EXACT 4 columns x4 rows with generous transparent padding inside every cell. NO background, floor, glows, labels or grid. Real alpha cutouts. Body paint saturated magenta/pink for palette recoloring, windows neutral charcoal, tires black, trim silver.\nRows match reference: row1 small pickup truck, row2 SUV, row3 sports coupe, row4 short rigid box delivery truck with magenta cargo box.\nColumns are screen directions, NOT isometric diagonals: column1 vehicle nose points exactly RIGHT in horizontal side profile; column2 nose points exactly DOWN toward viewer in symmetric FRONT view; column3 nose points exactly LEFT in horizontal side profile; column4 nose points exactly UP away from viewer in symmetric REAR view. Keep camera looking down30 degrees so roof is visible. Do NOT make any view diagonal. Maintain model identity, consistent lengths and materials, original realistic hand-painted miniatures, no pixel art or thick outlines. Every vehicle fully inside its cell. Transparent background."
+    }
+  ]
+}

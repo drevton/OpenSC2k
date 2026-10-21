@@ -1,0 +1,40 @@
+{
+  "kind": 144,
+  "source_selection": {
+    "kind": 144,
+    "name": "Nice Apartments",
+    "review": "assets/landscape/building-studies/approval-batch-144-147/144-nice-apartments/native-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-144-147/144-nice-apartments/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-144-147/144-nice-apartments/painted-square-more-parking-study.png",
+    "review_sha256": "5609f5819496e60c26ad358961745738f9b7a38ee1b0e3ad57d8792ac753bd3e"
+  },
+  "installed_view_sha256": "5609f5819496e60c26ad358961745738f9b7a38ee1b0e3ad57d8792ac753bd3e",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-144-147/144-nice-apartments/painted-square-more-parking-study.png",
+      "installed": "assets/landscape/buildings/144-nice-apartments/approved-original.png",
+      "sha256": "899aecf71ab2a478f1a07302a73087c6d3ee6fff69067a3524362e9b622262e8"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-144-147/144-nice-apartments/painted-square-more-parking-study.png",
+      "installed": "assets/landscape/buildings/144-nice-apartments/approved-foreground.png",
+      "sha256": "899aecf71ab2a478f1a07302a73087c6d3ee6fff69067a3524362e9b622262e8"
+    },
+    {
+      "source": "assets/landscape/buildings/144-nice-apartments/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/144-nice-apartments/approved-foundation-mask.png",
+      "sha256": "b4018bb08b2d5a4918dfb84335462b5e8d2fa3382836bef8dbcd5b6ff25deeca"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-144-147/144-nice-apartments/view-0.png",
+      "installed": "assets/landscape/buildings/144-nice-apartments/approved-view.png",
+      "sha256": "5609f5819496e60c26ad358961745738f9b7a38ee1b0e3ad57d8792ac753bd3e"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-144-147/144-nice-apartments/ground-0.png",
+      "installed": "assets/landscape/buildings/144-nice-apartments/approved-ground.png",
+      "sha256": "96e29606d9ec0e5858247825736523e1ce6903f98b02b720b250b04fcb7ce984"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

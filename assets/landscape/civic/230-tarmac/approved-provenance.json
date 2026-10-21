@@ -1,0 +1,40 @@
+{
+  "kind": 230,
+  "source_selection": {
+    "kind": 230,
+    "name": "Tarmac",
+    "review": "assets/landscape/building-studies/approval-batch-229-232/230-tarmac/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-229-232/230-tarmac/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-229-232/230-tarmac/alpha-clean-study.png",
+    "review_sha256": "58e1f62dd1c3c1a6aa4eb5a6f1a096d7686a9c4971c927e9ee1beba65b36bf5b"
+  },
+  "installed_view_sha256": "58e1f62dd1c3c1a6aa4eb5a6f1a096d7686a9c4971c927e9ee1beba65b36bf5b",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-229-232/230-tarmac/painted-size-revised.png",
+      "installed": "assets/landscape/civic/230-tarmac/approved-original.png",
+      "sha256": "f4ca40e652006729769ed22e4f6bff9941183c8299ff7eaba7ef21acfafbc956"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-229-232/230-tarmac/alpha-clean-study.png",
+      "installed": "assets/landscape/civic/230-tarmac/approved-foreground.png",
+      "sha256": "e7de2d1e402a2b5c6cc889edba84de463b0a32fffc31f3818bd2c7b8b9c1453d"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-229-232/230-tarmac/native-foundation-mask.png",
+      "installed": "assets/landscape/civic/230-tarmac/approved-foundation-mask.png",
+      "sha256": "ddc3b46015e06b04f795398dfbf27d0f88666d4828d279182d6abc3150fcc3dd"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-229-232/230-tarmac/view-0.png",
+      "installed": "assets/landscape/civic/230-tarmac/approved-view.png",
+      "sha256": "58e1f62dd1c3c1a6aa4eb5a6f1a096d7686a9c4971c927e9ee1beba65b36bf5b"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-229-232/230-tarmac/ground-0.png",
+      "installed": "assets/landscape/civic/230-tarmac/approved-ground.png",
+      "sha256": "552a88f69bd60fffd8bef7360f0c7c7da67bea21a95d1b21f60772c39309347d"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

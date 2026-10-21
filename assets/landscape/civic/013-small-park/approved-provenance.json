@@ -1,0 +1,34 @@
+{
+  "kind": 13,
+  "source_selection": {
+    "kind": 13,
+    "name": "Park",
+    "review": "assets/landscape/civic/013-small-park/view-0.png",
+    "review_sha256": "22f47836baeb64ef83310983547bce55f4b9a509441e83390bf59403aa4852e2",
+    "source_scope": "Earlier housing view or installed smallpark; no current approval-batch native image"
+  },
+  "installed_view_sha256": "941b313540c37ce2d74df038bf76817d302053aad92593cc996cdb2a8ce63191",
+  "dependencies": [
+    {
+      "source": "assets/landscape/civic/013-small-park/painted-source-0.png",
+      "installed": "assets/landscape/civic/013-small-park/approved-original.png",
+      "sha256": "c37cd5fd4052e59693720db66db874fc609b437780925132556abcc9fb3f51d9"
+    },
+    {
+      "source": "assets/landscape/civic/013-small-park/foundation-mask.png",
+      "installed": "assets/landscape/civic/013-small-park/approved-foundation-mask.png",
+      "sha256": "ddc3b46015e06b04f795398dfbf27d0f88666d4828d279182d6abc3150fcc3dd"
+    },
+    {
+      "source": "assets/landscape/civic/013-small-park/view-0.png",
+      "installed": "assets/landscape/civic/013-small-park/approved-view.png",
+      "sha256": "941b313540c37ce2d74df038bf76817d302053aad92593cc996cdb2a8ce63191"
+    },
+    {
+      "source": "assets/landscape/civic/013-small-park/ground-0.png",
+      "installed": "assets/landscape/civic/013-small-park/approved-ground.png",
+      "sha256": "725d8dd37210f8cbb07d6392e1836e2517b1d6d0d54d439f996b5a1695f850cd"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

@@ -1,0 +1,43 @@
+{
+  "kind": 131,
+  "source_selection": {
+    "kind": 131,
+    "name": "Cassidy's Toy Store",
+    "review": "assets/landscape/building-studies/daylight-cleanup/131-cassidy-s-toy-store/native-composited-daylight.png",
+    "recipe": "assets/landscape/building-studies/daylight-cleanup/131-cassidy-s-toy-store/bake.json",
+    "source": "assets/landscape/building-studies/daylight-cleanup/131-cassidy-s-toy-store/painted-daylight.png",
+    "review_sha256": "cddefd4d905d1cb169578a5bc6ea27af1145e23bcd849dd55ca44ef389fbf170",
+    "baked_sprite": "assets/landscape/building-studies/daylight-cleanup/131-cassidy-s-toy-store/view-0.png",
+    "source_sha256": "29d5fc8cf440a2b90206268f4e34890df666fcd17bf1167a43b1d9648206d765",
+    "correction_scope": "Remove all lettering for mirrorable art; correct daytime lighting, preserve approved architecture"
+  },
+  "installed_view_sha256": "f643d7802fd6b691d29b0e019facbe2f18cd4d363567a329a34cdd825b3541c4",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/131-cassidy-s-toy-store/calibration-source.png",
+      "installed": "assets/landscape/buildings/131-cassidy-s-toy-store/approved-original.png",
+      "sha256": "ee74746cf2d51d3061fb581e9ecb35df25715f541910af7a6e3efea0152b7bf0"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/131-cassidy-s-toy-store/registered-daylight.png",
+      "installed": "assets/landscape/buildings/131-cassidy-s-toy-store/approved-foreground.png",
+      "sha256": "a7f8d9a37e33ac0cc49ec42d048789ecdadcf1aa48d7ddb7e761149a35690b9e"
+    },
+    {
+      "source": "assets/landscape/buildings/131-cassidy-s-toy-store/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/131-cassidy-s-toy-store/approved-foundation-mask.png",
+      "sha256": "f1239c508c998830b34843fcf72f9182547bffe389f7bd22c91a0f0278e61818"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/131-cassidy-s-toy-store/view-0.png",
+      "installed": "assets/landscape/buildings/131-cassidy-s-toy-store/approved-view.png",
+      "sha256": "f643d7802fd6b691d29b0e019facbe2f18cd4d363567a329a34cdd825b3541c4"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/131-cassidy-s-toy-store/ground-0.png",
+      "installed": "assets/landscape/buildings/131-cassidy-s-toy-store/approved-ground.png",
+      "sha256": "9f80db50df768735c487aa4381a2fa1509f15ed6d78a921ab5f68dd8111c168a"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

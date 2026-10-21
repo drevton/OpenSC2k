@@ -1,0 +1,40 @@
+{
+  "kind": 244,
+  "source_selection": {
+    "kind": 244,
+    "name": "Water treatment plant",
+    "review": "assets/landscape/building-studies/approval-batch-241-244/244-water-treatment-plant/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-241-244/244-water-treatment-plant/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-241-244/244-water-treatment-plant/calibrated-source.png",
+    "review_sha256": "f5f278152602593099a7ee176bbcde4d48f5917ba58530b4425644996e4b286b"
+  },
+  "installed_view_sha256": "f5f278152602593099a7ee176bbcde4d48f5917ba58530b4425644996e4b286b",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-241-244/244-water-treatment-plant/calibrated-source.png",
+      "installed": "assets/landscape/civic/244-water-treatment-plant/approved-original.png",
+      "sha256": "72fb6412df04e296415d140487f3afd1fb97d294eb952a2140d3d16b86a8ad17"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-241-244/244-water-treatment-plant/calibrated-source.png",
+      "installed": "assets/landscape/civic/244-water-treatment-plant/approved-foreground.png",
+      "sha256": "72fb6412df04e296415d140487f3afd1fb97d294eb952a2140d3d16b86a8ad17"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-241-244/244-water-treatment-plant/native-foundation-mask.png",
+      "installed": "assets/landscape/civic/244-water-treatment-plant/approved-foundation-mask.png",
+      "sha256": "675fad7493cc2dc99056e5e6810f0e22cafbf45cd5c8f6526beeb2bb0ff3b2fe"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-241-244/244-water-treatment-plant/view-0.png",
+      "installed": "assets/landscape/civic/244-water-treatment-plant/approved-view.png",
+      "sha256": "f5f278152602593099a7ee176bbcde4d48f5917ba58530b4425644996e4b286b"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-241-244/244-water-treatment-plant/ground-0.png",
+      "installed": "assets/landscape/civic/244-water-treatment-plant/approved-ground.png",
+      "sha256": "70b3a4488885a37b7b4080de88fc07d540d77b0d577ec53af0cfe3313a9b39a7"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

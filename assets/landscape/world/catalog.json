@@ -1,0 +1,1838 @@
+[
+  {
+    "id": 0,
+    "file": "../world/0000.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 1,
+    "file": "../world/0001.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true,
+    "opaque": true
+  },
+  {
+    "id": 2,
+    "file": "../world/0002.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true,
+    "opaque": true
+  },
+  {
+    "id": 3,
+    "file": "../world/0003.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true,
+    "opaque": true
+  },
+  {
+    "id": 4,
+    "file": "../world/0004.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true,
+    "opaque": true
+  },
+  {
+    "id": 5,
+    "file": "../world/0005.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 14,
+    "file": "sprites/4245.png",
+    "baseline": 192,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 15,
+    "file": "sprites/4246.png",
+    "baseline": 192,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 16,
+    "file": "sprites/4247.png",
+    "baseline": 192,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 17,
+    "file": "sprites/4248.png",
+    "baseline": 192,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 18,
+    "file": "sprites/4249.png",
+    "baseline": 192,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 19,
+    "file": "sprites/4250.png",
+    "baseline": 192,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 20,
+    "file": "sprites/4251.png",
+    "baseline": 192,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 21,
+    "file": "sprites/4252.png",
+    "baseline": 192,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 22,
+    "file": "sprites/4253.png",
+    "baseline": 192,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 23,
+    "file": "sprites/4254.png",
+    "baseline": 192,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 24,
+    "file": "sprites/4255.png",
+    "baseline": 192,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 25,
+    "file": "sprites/4256.png",
+    "baseline": 192,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 26,
+    "file": "sprites/4257.png",
+    "baseline": 192,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 27,
+    "file": "sprites/4258.png",
+    "baseline": 192,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 28,
+    "file": "sprites/4245.png",
+    "baseline": 192,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 67,
+    "file": "../roads/straight-a.png",
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 68,
+    "file": "../roads/straight-b.png",
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 71,
+    "file": "../rails/straight-a.png",
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 72,
+    "file": "../rails/straight-b.png",
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 79,
+    "file": "../roads/highway-a.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 80,
+    "file": "../roads/highway-b.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 88,
+    "file": "../world/0088.png",
+    "baseline": 25,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 89,
+    "file": "../world/0089.png",
+    "baseline": 65,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 92,
+    "file": "sprites/4253.png",
+    "baseline": 160,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 108,
+    "file": "../world/0108.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 109,
+    "file": "../world/0109.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 110,
+    "file": "../world/0110.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 111,
+    "file": "../world/0111.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 305,
+    "file": "../world/0305.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 306,
+    "file": "../world/0306.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 307,
+    "file": "../world/0307.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 308,
+    "file": "../world/0308.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 309,
+    "file": "../world/0309.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 310,
+    "file": "../world/0310.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 311,
+    "file": "../world/0311.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 312,
+    "file": "../world/0312.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 313,
+    "file": "../world/0313.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 314,
+    "file": "../world/0314.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 315,
+    "file": "../world/0315.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 316,
+    "file": "../world/0316.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 317,
+    "file": "../world/0317.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 318,
+    "file": "../world/0318.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 319,
+    "file": "../world/0319.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 320,
+    "file": "../world/0320.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 321,
+    "file": "../world/0321.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 322,
+    "file": "../world/0322.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 323,
+    "file": "../world/0323.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 324,
+    "file": "../world/0324.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 325,
+    "file": "../world/0325.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 326,
+    "file": "../world/0326.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 327,
+    "file": "../world/0327.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 328,
+    "file": "../world/0328.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 329,
+    "file": "../world/0329.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 330,
+    "file": "../world/0330.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 331,
+    "file": "../world/0331.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 332,
+    "file": "../world/0332.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 333,
+    "file": "../world/0333.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 334,
+    "file": "../world/0334.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 335,
+    "file": "../world/0335.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 336,
+    "file": "../world/0336.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 337,
+    "file": "../world/0337.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 338,
+    "file": "../world/0338.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 339,
+    "file": "../world/0339.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 340,
+    "file": "../world/0340.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 341,
+    "file": "../world/0341.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 342,
+    "file": "../world/0342.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 343,
+    "file": "../world/0343.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 344,
+    "file": "../world/0344.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 345,
+    "file": "../world/0345.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 346,
+    "file": "../world/0346.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 347,
+    "file": "../world/0347.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 348,
+    "file": "../world/0348.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 349,
+    "file": "../world/0349.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 350,
+    "file": "../world/0350.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 351,
+    "file": "../world/0351.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 352,
+    "file": "../world/0352.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 353,
+    "file": "../world/0353.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 354,
+    "file": "../world/0354.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 355,
+    "file": "../world/0355.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 356,
+    "file": "../world/0356.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 357,
+    "file": "../world/0357.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 358,
+    "file": "../world/0358.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 359,
+    "file": "../world/0359.png",
+    "baseline": 48,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 360,
+    "file": "../world/0360.png",
+    "baseline": 40,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 361,
+    "file": "../world/0361.png",
+    "baseline": 43,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 362,
+    "file": "../world/0362.png",
+    "baseline": 63,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 363,
+    "file": "../world/0363.png",
+    "baseline": 72,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 364,
+    "file": "../world/0364.png",
+    "baseline": 55,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 365,
+    "file": "../world/0365.png",
+    "baseline": 52,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 366,
+    "file": "../world/0366.png",
+    "baseline": 39,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 367,
+    "file": "../world/0367.png",
+    "baseline": 59,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 368,
+    "file": "../world/0368.png",
+    "baseline": 68,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 369,
+    "file": "../world/0369.png",
+    "baseline": 56,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 370,
+    "file": "../world/0370.png",
+    "baseline": 50,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 371,
+    "file": "../world/0371.png",
+    "baseline": 53,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 372,
+    "file": "../world/0372.png",
+    "baseline": 68,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 373,
+    "file": "../world/0373.png",
+    "baseline": 73,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 374,
+    "file": "../world/0374.png",
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 375,
+    "file": "../world/0375.png",
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 376,
+    "file": "../world/0376.png",
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 377,
+    "file": "../world/0377.png",
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 378,
+    "file": "../world/0378.png",
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 379,
+    "file": "../world/0380.png",
+    "baseline": 65,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 380,
+    "file": "../world/0380.png",
+    "baseline": 65,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 381,
+    "file": "../world/0381.png",
+    "baseline": 65,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 382,
+    "file": "../world/0382.png",
+    "baseline": 48,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 383,
+    "file": "../world/0383.png",
+    "baseline": 48,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 384,
+    "file": "../world/0384.png",
+    "baseline": 48,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 385,
+    "file": "../world/0000.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 386,
+    "file": "../world/0386.png",
+    "baseline": 24,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 387,
+    "file": "../world/0387.png",
+    "baseline": 64,
+    "scale_divisor": 8,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 388,
+    "file": "../world/0388.png",
+    "baseline": 64,
+    "scale_divisor": 8,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 389,
+    "file": "../world/0389.png",
+    "baseline": 64,
+    "scale_divisor": 8,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 390,
+    "file": "../world/0390.png",
+    "baseline": 39,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 391,
+    "file": "../world/0391.png",
+    "baseline": 39,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 392,
+    "file": "../world/0392.png",
+    "baseline": 110,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 393,
+    "file": "../world/0393.png",
+    "baseline": 110,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 394,
+    "file": "../world/0394.png",
+    "baseline": 110,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 395,
+    "file": "../world/0395.png",
+    "baseline": 110,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 396,
+    "file": "../world/0396.png",
+    "baseline": 144,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 397,
+    "file": "../world/0397.png",
+    "baseline": 144,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 398,
+    "file": "../world/0398.png",
+    "baseline": 144,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 399,
+    "file": "../world/0399.png",
+    "baseline": 144,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 400,
+    "file": "../world/0400.png",
+    "baseline": 55,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 401,
+    "file": "../world/0401.png",
+    "baseline": 55,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 402,
+    "file": "../world/0402.png",
+    "baseline": 55,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 403,
+    "file": "../world/0403.png",
+    "baseline": 55,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 404,
+    "file": "../world/0404.png",
+    "baseline": 55,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 405,
+    "file": "../world/0405.png",
+    "baseline": 55,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 406,
+    "file": "../world/0406.png",
+    "baseline": 55,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 407,
+    "file": "../world/0407.png",
+    "baseline": 55,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 408,
+    "file": "../world/0408.png",
+    "baseline": 55,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 409,
+    "file": "../world/0409.png",
+    "baseline": 55,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 410,
+    "file": "../world/0410.png",
+    "baseline": 55,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 411,
+    "file": "../world/0411.png",
+    "baseline": 55,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 412,
+    "file": "../world/0412.png",
+    "baseline": 55,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 413,
+    "file": "../world/0413.png",
+    "baseline": 55,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 414,
+    "file": "../world/0414.png",
+    "baseline": 55,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 415,
+    "file": "../world/0415.png",
+    "baseline": 55,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 416,
+    "file": "../world/0416.png",
+    "baseline": 55,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 417,
+    "file": "../world/0417.png",
+    "baseline": 55,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 418,
+    "file": "../world/0418.png",
+    "baseline": 55,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 419,
+    "file": "../world/0419.png",
+    "baseline": 55,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 420,
+    "file": "../world/0420.png",
+    "baseline": 55,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 421,
+    "file": "../world/0421.png",
+    "baseline": 55,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 422,
+    "file": "../world/0422.png",
+    "baseline": 55,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 423,
+    "file": "../world/0423.png",
+    "baseline": 55,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 424,
+    "file": "../world/0424.png",
+    "baseline": 59,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 425,
+    "file": "../world/0425.png",
+    "baseline": 59,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 426,
+    "file": "../world/0426.png",
+    "baseline": 59,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 427,
+    "file": "../world/0427.png",
+    "baseline": 59,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 428,
+    "file": "../world/0428.png",
+    "baseline": 59,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 429,
+    "file": "../world/0429.png",
+    "baseline": 59,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 430,
+    "file": "../world/0430.png",
+    "baseline": 59,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 431,
+    "file": "../world/0431.png",
+    "baseline": 59,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 432,
+    "file": "../world/0432.png",
+    "baseline": 68,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 433,
+    "file": "../world/0433.png",
+    "baseline": 68,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 434,
+    "file": "../world/0434.png",
+    "baseline": 68,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 435,
+    "file": "../world/0435.png",
+    "baseline": 68,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 436,
+    "file": "../world/0436.png",
+    "baseline": 68,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 437,
+    "file": "../world/0437.png",
+    "baseline": 68,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 438,
+    "file": "../world/0438.png",
+    "baseline": 68,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 439,
+    "file": "../world/0439.png",
+    "baseline": 68,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 440,
+    "file": "../world/0440.png",
+    "baseline": 55,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 441,
+    "file": "../world/0441.png",
+    "baseline": 55,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 442,
+    "file": "../world/0442.png",
+    "baseline": 55,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 443,
+    "file": "../world/0443.png",
+    "baseline": 55,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 444,
+    "file": "../world/0444.png",
+    "baseline": 55,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 445,
+    "file": "../world/0445.png",
+    "baseline": 55,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 446,
+    "file": "../world/0446.png",
+    "baseline": 55,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 447,
+    "file": "../world/0447.png",
+    "baseline": 55,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 448,
+    "file": "../world/0000.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 449,
+    "file": "../world/0000.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 450,
+    "file": "../world/0450.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 451,
+    "file": "../world/0451.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 452,
+    "file": "../world/0452.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 453,
+    "file": "../world/0453.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 454,
+    "file": "../world/0454.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 455,
+    "file": "../world/0455.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 456,
+    "file": "../world/0456.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 457,
+    "file": "../world/0457.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 458,
+    "file": "../world/0458.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 459,
+    "file": "../world/0459.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 460,
+    "file": "../world/0460.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 461,
+    "file": "../world/0461.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 462,
+    "file": "../world/0462.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 463,
+    "file": "../world/0463.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 464,
+    "file": "../world/0464.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 465,
+    "file": "../world/0465.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 466,
+    "file": "../world/0466.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 467,
+    "file": "../world/0467.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 468,
+    "file": "../world/0468.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 469,
+    "file": "../world/0469.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 470,
+    "file": "../world/0470.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 471,
+    "file": "../world/0471.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 472,
+    "file": "../world/0472.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 473,
+    "file": "../world/0473.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 474,
+    "file": "../world/0474.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 475,
+    "file": "../world/0475.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 476,
+    "file": "../world/0476.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 477,
+    "file": "../world/0477.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 478,
+    "file": "../world/0478.png",
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 479,
+    "file": "../world/0479.png",
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 480,
+    "file": "../world/0480.png",
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 481,
+    "file": "../world/0481.png",
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 482,
+    "file": "../world/0482.png",
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 483,
+    "file": "../world/0483.png",
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 484,
+    "file": "../world/0484.png",
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 485,
+    "file": "../world/0485.png",
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 486,
+    "file": "../world/0486.png",
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 487,
+    "file": "../world/0487.png",
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 488,
+    "file": "../world/0488.png",
+    "baseline": 64,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 489,
+    "file": "../world/0000.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 490,
+    "file": "../world/0490.png",
+    "baseline": 170,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 491,
+    "file": "../world/0491.png",
+    "baseline": 163,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 492,
+    "file": "sprites/0270.png",
+    "baseline": 128,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": false
+  },
+  {
+    "id": 493,
+    "file": "../world/0493.png",
+    "baseline": 34,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 494,
+    "file": "../world/0494.png",
+    "baseline": 27,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 495,
+    "file": "../world/0495.png",
+    "baseline": 39,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 496,
+    "file": "../world/0496.png",
+    "baseline": 110,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 497,
+    "file": "../world/0497.png",
+    "baseline": 250,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 498,
+    "file": "../world/0498.png",
+    "baseline": 250,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  },
+  {
+    "id": 499,
+    "file": "../world/0499.png",
+    "baseline": 250,
+    "scale_divisor": 4,
+    "offset_x": 0,
+    "civic": true
+  }
+]

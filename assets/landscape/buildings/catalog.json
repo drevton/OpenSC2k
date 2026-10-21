@@ -1,0 +1,1819 @@
+{
+  "pixels_per_tile": 128,
+  "views": [
+    0,
+    90,
+    180,
+    270
+  ],
+  "description_source": "Stock Tile Info strings from Data/native-resources.sc2res; custom tileset NAME overrides excluded.",
+  "footprint_source": "src/city/tools/placement.c: kBulldozeFootprintSize",
+  "classification_source": "src/city/growth/zoning.c: PlaceGrowthTiles, kGrowthBaseTable, kGrowthDivisorTable",
+  "design_note": "Proposed designs are original art directions inferred from names, not factual descriptions of the original sprites.",
+  "summary": {
+    "remaining_kinds": 86,
+    "remaining_views": 344,
+    "installed_native_kinds": 58,
+    "retired_legacy_kinds": 1
+  },
+  "buildings": [
+    {
+      "kind": 13,
+      "tile_info_description": "Park",
+      "tile_info_resource": 597,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Small Park",
+      "manifest": "assets/landscape/civic/013-small-park/sprites.json"
+    },
+    {
+      "kind": 112,
+      "tile_info_description": "Lower-class homes",
+      "tile_info_resource": 612,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Residential",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Modest timber cottage with a small fenced yard."
+    },
+    {
+      "kind": 113,
+      "tile_info_description": "Lower-class homes",
+      "tile_info_resource": 612,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Residential",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Compact brick row-house pair with shared front steps."
+    },
+    {
+      "kind": 114,
+      "tile_info_description": "Lower-class homes",
+      "tile_info_resource": 612,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Residential",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Simple stucco bungalow with an attached lean-to."
+    },
+    {
+      "kind": 115,
+      "tile_info_description": "Lower-class homes",
+      "tile_info_resource": 612,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Residential",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Narrow workers cottage with a patched roof and rear shed."
+    },
+    {
+      "kind": 116,
+      "tile_info_description": "Middle-class homes",
+      "tile_info_resource": 613,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Residential",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Comfortable detached brick house with a front porch."
+    },
+    {
+      "kind": 117,
+      "tile_info_description": "Middle-class homes",
+      "tile_info_resource": 613,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Residential",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Two-storey family home with a bay window and garden."
+    },
+    {
+      "kind": 118,
+      "tile_info_description": "Middle-class homes",
+      "tile_info_resource": 613,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Residential",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Suburban split-level house with a garage."
+    },
+    {
+      "kind": 119,
+      "tile_info_description": "Middle-class homes",
+      "tile_info_resource": 613,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Residential",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Semi-detached duplex with separate entrances."
+    },
+    {
+      "kind": 120,
+      "tile_info_description": "Luxury Homes",
+      "tile_info_resource": 614,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Residential",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Large stone villa with landscaped grounds."
+    },
+    {
+      "kind": 121,
+      "tile_info_description": "Luxury Homes",
+      "tile_info_resource": 614,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Residential",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Modern luxury home with terraces and broad glazing."
+    },
+    {
+      "kind": 122,
+      "tile_info_description": "Luxury Homes",
+      "tile_info_resource": 614,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Residential",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Formal townhouse with an enclosed courtyard."
+    },
+    {
+      "kind": 123,
+      "tile_info_description": "Luxury Homes",
+      "tile_info_resource": 614,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Residential",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Mediterranean villa with a tiled roof and small pool."
+    },
+    {
+      "kind": 124,
+      "tile_info_description": "Gas Station",
+      "tile_info_resource": 615,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Commercial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Small fuel station with a service garage and short pump canopy."
+    },
+    {
+      "kind": 125,
+      "tile_info_description": "Bed & Breakfast Inn",
+      "tile_info_resource": 616,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Commercial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Converted townhouse inn with a welcoming porch and small garden."
+    },
+    {
+      "kind": 126,
+      "tile_info_description": "Convience Store",
+      "tile_info_resource": 617,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Commercial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Corner convenience shop with an awning and a rear delivery door."
+    },
+    {
+      "kind": 127,
+      "tile_info_description": "Gas Station",
+      "tile_info_resource": 618,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Commercial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Modern fuel station with a larger canopy and compact shop."
+    },
+    {
+      "kind": 128,
+      "tile_info_description": "Small office building",
+      "tile_info_resource": 619,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Commercial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Low-rise professional offices with a clear street entrance."
+    },
+    {
+      "kind": 129,
+      "tile_info_description": "Office building",
+      "tile_info_resource": 620,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Commercial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Compact mid-rise office block with a rooftop plant enclosure."
+    },
+    {
+      "kind": 130,
+      "tile_info_description": "Warehouse",
+      "tile_info_resource": 621,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Commercial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Commercial wholesale depot with a public trade counter and loading door."
+    },
+    {
+      "kind": 131,
+      "tile_info_description": "Cassidy's Toy Store",
+      "tile_info_resource": 622,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Commercial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Independent toy shop with colourful display windows and a generic original sign."
+    },
+    {
+      "kind": 132,
+      "tile_info_description": "Warehouse",
+      "tile_info_resource": 623,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Industrial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Small brick warehouse with a sawtooth roof and loading apron."
+    },
+    {
+      "kind": 133,
+      "tile_info_description": "Chemical Storage",
+      "tile_info_resource": 624,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Industrial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Chemical storage yard with bunded tanks, drums and a service hut."
+    },
+    {
+      "kind": 134,
+      "tile_info_description": "Warehouse",
+      "tile_info_resource": 625,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Industrial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Metal-clad distribution shed with loading doors and stacked pallets."
+    },
+    {
+      "kind": 135,
+      "tile_info_description": "Industrial substation",
+      "tile_info_resource": 626,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Industrial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Electrical substation with transformers, insulators and a fenced switchyard."
+    },
+    {
+      "kind": 136,
+      "tile_info_description": "Construction",
+      "tile_info_resource": 627,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Construction",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Small construction site at foundation stage with trenches and timber forms."
+    },
+    {
+      "kind": 137,
+      "tile_info_description": "Construction",
+      "tile_info_resource": 628,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Construction",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Small construction site with a partly built shell and scaffolding."
+    },
+    {
+      "kind": 138,
+      "tile_info_description": "Abandoned building",
+      "tile_info_resource": 629,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Abandoned",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Vacant small brick building with boarded windows and an overgrown yard."
+    },
+    {
+      "kind": 139,
+      "tile_info_description": "Abandoned building",
+      "tile_info_resource": 630,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Abandoned",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Derelict small commercial or industrial shell with damaged roofing."
+    },
+    {
+      "kind": 140,
+      "tile_info_description": "Cheap apartments",
+      "tile_info_resource": 631,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Residential",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Plain walk-up apartment blocks around a modest shared yard."
+    },
+    {
+      "kind": 141,
+      "tile_info_description": "Apartments",
+      "tile_info_resource": 632,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Residential",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Brick apartment courtyard with balconies and multiple entrances."
+    },
+    {
+      "kind": 142,
+      "tile_info_description": "Apartments",
+      "tile_info_resource": 633,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Residential",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Mid-rise slab apartments with a landscaped forecourt."
+    },
+    {
+      "kind": 143,
+      "tile_info_description": "Nice Apartments",
+      "tile_info_resource": 634,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Residential",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Well-kept apartment buildings with recessed balconies and a garden."
+    },
+    {
+      "kind": 144,
+      "tile_info_description": "Nice Apartments",
+      "tile_info_resource": 635,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Residential",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Contemporary apartment block with generous glazing and a shared courtyard."
+    },
+    {
+      "kind": 145,
+      "tile_info_description": "Condominium",
+      "tile_info_resource": 636,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Residential",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Condominium terraces with private balconies and planted setbacks."
+    },
+    {
+      "kind": 146,
+      "tile_info_description": "Condominium",
+      "tile_info_resource": 637,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Residential",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Stepped condominium block around a communal garden."
+    },
+    {
+      "kind": 147,
+      "tile_info_description": "Condominium",
+      "tile_info_resource": 638,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Residential",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Upscale condominium tower on a landscaped podium."
+    },
+    {
+      "kind": 148,
+      "tile_info_description": "Shopping center",
+      "tile_info_resource": 639,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Commercial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Neighbourhood shopping centre with varied storefronts and a small parking area."
+    },
+    {
+      "kind": 149,
+      "tile_info_description": "Grocery story",
+      "tile_info_resource": 640,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Commercial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Supermarket with a broad entrance, loading bay and trolley shelter."
+    },
+    {
+      "kind": 150,
+      "tile_info_description": "Office building",
+      "tile_info_resource": 641,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Commercial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Masonry office block with regular windows and a courtyard."
+    },
+    {
+      "kind": 151,
+      "tile_info_description": "Resort hotel",
+      "tile_info_resource": 642,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Commercial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Resort hotel with terraces, pool and landscaped grounds."
+    },
+    {
+      "kind": 152,
+      "tile_info_description": "Office building",
+      "tile_info_resource": 643,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Commercial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Modern office block with a recessed glazed entrance."
+    },
+    {
+      "kind": 153,
+      "tile_info_description": "Office / Retail",
+      "tile_info_resource": 644,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Commercial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Mixed-use block with street-level shops and offices above."
+    },
+    {
+      "kind": 154,
+      "tile_info_description": "Office building",
+      "tile_info_resource": 645,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Commercial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Narrow mid-rise office tower on a small podium."
+    },
+    {
+      "kind": 155,
+      "tile_info_description": "Office building",
+      "tile_info_resource": 646,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Commercial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Paired office wings joined by a glazed entrance hall."
+    },
+    {
+      "kind": 156,
+      "tile_info_description": "Office building",
+      "tile_info_resource": 647,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Commercial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Setback office tower with roof terraces."
+    },
+    {
+      "kind": 157,
+      "tile_info_description": "Office building",
+      "tile_info_resource": 648,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Commercial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Tall office block with a distinct crown and compact forecourt."
+    },
+    {
+      "kind": 158,
+      "tile_info_description": "Warehouse",
+      "tile_info_resource": 649,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Industrial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Medium warehouse with multiple loading docks and a service yard."
+    },
+    {
+      "kind": 159,
+      "tile_info_description": "Chemical processing",
+      "tile_info_resource": 650,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Industrial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Chemical processing plant with tanks, pipe racks and compact process towers."
+    },
+    {
+      "kind": 160,
+      "tile_info_description": "Factory",
+      "tile_info_resource": 651,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Industrial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Brick manufacturing works with roof monitors and a restrained chimney."
+    },
+    {
+      "kind": 161,
+      "tile_info_description": "Factory",
+      "tile_info_resource": 652,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Industrial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Assembly factory with sawtooth roofs and a loading yard."
+    },
+    {
+      "kind": 162,
+      "tile_info_description": "Factory",
+      "tile_info_resource": 653,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Industrial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Metal fabrication plant with tall workshop bays and material racks."
+    },
+    {
+      "kind": 163,
+      "tile_info_description": "Factory",
+      "tile_info_resource": 654,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Industrial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Light-industry campus with production halls and an office entrance."
+    },
+    {
+      "kind": 164,
+      "tile_info_description": "Factory",
+      "tile_info_resource": 655,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Industrial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Heavy workshop with rooftop ducts and extraction equipment."
+    },
+    {
+      "kind": 165,
+      "tile_info_description": "Factory",
+      "tile_info_resource": 656,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Industrial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Large processing hall with a service annex and exhaust stacks."
+    },
+    {
+      "kind": 166,
+      "tile_info_description": "Construction",
+      "tile_info_resource": 657,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Construction",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Medium construction site at excavation and foundation stage."
+    },
+    {
+      "kind": 167,
+      "tile_info_description": "Construction",
+      "tile_info_resource": 658,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Construction",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Medium construction site with a low concrete frame and scaffolding."
+    },
+    {
+      "kind": 168,
+      "tile_info_description": "Construction",
+      "tile_info_resource": 659,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Construction",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Medium construction site with a taller structural frame and crane."
+    },
+    {
+      "kind": 169,
+      "tile_info_description": "Construction",
+      "tile_info_resource": 660,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Construction",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Medium construction site with a mostly enclosed shell and unfinished landscaping."
+    },
+    {
+      "kind": 170,
+      "tile_info_description": "Abandoned building",
+      "tile_info_resource": 661,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Abandoned",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Vacant medium masonry block with boarded openings and weeded paving."
+    },
+    {
+      "kind": 171,
+      "tile_info_description": "Abandoned building",
+      "tile_info_resource": 662,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Abandoned",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Disused medium apartment block with stained facades and a neglected courtyard."
+    },
+    {
+      "kind": 172,
+      "tile_info_description": "Abandoned building",
+      "tile_info_resource": 663,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Abandoned",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Abandoned medium commercial block with empty storefronts."
+    },
+    {
+      "kind": 173,
+      "tile_info_description": "Abandoned building",
+      "tile_info_resource": 664,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Abandoned",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Disused medium industrial shed with broken roof panels and a littered yard."
+    },
+    {
+      "kind": 174,
+      "tile_info_description": "Large apartment building",
+      "tile_info_resource": 665,
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "category": "Residential",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Tall apartment slab with repeated balconies, entrance courts and mature planting."
+    },
+    {
+      "kind": 175,
+      "tile_info_description": "Large apartment building",
+      "tile_info_resource": 666,
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "category": "Residential",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Cluster of tall apartment towers on a shared residential podium."
+    },
+    {
+      "kind": 176,
+      "tile_info_description": "Condominium",
+      "tile_info_resource": 667,
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "category": "Residential",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "High-rise condominium towers around an enclosed garden."
+    },
+    {
+      "kind": 177,
+      "tile_info_description": "Condominium",
+      "tile_info_resource": 668,
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "category": "Residential",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Stepped luxury condominium complex with terraces and a landscaped podium."
+    },
+    {
+      "kind": 178,
+      "tile_info_description": "Office park",
+      "tile_info_resource": 669,
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "category": "Commercial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Office campus of several mid-rise wings around gardens and paths."
+    },
+    {
+      "kind": 179,
+      "tile_info_description": "Office tower",
+      "tile_info_resource": 670,
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "category": "Commercial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Tall slender office tower with a visible lobby and rooftop service crown."
+    },
+    {
+      "kind": 180,
+      "tile_info_description": "Mini-mall",
+      "tile_info_resource": 671,
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "category": "Commercial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Low-rise mini-mall with shopfronts, covered walks and parking."
+    },
+    {
+      "kind": 181,
+      "tile_info_description": "Theatre Square",
+      "tile_info_resource": 672,
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "category": "Commercial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Urban theatre complex with a marquee, adjoining shops and a public square."
+    },
+    {
+      "kind": 182,
+      "tile_info_description": "Drive-in theater",
+      "tile_info_resource": 673,
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "category": "Commercial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Drive-in cinema with a large screen, projection booth and ordered parking lanes."
+    },
+    {
+      "kind": 183,
+      "tile_info_description": "Office tower",
+      "tile_info_resource": 674,
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "category": "Commercial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Broad glass office tower with setbacks and a plaza."
+    },
+    {
+      "kind": 184,
+      "tile_info_description": "Office tower",
+      "tile_info_resource": 675,
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "category": "Commercial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Paired tall office towers linked by a lower podium."
+    },
+    {
+      "kind": 185,
+      "tile_info_description": "Parking lot",
+      "tile_info_resource": 676,
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "category": "Commercial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Surface car park with varied vehicles, landscaped islands and an entrance booth."
+    },
+    {
+      "kind": 186,
+      "tile_info_description": "Historic office building",
+      "tile_info_resource": 677,
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "category": "Commercial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Tall historic masonry office building with a detailed cornice and formal entrance."
+    },
+    {
+      "kind": 187,
+      "tile_info_description": "Corporate headquarters",
+      "tile_info_resource": 678,
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "category": "Commercial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Landmark corporate headquarters with a tall tower, lower wings and public forecourt."
+    },
+    {
+      "kind": 188,
+      "tile_info_description": "Chemical processing",
+      "tile_info_resource": 679,
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "category": "Industrial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Large chemical works with several process towers, pipe bridges and storage tanks."
+    },
+    {
+      "kind": 189,
+      "tile_info_description": "Large factory",
+      "tile_info_resource": 680,
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "category": "Industrial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Large industrial factory with multiple production halls, loading yards and chimneys."
+    },
+    {
+      "kind": 190,
+      "tile_info_description": "Industrial thingamajig",
+      "tile_info_resource": 681,
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "category": "Industrial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Specialised industrial machinery works with a prominent apparatus, ducts and service buildings; exact process is unspecified."
+    },
+    {
+      "kind": 191,
+      "tile_info_description": "Factory",
+      "tile_info_resource": 682,
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "category": "Industrial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Large manufacturing complex with contrasting workshop roof heights."
+    },
+    {
+      "kind": 192,
+      "tile_info_description": "Large warehouse",
+      "tile_info_resource": 683,
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "category": "Industrial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Logistics warehouse complex with many loading bays and a truck court."
+    },
+    {
+      "kind": 193,
+      "tile_info_description": "Warehouse",
+      "tile_info_resource": 684,
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "category": "Industrial",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Broad storage warehouse with rail-side loading and a separate service building."
+    },
+    {
+      "kind": 194,
+      "tile_info_description": "Construction",
+      "tile_info_resource": 685,
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "category": "Construction",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Large construction site with excavation, foundations and a tower crane."
+    },
+    {
+      "kind": 195,
+      "tile_info_description": "Construction",
+      "tile_info_resource": 686,
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "category": "Construction",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Large construction site with a substantial structural frame and partial cladding."
+    },
+    {
+      "kind": 196,
+      "tile_info_description": "Abandoned building",
+      "tile_info_resource": 687,
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "category": "Abandoned",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Large vacant urban block with boarded entrances and neglected courtyards."
+    },
+    {
+      "kind": 197,
+      "tile_info_description": "Abandoned building",
+      "tile_info_resource": 688,
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "category": "Abandoned",
+      "artwork_status": "needs_high_resolution_artwork",
+      "proposed_design": "Large disused industrial complex with damaged roofs and overgrown service yards."
+    },
+    {
+      "kind": 198,
+      "tile_info_description": "Hydroelectric power",
+      "tile_info_resource": 689,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Hydroelectric Plant",
+      "manifest": "assets/landscape/civic/198-hydro-power/sprites.json"
+    },
+    {
+      "kind": 199,
+      "tile_info_description": "Hydroelectric power",
+      "tile_info_resource": 690,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Legacy variant",
+      "artwork_status": "retired_native_variant",
+      "native_kind": 198
+    },
+    {
+      "kind": 200,
+      "tile_info_description": "Wind power",
+      "tile_info_resource": 691,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Wind Power Plant",
+      "manifest": "assets/landscape/civic/200-wind-power/sprites.json"
+    },
+    {
+      "kind": 201,
+      "tile_info_description": "Natural gas power plant",
+      "tile_info_resource": 692,
+      "footprint_tiles": [
+        4,
+        4
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Gas Power Plant",
+      "manifest": "assets/landscape/civic/201-gas-power-plant/sprites.json"
+    },
+    {
+      "kind": 202,
+      "tile_info_description": "Oil power plant",
+      "tile_info_resource": 693,
+      "footprint_tiles": [
+        4,
+        4
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Oil Power Plant",
+      "manifest": "assets/landscape/civic/202-oil-power-plant/sprites.json"
+    },
+    {
+      "kind": 203,
+      "tile_info_description": "Nuclear power plant",
+      "tile_info_resource": 694,
+      "footprint_tiles": [
+        4,
+        4
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Nuclear Power Plant",
+      "manifest": "assets/landscape/civic/203-nuclear-power-plant/sprites.json"
+    },
+    {
+      "kind": 204,
+      "tile_info_description": "Solar power plant",
+      "tile_info_resource": 695,
+      "footprint_tiles": [
+        4,
+        4
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Solar Power Plant",
+      "manifest": "assets/landscape/civic/204-solar-power-plant/sprites.json"
+    },
+    {
+      "kind": 205,
+      "tile_info_description": "Microwave power plant",
+      "tile_info_resource": 696,
+      "footprint_tiles": [
+        4,
+        4
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Microwave Power Plant",
+      "manifest": "assets/landscape/civic/205-microwave-power-plant/sprites.json"
+    },
+    {
+      "kind": 206,
+      "tile_info_description": "Fusion power plant",
+      "tile_info_resource": 697,
+      "footprint_tiles": [
+        4,
+        4
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Fusion Power Plant",
+      "manifest": "assets/landscape/civic/206-fusion-power-plant/sprites.json"
+    },
+    {
+      "kind": 207,
+      "tile_info_description": "Coal power plant",
+      "tile_info_resource": 698,
+      "footprint_tiles": [
+        4,
+        4
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Coal Power Plant",
+      "manifest": "assets/landscape/civic/207-coal-power-plant/sprites.json"
+    },
+    {
+      "kind": 208,
+      "tile_info_description": "City Hall",
+      "tile_info_resource": 699,
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "City Hall",
+      "manifest": "assets/landscape/civic/208-city-hall/sprites.json"
+    },
+    {
+      "kind": 209,
+      "tile_info_description": "Hospital",
+      "tile_info_resource": 700,
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Hospital",
+      "manifest": "assets/landscape/civic/209-hospital/sprites.json"
+    },
+    {
+      "kind": 210,
+      "tile_info_description": "Police station",
+      "tile_info_resource": 701,
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Police Station",
+      "manifest": "assets/landscape/civic/210-police-station/sprites.json"
+    },
+    {
+      "kind": 211,
+      "tile_info_description": "Fire station",
+      "tile_info_resource": 702,
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Fire Station",
+      "manifest": "assets/landscape/civic/211-fire-station/sprites.json"
+    },
+    {
+      "kind": 212,
+      "tile_info_description": "Museum",
+      "tile_info_resource": 703,
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Museum",
+      "manifest": "assets/landscape/civic/212-museum/sprites.json"
+    },
+    {
+      "kind": 213,
+      "tile_info_description": "Park",
+      "tile_info_resource": 704,
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Park",
+      "manifest": "assets/landscape/civic/213-park/sprites.json"
+    },
+    {
+      "kind": 214,
+      "tile_info_description": "School",
+      "tile_info_resource": 705,
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "School",
+      "manifest": "assets/landscape/civic/214-school/sprites.json"
+    },
+    {
+      "kind": 215,
+      "tile_info_description": "Stadium",
+      "tile_info_resource": 706,
+      "footprint_tiles": [
+        4,
+        4
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Stadium",
+      "manifest": "assets/landscape/civic/215-stadium/sprites.json"
+    },
+    {
+      "kind": 216,
+      "tile_info_description": "Prison",
+      "tile_info_resource": 707,
+      "footprint_tiles": [
+        4,
+        4
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Prison",
+      "manifest": "assets/landscape/civic/216-prison/sprites.json"
+    },
+    {
+      "kind": 217,
+      "tile_info_description": "College",
+      "tile_info_resource": 708,
+      "footprint_tiles": [
+        4,
+        4
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "College",
+      "manifest": "assets/landscape/civic/217-college/sprites.json"
+    },
+    {
+      "kind": 218,
+      "tile_info_description": "Zoo",
+      "tile_info_resource": 709,
+      "footprint_tiles": [
+        4,
+        4
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Zoo",
+      "manifest": "assets/landscape/civic/218-zoo/sprites.json"
+    },
+    {
+      "kind": 219,
+      "tile_info_description": "Statue",
+      "tile_info_resource": 710,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Statue",
+      "manifest": "assets/landscape/civic/219-statue/sprites.json"
+    },
+    {
+      "kind": 220,
+      "tile_info_description": "Water pump",
+      "tile_info_resource": 711,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Water Pump",
+      "manifest": "assets/landscape/civic/220-water-pump/sprites.json"
+    },
+    {
+      "kind": 221,
+      "tile_info_description": "Runway",
+      "tile_info_resource": 712,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Runway",
+      "manifest": "assets/landscape/civic/221-runway/sprites.json"
+    },
+    {
+      "kind": 222,
+      "tile_info_description": "Runway",
+      "tile_info_resource": 713,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Runway Crossing",
+      "manifest": "assets/landscape/civic/222-runway-crossing/sprites.json"
+    },
+    {
+      "kind": 223,
+      "tile_info_description": "Pier",
+      "tile_info_resource": 714,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Pier",
+      "manifest": "assets/landscape/civic/223-pier/sprites.json"
+    },
+    {
+      "kind": 224,
+      "tile_info_description": "Crane",
+      "tile_info_resource": 715,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Crane",
+      "manifest": "assets/landscape/civic/224-crane/sprites.json"
+    },
+    {
+      "kind": 225,
+      "tile_info_description": "Control tower",
+      "tile_info_resource": 716,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Control Tower 1",
+      "manifest": "assets/landscape/civic/225-control-tower/sprites.json"
+    },
+    {
+      "kind": 226,
+      "tile_info_description": "Control tower",
+      "tile_info_resource": 717,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Control Tower 2",
+      "manifest": "assets/landscape/civic/226-control-tower/sprites.json"
+    },
+    {
+      "kind": 227,
+      "tile_info_description": "Warehouse",
+      "tile_info_resource": 718,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Warehouse",
+      "manifest": "assets/landscape/civic/227-warehouse/sprites.json"
+    },
+    {
+      "kind": 228,
+      "tile_info_description": "Building",
+      "tile_info_resource": 719,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Airport Building 1",
+      "manifest": "assets/landscape/civic/228-airport-building/sprites.json"
+    },
+    {
+      "kind": 229,
+      "tile_info_description": "Buiding",
+      "tile_info_resource": 720,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Airport Building 2",
+      "manifest": "assets/landscape/civic/229-airport-building/sprites.json"
+    },
+    {
+      "kind": 230,
+      "tile_info_description": "Tarmac",
+      "tile_info_resource": 721,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Tarmac",
+      "manifest": "assets/landscape/civic/230-tarmac/sprites.json"
+    },
+    {
+      "kind": 231,
+      "tile_info_description": "F-15b",
+      "tile_info_resource": 722,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "F-15B",
+      "manifest": "assets/landscape/civic/231-fighter/sprites.json"
+    },
+    {
+      "kind": 232,
+      "tile_info_description": "Hanger",
+      "tile_info_resource": 723,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Hangar",
+      "manifest": "assets/landscape/civic/232-hangar/sprites.json"
+    },
+    {
+      "kind": 233,
+      "tile_info_description": "Subway Station",
+      "tile_info_resource": 724,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Subway Station",
+      "manifest": "assets/landscape/civic/233-subway-station/sprites.json"
+    },
+    {
+      "kind": 234,
+      "tile_info_description": "Radar",
+      "tile_info_resource": 725,
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Radar",
+      "manifest": "assets/landscape/civic/234-radar/sprites.json"
+    },
+    {
+      "kind": 235,
+      "tile_info_description": "Water tower",
+      "tile_info_resource": 726,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Water Tower",
+      "manifest": "assets/landscape/civic/235-water-tower/sprites.json"
+    },
+    {
+      "kind": 236,
+      "tile_info_description": "Bus station",
+      "tile_info_resource": 727,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Bus Station",
+      "manifest": "assets/landscape/civic/236-bus-station/sprites.json"
+    },
+    {
+      "kind": 237,
+      "tile_info_description": "Rail station",
+      "tile_info_resource": 728,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Rail Station",
+      "manifest": "assets/landscape/civic/237-rail-station/sprites.json"
+    },
+    {
+      "kind": 238,
+      "tile_info_description": "Parking lot",
+      "tile_info_resource": 729,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Parking Lot One",
+      "manifest": "assets/landscape/civic/238-parking-lot-one/sprites.json"
+    },
+    {
+      "kind": 239,
+      "tile_info_description": "Parking lot",
+      "tile_info_resource": 730,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Covered Parking Lot",
+      "manifest": "assets/landscape/civic/239-parking-lot-two/sprites.json"
+    },
+    {
+      "kind": 240,
+      "tile_info_description": "Loading bay",
+      "tile_info_resource": 731,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Loading Bay",
+      "manifest": "assets/landscape/civic/240-loading-bay/sprites.json"
+    },
+    {
+      "kind": 241,
+      "tile_info_description": "Top Secret",
+      "tile_info_resource": 732,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Top Secret Facility",
+      "manifest": "assets/landscape/civic/241-top-secret/sprites.json"
+    },
+    {
+      "kind": 242,
+      "tile_info_description": "Cargo yard",
+      "tile_info_resource": 733,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Cargo Yard",
+      "manifest": "assets/landscape/civic/242-cargo-yard/sprites.json"
+    },
+    {
+      "kind": 243,
+      "tile_info_description": "man",
+      "tile_info_resource": 734,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Mayor’s House",
+      "manifest": "assets/landscape/civic/243-mayors-house/sprites.json"
+    },
+    {
+      "kind": 244,
+      "tile_info_description": "Water treatment plant",
+      "tile_info_resource": 735,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Water Treatment Plant",
+      "manifest": "assets/landscape/civic/244-water-treatment-plant/sprites.json"
+    },
+    {
+      "kind": 245,
+      "tile_info_description": "Library",
+      "tile_info_resource": 736,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Library",
+      "manifest": "assets/landscape/civic/245-library/sprites.json"
+    },
+    {
+      "kind": 246,
+      "tile_info_description": "Hangar",
+      "tile_info_resource": 737,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Aircraft Hangar",
+      "manifest": "assets/landscape/civic/246-hangar/sprites.json"
+    },
+    {
+      "kind": 247,
+      "tile_info_description": "Church",
+      "tile_info_resource": 738,
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Church",
+      "manifest": "assets/landscape/civic/247-church/sprites.json"
+    },
+    {
+      "kind": 248,
+      "tile_info_description": "Marina",
+      "tile_info_resource": 739,
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Marina",
+      "manifest": "assets/landscape/civic/248-marina/sprites.json"
+    },
+    {
+      "kind": 249,
+      "tile_info_description": "Missile silo",
+      "tile_info_resource": 740,
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Missile Silo",
+      "manifest": "assets/landscape/civic/249-missile-silo/sprites.json"
+    },
+    {
+      "kind": 250,
+      "tile_info_description": "Desalinization plant",
+      "tile_info_resource": 741,
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Desalination Plant",
+      "manifest": "assets/landscape/civic/250-desalination-plant/sprites.json"
+    },
+    {
+      "kind": 251,
+      "tile_info_description": "Plymoth Archology",
+      "tile_info_resource": 742,
+      "footprint_tiles": [
+        4,
+        4
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Plymouth Arcology",
+      "manifest": "assets/landscape/civic/251-plymouth-arcology/sprites.json"
+    },
+    {
+      "kind": 252,
+      "tile_info_description": "Forest Arcology",
+      "tile_info_resource": 743,
+      "footprint_tiles": [
+        4,
+        4
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Forest Arcology",
+      "manifest": "assets/landscape/civic/252-forest-arcology/sprites.json"
+    },
+    {
+      "kind": 253,
+      "tile_info_description": "Darco Arcology",
+      "tile_info_resource": 744,
+      "footprint_tiles": [
+        4,
+        4
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Darco Arcology",
+      "manifest": "assets/landscape/civic/253-darco-arcology/sprites.json"
+    },
+    {
+      "kind": 254,
+      "tile_info_description": "Lanch Archology",
+      "tile_info_resource": 745,
+      "footprint_tiles": [
+        4,
+        4
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Launch Arcology",
+      "manifest": "assets/landscape/civic/254-launch-arcology/sprites.json"
+    },
+    {
+      "kind": 255,
+      "tile_info_description": "Braun Llama-dome",
+      "tile_info_resource": 746,
+      "footprint_tiles": [
+        4,
+        4
+      ],
+      "category": "Civic, utility, transport or special",
+      "artwork_status": "installed_four_views_128px_per_tile",
+      "artwork_name": "Braun Llama Dome",
+      "manifest": "assets/landscape/civic/255-braun-llama-dome/sprites.json"
+    }
+  ]
+}

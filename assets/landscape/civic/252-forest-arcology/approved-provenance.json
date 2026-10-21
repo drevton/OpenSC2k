@@ -1,0 +1,40 @@
+{
+  "kind": 252,
+  "source_selection": {
+    "kind": 252,
+    "name": "Forest Arcology",
+    "review": "assets/landscape/building-studies/approval-batch-249-252/252-forest-arcology/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-249-252/252-forest-arcology/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-249-252/252-forest-arcology/calibrated-source.png",
+    "review_sha256": "cf6122ca3c0089fe2f55eae5d9150abc7b0b46070d9e860a9b199280afec72c2"
+  },
+  "installed_view_sha256": "cf6122ca3c0089fe2f55eae5d9150abc7b0b46070d9e860a9b199280afec72c2",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-249-252/252-forest-arcology/calibrated-source.png",
+      "installed": "assets/landscape/civic/252-forest-arcology/approved-original.png",
+      "sha256": "28b2e53ae0881d9ce714030164aa94d3d0394c7b971b0cd1c89bd463ea43bf83"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-249-252/252-forest-arcology/calibrated-source.png",
+      "installed": "assets/landscape/civic/252-forest-arcology/approved-foreground.png",
+      "sha256": "28b2e53ae0881d9ce714030164aa94d3d0394c7b971b0cd1c89bd463ea43bf83"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-249-252/252-forest-arcology/native-foundation-mask.png",
+      "installed": "assets/landscape/civic/252-forest-arcology/approved-foundation-mask.png",
+      "sha256": "20b75d1beb1e53928f33df7ca14501f666528eeabab10e09f0532622d5a1c9a4"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-249-252/252-forest-arcology/view-0.png",
+      "installed": "assets/landscape/civic/252-forest-arcology/approved-view.png",
+      "sha256": "cf6122ca3c0089fe2f55eae5d9150abc7b0b46070d9e860a9b199280afec72c2"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-249-252/252-forest-arcology/ground-0.png",
+      "installed": "assets/landscape/civic/252-forest-arcology/approved-ground.png",
+      "sha256": "9f2180378b2bfc24c3177fb61bd37815f0d9e2331077138c02fa1b02ba7e5799"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

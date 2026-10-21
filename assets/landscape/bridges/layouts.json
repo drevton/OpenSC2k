@@ -1,0 +1,6468 @@
+{
+  "source": "OpenTTD src/table/bridge_land.h; OpenGFX2 bridges.pnml",
+  "styles": [
+    {
+      "name": "wood",
+      "pieces": [
+        [
+          [
+            {
+              "sheet": "wood",
+              "column": 65,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 65,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "wood",
+              "column": 0,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 0,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "wood",
+              "column": 65,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 65,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "wood",
+              "column": 0,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 0,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "wood",
+              "column": 65,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 65,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "wood",
+              "column": 0,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 0,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "wood",
+              "column": 65,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 65,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "wood",
+              "column": 0,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 0,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "wood",
+              "column": 65,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 65,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "wood",
+              "column": 0,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 0,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "wood",
+              "column": 65,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 65,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "wood",
+              "column": 0,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 0,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ]
+      ],
+      "rail_pieces": [
+        [
+          [
+            {
+              "sheet": "wood",
+              "column": 65,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 65,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "wood",
+              "column": 0,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 0,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "wood",
+              "column": 65,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 65,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "wood",
+              "column": 0,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 0,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "wood",
+              "column": 65,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 65,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "wood",
+              "column": 0,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 0,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "wood",
+              "column": 65,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 65,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "wood",
+              "column": 0,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 0,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "wood",
+              "column": 65,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 65,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "wood",
+              "column": 0,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 0,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "wood",
+              "column": 65,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 65,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "wood",
+              "column": 0,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 0,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "wood",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "concrete",
+      "pieces": [
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 715,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "suspension",
+              "column": 715,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 650,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "suspension",
+              "column": 650,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 715,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "suspension",
+              "column": 715,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 650,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "suspension",
+              "column": 650,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 715,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "suspension",
+              "column": 715,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 650,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "suspension",
+              "column": 650,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 715,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "suspension",
+              "column": 715,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 650,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "suspension",
+              "column": 650,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 715,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "suspension",
+              "column": 715,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 650,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "suspension",
+              "column": 650,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 715,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "suspension",
+              "column": 715,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 650,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "suspension",
+              "column": 650,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ]
+      ],
+      "rail_pieces": [
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 715,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "suspension",
+              "column": 715,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 650,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "suspension",
+              "column": 650,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 715,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "suspension",
+              "column": 715,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 650,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "suspension",
+              "column": 650,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 715,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "suspension",
+              "column": 715,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 650,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "suspension",
+              "column": 650,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 715,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "suspension",
+              "column": 715,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 650,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "suspension",
+              "column": 650,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 715,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "suspension",
+              "column": 715,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 650,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "suspension",
+              "column": 650,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 715,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "suspension",
+              "column": 715,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 650,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "suspension",
+              "column": 650,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "archgirder",
+      "pieces": [
+        [
+          [
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ]
+      ],
+      "rail_pieces": [
+        [
+          [
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "suspension_concrete",
+      "pieces": [
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 65,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 65,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 65,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            }
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 0,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 0,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 0,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 195,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 195,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 195,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            }
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 130,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 130,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 130,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 455,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 455,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 455,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            }
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 390,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 390,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 390,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 325,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 325,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 325,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            }
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 260,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 260,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 260,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 585,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 585,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 585,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            }
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 520,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 520,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 520,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 715,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 715,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            null
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 650,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 650,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            null
+          ]
+        ]
+      ],
+      "rail_pieces": [
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 65,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 65,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 65,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            }
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 0,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 0,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 0,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 195,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 195,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 195,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            }
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 130,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 130,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 130,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 455,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 455,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 455,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            }
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 390,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 390,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 390,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 325,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 325,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 325,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            }
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 260,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 260,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 260,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 585,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 585,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 585,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            }
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 520,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 520,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 520,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 715,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 715,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            null
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 650,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 650,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            null
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "suspension_oxide",
+      "pieces": [
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 65,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 65,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 0,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 0,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 195,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 195,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 195,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 130,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 130,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 130,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 455,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 455,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 455,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 390,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 390,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 390,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 325,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 325,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 325,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 260,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 260,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 260,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 585,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 585,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 585,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 520,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 520,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 520,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 715,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 715,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            null
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 650,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 650,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            null
+          ]
+        ]
+      ],
+      "rail_pieces": [
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 65,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 65,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 0,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 0,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 195,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 195,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 195,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 130,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 130,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 130,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 455,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 455,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 455,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 390,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 390,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 390,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 325,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 325,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 325,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 260,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 260,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 260,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 585,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 585,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 585,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 520,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 520,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 520,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 715,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 715,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            null
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 650,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "suspension",
+              "column": 650,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            null
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "suspension_yellow",
+      "pieces": [
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 65,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 65,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 65,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            }
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 0,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 0,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 0,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 195,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 195,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 195,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            }
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 130,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 130,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 130,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 455,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 455,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 455,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            }
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 390,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 390,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 390,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 325,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 325,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 325,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            }
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 260,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 260,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 260,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 585,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 585,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 585,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            }
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 520,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 520,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 520,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 715,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 715,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            null
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 650,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 650,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            null
+          ]
+        ]
+      ],
+      "rail_pieces": [
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 65,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 65,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 65,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            }
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 0,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 0,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 0,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 195,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 195,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 195,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            }
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 130,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 130,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 130,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 455,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 455,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 455,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            }
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 390,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 390,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 390,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 325,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 325,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 325,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            }
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 260,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 260,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 260,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 585,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 585,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 585,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            }
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 520,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 520,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 520,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "suspension",
+              "column": 715,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 715,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            null
+          ],
+          [
+            {
+              "sheet": "suspension",
+              "column": 650,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "suspension",
+              "column": 650,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            null
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "cantilever_oxide",
+      "pieces": [
+        [
+          [
+            {
+              "sheet": "girder",
+              "column": 325,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 325,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            null
+          ],
+          [
+            {
+              "sheet": "girder",
+              "column": 0,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 0,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            null
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "girder",
+              "column": 65,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 65,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "girder",
+              "column": 260,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 260,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 260,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ]
+      ],
+      "rail_pieces": [
+        [
+          [
+            {
+              "sheet": "girder",
+              "column": 325,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 325,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            null
+          ],
+          [
+            {
+              "sheet": "girder",
+              "column": 0,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 0,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            null
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "girder",
+              "column": 65,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 65,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "girder",
+              "column": 260,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 260,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 260,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "cantilever_brown",
+      "pieces": [
+        [
+          [
+            {
+              "sheet": "girder",
+              "column": 325,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 325,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            null
+          ],
+          [
+            {
+              "sheet": "girder",
+              "column": 0,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 0,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            null
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "girder",
+              "column": 65,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 65,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 65,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            }
+          ],
+          [
+            {
+              "sheet": "girder",
+              "column": 260,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 260,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 260,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            }
+          ],
+          [
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            }
+          ],
+          [
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            }
+          ],
+          [
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            }
+          ],
+          [
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            }
+          ]
+        ]
+      ],
+      "rail_pieces": [
+        [
+          [
+            {
+              "sheet": "girder",
+              "column": 325,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 325,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            null
+          ],
+          [
+            {
+              "sheet": "girder",
+              "column": 0,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 0,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            null
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "girder",
+              "column": 65,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 65,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 65,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            }
+          ],
+          [
+            {
+              "sheet": "girder",
+              "column": 260,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 260,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 260,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            }
+          ],
+          [
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            }
+          ],
+          [
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            }
+          ],
+          [
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            }
+          ],
+          [
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_BROWN"
+            }
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "cantilever_red",
+      "pieces": [
+        [
+          [
+            {
+              "sheet": "girder",
+              "column": 325,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 325,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            null
+          ],
+          [
+            {
+              "sheet": "girder",
+              "column": 0,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 0,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            null
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "girder",
+              "column": 65,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 65,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 65,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            }
+          ],
+          [
+            {
+              "sheet": "girder",
+              "column": 260,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 260,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 260,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            }
+          ],
+          [
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            }
+          ],
+          [
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            }
+          ],
+          [
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            }
+          ],
+          [
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            }
+          ]
+        ]
+      ],
+      "rail_pieces": [
+        [
+          [
+            {
+              "sheet": "girder",
+              "column": 325,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 325,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            null
+          ],
+          [
+            {
+              "sheet": "girder",
+              "column": 0,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 0,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            null
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "girder",
+              "column": 65,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 65,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 65,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            }
+          ],
+          [
+            {
+              "sheet": "girder",
+              "column": 260,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 260,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 260,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            }
+          ],
+          [
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            }
+          ],
+          [
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            }
+          ],
+          [
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 195,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            }
+          ],
+          [
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            },
+            {
+              "sheet": "girder",
+              "column": 130,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_RED"
+            }
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "girder",
+      "pieces": [
+        [
+          [
+            {
+              "sheet": "steelfast",
+              "column": 65,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelfast",
+              "column": 65,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "steelfast",
+              "column": 0,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelfast",
+              "column": 0,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "steelfast",
+              "column": 65,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelfast",
+              "column": 65,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "steelfast",
+              "column": 0,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelfast",
+              "column": 0,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "steelfast",
+              "column": 65,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelfast",
+              "column": 65,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "steelfast",
+              "column": 0,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelfast",
+              "column": 0,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "steelfast",
+              "column": 65,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelfast",
+              "column": 65,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "steelfast",
+              "column": 0,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelfast",
+              "column": 0,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "steelfast",
+              "column": 65,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelfast",
+              "column": 65,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "steelfast",
+              "column": 0,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelfast",
+              "column": 0,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "steelfast",
+              "column": 65,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelfast",
+              "column": 65,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "steelfast",
+              "column": 0,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelfast",
+              "column": 0,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ]
+      ],
+      "rail_pieces": [
+        [
+          [
+            {
+              "sheet": "steelfast",
+              "column": 65,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelfast",
+              "column": 65,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "steelfast",
+              "column": 0,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelfast",
+              "column": 0,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "steelfast",
+              "column": 65,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelfast",
+              "column": 65,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "steelfast",
+              "column": 0,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelfast",
+              "column": 0,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "steelfast",
+              "column": 65,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelfast",
+              "column": 65,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "steelfast",
+              "column": 0,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelfast",
+              "column": 0,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "steelfast",
+              "column": 65,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelfast",
+              "column": 65,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "steelfast",
+              "column": 0,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelfast",
+              "column": 0,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "steelfast",
+              "column": 65,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelfast",
+              "column": 65,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "steelfast",
+              "column": 0,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelfast",
+              "column": 0,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "steelfast",
+              "column": 65,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelfast",
+              "column": 65,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "steelfast",
+              "column": 0,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelfast",
+              "column": 0,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "steelslow",
+              "column": 0,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "tubular_oxide",
+      "pieces": [
+        [
+          [
+            {
+              "sheet": "tubular",
+              "column": 325,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 325,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            null
+          ],
+          [
+            {
+              "sheet": "tubular",
+              "column": 0,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 0,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            null
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "tubular",
+              "column": 65,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 65,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "tubular",
+              "column": 260,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 260,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 260,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ]
+      ],
+      "rail_pieces": [
+        [
+          [
+            {
+              "sheet": "tubular",
+              "column": 325,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 325,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            null
+          ],
+          [
+            {
+              "sheet": "tubular",
+              "column": 0,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 0,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            null
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "tubular",
+              "column": 65,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 65,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 65,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "tubular",
+              "column": 260,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 260,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 260,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ],
+          [
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 0,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 129,
+              "palette": "PAL_NONE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 259,
+              "palette": "PAL_NONE"
+            }
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "tubular_yellow",
+      "pieces": [
+        [
+          [
+            {
+              "sheet": "tubular",
+              "column": 325,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 325,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            null
+          ],
+          [
+            {
+              "sheet": "tubular",
+              "column": 0,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 0,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            null
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "tubular",
+              "column": 65,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 65,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 65,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            }
+          ],
+          [
+            {
+              "sheet": "tubular",
+              "column": 260,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 260,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 260,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            }
+          ],
+          [
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            }
+          ],
+          [
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            }
+          ],
+          [
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            }
+          ],
+          [
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            }
+          ]
+        ]
+      ],
+      "rail_pieces": [
+        [
+          [
+            {
+              "sheet": "tubular",
+              "column": 325,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 325,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            null
+          ],
+          [
+            {
+              "sheet": "tubular",
+              "column": 0,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 0,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            null
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "tubular",
+              "column": 65,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 65,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 65,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            }
+          ],
+          [
+            {
+              "sheet": "tubular",
+              "column": 260,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 260,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 260,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            }
+          ],
+          [
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            }
+          ],
+          [
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            }
+          ],
+          [
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            }
+          ],
+          [
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_YELLOW"
+            }
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "tubular_silicon",
+      "pieces": [
+        [
+          [
+            {
+              "sheet": "tubular",
+              "column": 325,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 325,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            null
+          ],
+          [
+            {
+              "sheet": "tubular",
+              "column": 0,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 0,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            null
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "tubular",
+              "column": 65,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 65,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 65,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            }
+          ],
+          [
+            {
+              "sheet": "tubular",
+              "column": 260,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 260,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 260,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            }
+          ],
+          [
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            }
+          ],
+          [
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            }
+          ],
+          [
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            }
+          ],
+          [
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            }
+          ]
+        ]
+      ],
+      "rail_pieces": [
+        [
+          [
+            {
+              "sheet": "tubular",
+              "column": 325,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 325,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            null
+          ],
+          [
+            {
+              "sheet": "tubular",
+              "column": 0,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 0,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            null
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "tubular",
+              "column": 65,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 65,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 65,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            }
+          ],
+          [
+            {
+              "sheet": "tubular",
+              "column": 260,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 260,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 260,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            }
+          ],
+          [
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            }
+          ],
+          [
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            }
+          ],
+          [
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            }
+          ]
+        ],
+        [
+          [
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 195,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            }
+          ],
+          [
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 0,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 129,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            },
+            {
+              "sheet": "tubular",
+              "column": 130,
+              "row": 259,
+              "palette": "PALETTE_TO_STRUCT_CONCRETE"
+            }
+          ]
+        ]
+      ]
+    }
+  ]
+}

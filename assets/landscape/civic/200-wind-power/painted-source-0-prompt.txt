@@ -1,0 +1,6 @@
+Use case: sketch-to-render.
+Asset type: high resolution isometric game building sprite, Wind Power Plant, view 0 degrees.
+Input 1 is the immutable geometry and footprint guide. Input 2 is the existing illustrated design/style reference.
+Paint the exact object and square grass site in input 1 with the polished, vivid, slightly playful hand-painted finish of input 2. The fixed model has a tall tapered red-and-silver open lattice tower, a circular fan of exactly sixteen blue paddle blades, red central hub, and a pale tail vane with a red trailing tip. Preserve this model's camera angle, proportions, occlusion, fan plane and tower height. The small concrete footing pad, grass, four small leafy trees and their ground shadows are part of the illustration. Keep the complete square ground footprint with four sharp corners and thin edging, in a 2:1 diamond projection. Nothing may extend beyond the square ground horizontally.
+Style: detailed matte painted illustration, lively saturated blue and warm red, nuanced brush textures, fine metal details, soft daylight from upper left. Match the reference's hand-painted ground; never replace it with a blank geometric base.
+Output one isolated complete wind plant on genuinely transparent background. No labels, frames, collage, modern three-blade turbine, extra buildings or extra fans.

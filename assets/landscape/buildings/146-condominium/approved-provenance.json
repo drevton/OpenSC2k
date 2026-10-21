@@ -1,0 +1,40 @@
+{
+  "kind": 146,
+  "source_selection": {
+    "kind": 146,
+    "name": "Condominium",
+    "review": "assets/landscape/building-studies/approval-batch-144-147/146-condominium/native-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-144-147/146-condominium/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-144-147/146-condominium/painted-slender-dark-flower-pots-study.png",
+    "review_sha256": "a931dccaf572e486ba3097d9ccd6a7ccb71d3785467c0dd3655c24963b170b4f"
+  },
+  "installed_view_sha256": "a931dccaf572e486ba3097d9ccd6a7ccb71d3785467c0dd3655c24963b170b4f",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-144-147/146-condominium/painted-slender-dark-flower-pots-study.png",
+      "installed": "assets/landscape/buildings/146-condominium/approved-original.png",
+      "sha256": "74610a7185d8629c0a511c286fb3ae2a93b7c8a43d08ddfedabf4831911f17ce"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-144-147/146-condominium/painted-slender-dark-flower-pots-study.png",
+      "installed": "assets/landscape/buildings/146-condominium/approved-foreground.png",
+      "sha256": "74610a7185d8629c0a511c286fb3ae2a93b7c8a43d08ddfedabf4831911f17ce"
+    },
+    {
+      "source": "assets/landscape/buildings/146-condominium/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/146-condominium/approved-foundation-mask.png",
+      "sha256": "b4018bb08b2d5a4918dfb84335462b5e8d2fa3382836bef8dbcd5b6ff25deeca"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-144-147/146-condominium/view-0.png",
+      "installed": "assets/landscape/buildings/146-condominium/approved-view.png",
+      "sha256": "a931dccaf572e486ba3097d9ccd6a7ccb71d3785467c0dd3655c24963b170b4f"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-144-147/146-condominium/ground-0.png",
+      "installed": "assets/landscape/buildings/146-condominium/approved-ground.png",
+      "sha256": "96e29606d9ec0e5858247825736523e1ce6903f98b02b720b250b04fcb7ce984"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

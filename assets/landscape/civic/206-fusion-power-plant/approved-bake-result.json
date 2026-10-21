@@ -1,0 +1,45 @@
+[
+  {
+    "degrees": 0,
+    "file": "view-0.png",
+    "baseline": 720,
+    "canvas": [
+      512,
+      720
+    ],
+    "source_ground_corners": [
+      [
+        479,
+        1034.487885913352
+      ],
+      [
+        837.4638085446833,
+        1241.9766036350552
+      ],
+      [
+        1186,
+        1037.0243226325674
+      ]
+    ],
+    "source_front_slopes": [
+      0.5788275211494306,
+      -0.5880373000769517
+    ],
+    "ground_owned_pixels": 65536,
+    "ground_mask_mismatches": 0,
+    "ground_source": "paving texture",
+    "ground_in_sprite": false,
+    "native_terrain_union_mismatches": 0,
+    "sprite_pixels_outside_site_prism": 0,
+    "foreground_opaque_pixels_trimmed": 0,
+    "content_inset_pixels": 7,
+    "foreground_opaque_pixels": 76644,
+    "occupied_bounds": [
+      14,
+      440,
+      505,
+      716
+    ],
+    "occupied_height": 276
+  }
+]

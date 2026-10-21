@@ -1,0 +1,40 @@
+{
+  "kind": 192,
+  "source_selection": {
+    "kind": 192,
+    "name": "Large warehouse",
+    "review": "assets/landscape/building-studies/approval-batch-192-195/192-large-warehouse/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-192-195/192-large-warehouse/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-192-195/192-large-warehouse/registered-cutout-source.png",
+    "review_sha256": "45e2e4304669c2c3d9ac8dc6fffc33c03839ebc800fd2f175d322ac54ab9c27a"
+  },
+  "installed_view_sha256": "1c7613d1c580593602c7e0deeb06d6fef6d80adac18d0b63bec719846bb71705",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-192-195/192-large-warehouse/registered-full-plot-calibration.png",
+      "installed": "assets/landscape/buildings/192-large-warehouse/approved-original.png",
+      "sha256": "01ab72964fd910104386352057a3c7ce1983ffb749e6ac911fa5a83cc4906516"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-192-195/192-large-warehouse/registered-cutout-source.png",
+      "installed": "assets/landscape/buildings/192-large-warehouse/approved-foreground.png",
+      "sha256": "ec52eb2366f30442ce54ce4fb3cf610f80ecd1887530734fe990fe5dee90417a"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-192-195/192-large-warehouse/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/192-large-warehouse/approved-foundation-mask.png",
+      "sha256": "5b66f84868ee31d7ab0913aed644d93e5d62a12a4990b02f48175031cb64033c"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-192-195/192-large-warehouse/view-0.png",
+      "installed": "assets/landscape/buildings/192-large-warehouse/approved-view.png",
+      "sha256": "1c7613d1c580593602c7e0deeb06d6fef6d80adac18d0b63bec719846bb71705"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-192-195/192-large-warehouse/ground-0.png",
+      "installed": "assets/landscape/buildings/192-large-warehouse/approved-ground.png",
+      "sha256": "d69f19d6c62d2d53314fb0aa980ffb5e8d1587379b83ac895e5d3058da5f8dd6"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

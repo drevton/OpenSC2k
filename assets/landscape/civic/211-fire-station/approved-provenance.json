@@ -1,0 +1,83 @@
+{
+  "kind": 211,
+  "source_selection": {
+    "kind": 211,
+    "name": "Fire station",
+    "source": "assets/landscape/civic/211-fire-station/grey-trim-revision/grey-trim-raw.png",
+    "foreground": "assets/landscape/civic/211-fire-station/grey-trim-revision/grey-trim-cutout-raw.png",
+    "recipe": "assets/landscape/civic/211-fire-station/approved-bake.json",
+    "review": "assets/landscape/civic/211-fire-station/approved-view.png",
+    "generation_history": "assets/landscape/civic/211-fire-station/grey-trim-revision/generation-history.json",
+    "review_sha256": "3356e4a4d08a33cefc334cd940729ea2a5603db76455a2e81d8e56d40f0c7374"
+  },
+  "installed_view_sha256": "3356e4a4d08a33cefc334cd940729ea2a5603db76455a2e81d8e56d40f0c7374",
+  "dependencies": [
+    {
+      "source": "assets/landscape/civic/211-fire-station/grey-trim-revision/grey-trim-raw.png",
+      "installed": "assets/landscape/civic/211-fire-station/approved-original.png",
+      "sha256": "4c73e2547fb6deaab668e45fe175e01a321e8331f70186a8512a495b6b2b9f6a"
+    },
+    {
+      "source": "assets/landscape/civic/211-fire-station/grey-trim-revision/registered-foreground.png",
+      "installed": "assets/landscape/civic/211-fire-station/approved-foreground.png",
+      "sha256": "3157acb5326df624d6119778e8e4efb5e0c02083dcf7708852dfe2b6a8bcae81"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-209-212/211-fire-station/native-foundation-mask.png",
+      "installed": "assets/landscape/civic/211-fire-station/approved-foundation-mask.png",
+      "sha256": "43284b370c3cb125f8a7e52ae2a9a8ee00369f488551b62ead439965678fbf8e"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-209-212/211-fire-station/view-0.png",
+      "installed": "assets/landscape/civic/211-fire-station/approved-view.png",
+      "sha256": "3356e4a4d08a33cefc334cd940729ea2a5603db76455a2e81d8e56d40f0c7374"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-209-212/211-fire-station/ground-0.png",
+      "installed": "assets/landscape/civic/211-fire-station/approved-ground.png",
+      "sha256": "92df8bfd40a62e95a8663f9ad74da52d3208093a27954c025bc405ee2dff31d4"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view",
+  "previous_source_selection": {
+    "kind": 211,
+    "name": "Fire station",
+    "review": "assets/landscape/building-studies/approval-batch-209-212/211-fire-station/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-209-212/211-fire-station/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-209-212/211-fire-station/painted-volume-study.png",
+    "review_sha256": "85da3ff80c11cb886c80f7e38896f2f2e5f1d9fbcd155d6a2c65fa250df96170"
+  },
+  "projection_note": "Paving uses its authored diamond; architecture uses measured facade axes. The extracted building matte is subtracted from the ground before painting to prevent duplicated old wall bases.",
+  "source_selection_history": [
+    {
+      "kind": 211,
+      "name": "Fire station",
+      "source": "assets/landscape/civic/211-fire-station/yard-revision/stock-proportions-ground-raw.png",
+      "foreground": "assets/landscape/civic/211-fire-station/yard-revision/stock-proportions-cutout-raw.png",
+      "recipe": "assets/landscape/civic/211-fire-station/approved-bake.json",
+      "review": "assets/landscape/civic/211-fire-station/approved-view.png",
+      "generation_history": "assets/landscape/civic/211-fire-station/yard-revision/generation-history.json",
+      "review_sha256": "810eec6312ba46a06476d1a6e7bafada2a9b13355d69b0ea901c1b5a5f702bd5"
+    },
+    {
+      "kind": 211,
+      "name": "Fire station",
+      "source": "assets/landscape/civic/211-fire-station/centered-revision/centered-square-raw.png",
+      "foreground": "assets/landscape/civic/211-fire-station/centered-revision/centered-cutout-raw.png",
+      "recipe": "assets/landscape/civic/211-fire-station/approved-bake.json",
+      "review": "assets/landscape/civic/211-fire-station/approved-view.png",
+      "generation_history": "assets/landscape/civic/211-fire-station/centered-revision/generation-history.json",
+      "review_sha256": "d347d94bcc2955a9f43e391259dfd91b003ca17001d9899fc3b8466fced34a67"
+    },
+    {
+      "kind": 211,
+      "name": "Fire station",
+      "source": "assets/landscape/civic/211-fire-station/square-grass-revision/front-lawns-raw.png",
+      "foreground": "assets/landscape/civic/211-fire-station/square-grass-revision/square-cutout-raw.png",
+      "recipe": "assets/landscape/civic/211-fire-station/approved-bake.json",
+      "review": "assets/landscape/civic/211-fire-station/approved-view.png",
+      "generation_history": "assets/landscape/civic/211-fire-station/square-grass-revision/generation-history.json",
+      "review_sha256": "c158540fe7f51e02054523f6708458779763e78236d4f5d5213e5f8a840aa8b3"
+    }
+  ]
+}

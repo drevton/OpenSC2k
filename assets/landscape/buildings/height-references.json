@@ -1,0 +1,2455 @@
+{
+  "pixels_per_tile": 128,
+  "source_pixels_per_tile": 32,
+  "measurement": "ground anchor to highest occupied pixel; roof measurement excludes thin antenna tips",
+  "buildings": [
+    {
+      "kind": 13,
+      "name": "Small Park",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1013,
+      "source_canvas": [
+        32,
+        22
+      ],
+      "source_baseline": 21,
+      "source_top": 1,
+      "target_height": 80,
+      "target_roof_height": 76
+    },
+    {
+      "kind": 112,
+      "name": "Lower-class homes",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1112,
+      "source_canvas": [
+        32,
+        19
+      ],
+      "source_baseline": 18,
+      "source_top": 1,
+      "target_height": 68,
+      "target_roof_height": 68
+    },
+    {
+      "kind": 113,
+      "name": "Lower-class homes",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1113,
+      "source_canvas": [
+        32,
+        19
+      ],
+      "source_baseline": 18,
+      "source_top": 1,
+      "target_height": 68,
+      "target_roof_height": 68
+    },
+    {
+      "kind": 114,
+      "name": "Lower-class homes",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1114,
+      "source_canvas": [
+        32,
+        19
+      ],
+      "source_baseline": 18,
+      "source_top": 1,
+      "target_height": 68,
+      "target_roof_height": 68
+    },
+    {
+      "kind": 115,
+      "name": "Lower-class homes",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1115,
+      "source_canvas": [
+        32,
+        18
+      ],
+      "source_baseline": 17,
+      "source_top": 1,
+      "target_height": 64,
+      "target_roof_height": 64
+    },
+    {
+      "kind": 116,
+      "name": "Middle-class homes",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1116,
+      "source_canvas": [
+        32,
+        18
+      ],
+      "source_baseline": 17,
+      "source_top": 1,
+      "target_height": 64,
+      "target_roof_height": 64
+    },
+    {
+      "kind": 117,
+      "name": "Middle-class homes",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1117,
+      "source_canvas": [
+        32,
+        18
+      ],
+      "source_baseline": 17,
+      "source_top": 1,
+      "target_height": 64,
+      "target_roof_height": 64
+    },
+    {
+      "kind": 118,
+      "name": "Middle-class homes",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1118,
+      "source_canvas": [
+        32,
+        18
+      ],
+      "source_baseline": 17,
+      "source_top": 1,
+      "target_height": 64,
+      "target_roof_height": 64
+    },
+    {
+      "kind": 119,
+      "name": "Middle-class homes",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1119,
+      "source_canvas": [
+        32,
+        18
+      ],
+      "source_baseline": 17,
+      "source_top": 1,
+      "target_height": 64,
+      "target_roof_height": 64
+    },
+    {
+      "kind": 120,
+      "name": "Luxury Homes",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1120,
+      "source_canvas": [
+        32,
+        20
+      ],
+      "source_baseline": 19,
+      "source_top": 1,
+      "target_height": 72,
+      "target_roof_height": 72
+    },
+    {
+      "kind": 121,
+      "name": "Luxury Homes",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1121,
+      "source_canvas": [
+        32,
+        20
+      ],
+      "source_baseline": 19,
+      "source_top": 1,
+      "target_height": 72,
+      "target_roof_height": 72
+    },
+    {
+      "kind": 122,
+      "name": "Luxury Homes",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1122,
+      "source_canvas": [
+        32,
+        21
+      ],
+      "source_baseline": 20,
+      "source_top": 1,
+      "target_height": 76,
+      "target_roof_height": 76
+    },
+    {
+      "kind": 123,
+      "name": "Luxury Homes",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1123,
+      "source_canvas": [
+        32,
+        22
+      ],
+      "source_baseline": 21,
+      "source_top": 1,
+      "target_height": 80,
+      "target_roof_height": 80
+    },
+    {
+      "kind": 124,
+      "name": "Gas Station",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1124,
+      "source_canvas": [
+        32,
+        24
+      ],
+      "source_baseline": 23,
+      "source_top": 1,
+      "target_height": 88,
+      "target_roof_height": 88
+    },
+    {
+      "kind": 125,
+      "name": "Bed & Breakfast Inn",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1125,
+      "source_canvas": [
+        32,
+        28
+      ],
+      "source_baseline": 27,
+      "source_top": 1,
+      "target_height": 104,
+      "target_roof_height": 104
+    },
+    {
+      "kind": 126,
+      "name": "Convience Store",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1126,
+      "source_canvas": [
+        32,
+        21
+      ],
+      "source_baseline": 20,
+      "source_top": 1,
+      "target_height": 76,
+      "target_roof_height": 76
+    },
+    {
+      "kind": 127,
+      "name": "Gas Station",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1127,
+      "source_canvas": [
+        32,
+        19
+      ],
+      "source_baseline": 18,
+      "source_top": 1,
+      "target_height": 68,
+      "target_roof_height": 68
+    },
+    {
+      "kind": 128,
+      "name": "Small office building",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1128,
+      "source_canvas": [
+        32,
+        33
+      ],
+      "source_baseline": 32,
+      "source_top": 1,
+      "target_height": 124,
+      "target_roof_height": 124
+    },
+    {
+      "kind": 129,
+      "name": "Office building",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1129,
+      "source_canvas": [
+        32,
+        44
+      ],
+      "source_baseline": 43,
+      "source_top": 1,
+      "target_height": 168,
+      "target_roof_height": 168
+    },
+    {
+      "kind": 130,
+      "name": "Warehouse",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1130,
+      "source_canvas": [
+        32,
+        26
+      ],
+      "source_baseline": 25,
+      "source_top": 1,
+      "target_height": 96,
+      "target_roof_height": 96
+    },
+    {
+      "kind": 131,
+      "name": "Cassidy's Toy Store",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1131,
+      "source_canvas": [
+        32,
+        35
+      ],
+      "source_baseline": 34,
+      "source_top": 1,
+      "target_height": 132,
+      "target_roof_height": 132
+    },
+    {
+      "kind": 132,
+      "name": "Warehouse",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1132,
+      "source_canvas": [
+        32,
+        22
+      ],
+      "source_baseline": 21,
+      "source_top": 1,
+      "target_height": 80,
+      "target_roof_height": 80
+    },
+    {
+      "kind": 133,
+      "name": "Chemical Storage",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1133,
+      "source_canvas": [
+        32,
+        29
+      ],
+      "source_baseline": 28,
+      "source_top": 1,
+      "target_height": 108,
+      "target_roof_height": 108
+    },
+    {
+      "kind": 134,
+      "name": "Warehouse",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1134,
+      "source_canvas": [
+        32,
+        21
+      ],
+      "source_baseline": 20,
+      "source_top": 1,
+      "target_height": 76,
+      "target_roof_height": 76
+    },
+    {
+      "kind": 135,
+      "name": "Industrial substation",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1135,
+      "source_canvas": [
+        32,
+        27
+      ],
+      "source_baseline": 26,
+      "source_top": 1,
+      "target_height": 100,
+      "target_roof_height": 100
+    },
+    {
+      "kind": 136,
+      "name": "Construction",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1136,
+      "source_canvas": [
+        32,
+        19
+      ],
+      "source_baseline": 18,
+      "source_top": 1,
+      "target_height": 68,
+      "target_roof_height": 68
+    },
+    {
+      "kind": 137,
+      "name": "Construction",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1137,
+      "source_canvas": [
+        32,
+        19
+      ],
+      "source_baseline": 18,
+      "source_top": 1,
+      "target_height": 68,
+      "target_roof_height": 64
+    },
+    {
+      "kind": 138,
+      "name": "Abandoned building",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1138,
+      "source_canvas": [
+        32,
+        18
+      ],
+      "source_baseline": 17,
+      "source_top": 1,
+      "target_height": 64,
+      "target_roof_height": 64
+    },
+    {
+      "kind": 139,
+      "name": "Abandoned building",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1139,
+      "source_canvas": [
+        32,
+        18
+      ],
+      "source_baseline": 17,
+      "source_top": 1,
+      "target_height": 64,
+      "target_roof_height": 64
+    },
+    {
+      "kind": 140,
+      "name": "Cheap apartments",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1140,
+      "source_canvas": [
+        64,
+        35
+      ],
+      "source_baseline": 34,
+      "source_top": 1,
+      "target_height": 132,
+      "target_roof_height": 128
+    },
+    {
+      "kind": 141,
+      "name": "Apartments",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1141,
+      "source_canvas": [
+        64,
+        40
+      ],
+      "source_baseline": 39,
+      "source_top": 1,
+      "target_height": 152,
+      "target_roof_height": 148
+    },
+    {
+      "kind": 142,
+      "name": "Apartments",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1142,
+      "source_canvas": [
+        64,
+        37
+      ],
+      "source_baseline": 36,
+      "source_top": 1,
+      "target_height": 140,
+      "target_roof_height": 140
+    },
+    {
+      "kind": 143,
+      "name": "Nice Apartments",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1143,
+      "source_canvas": [
+        64,
+        45
+      ],
+      "source_baseline": 44,
+      "source_top": 1,
+      "target_height": 172,
+      "target_roof_height": 168
+    },
+    {
+      "kind": 144,
+      "name": "Nice Apartments",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1144,
+      "source_canvas": [
+        64,
+        54
+      ],
+      "source_baseline": 53,
+      "source_top": 1,
+      "target_height": 208,
+      "target_roof_height": 208
+    },
+    {
+      "kind": 145,
+      "name": "Condominium",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1145,
+      "source_canvas": [
+        64,
+        57
+      ],
+      "source_baseline": 56,
+      "source_top": 1,
+      "target_height": 220,
+      "target_roof_height": 220
+    },
+    {
+      "kind": 146,
+      "name": "Condominium",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1146,
+      "source_canvas": [
+        64,
+        79
+      ],
+      "source_baseline": 78,
+      "source_top": 1,
+      "target_height": 308,
+      "target_roof_height": 304
+    },
+    {
+      "kind": 147,
+      "name": "Condominium",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1147,
+      "source_canvas": [
+        64,
+        78
+      ],
+      "source_baseline": 77,
+      "source_top": 1,
+      "target_height": 304,
+      "target_roof_height": 300
+    },
+    {
+      "kind": 148,
+      "name": "Shopping center",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1148,
+      "source_canvas": [
+        64,
+        34
+      ],
+      "source_baseline": 33,
+      "source_top": 1,
+      "target_height": 128,
+      "target_roof_height": 128
+    },
+    {
+      "kind": 149,
+      "name": "Grocery story",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1149,
+      "source_canvas": [
+        64,
+        38
+      ],
+      "source_baseline": 37,
+      "source_top": 1,
+      "target_height": 144,
+      "target_roof_height": 144
+    },
+    {
+      "kind": 150,
+      "name": "Office building",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1150,
+      "source_canvas": [
+        64,
+        43
+      ],
+      "source_baseline": 42,
+      "source_top": 1,
+      "target_height": 164,
+      "target_roof_height": 160
+    },
+    {
+      "kind": 151,
+      "name": "Resort hotel",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1151,
+      "source_canvas": [
+        64,
+        47
+      ],
+      "source_baseline": 46,
+      "source_top": 1,
+      "target_height": 180,
+      "target_roof_height": 160
+    },
+    {
+      "kind": 152,
+      "name": "Office building",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1152,
+      "source_canvas": [
+        64,
+        47
+      ],
+      "source_baseline": 46,
+      "source_top": 1,
+      "target_height": 180,
+      "target_roof_height": 180
+    },
+    {
+      "kind": 153,
+      "name": "Office / Retail",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1153,
+      "source_canvas": [
+        64,
+        52
+      ],
+      "source_baseline": 51,
+      "source_top": 1,
+      "target_height": 200,
+      "target_roof_height": 200
+    },
+    {
+      "kind": 154,
+      "name": "Office building",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1154,
+      "source_canvas": [
+        64,
+        71
+      ],
+      "source_baseline": 70,
+      "source_top": 1,
+      "target_height": 276,
+      "target_roof_height": 268
+    },
+    {
+      "kind": 155,
+      "name": "Office building",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1155,
+      "source_canvas": [
+        64,
+        67
+      ],
+      "source_baseline": 66,
+      "source_top": 1,
+      "target_height": 260,
+      "target_roof_height": 256
+    },
+    {
+      "kind": 156,
+      "name": "Office building",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1156,
+      "source_canvas": [
+        64,
+        73
+      ],
+      "source_baseline": 72,
+      "source_top": 1,
+      "target_height": 284,
+      "target_roof_height": 280
+    },
+    {
+      "kind": 157,
+      "name": "Office building",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1157,
+      "source_canvas": [
+        64,
+        85
+      ],
+      "source_baseline": 84,
+      "source_top": 1,
+      "target_height": 332,
+      "target_roof_height": 332
+    },
+    {
+      "kind": 158,
+      "name": "Warehouse",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1158,
+      "source_canvas": [
+        64,
+        38
+      ],
+      "source_baseline": 37,
+      "source_top": 1,
+      "target_height": 144,
+      "target_roof_height": 140
+    },
+    {
+      "kind": 159,
+      "name": "Chemical processing",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1159,
+      "source_canvas": [
+        64,
+        39
+      ],
+      "source_baseline": 38,
+      "source_top": 1,
+      "target_height": 148,
+      "target_roof_height": 148
+    },
+    {
+      "kind": 160,
+      "name": "Factory",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1160,
+      "source_canvas": [
+        64,
+        46
+      ],
+      "source_baseline": 45,
+      "source_top": 1,
+      "target_height": 176,
+      "target_roof_height": 160
+    },
+    {
+      "kind": 161,
+      "name": "Factory",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1161,
+      "source_canvas": [
+        64,
+        36
+      ],
+      "source_baseline": 35,
+      "source_top": 1,
+      "target_height": 136,
+      "target_roof_height": 136
+    },
+    {
+      "kind": 162,
+      "name": "Factory",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1162,
+      "source_canvas": [
+        64,
+        46
+      ],
+      "source_baseline": 45,
+      "source_top": 1,
+      "target_height": 176,
+      "target_roof_height": 172
+    },
+    {
+      "kind": 163,
+      "name": "Factory",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1163,
+      "source_canvas": [
+        64,
+        57
+      ],
+      "source_baseline": 56,
+      "source_top": 1,
+      "target_height": 220,
+      "target_roof_height": 212
+    },
+    {
+      "kind": 164,
+      "name": "Factory",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1164,
+      "source_canvas": [
+        64,
+        62
+      ],
+      "source_baseline": 61,
+      "source_top": 1,
+      "target_height": 240,
+      "target_roof_height": 228
+    },
+    {
+      "kind": 165,
+      "name": "Factory",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1165,
+      "source_canvas": [
+        64,
+        67
+      ],
+      "source_baseline": 66,
+      "source_top": 1,
+      "target_height": 260,
+      "target_roof_height": 256
+    },
+    {
+      "kind": 166,
+      "name": "Construction",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1166,
+      "source_canvas": [
+        64,
+        34
+      ],
+      "source_baseline": 33,
+      "source_top": 1,
+      "target_height": 128,
+      "target_roof_height": 124
+    },
+    {
+      "kind": 167,
+      "name": "Construction",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1167,
+      "source_canvas": [
+        64,
+        45
+      ],
+      "source_baseline": 44,
+      "source_top": 1,
+      "target_height": 172,
+      "target_roof_height": 160
+    },
+    {
+      "kind": 168,
+      "name": "Construction",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1168,
+      "source_canvas": [
+        64,
+        45
+      ],
+      "source_baseline": 44,
+      "source_top": 1,
+      "target_height": 172,
+      "target_roof_height": 160
+    },
+    {
+      "kind": 169,
+      "name": "Construction",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1169,
+      "source_canvas": [
+        64,
+        66
+      ],
+      "source_baseline": 65,
+      "source_top": 1,
+      "target_height": 256,
+      "target_roof_height": 228
+    },
+    {
+      "kind": 170,
+      "name": "Abandoned building",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1170,
+      "source_canvas": [
+        64,
+        47
+      ],
+      "source_baseline": 46,
+      "source_top": 1,
+      "target_height": 180,
+      "target_roof_height": 180
+    },
+    {
+      "kind": 171,
+      "name": "Abandoned building",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1171,
+      "source_canvas": [
+        64,
+        54
+      ],
+      "source_baseline": 53,
+      "source_top": 1,
+      "target_height": 208,
+      "target_roof_height": 204
+    },
+    {
+      "kind": 172,
+      "name": "Abandoned building",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1172,
+      "source_canvas": [
+        64,
+        62
+      ],
+      "source_baseline": 61,
+      "source_top": 1,
+      "target_height": 240,
+      "target_roof_height": 240
+    },
+    {
+      "kind": 173,
+      "name": "Abandoned building",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1173,
+      "source_canvas": [
+        64,
+        74
+      ],
+      "source_baseline": 73,
+      "source_top": 1,
+      "target_height": 288,
+      "target_roof_height": 284
+    },
+    {
+      "kind": 174,
+      "name": "Large apartment building",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "source_sprite_id": 1174,
+      "source_canvas": [
+        96,
+        78
+      ],
+      "source_baseline": 77,
+      "source_top": 1,
+      "target_height": 304,
+      "target_roof_height": 304
+    },
+    {
+      "kind": 175,
+      "name": "Large apartment building",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "source_sprite_id": 1175,
+      "source_canvas": [
+        96,
+        89
+      ],
+      "source_baseline": 88,
+      "source_top": 1,
+      "target_height": 348,
+      "target_roof_height": 344
+    },
+    {
+      "kind": 176,
+      "name": "Condominium",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "source_sprite_id": 1176,
+      "source_canvas": [
+        96,
+        59
+      ],
+      "source_baseline": 58,
+      "source_top": 1,
+      "target_height": 228,
+      "target_roof_height": 216
+    },
+    {
+      "kind": 177,
+      "name": "Condominium",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "source_sprite_id": 1177,
+      "source_canvas": [
+        96,
+        97
+      ],
+      "source_baseline": 96,
+      "source_top": 1,
+      "target_height": 380,
+      "target_roof_height": 376
+    },
+    {
+      "kind": 178,
+      "name": "Office park",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "source_sprite_id": 1178,
+      "source_canvas": [
+        96,
+        62
+      ],
+      "source_baseline": 61,
+      "source_top": 1,
+      "target_height": 240,
+      "target_roof_height": 236
+    },
+    {
+      "kind": 179,
+      "name": "Office tower",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "source_sprite_id": 1179,
+      "source_canvas": [
+        96,
+        92
+      ],
+      "source_baseline": 91,
+      "source_top": 1,
+      "target_height": 360,
+      "target_roof_height": 356
+    },
+    {
+      "kind": 180,
+      "name": "Mini-mall",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "source_sprite_id": 1180,
+      "source_canvas": [
+        96,
+        66
+      ],
+      "source_baseline": 65,
+      "source_top": 1,
+      "target_height": 256,
+      "target_roof_height": 252
+    },
+    {
+      "kind": 181,
+      "name": "Theatre Square",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "source_sprite_id": 1181,
+      "source_canvas": [
+        96,
+        91
+      ],
+      "source_baseline": 90,
+      "source_top": 1,
+      "target_height": 356,
+      "target_roof_height": 352
+    },
+    {
+      "kind": 182,
+      "name": "Drive-in theater",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "source_sprite_id": 1182,
+      "source_canvas": [
+        96,
+        59
+      ],
+      "source_baseline": 58,
+      "source_top": 1,
+      "target_height": 228,
+      "target_roof_height": 224
+    },
+    {
+      "kind": 183,
+      "name": "Office tower",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "source_sprite_id": 1183,
+      "source_canvas": [
+        96,
+        118
+      ],
+      "source_baseline": 117,
+      "source_top": 1,
+      "target_height": 464,
+      "target_roof_height": 460
+    },
+    {
+      "kind": 184,
+      "name": "Office tower",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "source_sprite_id": 1184,
+      "source_canvas": [
+        96,
+        124
+      ],
+      "source_baseline": 123,
+      "source_top": 1,
+      "target_height": 488,
+      "target_roof_height": 480
+    },
+    {
+      "kind": 185,
+      "name": "Parking lot",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "source_sprite_id": 1185,
+      "source_canvas": [
+        96,
+        79
+      ],
+      "source_baseline": 78,
+      "source_top": 1,
+      "target_height": 308,
+      "target_roof_height": 304
+    },
+    {
+      "kind": 186,
+      "name": "Historic office building",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "source_sprite_id": 1186,
+      "source_canvas": [
+        96,
+        109
+      ],
+      "source_baseline": 108,
+      "source_top": 1,
+      "target_height": 428,
+      "target_roof_height": 424
+    },
+    {
+      "kind": 187,
+      "name": "Corporate headquarters",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "source_sprite_id": 1187,
+      "source_canvas": [
+        96,
+        138
+      ],
+      "source_baseline": 137,
+      "source_top": 1,
+      "target_height": 544,
+      "target_roof_height": 544
+    },
+    {
+      "kind": 188,
+      "name": "Chemical processing",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "source_sprite_id": 1188,
+      "source_canvas": [
+        96,
+        51
+      ],
+      "source_baseline": 50,
+      "source_top": 1,
+      "target_height": 196,
+      "target_roof_height": 196
+    },
+    {
+      "kind": 189,
+      "name": "Large factory",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "source_sprite_id": 1189,
+      "source_canvas": [
+        96,
+        87
+      ],
+      "source_baseline": 86,
+      "source_top": 1,
+      "target_height": 340,
+      "target_roof_height": 328
+    },
+    {
+      "kind": 190,
+      "name": "Industrial thingamajig",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "source_sprite_id": 1190,
+      "source_canvas": [
+        96,
+        56
+      ],
+      "source_baseline": 55,
+      "source_top": 1,
+      "target_height": 216,
+      "target_roof_height": 208
+    },
+    {
+      "kind": 191,
+      "name": "Factory",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "source_sprite_id": 1191,
+      "source_canvas": [
+        96,
+        64
+      ],
+      "source_baseline": 63,
+      "source_top": 1,
+      "target_height": 248,
+      "target_roof_height": 236
+    },
+    {
+      "kind": 192,
+      "name": "Large warehouse",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "source_sprite_id": 1192,
+      "source_canvas": [
+        96,
+        57
+      ],
+      "source_baseline": 56,
+      "source_top": 1,
+      "target_height": 220,
+      "target_roof_height": 216
+    },
+    {
+      "kind": 193,
+      "name": "Warehouse",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "source_sprite_id": 1193,
+      "source_canvas": [
+        96,
+        50
+      ],
+      "source_baseline": 49,
+      "source_top": 1,
+      "target_height": 192,
+      "target_roof_height": 188
+    },
+    {
+      "kind": 194,
+      "name": "Construction",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "source_sprite_id": 1194,
+      "source_canvas": [
+        96,
+        86
+      ],
+      "source_baseline": 85,
+      "source_top": 1,
+      "target_height": 336,
+      "target_roof_height": 328
+    },
+    {
+      "kind": 195,
+      "name": "Construction",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "source_sprite_id": 1195,
+      "source_canvas": [
+        96,
+        66
+      ],
+      "source_baseline": 65,
+      "source_top": 1,
+      "target_height": 256,
+      "target_roof_height": 252
+    },
+    {
+      "kind": 196,
+      "name": "Abandoned building",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "source_sprite_id": 1196,
+      "source_canvas": [
+        96,
+        75
+      ],
+      "source_baseline": 74,
+      "source_top": 1,
+      "target_height": 292,
+      "target_roof_height": 288
+    },
+    {
+      "kind": 197,
+      "name": "Abandoned building",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "source_sprite_id": 1197,
+      "source_canvas": [
+        96,
+        91
+      ],
+      "source_baseline": 90,
+      "source_top": 1,
+      "target_height": 356,
+      "target_roof_height": 352
+    },
+    {
+      "kind": 198,
+      "name": "Hydroelectric Plant",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1198,
+      "source_canvas": [
+        32,
+        33
+      ],
+      "source_baseline": 32,
+      "source_top": 1,
+      "target_height": 124,
+      "target_roof_height": 120
+    },
+    {
+      "kind": 200,
+      "name": "Wind Power Plant",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1200,
+      "source_canvas": [
+        32,
+        49
+      ],
+      "source_baseline": 48,
+      "source_top": 1,
+      "target_height": 188,
+      "target_roof_height": 188
+    },
+    {
+      "kind": 201,
+      "name": "Gas Power Plant",
+      "footprint_tiles": [
+        4,
+        4
+      ],
+      "source_sprite_id": 1201,
+      "source_canvas": [
+        128,
+        87
+      ],
+      "source_baseline": 86,
+      "source_top": 1,
+      "target_height": 340,
+      "target_roof_height": 332
+    },
+    {
+      "kind": 202,
+      "name": "Oil Power Plant",
+      "footprint_tiles": [
+        4,
+        4
+      ],
+      "source_sprite_id": 1202,
+      "source_canvas": [
+        128,
+        116
+      ],
+      "source_baseline": 115,
+      "source_top": 1,
+      "target_height": 456,
+      "target_roof_height": 436
+    },
+    {
+      "kind": 203,
+      "name": "Nuclear Power Plant",
+      "footprint_tiles": [
+        4,
+        4
+      ],
+      "source_sprite_id": 1203,
+      "source_canvas": [
+        128,
+        82
+      ],
+      "source_baseline": 81,
+      "source_top": 1,
+      "target_height": 320,
+      "target_roof_height": 316
+    },
+    {
+      "kind": 204,
+      "name": "Solar Power Plant",
+      "footprint_tiles": [
+        4,
+        4
+      ],
+      "source_sprite_id": 1204,
+      "source_canvas": [
+        128,
+        79
+      ],
+      "source_baseline": 78,
+      "source_top": 1,
+      "target_height": 308,
+      "target_roof_height": 300
+    },
+    {
+      "kind": 205,
+      "name": "Microwave Power Plant",
+      "footprint_tiles": [
+        4,
+        4
+      ],
+      "source_sprite_id": 1205,
+      "source_canvas": [
+        128,
+        96
+      ],
+      "source_baseline": 95,
+      "source_top": 1,
+      "target_height": 376,
+      "target_roof_height": 356
+    },
+    {
+      "kind": 206,
+      "name": "Fusion Power Plant",
+      "footprint_tiles": [
+        4,
+        4
+      ],
+      "source_sprite_id": 1206,
+      "source_canvas": [
+        128,
+        70
+      ],
+      "source_baseline": 69,
+      "source_top": 1,
+      "target_height": 272,
+      "target_roof_height": 264
+    },
+    {
+      "kind": 207,
+      "name": "Coal Power Plant",
+      "footprint_tiles": [
+        4,
+        4
+      ],
+      "source_sprite_id": 1207,
+      "source_canvas": [
+        128,
+        107
+      ],
+      "source_baseline": 106,
+      "source_top": 1,
+      "target_height": 420,
+      "target_roof_height": 408
+    },
+    {
+      "kind": 208,
+      "name": "City Hall",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "source_sprite_id": 1208,
+      "source_canvas": [
+        96,
+        78
+      ],
+      "source_baseline": 77,
+      "source_top": 1,
+      "target_height": 304,
+      "target_roof_height": 280
+    },
+    {
+      "kind": 209,
+      "name": "Hospital",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "source_sprite_id": 1209,
+      "source_canvas": [
+        96,
+        83
+      ],
+      "source_baseline": 82,
+      "source_top": 1,
+      "target_height": 324,
+      "target_roof_height": 324
+    },
+    {
+      "kind": 210,
+      "name": "Police Station",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "source_sprite_id": 1210,
+      "source_canvas": [
+        96,
+        73
+      ],
+      "source_baseline": 72,
+      "source_top": 1,
+      "target_height": 284,
+      "target_roof_height": 284
+    },
+    {
+      "kind": 211,
+      "name": "Fire Station",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "source_sprite_id": 1211,
+      "source_canvas": [
+        96,
+        66
+      ],
+      "source_baseline": 65,
+      "source_top": 1,
+      "target_height": 256,
+      "target_roof_height": 252
+    },
+    {
+      "kind": 212,
+      "name": "Museum",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "source_sprite_id": 1212,
+      "source_canvas": [
+        96,
+        56
+      ],
+      "source_baseline": 55,
+      "source_top": 1,
+      "target_height": 216,
+      "target_roof_height": 208
+    },
+    {
+      "kind": 213,
+      "name": "Park",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "source_sprite_id": 1213,
+      "source_canvas": [
+        96,
+        52
+      ],
+      "source_baseline": 51,
+      "source_top": 1,
+      "target_height": 200,
+      "target_roof_height": 192
+    },
+    {
+      "kind": 214,
+      "name": "School",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "source_sprite_id": 1214,
+      "source_canvas": [
+        96,
+        58
+      ],
+      "source_baseline": 57,
+      "source_top": 1,
+      "target_height": 224,
+      "target_roof_height": 220
+    },
+    {
+      "kind": 215,
+      "name": "Stadium",
+      "footprint_tiles": [
+        4,
+        4
+      ],
+      "source_sprite_id": 1215,
+      "source_canvas": [
+        128,
+        84
+      ],
+      "source_baseline": 83,
+      "source_top": 1,
+      "target_height": 328,
+      "target_roof_height": 328
+    },
+    {
+      "kind": 216,
+      "name": "Prison",
+      "footprint_tiles": [
+        4,
+        4
+      ],
+      "source_sprite_id": 1216,
+      "source_canvas": [
+        128,
+        75
+      ],
+      "source_baseline": 74,
+      "source_top": 1,
+      "target_height": 292,
+      "target_roof_height": 288
+    },
+    {
+      "kind": 217,
+      "name": "College",
+      "footprint_tiles": [
+        4,
+        4
+      ],
+      "source_sprite_id": 1217,
+      "source_canvas": [
+        128,
+        86
+      ],
+      "source_baseline": 85,
+      "source_top": 1,
+      "target_height": 336,
+      "target_roof_height": 332
+    },
+    {
+      "kind": 218,
+      "name": "Zoo",
+      "footprint_tiles": [
+        4,
+        4
+      ],
+      "source_sprite_id": 1218,
+      "source_canvas": [
+        128,
+        68
+      ],
+      "source_baseline": 67,
+      "source_top": 1,
+      "target_height": 264,
+      "target_roof_height": 256
+    },
+    {
+      "kind": 219,
+      "name": "Statue",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1219,
+      "source_canvas": [
+        32,
+        43
+      ],
+      "source_baseline": 42,
+      "source_top": 1,
+      "target_height": 164,
+      "target_roof_height": 164
+    },
+    {
+      "kind": 220,
+      "name": "Water Pump",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1220,
+      "source_canvas": [
+        32,
+        20
+      ],
+      "source_baseline": 19,
+      "source_top": 1,
+      "target_height": 72,
+      "target_roof_height": 72
+    },
+    {
+      "kind": 221,
+      "name": "Runway",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1221,
+      "source_canvas": [
+        32,
+        18
+      ],
+      "source_baseline": 17,
+      "source_top": 1,
+      "target_height": 64,
+      "target_roof_height": 64
+    },
+    {
+      "kind": 222,
+      "name": "Runway Crossing",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1222,
+      "source_canvas": [
+        32,
+        18
+      ],
+      "source_baseline": 17,
+      "source_top": 1,
+      "target_height": 64,
+      "target_roof_height": 64
+    },
+    {
+      "kind": 223,
+      "name": "Pier",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1223,
+      "source_canvas": [
+        32,
+        22
+      ],
+      "source_baseline": 21,
+      "source_top": 1,
+      "target_height": 80,
+      "target_roof_height": 80
+    },
+    {
+      "kind": 224,
+      "name": "Crane",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1224,
+      "source_canvas": [
+        32,
+        41
+      ],
+      "source_baseline": 40,
+      "source_top": 1,
+      "target_height": 156,
+      "target_roof_height": 152
+    },
+    {
+      "kind": 225,
+      "name": "Control Tower 1",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1225,
+      "source_canvas": [
+        32,
+        64
+      ],
+      "source_baseline": 63,
+      "source_top": 1,
+      "target_height": 248,
+      "target_roof_height": 248
+    },
+    {
+      "kind": 226,
+      "name": "Control Tower 2",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1226,
+      "source_canvas": [
+        32,
+        70
+      ],
+      "source_baseline": 69,
+      "source_top": 1,
+      "target_height": 272,
+      "target_roof_height": 256
+    },
+    {
+      "kind": 227,
+      "name": "Warehouse",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1227,
+      "source_canvas": [
+        32,
+        21
+      ],
+      "source_baseline": 20,
+      "source_top": 1,
+      "target_height": 76,
+      "target_roof_height": 76
+    },
+    {
+      "kind": 228,
+      "name": "Airport Building 1",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1228,
+      "source_canvas": [
+        32,
+        24
+      ],
+      "source_baseline": 23,
+      "source_top": 1,
+      "target_height": 88,
+      "target_roof_height": 88
+    },
+    {
+      "kind": 229,
+      "name": "Airport Building 2",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1229,
+      "source_canvas": [
+        32,
+        23
+      ],
+      "source_baseline": 22,
+      "source_top": 1,
+      "target_height": 84,
+      "target_roof_height": 84
+    },
+    {
+      "kind": 230,
+      "name": "Tarmac",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1230,
+      "source_canvas": [
+        32,
+        18
+      ],
+      "source_baseline": 17,
+      "source_top": 1,
+      "target_height": 64,
+      "target_roof_height": 64
+    },
+    {
+      "kind": 231,
+      "name": "F-15B",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1231,
+      "source_canvas": [
+        32,
+        19
+      ],
+      "source_baseline": 18,
+      "source_top": 1,
+      "target_height": 68,
+      "target_roof_height": 68
+    },
+    {
+      "kind": 232,
+      "name": "Hangar",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1232,
+      "source_canvas": [
+        32,
+        21
+      ],
+      "source_baseline": 20,
+      "source_top": 1,
+      "target_height": 76,
+      "target_roof_height": 76
+    },
+    {
+      "kind": 233,
+      "name": "Subway Station",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1233,
+      "source_canvas": [
+        32,
+        22
+      ],
+      "source_baseline": 21,
+      "source_top": 1,
+      "target_height": 80,
+      "target_roof_height": 80
+    },
+    {
+      "kind": 234,
+      "name": "Radar",
+      "footprint_tiles": [
+        1,
+        1
+      ],
+      "source_sprite_id": 1234,
+      "source_canvas": [
+        32,
+        20
+      ],
+      "source_baseline": 19,
+      "source_top": 1,
+      "target_height": 72,
+      "target_roof_height": 72
+    },
+    {
+      "kind": 235,
+      "name": "Water Tower",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1235,
+      "source_canvas": [
+        64,
+        65
+      ],
+      "source_baseline": 64,
+      "source_top": 1,
+      "target_height": 252,
+      "target_roof_height": 252
+    },
+    {
+      "kind": 236,
+      "name": "Bus Station",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1236,
+      "source_canvas": [
+        64,
+        38
+      ],
+      "source_baseline": 37,
+      "source_top": 1,
+      "target_height": 144,
+      "target_roof_height": 144
+    },
+    {
+      "kind": 237,
+      "name": "Rail Station",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1237,
+      "source_canvas": [
+        64,
+        39
+      ],
+      "source_baseline": 38,
+      "source_top": 1,
+      "target_height": 148,
+      "target_roof_height": 144
+    },
+    {
+      "kind": 238,
+      "name": "Parking Lot One",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1238,
+      "source_canvas": [
+        64,
+        40
+      ],
+      "source_baseline": 39,
+      "source_top": 1,
+      "target_height": 152,
+      "target_roof_height": 124
+    },
+    {
+      "kind": 239,
+      "name": "Covered Parking Lot",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1239,
+      "source_canvas": [
+        64,
+        38
+      ],
+      "source_baseline": 37,
+      "source_top": 1,
+      "target_height": 144,
+      "target_roof_height": 132
+    },
+    {
+      "kind": 240,
+      "name": "Loading Bay",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1240,
+      "source_canvas": [
+        64,
+        37
+      ],
+      "source_baseline": 36,
+      "source_top": 1,
+      "target_height": 140,
+      "target_roof_height": 140
+    },
+    {
+      "kind": 241,
+      "name": "Top Secret Facility",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1241,
+      "source_canvas": [
+        64,
+        58
+      ],
+      "source_baseline": 57,
+      "source_top": 1,
+      "target_height": 224,
+      "target_roof_height": 220
+    },
+    {
+      "kind": 242,
+      "name": "Cargo Yard",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1242,
+      "source_canvas": [
+        64,
+        34
+      ],
+      "source_baseline": 33,
+      "source_top": 1,
+      "target_height": 128,
+      "target_roof_height": 124
+    },
+    {
+      "kind": 243,
+      "name": "Mayor\u2019s House",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1243,
+      "source_canvas": [
+        64,
+        37
+      ],
+      "source_baseline": 36,
+      "source_top": 1,
+      "target_height": 140,
+      "target_roof_height": 136
+    },
+    {
+      "kind": 244,
+      "name": "Water Treatment Plant",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1244,
+      "source_canvas": [
+        64,
+        38
+      ],
+      "source_baseline": 37,
+      "source_top": 1,
+      "target_height": 144,
+      "target_roof_height": 144
+    },
+    {
+      "kind": 245,
+      "name": "Library",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1245,
+      "source_canvas": [
+        64,
+        54
+      ],
+      "source_baseline": 53,
+      "source_top": 1,
+      "target_height": 208,
+      "target_roof_height": 188
+    },
+    {
+      "kind": 246,
+      "name": "Aircraft Hangar",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1246,
+      "source_canvas": [
+        64,
+        40
+      ],
+      "source_baseline": 39,
+      "source_top": 1,
+      "target_height": 152,
+      "target_roof_height": 152
+    },
+    {
+      "kind": 247,
+      "name": "Church",
+      "footprint_tiles": [
+        2,
+        2
+      ],
+      "source_sprite_id": 1247,
+      "source_canvas": [
+        64,
+        49
+      ],
+      "source_baseline": 48,
+      "source_top": 1,
+      "target_height": 188,
+      "target_roof_height": 188
+    },
+    {
+      "kind": 248,
+      "name": "Marina",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "source_sprite_id": 1248,
+      "source_canvas": [
+        96,
+        56
+      ],
+      "source_baseline": 55,
+      "source_top": 1,
+      "target_height": 216,
+      "target_roof_height": 188
+    },
+    {
+      "kind": 249,
+      "name": "Missile Silo",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "source_sprite_id": 1249,
+      "source_canvas": [
+        96,
+        51
+      ],
+      "source_baseline": 50,
+      "source_top": 1,
+      "target_height": 196,
+      "target_roof_height": 188
+    },
+    {
+      "kind": 250,
+      "name": "Desalination Plant",
+      "footprint_tiles": [
+        3,
+        3
+      ],
+      "source_sprite_id": 1250,
+      "source_canvas": [
+        96,
+        78
+      ],
+      "source_baseline": 77,
+      "source_top": 1,
+      "target_height": 304,
+      "target_roof_height": 284
+    },
+    {
+      "kind": 251,
+      "name": "Plymouth Arcology",
+      "footprint_tiles": [
+        4,
+        4
+      ],
+      "source_sprite_id": 1251,
+      "source_canvas": [
+        128,
+        197
+      ],
+      "source_baseline": 196,
+      "source_top": 1,
+      "target_height": 780,
+      "target_roof_height": 748
+    },
+    {
+      "kind": 252,
+      "name": "Forest Arcology",
+      "footprint_tiles": [
+        4,
+        4
+      ],
+      "source_sprite_id": 1252,
+      "source_canvas": [
+        128,
+        183
+      ],
+      "source_baseline": 182,
+      "source_top": 1,
+      "target_height": 724,
+      "target_roof_height": 712
+    },
+    {
+      "kind": 253,
+      "name": "Darco Arcology",
+      "footprint_tiles": [
+        4,
+        4
+      ],
+      "source_sprite_id": 1253,
+      "source_canvas": [
+        128,
+        211
+      ],
+      "source_baseline": 210,
+      "source_top": 1,
+      "target_height": 836,
+      "target_roof_height": 828
+    },
+    {
+      "kind": 254,
+      "name": "Launch Arcology",
+      "footprint_tiles": [
+        4,
+        4
+      ],
+      "source_sprite_id": 1254,
+      "source_canvas": [
+        128,
+        236
+      ],
+      "source_baseline": 235,
+      "source_top": 1,
+      "target_height": 936,
+      "target_roof_height": 932
+    },
+    {
+      "kind": 255,
+      "name": "Braun Llama Dome",
+      "footprint_tiles": [
+        4,
+        4
+      ],
+      "source_sprite_id": 1255,
+      "source_canvas": [
+        128,
+        155
+      ],
+      "source_baseline": 154,
+      "source_top": 1,
+      "target_height": 612,
+      "target_roof_height": 580
+    }
+  ]
+}

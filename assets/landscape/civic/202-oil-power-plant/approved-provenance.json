@@ -1,0 +1,40 @@
+{
+  "kind": 202,
+  "source_selection": {
+    "kind": 202,
+    "name": "Oil power plant",
+    "review": "assets/landscape/building-studies/approval-batch-201-204/202-oil-power-plant/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-201-204/202-oil-power-plant/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-201-204/202-oil-power-plant/registered-cutout-source.png",
+    "review_sha256": "06377764eadb19ed3d5bf086565f66f2aaf543192160faa8c7ac85f6fd26e136"
+  },
+  "installed_view_sha256": "31e47912226c6f2f7db1f6eaaaa3ee507cef42b532b7382eb6ce379d972c380d",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-201-204/202-oil-power-plant/registered-full-plot-calibration.png",
+      "installed": "assets/landscape/civic/202-oil-power-plant/approved-original.png",
+      "sha256": "7e0e42b5498c242304001d5c9a29f1c132190470436f8456154e910bfdae4781"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-201-204/202-oil-power-plant/registered-cutout-source.png",
+      "installed": "assets/landscape/civic/202-oil-power-plant/approved-foreground.png",
+      "sha256": "b1dfd5d0b6295603a8c00fc644bd897761d1fdad0993ae5e8430f451b20b55cd"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-201-204/202-oil-power-plant/native-foundation-mask.png",
+      "installed": "assets/landscape/civic/202-oil-power-plant/approved-foundation-mask.png",
+      "sha256": "7fbfc8b279db7f5077a762cc66e730cba1e14a4ba7247989084e6c7ec0dd94f8"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-201-204/202-oil-power-plant/view-0.png",
+      "installed": "assets/landscape/civic/202-oil-power-plant/approved-view.png",
+      "sha256": "31e47912226c6f2f7db1f6eaaaa3ee507cef42b532b7382eb6ce379d972c380d"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-201-204/202-oil-power-plant/ground-0.png",
+      "installed": "assets/landscape/civic/202-oil-power-plant/approved-ground.png",
+      "sha256": "87a63a414e60cb9491e64668932f951f5647ac13cded6437976d68d4cf0922b3"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

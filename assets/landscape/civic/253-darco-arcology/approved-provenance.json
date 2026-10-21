@@ -1,0 +1,40 @@
+{
+  "kind": 253,
+  "source_selection": {
+    "kind": 253,
+    "name": "Darco Arcology",
+    "review": "assets/landscape/building-studies/approval-batch-253-255/253-darco-arcology/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-253-255/253-darco-arcology/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-253-255/253-darco-arcology/calibrated-source.png",
+    "review_sha256": "6af41701e8f44707487ced3df204123dcf663c79cc0c1470fd79fee9b9d02d0a"
+  },
+  "installed_view_sha256": "6af41701e8f44707487ced3df204123dcf663c79cc0c1470fd79fee9b9d02d0a",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-253-255/253-darco-arcology/calibrated-source.png",
+      "installed": "assets/landscape/civic/253-darco-arcology/approved-original.png",
+      "sha256": "f7190797c59f1f7aa58c874b753790854ab68c68e291decaf7c0eb3c3a2f0419"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-253-255/253-darco-arcology/calibrated-source.png",
+      "installed": "assets/landscape/civic/253-darco-arcology/approved-foreground.png",
+      "sha256": "f7190797c59f1f7aa58c874b753790854ab68c68e291decaf7c0eb3c3a2f0419"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-253-255/253-darco-arcology/native-foundation-mask.png",
+      "installed": "assets/landscape/civic/253-darco-arcology/approved-foundation-mask.png",
+      "sha256": "6f0b3fbe7bb1ae62ad438002220fdaedd814efebf204b5c7f6c7f6be1a55f9a1"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-253-255/253-darco-arcology/view-0.png",
+      "installed": "assets/landscape/civic/253-darco-arcology/approved-view.png",
+      "sha256": "6af41701e8f44707487ced3df204123dcf663c79cc0c1470fd79fee9b9d02d0a"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-253-255/253-darco-arcology/ground-0.png",
+      "installed": "assets/landscape/civic/253-darco-arcology/approved-ground.png",
+      "sha256": "0c1c651f4f2198d383fd3b0523207e482a4abfdde9f05e4807a1d6b402d3c3ba"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

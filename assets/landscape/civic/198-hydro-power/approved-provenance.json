@@ -1,0 +1,40 @@
+{
+  "kind": 198,
+  "source_selection": {
+    "kind": 198,
+    "name": "Hydroelectric power",
+    "review": "assets/landscape/building-studies/approval-batch-196-200/198-hydro-power/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-196-200/198-hydro-power/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-196-200/198-hydro-power/registered-cutout-source.png",
+    "review_sha256": "e728bb4c0bee440a0f665a249566f42d3ad47f14246b012091485694c2a29752"
+  },
+  "installed_view_sha256": "44a97f68da68f8141dbaf9a22b6563ff83fafa1e9663a73ea55e556ef6b50650",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-196-200/198-hydro-power/registered-full-plot-calibration.png",
+      "installed": "assets/landscape/civic/198-hydro-power/approved-original.png",
+      "sha256": "1d380d40dd1b3e9e0484574e766111c01e735c40f0b03aa33f17ff6c260b9561"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-196-200/198-hydro-power/registered-cutout-source.png",
+      "installed": "assets/landscape/civic/198-hydro-power/approved-foreground.png",
+      "sha256": "cc4a2b2318f0c4b6402d237681df453b74886399ee197405d5cfd43ee711420c"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-196-200/198-hydro-power/native-foundation-mask.png",
+      "installed": "assets/landscape/civic/198-hydro-power/approved-foundation-mask.png",
+      "sha256": "0193224980ebb066fdd131027b80b26dd02b0417617b7b4f2090bf5f152f2b45"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-196-200/198-hydro-power/view-0.png",
+      "installed": "assets/landscape/civic/198-hydro-power/approved-view.png",
+      "sha256": "44a97f68da68f8141dbaf9a22b6563ff83fafa1e9663a73ea55e556ef6b50650"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-196-200/198-hydro-power/ground-0.png",
+      "installed": "assets/landscape/civic/198-hydro-power/approved-ground.png",
+      "sha256": "5e101923ffb1cad6da45ae3e5ffaf1ba966d7cb747f470404f30417d6eed5468"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

@@ -1,0 +1,40 @@
+{
+  "kind": 170,
+  "source_selection": {
+    "kind": 170,
+    "name": "Abandoned building",
+    "review": "assets/landscape/building-studies/approval-batch-168-171/170-abandoned-building/native-composited-study.png",
+    "recipe": "assets/landscape/building-studies/approval-batch-168-171/170-abandoned-building/bake.json",
+    "source": "assets/landscape/building-studies/approval-batch-168-171/170-abandoned-building/painted-stock-height-study.png",
+    "review_sha256": "c6c0aa5f8d29ddedad2f3fb06fc819014f344c358003f279de786c39a01f8187"
+  },
+  "installed_view_sha256": "9001a2fe14eabf30f2550266ffde3028b0936feb413e374db09613d9c123c455",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/approval-batch-168-171/170-abandoned-building/painted-study.png",
+      "installed": "assets/landscape/buildings/170-abandoned-building/approved-original.png",
+      "sha256": "dc00f1ac1f175ec608263f696ecd43d1e8e9e08c58ec7b77ba02a36b60f900dc"
+    },
+    {
+      "source": "assets/landscape/building-studies/approval-batch-168-171/170-abandoned-building/painted-stock-height-study.png",
+      "installed": "assets/landscape/buildings/170-abandoned-building/approved-foreground.png",
+      "sha256": "3021231ef0641cc325f34c5ad1ddba57193de56efddd75f03136099989d065b4"
+    },
+    {
+      "source": "assets/landscape/buildings/170-abandoned-building/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/170-abandoned-building/approved-foundation-mask.png",
+      "sha256": "466ef6804dc8914b975967ebaa766ec28c55524b9c78eee60611371edf68ac4e"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-168-171/170-abandoned-building/view-0.png",
+      "installed": "assets/landscape/buildings/170-abandoned-building/approved-view.png",
+      "sha256": "9001a2fe14eabf30f2550266ffde3028b0936feb413e374db09613d9c123c455"
+    },
+    {
+      "source": "build/artwork-studies/approval-batch-168-171/170-abandoned-building/ground-0.png",
+      "installed": "assets/landscape/buildings/170-abandoned-building/approved-ground.png",
+      "sha256": "fa6d3db7cab662ace71c9176057fb2ada6d94fdc52e0e808314fbaaf66f34cee"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}

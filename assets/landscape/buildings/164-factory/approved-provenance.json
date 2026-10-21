@@ -1,0 +1,43 @@
+{
+  "kind": 164,
+  "source_selection": {
+    "kind": 164,
+    "name": "Factory",
+    "review": "assets/landscape/building-studies/daylight-cleanup/164-factory/native-composited-daylight.png",
+    "recipe": "assets/landscape/building-studies/daylight-cleanup/164-factory/bake.json",
+    "source": "assets/landscape/building-studies/daylight-cleanup/164-factory/painted-daylight.png",
+    "review_sha256": "3d31bac056f7db017a88c8bc93d9456d7b021c9a107a1ed965790b2c2ac31b08",
+    "baked_sprite": "assets/landscape/building-studies/daylight-cleanup/164-factory/view-0.png",
+    "source_sha256": "5a2a34196abbda3644f127cda784fec63107d9af10a95a0b9ff2c7133064397f",
+    "correction_scope": "Lighting only, approved architecture preserved"
+  },
+  "installed_view_sha256": "a7f5d59e2c90b0571cf3b05c71f640215499fe9cbba237427cdf648663fa6eef",
+  "dependencies": [
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/164-factory/calibration-source.png",
+      "installed": "assets/landscape/buildings/164-factory/approved-original.png",
+      "sha256": "8228fdf3fcd970f699900475c8ab80200ba809fbbf2e1f946d9b8ac421f20140"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/164-factory/registered-daylight.png",
+      "installed": "assets/landscape/buildings/164-factory/approved-foreground.png",
+      "sha256": "35a2ac6ffe8d487fc1c1d3a7f9edfc1c44243f7ca1e38728d29f03a19f0b1651"
+    },
+    {
+      "source": "assets/landscape/buildings/164-factory/native-foundation-mask.png",
+      "installed": "assets/landscape/buildings/164-factory/approved-foundation-mask.png",
+      "sha256": "466ef6804dc8914b975967ebaa766ec28c55524b9c78eee60611371edf68ac4e"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/164-factory/view-0.png",
+      "installed": "assets/landscape/buildings/164-factory/approved-view.png",
+      "sha256": "a7f5d59e2c90b0571cf3b05c71f640215499fe9cbba237427cdf648663fa6eef"
+    },
+    {
+      "source": "assets/landscape/building-studies/daylight-cleanup/164-factory/ground-0.png",
+      "installed": "assets/landscape/buildings/164-factory/approved-ground.png",
+      "sha256": "fa6d3db7cab662ace71c9176057fb2ada6d94fdc52e0e808314fbaaf66f34cee"
+    }
+  ],
+  "rotations": "deferred; all four asset IDs reference this single view"
+}
