@@ -1,15 +1,23 @@
-#include "city/maps/layers.h"
-#include "city/maps/buildings.h"
+#include "city/maps/labels.h"
+#include <stdio.h>
+
+#include "assets/state.h"
+#include "city/engine/random.h"
 #include "city/events/events.h"
+#include "city/growth/growth.h"
+#include "city/maps/buildings.h"
+#include "city/maps/layers.h"
 #include "city/maps/map_types.h"
 #include "city/maps/tile_storage.h"
-#include "drawing/maps/map_view.h"
-#include "drawing/drawing_internal.h"
 #include "drawing/fonts/fonts.h"
+#include "drawing/maps/map_animation.h"
+#include "drawing/maps/map_events.h"
 #include "drawing/maps/map_render.h"
+#include "drawing/maps/map_view.h"
 #include "drawing/maps/tables.h"
 #include "drawing/state.h"
-#include "city/growth/growth.h"
+#include "game/errors.h"
+#include "game/state.h"
 
 static bool Intersects(CityRect a, CityRect b) {
   return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
@@ -25,16 +33,16 @@ static int CeilDivide(int value, int divisor) {
 
 // Sprite extents depend on assets/graphics configuration, never map edits or
 // camera position. Bounds-only callers must not prepare or sort moving events.
-static void PrepareCityMapTileBounds(City *city, int zoom, bool labels) {
+static void PrepareCityMapTileBounds(const City *city, int zoom, bool labels) {
   Drawing *drawing = city->game->drawing;
   MapTileTraversal *traversal = &drawing->tile_traversal;
-  const CityMapSprite *catalog = CityDrawingSpriteCatalog(drawing);
+  const MapSpriteMetrics *catalog = drawing->map_state.sprite_metrics;
   bool native = (city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)) != 0;
   u32 revision = city->game->resources->sprite_revision;
-  if (traversal->extent_catalog != catalog || traversal->extent_revision != revision ||
+  if (traversal->extent_metrics != catalog || traversal->extent_revision != revision ||
       traversal->extent_native != native) {
     traversal->extent_valid = 0;
-    traversal->extent_catalog = catalog;
+    traversal->extent_metrics = catalog;
     traversal->extent_revision = revision;
     traversal->extent_native = native;
   }
@@ -43,7 +51,7 @@ static void PrepareCityMapTileBounds(City *city, int zoom, bool labels) {
     // Prepare every zoom together; changing zoom never starts a new scan.
     for (int detail = 0; detail < 3; ++detail) {
       CityPoint limit = {16 << detail, 32 << detail};
-      for (int sprite = 0; sprite < 500; ++sprite) {
+      for (int sprite = 0; sprite < CITY_MAP_SPRITES_PER_ZOOM; ++sprite) {
         CityPoint extent = CityBuildingSpriteExtent(city, sprite, detail);
         limit.x = IntMax(limit.x, extent.x);
         limit.y = IntMax(limit.y, extent.y);
@@ -125,7 +133,7 @@ static void PrepareMapTileTraversal(City *city, const CityMapViewConfig *view, i
   }
 }
 
-CityRect VisibleCityMapTileBounds(City *city, int origin_x, int origin_y, int zoom, int rotation, CityRect area) {
+CityRect VisibleCityMapTileBounds(const City *city, int origin_x, int origin_y, int zoom, int rotation, CityRect area) {
   Drawing *drawing = city->game->drawing;
   PrepareCityMapTileBounds(city, zoom, true);
   const MapTileTraversal *traversal = &drawing->tile_traversal;
@@ -165,7 +173,7 @@ static CityRect TilePaintBounds(City *city, Drawing *drawing, int zoom, TileInde
     extra = CapturedCityMapAnimationBounds(drawing, cell);
   } else if (IsCityEventOverlay(overlay)) {
     for (int slot = CityEventOverlaySlot(overlay); slot >= 0; slot = NextCityMapEventOnTile(city, slot)) {
-      CityRect event = Sc2kCityMapEventBounds(city, zoom, x, y, slot);
+      CityRect event = CityMapEventSpriteBounds(city, zoom, x, y, slot);
       if (event.left < event.right && event.top < event.bottom)
         extra = extra.left < extra.right && extra.top < extra.bottom ? UnionCityRects(extra, event) : event;
     }
@@ -200,7 +208,7 @@ static CityRect TilePaintBounds(City *city, Drawing *drawing, int zoom, TileInde
 void PaintVisibleCityMapTiles(City *city, const CityMapViewConfig *view, int zoom) {
   Drawing *drawing = city->game->drawing;
   bool capture = drawing->animation.mode == ANIMATION_CAPTURE;
-  CityRect area = capture ? drawing->map_state.scan_clip : drawing->map_state.paint_parameters.rect;
+  CityRect area = capture ? drawing->map_state.scan_clip : drawing->map_state.paint_rect;
   if (area.left >= area.right || area.top >= area.bottom) return;
   PrepareMapTileTraversal(city, view, zoom);
   MapTileTraversal *traversal = &drawing->tile_traversal;
@@ -379,7 +387,7 @@ static void PaintDepthArea(City *city, const CityMapViewConfig *view, int zoom, 
   i64 pixels = (i64)(area.right - area.left) * (area.bottom - area.top) * (1 << (2 - zoom));
   if ((pixels > CITY_MAP_DEPTH_PIXEL_LIMIT || clip.right - clip.left > 16000 || clip.bottom - clip.top > 16000) &&
       SubdivideDepthArea(city, view, zoom, area, clip)) return;
-  drawing->map_state.paint_parameters.rect = area;
+  drawing->map_state.paint_rect = area;
   drawing->map_target.canvas.clip = clip;
   SimulationRandomState random = city->random;
   PaintGroundAndCollectDepthObjects(city, view, zoom);
@@ -400,13 +408,13 @@ static void PaintDepthArea(City *city, const CityMapViewConfig *view, int zoom, 
 void DrawDepthSortedCityMap(City *city, const CityMapViewConfig *view, int zoom) {
   Drawing *drawing = city->game->drawing;
   DrawingMapDepth previous = drawing->map_depth;
-  CityRect area = drawing->map_state.paint_parameters.rect;
+  CityRect area = drawing->map_state.paint_rect;
   CityRect clip = drawing->map_target.canvas.clip;
   drawing->map_depth = (DrawingMapDepth){.bridge_palettes = city->game->resources->bridge_palettes,
       .underworld_palettes = city->game->resources->underworld_palettes,
       .car_palettes = city->game->resources->road_vehicle_palettes};
   PaintDepthArea(city, view, zoom, area, clip);
   drawing->map_depth = previous;
-  drawing->map_state.paint_parameters.rect = area;
+  drawing->map_state.paint_rect = area;
   drawing->map_target.canvas.clip = clip;
 }

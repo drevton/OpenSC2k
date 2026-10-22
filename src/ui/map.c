@@ -1,17 +1,32 @@
-#include "drawing/maps/map_view.h"
-#include "ui/frontend.h"
-#include "ui/updates.h"
-#include "ui/signs.h"
-#include "drawing/drawing_internal.h"
-#include "city/presentation.h"
+#include "ui/map_visibility.h"
 #include "ui/map.h"
+
+#include <string.h>
+
+#include "assets/state.h"
+#include "audio/state.h"
+#include "base/time.h"
+#include "city/events/events.h"
+#include "city/maps/layers.h"
+#include "city/presentation.h"
+#include "city/state.h"
+#include "drawing/maps/map_camera.h"
+#include "drawing/maps/map_effects.h"
+#include "drawing/maps/map_events.h"
+#include "drawing/maps/map_render.h"
+#include "drawing/maps/map_view.h"
+#include "drawing/state.h"
 #include "game/errors.h"
 #include "game/state.h"
-#include "audio/state.h"
-#include "city/state.h"
-#include "drawing/state.h"
-#include "assets/state.h"
+#include "ui/charts/charts.h"
+#include "ui/dialogs/map_data.h"
+#include "ui/map_views.h"
+#include "ui/signs.h"
 #include "ui/state.h"
+#include "ui/text/text.h"
+#include "ui/tools/tools.h"
+#include "ui/updates.h"
+#include "ui/windows/windows.h"
 
 void ReadCityMapClientRect(Drawing *drawing, CityRect *rect) {
   *rect = drawing->client_rect;
@@ -33,84 +48,47 @@ bool InvalidateCityMap(Game *game, const CityRect *rect) {
   return InvalidateCityCanvasWindow(game, 0, &bounds);
 }
 
-bool InvalidateCityMapDataPreview(City *city) {
-  Drawing *drawing = city->game->drawing;
-  if (!drawing->map_navigation_enabled || city->game->ui == NULL) {
-    return false;
-  }
-  CityCanvasDesktop *desktop = &city->game->ui->desktop;
-  int scale = drawing->ui_scale_applied > 0 ? drawing->ui_scale_applied : 100;
-  bool result = true;
-  for (int index = 0; index < desktop->count; ++index) {
-    const Window *panel = &desktop->windows[index];
-    if (panel->kind != CITY_CANVAS_MAP_DATA) continue;
-    CityRect preview = Sc2kCanvasMapDataPreviewRect(panel);
-    CityRect rect = {preview.left - panel->bounds.left, preview.top - panel->bounds.top,
-        preview.right - panel->bounds.left, preview.bottom - panel->bounds.top};
-    rect = (CityRect){rect.left * scale / 100, rect.top * scale / 100,
-        (rect.right * scale + 99) / 100, (rect.bottom * scale + 99) / 100};
-    result = InvalidateCityCanvasWindow(city->game, panel->window_id, &rect) && result;
-  }
-  return result;
-}
-
 // Redraw the city map; document attachment is comparison transport. Requires attached Drawing state; requests viewport
 // refresh and does not rebuild or advance the simulation.
 void RefreshCityDrawing(City *city) {
   RefreshCityMapViews(city->game);
 }
 
-// Mark a changed tile and notify Drawing so each viewport can damage its old or new extent. Tile must be valid or
-// INVALID_TILE, which is ignored; other indices assert, and disabled/full-map tracking needs no extra notification.
-void InvalidateTile(City *city, TileIndex tile) {
-  if (tile == INVALID_TILE) return;
-  assert(tile < city->map_cell_count);
-  SimulationMapChanges *changes = &city->map_changes;
-  if (!changes->enabled || changes->full) return;
-  InvalidateCityInformation(city->game, CITY_UPDATE_MAP);
-  changes->tiles_changed = true;
-  Drawing *drawing = city->game ? city->game->drawing : NULL;
-  if (drawing) PublishCityMapTileDamage(city, tile);
-}
-
-// Invalidate a rectangle beginning at a valid tile, clipping its right and bottom edges to the map. INVALID_TILE is
-// ignored; dimensions must describe the intended nonnegative area, and each included tile uses InvalidateTile.
-void InvalidateTileRange(City *city, TileIndex start, int width, int height) {
-  if (start == INVALID_TILE) return;
-  assert(start < city->map_cell_count);
-  if (!city->map_changes.enabled || city->map_changes.full) return;
-  width = IntMin(width, city->map_width - MapTileX(city, start));
-  height = IntMin(height, city->map_height - MapTileY(city, start));
-  for (int y = 0; y < height; ++y) {
-    TileIndex row = start + y * city->map_width;
-    for (int x = 0; x < width; ++x) InvalidateTile(city, row + x);
+void ToggleCityMapLayer(Game *game, CityMapLayer layer) {
+  CityMapDrawingState *map = &game->drawing->map_state;
+  switch (layer) {
+  case CITY_MAP_LAYER_BUILDINGS: map->buildings_enabled = !map->buildings_enabled; break;
+  case CITY_MAP_LAYER_NETWORKS: map->networks_enabled = !map->networks_enabled; break;
+  case CITY_MAP_LAYER_WATER: map->water_enabled = !map->water_enabled; break;
+  case CITY_MAP_LAYER_TREES: map->trees_enabled = !map->trees_enabled; break;
+  case CITY_MAP_LAYER_SIGNS: map->label_display = !map->label_display; break;
+  case CITY_MAP_LAYER_VEHICLES:
+    map->vehicles_enabled = !map->vehicles_enabled;
+    if (!map->vehicles_enabled) ClearCityVehicleVisualization(game->drawing);
+    break;
+  default: return;
   }
+  RefreshCityMapViews(game);
 }
 
-// Record one coarse-layer change for viewport-specific redraw. Layer must be a supported CityMapChangeLayer; disabled
-// tracking leaves damage state unchanged.
-void InvalidateMapLayer(City *city, CityMapChangeLayer layer) {
-  if (city->map_changes.enabled) {
-    city->map_changes.invalidated_layers |= 1 << layer;
-    InvalidateCityInformation(city->game, CITY_UPDATE_MAP | CITY_UPDATE_UTILITIES);
-  }
+void RefreshCityMapViews(Game *game) {
+  Drawing *drawing = game->drawing;
+  InvalidateCityMapViews(drawing);
+  MarkScreenDirty(&drawing->screen_damage, (CityRect){0, 0,
+      drawing->framebuffer.width, drawing->framebuffer.height});
 }
 
-// Mark the whole map dirty when damage tracking is enabled. This supersedes later per-tile work; use it only for
-// changes whose drawing impact is actually map-wide.
-void InvalidateMap(City *city) {
-  if (city->map_changes.enabled) {
-    city->map_changes.full = true;
-    InvalidateCityInformation(city->game, CITY_UPDATE_MAP);
-  }
+// Moving sprites retain old/new screen footprints in the normal frame renderer. Demolition may supply an unset
+// last-disaster slot; reject it before reading the event array.
+void InvalidateCityMapEvent(City *city, int slot) {
+  if (slot < 0 || slot >= city->events.capacity) return;
+  const CityMapEvent *event = &city->events.event[slot];
+  if (event->type == CITY_MAP_EVENT_UNUSED) return;
+  InvalidateTile(city, event->tile);
 }
 
-// Clear accumulated tile, layer and full-map damage after its consumer has processed it. The enabled policy is
-// preserved; the supplied change record remains caller-owned.
-void ClearSimulationMapChanges(SimulationMapChanges *changes) {
-  changes->tiles_changed = false;
-  changes->invalidated_layers = 0;
-  changes->full = false;
+void RefreshCityMapTiles(City *city) {
+  for (int layer = 0; layer < CITY_MAP_CHANGE_COUNT; ++layer) InvalidateMapLayer(city, layer);
 }
 
 void ReadCitySavedView(City *city, int *position_out, int *mode_out) {
@@ -151,103 +129,60 @@ void StartCityEarthquakePresentation(City *city) {
   StartCityScreenShake(city->game->drawing);
 }
 
+void ShowCityConstructionCost(City *city, TileIndex tile, i64 cost) {
+  if (cost <= 0 || !IsMapTileValid(city, tile)) return;
+  double now = MonotonicSeconds();
+  char currency[CITY_CURRENCY_TEXT_CAPACITY];
+  FormatCityCurrency(city->game, currency, cost);
+  StartCityConstructionCost(city->game->drawing, tile, currency, now);
+}
+
+void ShowCityDemolitionEffect(City *city, TileIndex tile, bool large) {
+  if (!IsMapTileValid(city, tile)) return;
+  int elevation = ReadCitySurfaceHeight(&city->tile[tile]);
+  StartCityDemolitionEffect(city->game->drawing, tile, elevation, large);
+}
+
 void ApplyCitySavedViewPosition(City *city, int position) {
-  CitySavedViewState *view = &city->game->drawing->map_state.saved_view;
+  CityLoadedMapView *view = &city->game->drawing->map_state.loaded_view;
   view->y = position == -1 ? 64 : (u16)position & 127;
   view->x = position == -1 ? 128 : (u16)(position >> 8);
 }
 
 void ApplyCitySavedViewMode(City *city, int mode) {
-  city->game->drawing->map_state.saved_view.mode = mode;
+  city->game->drawing->map_state.loaded_view.zoom = mode;
 }
 
 void SetCityLoadedViewCenter(City *city, int x, int y) {
-  CitySavedViewState *view = &city->game->drawing->map_state.saved_view;
+  CityLoadedMapView *view = &city->game->drawing->map_state.loaded_view;
   view->x = x;
   view->y = y;
 }
 
 void RestoreCityLoadedView(City *city) {
-  CitySavedViewState view = city->game->drawing->map_state.saved_view;
-  CenterCityMapViewAndResetOverlays(city, view.x, view.y, view.mode);
+  CityLoadedMapView view = city->game->drawing->map_state.loaded_view;
+  CenterCityMapViewAndResetOverlays(city, view.x, view.y, view.zoom);
 }
 
-void *BeginCitySaveView(City *city) {
+CityMapViewConfig *BeginCitySaveView(City *city) {
   CityMapViewConfig *view = city->game->drawing->default_map_view;
   bool magnified = view && view->magnified_large_zoom;
   if (magnified) ZoomCityMapViewOut(city, view);
   return magnified ? view : NULL;
 }
 
-void EndCitySaveView(City *city, void *saved_view) {
-  CityMapViewConfig *view = saved_view;
+void EndCitySaveView(City *city, CityMapViewConfig *view) {
   if (view) ZoomCityMapViewIn(city, view);
 }
 
-// Use the same viewport boundary as VisitCanvasMapPixels. Effect footprints
-// outside this window must not damage another camera's retained pixels.
-CityRect ClipCityMapViewportPixels(CityRect rect, CityMapPaint *paint) {
-  if (!paint->view) return rect;
-  CityCanvasDesktop *desktop = &paint->city->game->ui->desktop;
-  const Window *window = FindCityCanvasWindow(desktop, paint->view->window_id);
-  if (!window || !window->visible || window->shaded) return (CityRect){0};
-  CityRect b = Sc2kCanvasDesktopPixelBounds(desktop, window->window_id);
-  int scale = desktop->pixel_state.scale ? desktop->pixel_state.scale : 100;
-  CityRect content = {b.left + (3 * scale + 99) / 100, b.top + (CITY_VIEWPORT_TOP * scale + 99) / 100,
-      b.right - (3 * scale + 99) / 100,
-      b.bottom - ((window->viewport_pixels ? 3 : CITY_VIEWPORT_BOTTOM) * scale + 99) / 100};
-  return IntersectCityRects(rect, content);
-}
-
-int CityViewportMapZoom(const CityExtraMapView *view) {
-  return IntMin(view->zoom, CITY_MAP_ZOOM_LARGE);
-}
-
-int CityViewportMagnification(const CityExtraMapView *view) {
-  return view->zoom == CITY_CANVAS_MAP_ZOOM_MAGNIFIED ? 2 : 1;
-}
-
-// Update logical viewport dimensions and constrain its camera after resizing, rotation or zoom changes.
-void SyncCityMapViewSize(const City *city, CityExtraMapView *view, Window *window) {
-  const Drawing *drawing = city->game->drawing;
-  CityRect content = CityViewportContentBounds(window);
-  int scale = drawing->map_pixel_scale * 100 * CityViewportMagnification(view);
-  int width = (content.right - content.left) * drawing->options.scale;
-  int height = (content.bottom - content.top) * drawing->options.scale;
-  view->width = (width + scale - 1) / scale;
-  view->height = (height + scale - 1) / scale;
-  CityPoint origin = ClampCityMapCameraOrigin(city,
-      (CityMapCamera){view->origin_x, view->origin_y, CityViewportMapZoom(view),
-          view->width, view->height, view->rotation});
-  if (origin.x != view->origin_x) view->scroll_pixels.x = 0;
-  if (origin.y != view->origin_y) view->scroll_pixels.y = 0;
-  view->origin_x = origin.x;
-  view->origin_y = origin.y;
-  window->viewport_zoom = view->zoom;
-}
-
-CityRect CityMapScreenRect(CityRect rect, void *context) {
+void MarkCityMapSpriteDamage(CityRect rect, void *context) {
   CityMapPaint *paint = context;
   City *city = paint->city;
   Drawing *drawing = city->game->drawing;
-  CityInterfaceState *ui = city->game->ui;
-  CityExtraMapView *view = paint->view;
-  if (view == NULL) {
-    int scale = drawing->map_pixel_scale * (drawing->default_map_view->magnified_large_zoom ? 2 : 1);
-    rect = (CityRect){rect.left * scale, rect.top * scale, rect.right * scale, rect.bottom * scale};
-  } else {
-    CityRect pixels = Sc2kCanvasDesktopPixelBounds(&ui->desktop, view->window_id);
-    int ui_scale = drawing->options.scale;
-    int scale = drawing->map_pixel_scale * 100 * CityViewportMagnification(view);
-    int left = pixels.left + (3 * ui_scale + 99) / 100;
-    int top = pixels.top + (CITY_VIEWPORT_TOP * ui_scale + 99) / 100;
-    rect = (CityRect){left + rect.left * scale / 100, top + rect.top * scale / 100,
-        left + (rect.right * scale + 99) / 100, top + (rect.bottom * scale + 99) / 100};
-  }
-  CityPoint offset = view ? view->scroll_pixels : drawing->scroll_pixels;
-  rect.left += offset.x; rect.right += offset.x;
-  rect.top += offset.y; rect.bottom += offset.y;
-  return ClipCityMapViewportPixels(rect, paint);
+  if (rect.left >= rect.right || rect.top >= rect.bottom) return;
+  rect = CityMapScreenRect(rect, paint);
+  MarkScreenDirty(&drawing->screen_damage, rect);
+  MarkScreenDirty(&drawing->world_damage, rect);
 }
 
 void MarkCityMapRect(CityRect rect, void *context) {
@@ -255,7 +190,7 @@ void MarkCityMapRect(CityRect rect, void *context) {
   City *city = paint->city;
   Drawing *drawing = city->game->drawing;
   if (rect.left >= rect.right || rect.top >= rect.bottom) return;
-  MarkScreenDirty(&drawing->screen_damage, CityMapScreenRect(rect, context));
+  MarkScreenDirty(&drawing->screen_damage, CityMapScreenRect(rect, paint));
 }
 
 void PublishCityMapTileDamage(City *city, TileIndex tile) {
@@ -281,7 +216,7 @@ void PublishCityMapTileDamage(City *city, TileIndex tile) {
   }
 }
 
-static void MarkCityRoadCarDamage(const RoadCar *car, CityMapCamera camera, CityMapPaint *paint) {
+static void MarkCityRoadCarDamage(const RoadCar *car, CityMapCamera camera, const CityMapPaint *paint) {
   Drawing *drawing = paint->city->game->drawing;
   CityExtraMapView *view = paint->view;
   int magnification = view ? CityViewportMagnification(view) :
@@ -331,4 +266,241 @@ void HideCitySimulationPanels(City *city) {
   HideCityMapDataDialog(city);
   HideCityChartPanel(city, CITY_PANEL_NEIGHBORS);
   HideCityChartPanel(city, CITY_PANEL_INDUSTRY);
+}
+
+// Camera controls change local presentation only; projection and picking stay in Drawing.
+
+// Center the main camera unless its host window is minimized. A NULL view selects the default.
+int CenterCityMapViewAtTile(City *city, CityMapViewConfig *view, int x, int y) {
+  Drawing *drawing = city->game->drawing;
+  if (view == NULL) view = drawing->default_map_view;
+  const CityInterfaceState *ui = city->game->ui;
+  if (ui->main_window_iconic)
+    return 0;
+
+  bool magnified = false;
+
+  if (view->magnified_large_zoom == 1) {
+    view->magnified_large_zoom = 0;
+    int saved_x = drawing->map_state.save_x;
+    int saved_y = drawing->map_state.save_y;
+    drawing->map_state.save_x = saved_x * 2;
+    drawing->map_state.save_y = saved_y * 2;
+    drawing->map_state.origin_x += saved_x;
+    drawing->map_state.origin_y += saved_y;
+    magnified = true;
+  }
+
+  CityPoint screen = CityMapTileToScreen(city, view, (CityPoint){x, y});
+  drawing->map_state.origin_x = drawing->map_state.origin_x + drawing->map_state.save_x - screen.x;
+  drawing->map_state.origin_y = drawing->map_state.origin_y + drawing->map_state.save_y - screen.y;
+
+  if (magnified) {
+    view->magnified_large_zoom = 1;
+    int saved_x = drawing->map_state.save_x;
+    int saved_y = drawing->map_state.save_y;
+    drawing->map_state.save_x = saved_x >> 1;
+    drawing->map_state.save_y = saved_y >> 1;
+    drawing->map_state.origin_x -= drawing->map_state.save_x;
+    drawing->map_state.origin_y -= drawing->map_state.save_y;
+  }
+
+  return UpdateCityMapViewScrollPosition(city, view);
+}
+
+// Increase map zoom around its saved screen center.
+void ZoomCityMapViewIn(City *city, CityMapViewConfig *view) {
+  Drawing *drawing = city->game->drawing;
+  if (view->zoom + view->magnified_large_zoom >= CityMapZoomLimit(drawing->map_pixel_scale * 100))
+    return;
+
+  if (view->zoom == CITY_MAP_ZOOM_LARGE) {
+    view->magnified_large_zoom = 1;
+    drawing->map_state.save_x >>= 1;
+    drawing->map_state.save_y >>= 1;
+    drawing->map_state.origin_x = drawing->map_state.origin_x - drawing->map_state.save_x;
+    drawing->map_state.origin_y = drawing->map_state.origin_y - drawing->map_state.save_y;
+  } else {
+    ++view->zoom;
+    drawing->map_state.origin_x = 2 * drawing->map_state.origin_x - drawing->map_state.save_x;
+    drawing->map_state.origin_y = 2 * drawing->map_state.origin_y - drawing->map_state.save_y;
+  }
+
+  GetCityMapClientRect(drawing, &view->view_rect);
+  if (view->magnified_large_zoom == 1) {
+    view->view_rect.left >>= 1;
+    view->view_rect.top >>= 1;
+    view->view_rect.right >>= 1;
+    view->view_rect.bottom >>= 1;
+  }
+  UpdateCityMapViewScrollPosition(city, view);
+  RefreshCityMapViews(city->game);
+  RefreshCityMapDataPreview(city);
+}
+
+// Step out of magnified-large mode or reduce the map zoom by one.
+void ZoomCityMapViewOut(City *city, CityMapViewConfig *view) {
+  Drawing *drawing = city->game->drawing;
+  if (view->zoom == CITY_MAP_ZOOM_SMALL)
+    return;
+
+  GetCityMapClientRect(drawing, &view->view_rect);
+  if (view->magnified_large_zoom == 1) {
+    int saved_x = drawing->map_state.save_x;
+    int saved_y = drawing->map_state.save_y;
+    drawing->map_state.save_x = saved_x * 2;
+    drawing->map_state.save_y = saved_y * 2;
+    drawing->map_state.origin_x += saved_x;
+    drawing->map_state.origin_y += saved_y;
+    view->magnified_large_zoom = 0;
+  } else {
+    --view->zoom;
+    drawing->map_state.origin_x =
+        ((drawing->map_state.origin_x - drawing->map_state.save_x) / 2 + drawing->map_state.save_x);
+    drawing->map_state.origin_y =
+        ((drawing->map_state.origin_y - drawing->map_state.save_y) / 2 + drawing->map_state.save_y);
+  }
+
+  UpdateCityMapViewScrollPosition(city, view);
+  RefreshCityMapViews(city->game);
+  RefreshCityMapDataPreview(city);
+}
+
+// Restore the map overlays, center the saved tile, and redraw.
+int CenterCityMapViewAndResetOverlays(City *city, int x, int y, int zoom) {
+  Drawing *drawing = city->game->drawing;
+  CityMapViewConfig *view = drawing->default_map_view;
+  // A stock save without a camera position supplies (128, 64), outside a
+  // 128-wide map. Resolve that fallback before looking up tile elevation.
+  if (!IsMapCoordinateValid(city, x, y)) {
+    x = city->map_width / 2;
+    y = city->map_height / 2;
+  }
+  static const u8 kEventDisplayFlags[5] = {0, 1, 1, 1, 1};
+  static const CityMapOverlaySettings kOverlayDefaults = {
+    .surface = {0, 1, 1, 1, 1},
+    .underground = {0, 0, 1, 0, 0}
+  };
+
+  GetCityMapClientRect(drawing, &view->view_rect);
+  if (view->magnified_large_zoom != 0)
+    ZoomCityMapViewOut(city, view);
+  view->magnified_large_zoom = 0;
+  view->rotation = 0;
+  view->zoom = zoom;
+
+  for (int index = 0; index < 5; ++index)
+    drawing->map_state.display_flags[index] = kEventDisplayFlags[index];
+  RebuildCityToolbar(city);
+  drawing->map_state.overlay_settings = kOverlayDefaults;
+
+  CityCanvasDesktop *desktop = drawing->map_navigation_enabled ? &city->game->ui->desktop : NULL;
+  if (desktop != NULL) {
+    WindowIds windows = SnapshotCityWindowIds(desktop);
+    for (int index = windows.count - 1; index >= 0; --index) {
+      Window *window = FindCityCanvasWindow(desktop, windows.ids[index]);
+      if (window && Sc2kCanvasChartCode(window->kind) != 0)
+        Sc2kCanvasDesktopDismissWindow(desktop, window->window_id);
+    }
+  }
+
+  InvalidateCityMapViews(drawing);
+  return CenterCityMapViewAtTile(city, view, x, y);
+}
+
+void RotateCityMapView(City *city, CityMapViewConfig *view, bool clockwise) {
+  Drawing *drawing = city->game->drawing;
+  int rotation = (view->rotation + (clockwise ? 1 : 3)) & 3;
+  CityPoint center = {drawing->map_state.save_x, drawing->map_state.save_y};
+  CityPoint origin = TransferCityMapCameraCenter(city,
+      (CityMapCamera){drawing->map_state.origin_x, drawing->map_state.origin_y, view->zoom,
+          center.x * 2, center.y * 2, view->rotation},
+      (CityMapCamera){0, 0, view->zoom, center.x * 2, center.y * 2, rotation});
+  view->rotation = rotation;
+  drawing->map_state.origin_x = origin.x;
+  drawing->map_state.origin_y = origin.y;
+  drawing->main_cache.valid = false;
+  drawing->main_sprites.initialized = false;
+  drawing->main_animations.count = 0;
+  memset(drawing->cost_text_bounds[0], 0, sizeof(drawing->cost_text_bounds[0]));
+  memset(drawing->demolition_bounds[0], 0, sizeof(drawing->demolition_bounds[0]));
+  UpdateCityMapViewScrollPosition(city, view);
+  InvalidateCityMapRect(drawing, view, view->view_rect);
+}
+
+void RotateCityMapViewport(City *city, u32 window_id, bool clockwise) {
+  Drawing *drawing = city->game->drawing;
+  for (int index = 0; index < CITY_EXTRA_MAP_VIEW_COUNT; ++index) {
+    CityExtraMapView *view = &drawing->views[index];
+    if (!window_id || view->window_id != window_id) continue;
+    Window *window = FindCityCanvasWindow(&city->game->ui->desktop, window_id);
+    if (!window) break;
+    if (window->shaded) return;
+    int rotation = (view->rotation + (clockwise ? 1 : 3)) & 3;
+    int zoom = IntMin(view->zoom, CITY_MAP_ZOOM_LARGE);
+    CityPoint center = {view->width / 2, view->height / 2};
+    CityPoint origin = TransferCityMapCameraCenter(city,
+        (CityMapCamera){view->origin_x, view->origin_y, zoom, center.x * 2, center.y * 2, view->rotation},
+        (CityMapCamera){0, 0, zoom, center.x * 2, center.y * 2, rotation});
+    view->origin_x = origin.x;
+    view->origin_y = origin.y;
+    view->rotation = rotation;
+    view->cache.valid = false;
+    view->sprites.initialized = false;
+    view->animations.count = 0;
+    memset(drawing->cost_text_bounds[index + 1], 0, sizeof(drawing->cost_text_bounds[index + 1]));
+    memset(drawing->demolition_bounds[index + 1], 0, sizeof(drawing->demolition_bounds[index + 1]));
+    Sc2kDirtyMarkRect(&city->game->ui->desktop.dirty, window->bounds);
+    return;
+  }
+  RotateCityMapView(city, drawing->default_map_view, clockwise);
+}
+
+void RotateFocusedCityMapView(City *city, bool clockwise) {
+  u32 window = city->game->ui->map_view_focus_window;
+  RotateCityMapViewport(city, window, clockwise);
+}
+
+// Remove the scrollbar strips from the host client rectangle, preserving observed client-rectangle reads.
+int GetCityMapClientRect(Drawing *drawing, CityRect *rect) {
+  ReadCityMapClientRect(drawing, rect);
+  rect->bottom = (int)((u32)rect->bottom - (u32)drawing->map_state.scroll_height);
+  rect->right = (int)((u32)rect->right - (u32)drawing->map_state.scroll_width);
+  return rect->bottom;
+}
+
+// Constrain the main camera and update both scrollbar positions from its logical viewport and rotated map dimensions.
+int UpdateCityMapViewScrollPosition(City *city, CityMapViewConfig *view) {
+  Drawing *drawing = city->game->drawing;
+  CityMapCamera camera = {drawing->map_state.origin_x, drawing->map_state.origin_y, view->zoom,
+      drawing->map_state.save_x * 2, drawing->map_state.save_y * 2, view->rotation};
+  CityPoint origin = ClampCityMapCameraOrigin(city, camera);
+  if (origin.x != camera.origin_x) drawing->scroll_pixels.x = 0;
+  if (origin.y != camera.origin_y) drawing->scroll_pixels.y = 0;
+  drawing->map_state.origin_x = origin.x;
+  drawing->map_state.origin_y = origin.y;
+  CityRect bounds = CityMapOriginBounds(city, camera);
+  view->horizontal_scroll_position = (bounds.right - origin.x) * 100 / (bounds.right - bounds.left);
+  view->vertical_scroll_position = (bounds.bottom - origin.y) * 100 / (bounds.bottom - bounds.top);
+  return view->vertical_scroll_position;
+}
+
+// Optionally preserve stock camera alignment for compatibility.
+void MaskCityMapOriginForZoom(Drawing *drawing, CityMapViewConfig *view) {
+  if (!(drawing->options.fixes & (1 << DRAWING_FIX_PIXEL_SCROLLING)))
+    drawing->map_state.origin_x &= -CityMapOriginAlignment(view->zoom);
+}
+
+// Offset the main map, constrain its extents and refresh the map-data preview.
+void OffsetCityMapOrigin(City *city, CityMapViewConfig *view, int delta_x, int delta_y) {
+  Drawing *drawing = city->game->drawing;
+  CityRect bounds = CityMapOriginBounds(city, (CityMapCamera){0, 0, view->zoom,
+      drawing->map_state.save_x * 2, drawing->map_state.save_y * 2, view->rotation});
+  i64 x = (i64)drawing->map_state.origin_x + delta_x;
+  i64 y = (i64)drawing->map_state.origin_y + delta_y;
+  drawing->map_state.origin_x = x < bounds.left ? bounds.left : x > bounds.right ? bounds.right : (int)x;
+  drawing->map_state.origin_y = y < bounds.top ? bounds.top : y > bounds.bottom ? bounds.bottom : (int)y;
+  MaskCityMapOriginForZoom(drawing, view);
+  UpdateCityMapViewScrollPosition(city, view);
+  RefreshCityMapDataPreview(city);
 }

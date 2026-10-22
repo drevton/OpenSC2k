@@ -1,9 +1,9 @@
+#include "city/engine/city_name.h"
 #include "game/state.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "city/engine/city_types.h"
 #include "game/errors.h"
 
 #include "city/state.h"

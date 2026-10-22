@@ -162,7 +162,7 @@ const char *const kCitySports[] = {
 // Names
 
 // These are presentation resources, not saved simulation strings.
-bool InitializeCityResourceNames(CityResourceState *resources) {
+bool InitializeCityResourceNames(CityAssets *resources) {
   memset(&resources->calendar_names, 0, sizeof(resources->calendar_names));
   memset(&resources->tool_names, 0, sizeof(resources->tool_names));
   for (int month = 0; month < CITY_MONTH_COUNT; ++month) {

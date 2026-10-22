@@ -1,17 +1,19 @@
+#include "game/audio.h"
 #include "city/engine/command_types.h"
-#include "game/application.h"
-#include "ui/tools/types.h"
-#include "drawing/drawing_internal.h"
-#include "game/application_internal.h"
-#include "ui/frontend.h"
-
-#include "audio/audio.h"
-#include "city/state.h"
 #include "city/saveload/path.h"
-#include "drawing/drawing.h"
+#include "city/state.h"
+#include "game/application.h"
+#include "game/state.h"
+#include "ui/windows/window_internal.h"
 #include "ui/commands.h"
+#include "ui/dialogs/budget.h"
+#include "ui/dialogs/dialogs.h"
+#include "ui/dialogs/messages.h"
+#include "ui/sdl.h"
 #include "ui/state.h"
 #include "ui/tools/tools.h"
+#include "ui/tools/types.h"
+#include "ui/windows/windows.h"
 
 // Application Exit
 

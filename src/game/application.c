@@ -1,24 +1,65 @@
-#include "city/maps/layers.h"
-#include "city/engine/city_types.h"
-#include "ui/windows/state.h"
+#include "game/graphics.h"
+#include "ui/updates.h"
+#include "ui/cursor/cursor.h"
+#include "base/file.h"
+#include "game/timing.h"
+#include "city/engine/clock.h"
+#include "city/engine/simulation.h"
+#include "game/application.h"
+
+#include <errno.h>
+#include <stdlib.h>
+
+#include "assets/assets.h"
+#include "assets/catalog.h"
+#include "assets/state.h"
+#include "game/audio.h"
+#include "audio/backend.h"
+#include "audio/state.h"
 #include "base/time.h"
 #include "base/version.h"
-#include "assets/assets.h"
-#include "ui/tools/tools.h"
-#include "city/saveload/runtime.h"
-#include "game/application_internal.h"
-#include "city/state.h"
+#include "city/engine/city_types.h"
+#include "city/maps/layers.h"
 #include "city/saveload/file.h"
-#include "game/errors.h"
-#include "game/state.h"
-#include "audio/state.h"
-#include "drawing/state.h"
-#include "assets/state.h"
-#include "ui/state.h"
+#include "city/saveload/runtime.h"
+#include "game/city_lifecycle.h"
+#include "city/state.h"
+#include "drawing/display.h"
+#include "drawing/maps/map_effects.h"
+#include "drawing/maps/map_events.h"
 #include "drawing/maps/map_render.h"
+#include "drawing/palette.h"
+#include "drawing/state.h"
+#include "game/commands.h"
+#include "game/errors.h"
+#include "game/frame.h"
+#include "game/palette.h"
+#include "game/state.h"
+#include "game/update.h"
+#include "ui/city_lifecycle.h"
+#include "ui/commands.h"
+#include "ui/console.h"
+#include "ui/dialogs/budget.h"
+#include "ui/dialogs/dialogs.h"
+#include "ui/dialogs/file_dialog.h"
+#include "ui/dialogs/game_options.h"
+#include "ui/dialogs/map_data.h"
+#include "ui/dialogs/scenario.h"
+#include "ui/dialogs/spans.h"
+#include "ui/input.h"
+#include "ui/map.h"
+#include "ui/map_views.h"
+#include "ui/music/jukebox.h"
+#include "ui/news/newspaper.h"
+#include "ui/news/newspaper_text.h"
+#include "ui/signs.h"
+#include "ui/sdl.h"
+#include "ui/state.h"
+#include "ui/startup/startup.h"
 #include "ui/text/text.h"
-
-#include "game/application.h"
+#include "ui/tools/tools.h"
+#include "ui/windows/state.h"
+#include "ui/windows/windows.h"
 
 static void PrintUsage(const char *name);
 
@@ -258,15 +299,14 @@ static bool RunLiveApplication(Game *game, CanvasSDL *display, const Application
       !script_path && !live_script_path;
 
     SetCityMapNavigationPresentation(game, true, true);
-    drawing->status_display = display;
-    drawing->shake_display = display;
-    drawing->ui_display = display;
+    ui->command_display = display;
+    ui->display = display;
     drawing->vehicles.enabled = true;
     ConfigureCityDiagnostics(game);
     if (drawing->options.fullscreen && Sc2kSDLFullscreen(display, 1))
       fprintf(stderr, "Fullscreen: %s\n", Sc2kSDLError());
     SyncCityInterface(game, display, 1);
-    drawing->sprite_cache.pixel_scale = drawing->map_pixel_scale * 100;
+    // Drawing installs the batch scale before launching workers; desired scales stay local until then.
     int loading_scales[2], loading_count = CityMapSpriteScales(drawing, loading_scales);
     int loading_completed = 0, loading_total = 1;
     int loading_preview_width = (CITY_BUILDING_PREVIEW_WIDTH * drawing->options.scale + 99) / 100;
@@ -286,7 +326,6 @@ static bool RunLiveApplication(Game *game, CanvasSDL *display, const Application
         }
         if (resized) {
           SyncCityInterface(game, display, 1);
-          drawing->sprite_cache.pixel_scale = drawing->map_pixel_scale * 100;
           int scales[2], count = CityMapSpriteScales(drawing, scales);
           int preview_width = (CITY_BUILDING_PREVIEW_WIDTH * drawing->options.scale + 99) / 100;
           int preview_height = (CITY_BUILDING_PREVIEW_HEIGHT * drawing->options.scale + 99) / 100;
@@ -356,7 +395,7 @@ static bool RunLiveApplication(Game *game, CanvasSDL *display, const Application
             if (!OpenCityStartupMenu(city)) return false;
           }
         }
-        if (ui->jukebox.playing) NativeAudioPlay(audio, &ui->jukebox);
+        if (audio->jukebox.playing) NativeAudioPlay(audio);
         if (!RedrawCityCanvas(city, display))
           return false;
         if (open_newspaper >= 0) {
@@ -378,7 +417,7 @@ static bool RunLiveApplication(Game *game, CanvasSDL *display, const Application
           !ui->desktop.menu.pressed && !ui->button_feedback.repeating &&
           !drawing->cost_texts_active &&
           !ui->pointer_stroke_count &&
-          !ui->jukebox.playing && !audio->music_notify && !audio->sound_playing && !audio->cached_sound_playing) {
+          !audio->jukebox.playing && !audio->music_notify && !audio->sound_playing && !audio->cached_sound_playing) {
         // SDL wakes immediately for input; a quiet paused city needs only its next cadence.
         wait_ms = IntClamp((int)((game->next_cadence_time - MonotonicSeconds()) * 1000) + 1,
             0, CITY_CADENCE_INTERVAL_MS);
@@ -485,7 +524,7 @@ static bool RunLiveApplication(Game *game, CanvasSDL *display, const Application
       dirty |= UpdateCityWindowTimers(game, ui_time);
       dirty |= UpdateCityVehicleAnimation(city, world_time);
       dirty |= UpdateCityRoadTraffic(city, (u32)(u64)(world_time * 256));
-      dirty |= UpdateCityPowerAnimation(city, world_time);
+      dirty |= UpdateCityPowerAnimation(drawing, city->settings.speed, world_time);
       dirty |= UpdateCityCostTexts(drawing, ui_time);
       dirty |= UpdateCityDemolitionEffects(drawing, ui_time);
       dirty |= UpdateCityScreenShake(drawing, world_time);
@@ -512,63 +551,31 @@ static int CloseApplication(GameStorage *storage, CanvasSDL *display,
   Game *game = &storage->game;
   City *city = game->city;
   Drawing *drawing = game->drawing;
-  CityInterfaceState *ui = game->ui;
   CityAudioState *audio = game->audio;
   const GameApplicationHooks *hooks = options->hooks;
   void *context = options->context;
   CloseGameSettings(game);
   FinishMapSpritePreparation(&drawing->sprite_cache, true);
   game->close_requested = true;
-  ClearCityResourceNotices(ui);
-  for (int index = ui->desktop.count - 1; index >= 0; --index)
-    if (ui->desktop.windows[index].newspaper || ui->desktop.windows[index].owned_message ||
-        ui->desktop.windows[index].completion)
-      Sc2kCanvasDesktopDismissWindow(&ui->desktop, ui->desktop.windows[index].window_id);
-  CloseCityManualBudget(city);
+  BeginCityInterfaceShutdown(game);
   game->activation_context = NULL;
-  game->poll_activation = NULL;  drawing->present_map = NULL;
+  game->poll_activation = NULL;
+  game->present_map = NULL;
   drawing->tile_damage_enabled = false;
-  drawing->status_display = NULL;
-  ClearCityScenarioSelection(city);
-  CompleteCityWindowCallbacks(city);
-  ReleaseCityBudgetPresentation(ui);
+  CompleteCityInterfaceCallers(game);
   ReleaseCityTickContinuations(city);
   ReleaseCityPostedCommands(game);
-  ClearCityStartupMenuPresentation(city);
-  ReleaseCityTerrainMap(ui->terrain_preview);
-  free(ui->terrain_preview); ui->terrain_preview = NULL;
-  SetCitySpanPresentation(ui, NULL);
-  ShutdownCityFileDialogPresentation(city);
-  ReleaseCityFileNotices(city, 1);
-  UnbindCityChartPanels(city);
-  SetCityStatusPresentation(&ui->status, NULL, 0);
-  SetCityMapDataPresentation(city, NULL);
-  SetCityMapNavigationPresentation(game, false, false);
+  ReleaseCityInterfacePresentation(game);
   if (audio->live_open) NativeAudioClose(audio);
   if (hooks && hooks->close_streams && !hooks->close_streams(context)) result = 1;
   if (display != NULL)
     Sc2kSDLClose(display);
-  ReleaseCityNewspaperOpening(drawing);
-  free(drawing->framebuffer.pixels);
-  free(drawing->screen_indices); free(drawing->scroll_indices); free(drawing->scroll_colors);
-  free(drawing->animation_rows);
-  FreeMapSpriteCache(&drawing->sprite_cache);
-  ReleaseCityToolbarIcons(drawing);
-  while (drawing->window_drawing) ReleaseCityWindowDrawing(drawing->window_drawing);
-  ReleaseCityMapDrawingStorage(drawing);
-  free(drawing->signs);
-  free(ui->signs.entries); free(ui->signs.order);
-  free(ui->desktop.placement.cells);
-  ReleaseCityConsole(ui);
-  ui->pointer_stroke_count = 0;
+  ReleaseDrawing(drawing);
+  ReleaseCityInteractionState(game->ui);
   ReleaseGameCityAssets(game);
   if (hooks && hooks->release) hooks->release(game, context);
-  EmptyCityName(city);
-  ReleaseCityFileExtensions(city);
+  ReleaseSimulation(city);
   ReleaseCityFilePaths(game);
-  ReleaseCityAssociations(city);
-  free(city->map_storage);
-  city->map_storage = NULL;
   CloseCityDiagnostics(game);
   free(storage);
   return result;
@@ -590,7 +597,7 @@ int RunGameApplication(int argc, char **argv, const GameApplicationHooks *hooks,
   Game *game = &storage->game;
   City *city = &storage->city;
   InitializeSimulation(city, maps);
-  *game = (Game){.city = city, .error_tile = INVALID_TILE, .drawing = &storage->drawing, .ui = &storage->ui,
+  *game = (Game){.city = city, .drawing = &storage->drawing, .ui = &storage->ui,
       .audio = &storage->audio, .resources = &storage->assets, .idle_inputs = {true, true, false},
       .default_city_fixes = CITY_FIX_DEFAULT_MASK, .repair_save_headers = true};
   city->game = game;
@@ -599,6 +606,7 @@ int RunGameApplication(int argc, char **argv, const GameApplicationHooks *hooks,
   CityInterfaceState *ui = game->ui;
   CityAudioState *audio = game->audio;
   CityResourceState *resources = game->resources;
+  ui->error_tile = INVALID_TILE;
   ui->main_window_available = true;
   ui->tools_visible = true;
   ui->file_dialog_redraw_pending = true;
@@ -606,7 +614,7 @@ int RunGameApplication(int argc, char **argv, const GameApplicationHooks *hooks,
   ui->diagnostic_nested_newspaper = -1;
   audio->sound_tile = INVALID_TILE;
   InitializeDrawing(drawing);
-  drawing->present_map = ApplicationPresentMap;
+  game->present_map = ApplicationPresentMap;
   drawing->tile_damage_enabled = true;
   const char *assets = options.assets, *city_path = options.startup.city_path, *image_path = options.image_path;
   int image_physical = options.image_physical;
@@ -663,10 +671,6 @@ int RunGameApplication(int argc, char **argv, const GameApplicationHooks *hooks,
   InitializeCityNewspaperLayouts(drawing);
   Sc2kSetCityMapClientRect(drawing, (CityRect){0, 0, kDefaultCityCanvasWidth, kDefaultCityCanvasHeight});
   drawing->default_map_view->view_rect = (CityRect){0, 0, kDefaultCityCanvasWidth, kDefaultCityCanvasHeight};
-  // Both preview receivers borrow the retained map raster before command-time painting.
-  if (!EnsureCityMapViewSurface(drawing, drawing->default_map_view) ||
-      !EnsureCityMapViewSurface(drawing, drawing->drag_map_view))
-    goto done;
   InitializeCityMapView(game, MapTileXY(city, city->geography.center_x, city->geography.center_y), 1);
   SetCityStatusPresentation(&ui->status, &ui->desktop, kDefaultCityCanvasWidth);
   SetCityStatusMinimized(&ui->status, 0);
@@ -681,8 +685,9 @@ int RunGameApplication(int argc, char **argv, const GameApplicationHooks *hooks,
   ui->desktop.interface = ui;
   ui->desktop.game = game;
   ui->desktop.interface_font = &resources->interface_font;
-  JukeboxInit(&ui->jukebox, (u32)(u64)(MonotonicSeconds() * 1000000));
-  Sc2kCanvasSetJukeboxState(ui, &ui->jukebox);
+  JukeboxInit(&audio->jukebox, (u32)(u64)(MonotonicSeconds() * 1000000));
+  ui->music_collapsed = ui->music_pinned = 0;
+  Sc2kCanvasSetJukeboxState(ui, &audio->jukebox);
   ui->desktop.canvas_width = kDefaultCityCanvasWidth;
   ui->desktop.canvas_height = kDefaultCityCanvasHeight;
   if (!BindCityChartPanels(city, &ui->desktop))
@@ -712,9 +717,9 @@ int RunGameApplication(int argc, char **argv, const GameApplicationHooks *hooks,
   RefreshCityStatusPanel(city, &ui->status, city->settings.speed, true);
   if (GetGameError(game)) goto done;
   ApplicationSyncDialogPause(city);
-  if (!headless && !game->close_requested) NativeAudioOpen(audio, &ui->jukebox);
+  if (!headless && !game->close_requested) NativeAudioOpen(audio);
   if (!hooks) {
-    if (!audio->live_open) { audio->master_volume = 100; ui->jukebox.playing = 1; }
+    if (!audio->live_open) { audio->master_volume = 100; audio->jukebox.playing = 1; }
     ApplyGameSettings(game, ui_scale_override);
   }
   if (headless && !RunHeadlessApplication(game, &options)) goto done;
@@ -723,7 +728,7 @@ int RunGameApplication(int argc, char **argv, const GameApplicationHooks *hooks,
   game->activation_context = NULL;
   game->poll_activation = NULL;
   if (hooks && hooks->finish && !hooks->finish(game, context)) goto done;
-  if (image_path && !ScreenshotCityCanvas(city, image_path, image_physical))
+  if (image_path && !ScreenshotCityCanvas(game, image_path, image_physical))
     goto done;
   if (ui->dialog_pause_active) {
     ui->dialog_pause_requested = 0;

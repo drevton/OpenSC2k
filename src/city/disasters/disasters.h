@@ -2,55 +2,7 @@
 #define SC2K_DOMAIN_SRC_CITY_DISASTERS_DISASTERS_H
 
 #include "city/types.h"
-#include "city/engine/simulation.h"
-
-// State
-
-typedef struct {
-  i32 y;
-  i32 x;
-} CityDisasterLocation;
-
-typedef struct {
-  i16 months[4];
-} CityDisasterPeriods;
-
-typedef struct {
-  CityDisasterLocation location;
-  CityDisasterPeriods periods;
-  u32 map_update_pending;
-  u16 pending_type;
-  u16 last_type;
-  u16 last_event_slot;
-  i16 event_data;
-  i16 tile237_count;
-  i16 tile248_count;
-  i16 tornado_count;
-  i16 monster_count;
-  i16 type1_count;
-  i16 type2_count;
-  i16 type16_count;
-  i16 border_water_count;
-  u16 border_water_x;
-  u16 border_water_y;
-  i16 event_decay_ticks;
-  u16 event_cleanup_ticks;
-} CityDisasterState;
-
-// Explicit operation locals retained across animation boundaries. No C stack
-// or tile snapshot is retained; resumption uses the live City.
-enum { CITY_OPERATION_PENDING = -2 };
-typedef struct {
-  u8 type, phase;
-  i16 iteration, attempts;
-  int origin_x, origin_y;
-  int x, y, direction, run_length, run_position, remaining;
-  u32 update_gate;
-  bool applied, terrain_water_allowed;
-  TileIndex strike;
-  i64 cash_restore;
-  u32 label_restore, redraw_counter;
-} CityDisasterWork;
+#include "city/disasters/types.h"
 
 void CancelCityDisasterWork(City *city);
 
@@ -59,9 +11,6 @@ void SetDisasterLocation(CityDisasterLocation *location, int x, int y);
 // Tables
 
 extern const CityDisasterPeriods kCityDefaultDisasterPeriods;
-extern const u8 kEventDataPriority[67];
-extern const i8 kDisasterType10DirectionY[8];
-extern const i8 kDisasterType10DirectionX[8];
 extern const i8 kCardinalNeighborY[4];
 extern const i8 kCardinalNeighborX[4];
 
@@ -74,11 +23,11 @@ void ScheduleCenteredDisaster(City *city, int kind, int radius);
 void SchedulePollutionDisaster(City *city);
 void EvaluateCityProblemsAndRandomDisaster(City *city);
 i64 AdvanceCityDisasterEffects(City *city, bool terrain_water_allowed);
-i64 ProcessPendingCityDisaster(City *city, bool terrain_water_allowed);
 
-// Effects
+// Effects apply the queued location immediately or resume City-owned disaster work. An i64 result may be
+// CITY_OPERATION_PENDING; resume that same effect after its delay instead of scheduling it again.
+// Successful effects return nonzero, and false/zero means no suitable target or event slot was found.
 
-typedef struct City City;
 i64 ApplyCityFireDisaster(City *city, bool fire_storm);
 bool ApplyCityMobileDisaster(City *city, bool monster);
 i64 ApplyCityRandomDisasterStrikes(City *city, bool delayed);
@@ -89,18 +38,30 @@ void ResolveDestroyedCityMapCell(City *city, TileIndex tile_index);
 void SpreadCityMapFireToCell(City *city, TileIndex tile_index, int maximum_power_level);
 void SetCityMapOverlayIfReplaceable(City *city, TileIndex tile_index, u8 overlay);
 void ClearTransientCityMapOverlay(City *city, TileIndex tile_index);
-bool ApplyDisasterType3(City *city);
-i64 ApplyDisasterType10(City *city);
-bool ApplyDisasterType2(City *city);
-bool ApplyDisasterType4(City *city);
-int ApplyDisasterType15(City *city);
-i64 ApplyDisasterType9(City *city);
-i64 ApplyDisasterType16(City *city);
-i64 ApplyDisasterType11(City *city, bool terrain_water_allowed);
-i64 ApplyDisasterType6(City *city);
-bool ApplyDisasterType18(City *city);
+bool ApplyCityRiotDisaster(City *city);
+i64 ApplyCityMicrowaveDisaster(City *city);
+bool ApplyCityFloodDisaster(City *city);
+bool ApplyCityPollutionDisaster(City *city);
+int ApplyCityChemicalSpillDisaster(City *city);
+i64 ApplyCityMeltdownDisaster(City *city);
+i64 ApplyCityHurricaneDisaster(City *city);
+i64 ApplyCityVolcanoDisaster(City *city, bool terrain_water_allowed);
+i64 ApplyCityEarthquakeDisaster(City *city);
+bool ApplyCityAirCrashDisaster(City *city);
 
-// Menu
+// Toggle random-disaster suppression; this does not cancel an active or explicitly requested disaster.
+// The command ignores map location and requires zero reserved fields. TEST leaves the rule unchanged.
+i64 CmdToggleNoDisasters(City *city, u32 flags, int reserved1, int reserved2, int reserved3);
+
+// Shared command admission and execution. Reserved parameters must be zero. The fifteen explicit selectors below
+// ignore location; crash, helicopter-crash and chemical-spill requests require INVALID_TILE and a valid city center.
+// TEST returns zero on admission without changing City, RNG or presentation; execution returns one on success.
+// Invalid payloads or unavailable crash-event slots return CITY_COMMAND_COST_INVALID.
+i64 CmdStartDisaster(City *city, u32 flags, TileIndex location,
+    int kind, int parameter2, int parameter3);
+
+// Queue a supported explicit disaster request. These selectors consume their documented location draws;
+// callers needing validation or a read-only query must use CmdStartDisaster through RunCityCommand.
 
 void SelectCityFireDisaster(City *city);
 void SelectCityFloodDisaster(City *city);

@@ -43,6 +43,11 @@ typedef enum CityFileExceptionCause {
   CITY_FILE_CAUSE_END_OF_FILE = 14,
 } CityFileExceptionCause;
 
+typedef struct CityFileExceptionState {
+  i32 cause;
+  i32 os_error; // Native errno; comparison adapters retain stock Win32 error values.
+} CityFileExceptionState;
+
 // MISC word positions are file-format IDs, independent of guest addresses.
 // Word29's role remains unidentified; retain its number rather than guessing.
 typedef enum CityMiscWordIndex {

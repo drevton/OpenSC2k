@@ -19,6 +19,10 @@ OpenGFX2 artwork described below; the other vehicles retain their original Blend
 | 478–488 | OpenGFX2 passenger coach and remaining locomotive headings |
 | 490–499 | Industrial crawler, water, crowd, rescue helicopter, smoke and tornado |
 
+Portal facings are south, east, north and west. Their screen projection uses
+`screen_x = 64 + 64 * (tile_y - tile_x)` and `screen_y = 64 + 32 * (tile_x + tile_y) - height`,
+matching the map and rail artwork.
+
 Unused palette traffic slots 448–449 explicitly resolve to an empty sprite. Retired
 composite monster-part slots are blank except 478–488, reused for train coaches and locomotive headings.
 Native animated road vehicles keep their independent Blender bank.
@@ -108,9 +112,10 @@ python3 tools/dev.py build
 ```
 
 Normal builds pack checked-in PNGs without downloads. The world baker preserves these imported
-records. Drawing follows a rounded path through successive rail positions, chooses headings from
-its tangent, and interpolates track height through slopes and bridge approaches. Rail tile artwork
-no longer controls vehicle orientation or adds tile-specific vehicle offsets. Motion history stays
-in Drawing's existing per-event buffer. Coaches sample the same path at 65% of a tile spacing to
-match their imported length, rather than leaving the full-tile simulation gaps between vehicles.
-City movement, RNG and save records are unchanged.
+records. Normal builds also bake compact rail centreline tables from the same geometry as the
+track artwork, including diagonals and extended bends. Drawing samples these paths for positions
+and headings, and interpolates track height through slopes and bridge approaches. Cached path
+descriptors fit in the existing per-event record padding. Coaches follow at 180/256 of a tile in
+track distance, so short diagonal pieces do not compress their spacing. An engine stops its visual
+motion at the current tile's centre when its next tile is occupied. City movement, RNG and save
+records are unchanged.

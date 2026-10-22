@@ -160,6 +160,7 @@ def WriteLicenses(source_root, destination, sound_metadata, extra_licenses=()):
       'thirdparty/lua/LICENSE': 'Lua-LICENSE.txt',
       'thirdparty/zstd/LICENSE': 'Zstandard-LICENSE.txt',
       'docs/licenses/sc2kfix.txt': 'sc2kfix-LICENSE.txt',
+      'docs/licenses/sdl2.txt': 'SDL2-LICENSE.txt',
       'src/city/terrain/LICENSE.OpenTTD': 'OpenTTD-terrain-LICENSE.txt',
       'src/city/terrain/LICENSE.OpenSC2K': 'OpenSC2K-terrain-LICENSE.txt',
       'src/city/terrain/LICENSE.FastNoiseLite': 'FastNoiseLite-LICENSE.txt',

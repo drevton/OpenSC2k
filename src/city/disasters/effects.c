@@ -1,27 +1,42 @@
+#include "game/timing.h"
+#include "city/maps/labels.h"
+#include "city/engine/random.h"
 #include "audio/types.h"
 #include "city/disasters/types.h"
 #include "city/maps/tile_storage.h"
 #include "city/maps/layers.h"
-#include "audio/audio.h"
+#include "game/audio.h"
 #include "city/presentation.h"
 #include <assert.h>
 #include <string.h>
 
 #include "game/observation.h"
 #include "city/disasters/disasters.h"
-#include "city/engine/initialization.h"
-#include "city/engine/simulation.h"
 #include "city/events/events.h"
-#include "city/infrastructure/infrastructure.h"
 #include "city/maps/map.h"
 #include "city/state.h"
 #include "city/tools/tools.h"
 #include "city/saveload/file.h"
 #include "game/state.h"
-#include "audio/state.h"
 #include "assets/state.h"
 #include "city/maps/map_types.h"
 #include "city/saveload/map_format.h"
+
+static const u8 kDisasterDamagePriority[67] = {
+  0, 1, 1, 1, 1, 1, 1, 1, 4, 8, 5, 5, 5, 5, 5, 5,
+  5, 5, 5, 3, 4, 4, 4, 2, 2, 3, 2, 4, 3, 2, 3, 2,
+  8, 8, 2, 4, 8, 1, 4, 1, 1, 8, 1, 1, 3, 8, 2, 2,
+  2, 1, 1, 4, 1, 1, 2, 2, 2, 1, 3, 2, 5, 3, 6, 6,
+  6, 6, 6,
+};
+
+static const i8 kMicrowaveDisasterStepY[8] = {
+  0, 1, 1, 1, 0, -1, -1, -1,
+};
+
+static const i8 kMicrowaveDisasterStepX[8] = {
+  -1, -1, 0, 1, 1, 1, 0, -1,
+};
 
 enum {
   CITY_DISASTER_WORK_READY, CITY_DISASTER_WORK_WAIT,
@@ -107,9 +122,9 @@ i64 ApplyCityFireDisaster(City *city, bool fire_storm) {
   return applied;
 }
 
-// Walk the binary's expanding spiral and mark the first suitable tile. Uses initialized disaster location and
-// deterministic search state; returns whether it found and marked a suitable target.
-bool ApplyDisasterType3(City *city) {
+// Search outward from the scheduled location for a dry road and start one riot marker.
+// Returns whether a suitable road was found; successful placement consumes one CRT draw.
+bool ApplyCityRiotDisaster(City *city) {
   int y = city->disasters.location.y;
   int x = city->disasters.location.x;
   int direction = 0;
@@ -224,7 +239,7 @@ i64 ApplyCityRandomDisasterStrikes(City *city, bool delayed) {
     int x = (Sc2kCrtRand(city) & 0x1F) + work->origin_x - 16;
     if (IsMapCoordinateValid(city, x, y)) {
       SetDisasterLocation(&city->disasters.location, x, y);
-      if (delayed ? ApplyDisasterType2(city) : ApplyDisasterType3(city)) work->applied = true;
+      if (delayed ? ApplyCityFloodDisaster(city) : ApplyCityRiotDisaster(city)) work->applied = true;
       if (delayed) {
         work->phase = 1;
         BeginGameDelay(city->game, &city->game->animation_delay, 20, true);
@@ -242,9 +257,9 @@ i64 ApplyCityRandomDisasterStrikes(City *city, bool delayed) {
   return applied;
 }
 
-// Find the first alien tile and sweep its eight-way random path. Requires the same retained disaster work on
-// subsequent calls; pending timing must not replay already consumed random path steps.
-i64 ApplyDisasterType10(City *city) {
+// Find the first microwave power plant and damage a random eight-direction path from it.
+// Calls share City disaster work; each path step consumes its direction draw once.
+i64 ApplyCityMicrowaveDisaster(City *city) {
   CityDisasterWork *work = &city->disaster_work;
   if (!work->type) {
     int y = 0;
@@ -285,17 +300,17 @@ i64 ApplyDisasterType10(City *city) {
       work->phase = 0;
     }
     --work->remaining;
-    work->y += kDisasterType10DirectionY[work->direction];
-    work->x += kDisasterType10DirectionX[work->direction];
+    work->y += kMicrowaveDisasterStepY[work->direction];
+    work->x += kMicrowaveDisasterStepX[work->direction];
     work->direction = Sc2kCrtRand(city) & 7;
   }
   *work = (CityDisasterWork){0};
   return true;
 }
 
-// Find a shoreline target and mark its unpowered neighbors. Returns whether a suitable target was affected; failed
-// searches retain their deterministic random draws.
-bool ApplyDisasterType2(City *city) {
+// Find a shoreline target and flood nearby dry tiles. If no shore is found, try random flat tiles.
+// Returns whether flooding started; failed random probes still consume their draws.
+bool ApplyCityFloodDisaster(City *city) {
   int origin_y = city->disasters.location.y;
   int origin_x = city->disasters.location.x;
   int target_y = 0;
@@ -385,9 +400,9 @@ bool ApplyDisasterType2(City *city) {
   return true;
 }
 
-// Optionally centers the map, marks the scheduled cell, and preserves its coordinates. Uses the scheduled location;
-// returns whether its tile effect was admitted and any camera change remains presentation state.
-bool ApplyDisasterType4(City *city) {
+// Mark the scheduled tile with pollution and optionally center the map on it. The scheduled location must
+// be valid; this effect always succeeds and consumes no random draws.
+bool ApplyCityPollutionDisaster(City *city) {
   int y = city->disasters.location.y;
   int x = city->disasters.location.x;
   if (city->settings.auto_goto != 0)
@@ -399,9 +414,9 @@ bool ApplyDisasterType4(City *city) {
   return true;
 }
 
-// Place a population-scaled set of random disaster markers near the target. Uses the scheduled point and deterministic
-// RNG; returns its original applied-marker count rather than a command price.
-int ApplyDisasterType15(City *city) {
+// Place population-scaled pollution markers around the scheduled location. Each attempt draws Y then X;
+// returns one if any in-map tile was marked, otherwise zero.
+int ApplyCityChemicalSpillDisaster(City *city) {
   int center_y = city->disasters.location.y;
   int center_x = city->disasters.location.x;
   int remaining = city->indicators.population / 10000 + 5;
@@ -450,7 +465,7 @@ void DemolishCityFootprintForDisaster(City *city, TileIndex tile_index, int anim
     category = ReadCityZoneKind(&city->tile[tile_index]);
 
   if (city->disasters.event_data == CITY_DISASTER_EVENT_DATA_NONE ||
-      kEventDataPriority[city->disasters.event_data] < kEventDataPriority[category])
+      kDisasterDamagePriority[city->disasters.event_data] < kDisasterDamagePriority[category])
     city->disasters.event_data = category;
 }
 
@@ -579,9 +594,9 @@ bool ApplyDisasterCellEffect(City *city, TileIndex tile_index, int allow_low_til
   return false;
 }
 
-// Bulldoze and randomize a 65-by-65 area around the type-9 disaster. Retains iteration/captured cleanup in City
-// disaster work; pending timing must resume the same strike sequence.
-i64 ApplyDisasterType9(City *city) {
+// Find a nuclear plant, demolish its footprint and scatter damage and radioactive waste around it.
+// City disaster work retains the plant origin and strike iteration; returns false when no plant exists.
+i64 ApplyCityMeltdownDisaster(City *city) {
   CityDisasterWork *work = &city->disaster_work;
   if (!work->type) {
     int center_y = city->disasters.location.y;
@@ -644,9 +659,9 @@ static TileIndex CityDisasterEdgeTile(const City *city, bool vertical, int along
   return MapTileXY(city, vertical ? across : along, vertical ? along : across);
 }
 
-// Apply the directional earthquake search and overlay passes. Requires initialized scheduled location and reusable
-// scan state; updates markers and cleanup counters as simulation effects.
-i64 ApplyDisasterType16(City *city) {
+// Sweep inland from the selected map edge, demolishing coastal structures and leaving flood overlays.
+// City disaster work retains the edge direction and scan progress until the hurricane passes finish.
+i64 ApplyCityHurricaneDisaster(City *city) {
   CityDisasterWork *work = &city->disaster_work;
   if (!work->type) {
     PlayCitySound(city, INVALID_TILE, CITY_SOUND_EARTHQUAKE);
@@ -705,9 +720,9 @@ i64 ApplyDisasterType16(City *city) {
   return true;
 }
 
-// Create the type-11 power-grid disaster around its scheduled location. Terrain-water permission is explicit; retained
-// work restores temporary labels/cash on the real completion or cancellation path.
-i64 ApplyDisasterType11(City *city, bool terrain_water_allowed) {
+// Raise terrain and scatter fire and pollution around the scheduled volcano origin. Terrain-water permission
+// is explicit; retained work restores temporary labels and cash on completion or cancellation.
+i64 ApplyCityVolcanoDisaster(City *city, bool terrain_water_allowed) {
   CityDisasterWork *work = &city->disaster_work;
   if (!work->type) {
     *work = (CityDisasterWork){.type = CITY_DISASTER_VOLCANO,
@@ -763,7 +778,7 @@ i64 ApplyDisasterType11(City *city, bool terrain_water_allowed) {
 
 // Shake the viewport, then strike a 65-by-65 region around the origin. Retains its shake/strike iteration across
 // pending delays; may mutate map cells and consume RNG before completion.
-i64 ApplyDisasterType6(City *city) {
+i64 ApplyCityEarthquakeDisaster(City *city) {
   CityDisasterWork *work = &city->disaster_work;
   if (!work->type) {
     *work = (CityDisasterWork){.type = CITY_DISASTER_EARTHQUAKE,
@@ -806,9 +821,9 @@ i64 ApplyDisasterType6(City *city) {
   return true;
 }
 
-// Create the type-18 event at a random unmarked tile in the central map region. Returns whether an eligible event was
-// created; failed search attempts still consume the deterministic selection draws.
-bool ApplyDisasterType18(City *city) {
+// Create a crashing airplane over a randomly selected unmarked tile in the central map region.
+// Returns false if no tile or event slot is available; search probes still consume their draws.
+bool ApplyCityAirCrashDisaster(City *city) {
   bool found = false;
   int y;
   int x;

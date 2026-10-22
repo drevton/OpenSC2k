@@ -2,17 +2,15 @@
 #define SC2K_DOMAIN_SRC_CITY_EVENTS_EVENTS_H
 
 #include "city/maps/tile_storage.h"
+#include "city/events/emergency.h"
 #include <stddef.h>
 
 #include "city/types.h"
 
 // Event
 
-// Event-kind values index the sprite table and event dispatcher.
-// The large-zoom atlas confirms the vehicle/effect
-// names. Kind 4 has a bulldozer sprite but no update handler. Kind 16 is Maxis
-// Man: sprite495, disaster targeting, and OpenSC2K's TYPE_MAXIS_MAN agree.
-// CityMapEvent.type remains u8: these constants do not change the guest ABI.
+// Stable event kinds used by saved records and the event dispatcher. The type field stores one byte.
+// Bulldozer events have artwork but no movement handler.
 typedef enum CityMapEventKind {
   CITY_MAP_EVENT_UNUSED = 0,
   CITY_MAP_EVENT_AIRPLANE = 1,
@@ -80,27 +78,6 @@ typedef enum CityMaxisManState {
   CITY_MAXIS_MAN_DEPART = 2,
 } CityMaxisManState;
 
-// Train states use byte arrays. Bus boarding switches
-// from states 0..3 to 4..7; stations 8/10/11 tally separate facility traffic.
-// Alighting at 9 returns to ordinary road travel. Rail 12 and subway 13 are
-// distinct graph modes, not surface or underground tile IDs.
-typedef enum CityTransportRouteState {
-  CITY_ROUTE_ROAD = 0,
-  CITY_ROUTE_HIGHWAY = 1,
-  CITY_ROUTE_TUNNEL = 2,
-  CITY_ROUTE_CONNECTOR = 3,
-  CITY_ROUTE_BUS_ROAD = 4,
-  CITY_ROUTE_BUS_HIGHWAY = 5,
-  CITY_ROUTE_BUS_TUNNEL = 6,
-  CITY_ROUTE_BUS_CONNECTOR = 7,
-  CITY_ROUTE_BUS_STATION = 8,
-  CITY_ROUTE_ALIGHTING_STATION = 9,
-  CITY_ROUTE_RAIL_STATION = 10,
-  CITY_ROUTE_SUBWAY_STATION = 11,
-  CITY_ROUTE_RAIL = 12,
-  CITY_ROUTE_SUBWAY = 13
-} CityTransportRouteState;
-
 // Random rail-station probes: paired vertical then horizontal choices.
 typedef enum CityRailProbeDirection {
   CITY_RAIL_PROBE_NORTH = 0, CITY_RAIL_PROBE_SOUTH = 1,
@@ -112,10 +89,10 @@ typedef enum CityAirplaneSpawnSide {
   CITY_AIRPLANE_SPAWN_SOUTH = 2, CITY_AIRPLANE_SPAWN_EAST = 3,
 } CityAirplaneSpawnSide;
 
-// Type9 state byte: sailing until a rare incident stops movement before removal.
+// Sailboat state byte: sailing until a rare incident stops movement before removal.
 typedef enum CitySailboatState { CITY_SAILBOAT_SAILING = 0, CITY_SAILBOAT_INCIDENT = 1 } CitySailboatState;
 
-// Type6 reuses direction as its explosion animation stage, not a heading.
+// Explosions reuse direction as its explosion animation stage, not a heading.
 typedef enum CityExplosionStage {
   CITY_EXPLOSION_START = 0, CITY_EXPLOSION_SECOND_FRAME = 1, CITY_EXPLOSION_RESOLVE = 2,
 } CityExplosionStage;
@@ -146,8 +123,9 @@ typedef struct { u8 offset_y, reserved_y, offset_x, reserved_x; } CityMapEventMo
 static inline bool IsCityMapEventTrain(int type) {
   return type >= CITY_MAP_EVENT_TRAIN_ENGINE && type <= CITY_MAP_EVENT_SUBWAY_CAR;
 }
-typedef struct {
+typedef struct CityMapEvent {
   u8 type;
+  // Aircraft/ships use eight-way headings; trains/sailboats use four-way directions; explosions use stages.
   u8 direction;
   union {
     u16 next_slot;
@@ -184,7 +162,7 @@ typedef struct {
   };
 } CityMapEvent;
 
-enum { CITY_NATIVE_EVENT_BYTES = 22, CITY_STOCK_EVENT_BYTES = 12 };
+enum { CITY_NATIVE_EVENT_BYTES = 22 };
 
 _Static_assert(offsetof(CityMapEvent, type) == 0, "native event type layout");
 _Static_assert(offsetof(CityMapEvent, direction) == 1, "native event direction layout");
@@ -209,19 +187,11 @@ _Static_assert(offsetof(CityMapEvent, hash_next) == CITY_NATIVE_EVENT_BYTES,
 _Static_assert(offsetof(CityMapEvent, tile) == 8, "event tile alignment");
 _Static_assert(sizeof(CityMapEvent) == 24, "native event record size");
 
-typedef struct City City;
 CityPoint ReadCityMapEventPosition(const City *city, const CityMapEvent *event);
 CityPoint ReadCityMapEventTarget(const City *city, const CityMapEvent *event);
-// Train targets are map coordinates; all other targets are native scaled offsets.
+// Train targets are map coordinates; all other targets are normalized native sub-tile offsets.
 void SetCityMapEventTarget(City *city, CityMapEvent *event, int x, int y);
 void ReindexCityMapEvents(City *city, int width, int height);
-void DecodeCityMapEventCoordinates(City *city, CityMapEvent *event, int x, int y, int target_x, int target_y);
-void EncodeStockCityMapEvent(const City *city, u8 bytes[CITY_STOCK_EVENT_BYTES], const CityMapEvent *event);
-void DecodeStockCityMapEvent(City *city, CityMapEvent *event, const u8 bytes[CITY_STOCK_EVENT_BYTES]);
-
-// During approach, destination is the runway reference point, not the offset waypoint.
-// The orientation rotates with the map; derive the signed offset only when needed.
-void ReadCityAirplaneApproachOffset(const CityMapEvent *event, int *x, int *y);
 
 typedef struct {
   CityMapEvent *event;
@@ -256,42 +226,25 @@ void LinkCityMapEvent(City *city, int slot);
 void MoveCityMapEvent(City *city, int slot, TileIndex tile);
 int FirstCityMapEventOnTile(const City *city, TileIndex tile);
 int NextCityMapEventOnTile(const City *city, int slot);
+// Discard all event records and hash membership in existing storage. Does not clear tile overlays or spawn counters.
+void ClearCityMapEvents(City *city);
 void RebuildCityEventHash(City *city);
-void ImportStockCityEventLinks(City *city);
 int ReadOverlay(const City *city, TileIndex tile);
 u16 ReadCityEventUnderlay(const City *city, TileIndex tile);
 
 // Runtime
 
-typedef struct City City;
 
 int FindFreeCityEventSlot(City *city);
-void FinishCityAirplaneApproach(CityMapEvent *event);
 void ClearCityMapEventSlot(City *city, int slot);
 
-// Dispatch uses slots 1..count, including the final one-based slot.
-enum { CITY_CIVIC_DISPATCH_UNITS = 30, CITY_MILITARY_DISPATCH_UNITS = 5 };
-
-typedef struct {
+// Logical event cadence and animation phase; the host clock and UI scheduling belong to Game.
+typedef struct CityEventRuntime {
   u32 timer_deadline;
   i16 tick_sample;
   i16 tick_average;
   u16 animation_phase;
-  i16 police_unit_count;
-  i16 fire_unit_count;
-  i16 military_unit_count;
-  i16 police_index;
-  i16 fire_index;
-  i16 military_index;
-  u32 police_blocked_warning;
-  u32 fire_blocked_warning;
-  u32 military_blocked_warning;
-  u16 police_previous_x[CITY_CIVIC_DISPATCH_UNITS + 1];
-  u16 police_previous_y[CITY_CIVIC_DISPATCH_UNITS + 1];
-  u16 fire_previous_x[CITY_CIVIC_DISPATCH_UNITS + 1];
-  u16 fire_previous_y[CITY_CIVIC_DISPATCH_UNITS + 1];
-  u16 military_previous_x[CITY_MILITARY_DISPATCH_UNITS + 1];
-  u16 military_previous_y[CITY_MILITARY_DISPATCH_UNITS + 1];
+  CityEmergencyDispatchState dispatch;
 } CityEventRuntime;
 
 // Tables
@@ -299,106 +252,56 @@ typedef struct {
 // Native immutable values; no executable mapping is needed.
 extern const i8 kCityMapEventSubtileYStep[8];
 extern const i8 kCityMapEventSubtileXStep[8];
-extern const i8 kCityMapEvent12StepY[8];
-extern const i8 kCityMapEvent12StepX[8];
-extern const i8 kCityMapEvent16StepY[8];
-extern const i8 kCityMapEvent16StepX[8];
-extern const i8 kCityEventAdjacentYOffset[8];
-extern const i8 kCityEventAdjacentXOffset[8];
-extern const u8 kCityMapEventSubtileSpeed[17];
-extern const u8 kCityEventDirectionSearchOrder[7];
-extern const u8 kCityEventTile237DirectionOrderA[4];
-extern const u8 kCityEventTile237DirectionOrderB[4];
-extern const i8 kCityEventTile237DirectionYOffset[4];
-extern const i8 kCityEventTile237DirectionXOffset[4];
-extern const i8 kCityEventOverlayBlockYOffset[8];
-extern const i8 kCityEventOverlayBlockXOffset[8];
-extern const i8 kCityEventTurnClockwiseOrder[9];
-extern const i8 kCityEventTurnCounterclockwiseOrder[9];
-extern const i8 kBorderWaterTileYOffsets[4];
-extern const i8 kBorderWaterTileXOffsets[4];
-extern const i8 kCityEventDestinationYOffset[8];
-extern const i8 kCityEventDestinationXOffset[8];
-extern const u8 kCityMapEventInitialAge[24];
-extern const i8 kCityTrainSpawnYStep[4];
-extern const i8 kCityTrainSpawnXStep[4];
-extern const i8 kCityTrainUpdateYStep[16];
-extern const i16 kCityTrainUpdateXStep[16];
-extern const u8 kCityTrainUpdateAnimation[64];
 
-// The original low-nibble train direction can also select neighboring table bytes.
-// The full reachable values are explicit arrays, including those non-cardinal reads.
-static inline int CityTrainUpdateYStep(int direction) {
-  return kCityTrainUpdateYStep[direction];
-}
+// Shared movement maintains tile/hash membership and byte fractions. Slots must contain live records.
+// speed_type selects the event-kind speed; direction is an explicit eight-way heading.
+void AdvanceCityMapEventPosition(City *city, int speed_type, int slot, int direction);
+// Ship boundary failure unlinks but retains its event; the caller decides its subsequent state/removal.
+bool AdvanceCityShipPosition(City *city, int slot);
+// Sailboat boundary failure releases its event; the final map row/column are excluded.
+bool AdvanceCitySailboatPosition(City *city, int slot);
+// Always return an adjacent heading, even when already aligned. SteerCityEventTowardPoint preserves alignment.
+int TurnCityEventHeadingToward(int direction, int target);
+// World coordinates, including off-map waypoints. Half-axis thresholds select headings; coincident points select SE.
+int CityEventHeadingTowardPoint(int x, int y, int target_x, int target_y);
+int SteerCityEventTowardPoint(int direction, int x, int y, int target_x, int target_y);
+int RandomlyPerturbCityEventHeading(City *city, int direction, int chance);
 
-static inline int CityTrainUpdateXStep(int direction) {
-  return kCityTrainUpdateXStep[direction];
-}
-
-static inline int CityTrainUpdateAnimation(int direction, int next_direction) {
-  return kCityTrainUpdateAnimation[4 * direction + next_direction];
-}
-
-// Actors
-
-typedef struct City City;
-
-void UpdateCityMapExplosion(City *city, int slot);
-void UpdateCityMapShip(City *city, int slot);
-bool IsCityEventTileUnoccupiedAndBuildable(City *city, TileIndex tile_index);
-void SpawnBorderWaterEvent(City *city, TileIndex source);
-void CreateCityMapMaxisMan(City *city, int disaster_type);
-int CreateCityMapEffectEvent(City *city, TileIndex tile, int variant, int state, int linked);
-void UpdateCityMapMaxisMan(City *city, int slot);
-void UpdateCityMapTrain(City *city, int slot);
-void UpdateCityMapTornado(City *city, int slot);
-
-// Movement
-
-typedef struct City City;
-
-void AdvanceCityMapEventPosition(City *city, int mode, int slot, int direction);
-bool AdvanceCityMapEventPosition12(City *city, int slot);
-bool AdvanceCityMapEventPosition16(City *city, int slot);
-bool CanCityEventAdvanceInDirection(City *city, int slot, int direction);
-int TurnCityEventDirectionToward(int direction, int target);
-int CityEventDirection(int destination_x, int destination_y, int source_x, int source_y);
-int SteerCityEventTowardTile(int direction, int x, int y, int target_x, int target_y);
-
-void SetCityMapEventStageAtTileOffset(City *city, int x, int y);
-bool CanDispatchCityService(const City *city, int service);
-bool HasCityDispatchedUnits(const City *city);
-void InitializeCityEmergencyDispatchState(City *city);
-void DispatchCityService(City *city, TileIndex tile, int service);
 void CreateCityMapEventAtTile(City *city, TileIndex tile, int type, int direction);
 void UpdateCityMapEvents(City *city);
 void UpdateCityMapEventTimer(City *city);
-bool CheckCityEventAdjacentTile(City *city, int slot, int direction);
-void UpdateCityMapSailboat(City *city, int slot);
-int RandomlyPerturbCityEventDirection(City *city, int direction, int chance);
-int ComputeCityEventDirection(int x, int y, int target_x, int target_y);
-int CityEventManhattanDistance(int x, int y, int target_x, int target_y);
-bool IsCityEventDirectionBlockedBySpecialTile(City *city, int slot, int direction);
-bool IsCityBoatPassageTile(const City *city, TileIndex tile);
-void FindNextValidCityEventDirection(City *city, int slot);
+
+// Aircraft (aircraft.c). Spawning and updates own City state/RNG; waypoint decoding is read-only for file codecs.
+// During approach the destination is the runway reference point; derive its rotated offset only when needed.
+void ReadCityAirplaneApproachOffset(const CityMapEvent *event, int *x, int *y);
+// Target effects use native tile indices; invalid/non-helicopter targets leave City unchanged.
+void CrashCityHelicopterAtTile(City *city, TileIndex tile);
+// Free shared action: TEST is read-only and execution acknowledges no-op targets as before.
+i64 CmdCrashCityHelicopterAtTile(City *city, u32 flags, TileIndex tile);
+void TrySpawnCityHelicopter(City *city, TileIndex tile);
+void TrySpawnCityAirplane(City *city, TileIndex tile, int axis);
 void UpdateCityMapAirplane(City *city, int slot);
 void UpdateCityMapHelicopter(City *city, int slot);
+
+// Ships and sailboats (boats.c). Admission, arrival and stage changes stay inside the family.
+void SpawnBorderWaterEvent(City *city, TileIndex source);
+void TryCreateCitySailboat(City *city, TileIndex tile);
+void TrySpawnCityMarinaSailboats(City *city, TileIndex tile);
+void UpdateCityMapShip(City *city, int slot);
+void UpdateCityMapSailboat(City *city, int slot);
+
+// Trains and subways (trains.c). An engine owns its two linked coaches; reversal preserves their pool slots.
+void SwapCityTrainEnds(City *city, int first_slot, int second_slot);
+bool TryCreateCityTrain(City *city, TileIndex tile);
+void TrySpawnCityStationTrains(City *city, TileIndex tile);
+void UpdateCityMapTrain(City *city, int slot);
+
+// Disaster actors (disaster_actors.c). Creation/update applies City effects and delivers presentation requests.
+void CreateCityMapMaxisMan(City *city, int disaster_type);
+int CreateCityMapEffectEvent(City *city, TileIndex tile, int variant, int state, int linked);
+void UpdateCityMapExplosion(City *city, int slot);
+void UpdateCityMapMaxisMan(City *city, int slot);
+void UpdateCityMapTornado(City *city, int slot);
 void UpdateCityMapMonster(City *city, int slot);
-
-// Vehicles
-
-typedef struct City City;
-
-bool IsCityEventTargetTile(City *city, TileIndex tile_index, int event_type);
-void CopyCityMapLinkedEventRecord(City *city, int source_slot, int destination_slot);
-void SwapCityMapEventPositions(City *city, int first_slot, int second_slot);
-i32 FindTile237EventDirection(City *city, TileIndex tile_index, int direction, int event_type);
-void TrySpawnCityEventType2(City *city, TileIndex tile_index);
-void TrySpawnCityEventType1(City *city, TileIndex tile_index, int axis);
-bool TryCreateTile237Event(City *city, TileIndex tile_index);
-void TrySpawnTile237Events(City *city, TileIndex tile_index);
-void TryCreateTile248Event(City *city, TileIndex tile_index);
-void TrySpawnTile248Events(City *city, TileIndex tile_index);
 
 #endif

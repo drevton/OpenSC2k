@@ -1,26 +1,112 @@
-#include "drawing/sprites/sprites.h"
+#include "game/timing.h"
+#include "city/economy/budget.h"
+#include <stdlib.h>
+
+#include "assets/catalog.h"
+#include "assets/state.h"
+#include "audio/state.h"
+#include "city/economy/economy.h"
 #include "city/economy/types.h"
 #include "city/engine/city_types.h"
 #include "city/engine/command_types.h"
-#include "ui/tools/types.h"
-#include "ui/windows/state.h"
-#include "drawing/drawing_internal.h"
-#include "ui/tools/tools.h"
-#include "game/application_internal.h"
-
-#include "ui/input.h"
-
-#include "city/economy/economy.h"
 #include "city/engine/questions.h"
 #include "city/engine/simulation.h"
-#include "game/state.h"
-#include "audio/state.h"
+#include "city/presentation.h"
 #include "city/state.h"
+#include "drawing/raster/canvas_primitives.h"
+#include "drawing/sprites/sprites.h"
 #include "drawing/state.h"
-#include "assets/state.h"
-#include "ui/state.h"
-#include "assets/catalog.h"
+#include "game/commands.h"
+#include "game/errors.h"
+#include "game/observation.h"
+#include "game/state.h"
+#include "ui/windows/window_internal.h"
 #include "ui/charts/charts.h"
+#include "ui/commands.h"
+#include "ui/dialogs/budget.h"
+#include "ui/dialogs/dialogs.h"
+#include "ui/dialogs/messages.h"
+#include "ui/input.h"
+#include "ui/menus/menu.h"
+#include "ui/sdl.h"
+#include "ui/state.h"
+#include "ui/tools/tools.h"
+#include "ui/tools/types.h"
+#include "ui/windows/controls.h"
+#include "ui/windows/state.h"
+#include "ui/windows/windows.h"
+
+// Budget, bond and ordinance windows retain their own presentation values.
+const char *CityAdvisorName(CityBudgetCategory category) {
+  static const char *const kNames[CITY_BUDGET_CATEGORY_COUNT] = {
+    "Property tax", "Ordinances", "Bonds", "Police", "Fire", "Health", "Education", "Transit"
+  };
+  return kNames[category];
+}
+
+CityRect CityAdvisorButtonBounds(const Window *window, CityBudgetCategory category) {
+  CityRect b = window->bounds;
+  int width = b.right - b.left;
+  int left = b.left + category * width / CITY_BUDGET_CATEGORY_COUNT;
+  int right = b.left + (category + 1) * width / CITY_BUDGET_CATEGORY_COUNT;
+  return (CityRect){left, b.top + 14, right, b.top + 14 + CITY_ADVISOR_BUTTON_SIZE};
+}
+
+int CityAdvisorButtonAt(const Window *window, int x, int y) {
+  for (int category = 0; category < CITY_BUDGET_CATEGORY_COUNT; ++category)
+    if (CanvasPointInRect(CityAdvisorButtonBounds(window, category), x, y)) return category;
+  return -1;
+}
+
+i32 Sc2kCanvasDesktopOpenPolicies(CityCanvasDesktop *desktop, CityRect bounds, u32 policy_flags) {
+  int left = (bounds.left + bounds.right - CITY_POLICY_WINDOW_WIDTH) / 2;
+  int top = (bounds.top + bounds.bottom - CITY_POLICY_WINDOW_HEIGHT) / 2;
+  return Sc2kCanvasDesktopOpen(desktop,
+      (Window){.kind = CITY_CANVAS_POLICIES,
+          .bounds = {left, top, left + CITY_POLICY_WINDOW_WIDTH, top + CITY_POLICY_WINDOW_HEIGHT},
+          .title = "City Ordinances", .policy_flags = policy_flags});
+}
+
+i32 Sc2kCanvasDesktopOpenBonds(CityCanvasDesktop *desktop, CityRect bounds, int issue_rate) {
+  bounds.right = bounds.left + CITY_BOND_WINDOW_WIDTH;
+  bounds.bottom = bounds.top + CITY_BOND_WINDOW_HEIGHT;
+  return Sc2kCanvasDesktopOpen(desktop,
+      (Window){.kind = CITY_CANVAS_BONDS, .bounds = bounds,
+          .title = "City Bonds", .bond_issue_rate = issue_rate});
+}
+
+void UpdateCityPolicyWindows(City *city, CityCanvasDesktop *desktop, u32 policy_flags) {
+  const CityEconomyMonths *economy = &city->economy;
+  const CityBudgetPolicyGroupTotals *group_totals = &city->game->ui->budget_policy_totals;
+  for (i32 index = 0; index < desktop->count; ++index) {
+    Window *window = &desktop->windows[index];
+    if (window->kind != CITY_CANVAS_POLICIES)
+      continue;
+    window->policy_flags = policy_flags;
+    for (i32 policy = 0; policy < CITY_ORDINANCE_COUNT; ++policy)
+      window->policy_cost[policy] = CityPolicyMonthlyCost(city, policy);
+    for (i32 group = 0; group < CITY_POLICY_GROUP_COUNT; ++group)
+      window->policy_group_cost[group] = group_totals->group[group];
+    window->policy_ytd_total = economy->sector[CITY_ECONOMY_ORDINANCES].accumulated;
+    window->policy_estimated_total = economy->sector[CITY_ECONOMY_ORDINANCES].projected_annual_total;
+    Sc2kDirtyMarkRect(&desktop->dirty, CanvasWindowPaintRect(window));
+  }
+}
+
+void Sc2kCanvasDesktopUpdateBudget(CityCanvasDesktop *desktop, const CityBudgetPanel *budget) {
+  for (i32 index = 0; index < desktop->count; ++index) {
+    Window *window = &desktop->windows[index];
+    if (window->kind == CITY_CANVAS_BONDS) {
+      Sc2kDirtyMarkRect(&desktop->dirty, CanvasWindowPaintRect(window));
+      int count = (int)(budget->loan / 10000);
+      window->bond_scroll = IntClamp(window->bond_scroll, 0,
+          IntMax(0, CityBondContentRows(count) - CityBondVisibleRows(window)));
+    }
+    if (window->kind != CITY_CANVAS_BUDGET) continue;
+    window->budget = *budget;
+    Sc2kDirtyMarkRect(&desktop->dirty, CanvasWindowPaintRect(window));
+  }
+}
 
 static const char *const kBudgetAdviceText[CITY_ADVICE_COUNT] = {
   "No urgent advice. Enjoy it while it lasts.",
@@ -64,6 +150,55 @@ static const char *const kBudgetAdviceText[CITY_ADVICE_COUNT] = {
 };
 
 enum { BUDGET_QUESTION_BASE = 0x60000000, BUDGET_QUESTION_LIMIT = 0x1FFFFFFF };
+
+int OpenCityBudgetWindow(City *city) {
+  CityInterfaceState *ui = city->game->ui;
+  CityBudgetPanel budget;
+  Sc2kCanvasBudgetFromCity(city, &budget);
+  Window window = {.kind = CITY_CANVAS_BUDGET,
+      .bounds = {(kDefaultCityCanvasWidth - CITY_BUDGET_WINDOW_WIDTH) / 2,
+          (kDefaultCityCanvasHeight - CITY_BUDGET_WINDOW_HEIGHT) / 2,
+          (kDefaultCityCanvasWidth + CITY_BUDGET_WINDOW_WIDTH) / 2,
+          (kDefaultCityCanvasHeight + CITY_BUDGET_WINDOW_HEIGHT) / 2}, .budget = budget};
+  int slot = Sc2kCanvasDesktopOpen(&ui->desktop, window);
+  if (slot < 0) {
+    SetGameError(city->game, SC2K_ERROR_GUEST_ALLOCATION_FAILURE);
+    return -1;
+  }
+  return slot;
+}
+
+void OpenCityBudget(City *city) {
+  if (!city->game->observation && city->settings.timer_mode == CITY_TIMER_STOPPED) return;
+  if (FocusCityCanvasWindowKind(&city->game->ui->desktop, CITY_CANVAS_BUDGET) >= 0) return;
+  if (city->game->observation && city->game->observation->open_manual_budget) {
+    city->game->observation->open_manual_budget(city);
+    return;
+  }
+  CityInterfaceState *ui = city->game->ui;
+  if (ui->main_window_iconic) return;
+  int slot = OpenCityBudgetWindow(city);
+  if (slot < 0) return;
+  ApplicationBudgetBegin(city, ui->desktop.windows[slot].window_id, true);
+  ApplicationUpdateDialogPause(city);
+  RefreshCityChartPanels(city);
+}
+
+// Open the manual budget through the installed observation adapter or native UI. Requires live City/UI owners; this
+// routes presentation and does not itself perform annual settlement.
+void ShowBudgetDialogManually(City *city) {
+  const GameObservation *observer = city->game->observation;
+  if (observer && observer->show_manual_budget) observer->show_manual_budget(city);
+  else OpenCityBudget(city);
+}
+
+// Prepare the annual budget once, then retain its paused caller until the dialog returns.
+void ShowAnnualBudgetDialog(City *city) {
+  if (!PrepareCityAnnualBudget(city)) return;
+  CityCanvasBudgetRequest request = {CITY_CANVAS_BUDGET_DIALOG_REQUEST};
+  RunPausedCityModalDialog(city, &request);
+  SetCityCursor(city, CITY_CURSOR_ARROW, 0);
+}
 
 const CityBudgetState *ReadCityBudgetWindowState(const City *city) {
   return city->game->observation ? &city->budget : &city->game->ui->budget_window;
@@ -422,7 +557,6 @@ bool BudgetWindowProcedure(Game *game, const Window *window, const WindowEvent *
   else return false;
   ApplicationUpdateDialogPause(city);
   return true;
-  return false;
 }
 
 // Handles this window's painting and input; paint coordinates are local to the window.

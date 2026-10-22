@@ -2,7 +2,8 @@
 #define SC2K_CITY_INFRASTRUCTURE_BRIDGES_H
 
 #include "city/infrastructure/types.h"
-#include "city/maps/map.h"
+#include "city/maps/terrain.h"
+#include "city/maps/tile_storage.h"
 
 // Readable tile records suffice for local head/underpass metadata; other kinds have no bridge head/underpass.
 SC2K_PRESERVE_MOST int ReadCityBridgeHead(const TileInfo *tp);

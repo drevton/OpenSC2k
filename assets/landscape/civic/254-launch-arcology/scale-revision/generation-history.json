@@ -1,0 +1,53 @@
+{
+  "tool": "image_gen.imagegen",
+  "scope": "Launch Arcology ground-free extraction followed by longer support legs; offline registration narrows the habitat and reduces overall size.",
+  "reproduction_note": "Exact prompts, input snapshots and raw outputs preserved. Built-in tool exposes no effort, quality, model revision or seed setting.",
+  "runs": [
+    {
+      "id": "ground-free-cutout",
+      "kind": 254,
+      "tool": "image_gen.imagegen",
+      "args": {
+        "prompt": "Use case: background-extraction. Exact sprite layer extraction of Image1, not a redesign. Return ONLY the complete elevated Launch Arcology BUILDING: preserve its round clear glass habitat dome and every internal landscape detail, copper frame, cylindrical service drum, exterior pipes/glazed diagonal gallery, all support legs/footings, and ground-level entrance pavilion with blue skylights. Preserve every feature, exact silhouette, geometry, proportions, orientation and materials. The dome must stay ROUND, not narrower or squashed. Keep source scale and placement within the original canvas.\nRemove only the broad flat square paved lot around and underneath the building and its freestanding small planter boxes. There must be no solid square floor/base or exterior pavement diamond: the game supplies paving separately. Keep structural footings, entry steps and any small metal foot pads attached directly to the supports/entrance. Empty spaces underneath/between the legs and around the entrance must be transparent, not new paving. Remove all floating background speckles and background; true RGBA alpha transparency outside the solid building/footings, and inside gaps between supports. Keep antialiasing at silhouette edges. Same neutral daytime lighting, no new parts, lights, text or vehicles. One exact same-angle building cutout only, entire dome and all feet/entrance inside frame with alpha margin.",
+        "referenced_image_paths": [
+          "assets/landscape/civic/254-launch-arcology/scale-revision/cutout-input.png"
+        ],
+        "transparent_background": true
+      },
+      "prompt_file": "cutout-prompt.txt",
+      "output": "building-cutout-raw.png",
+      "output_sha256": "434e05f89c4c3dfac768cbf9f265035bab4f0487996d24a7d6e7c135da6a882d",
+      "reference_images": [
+        {
+          "path": "assets/landscape/civic/254-launch-arcology/scale-revision/cutout-input.png",
+          "sha256": "fb4f8a1261ccc99d86f3e062fffdc5908fd0512e6901e5917308c4d73113304c"
+        }
+      ],
+      "selected_for": "immediate generation input",
+      "original_input_path": "assets/landscape/civic/254-launch-arcology/approved-original.png",
+      "input_snapshot_note": "The input was snapshotted before replacing the installed source with the new longer-leg painting."
+    },
+    {
+      "id": "longer-supports",
+      "kind": 254,
+      "tool": "image_gen.imagegen",
+      "args": {
+        "prompt": "Use case: precise-object-edit. Image1 is a complete isolated Launch Arcology BUILDING cutout. Change ONLY the LENGTH OF THE SUPPORT LEGS underneath the cylindrical habitat. They are too short. Make the structural support legs about75% LONGER/TALLER in the vertical direction. Raise the entire upper habitat cylinder and round glass dome together as one unchanged rigid structure to sit on those taller legs. Keep the cylindrical body and dome exactly the same WIDTH, height, architecture, shape, materials, geodesic frame and internal landscape details. Do NOT enlarge or thicken the upper habitat, do not flatten or stretch the dome. The extra height must come from longer supports and visibly more open space below the upper habitat, not more drum floors.\nExtend the angled engineered legs coherently with their pipes, panels, diagonal braces and embedded mechanical details; no spindly rods or new giant solid foundation. Keep the existing footings and small blue-glazed entrance pavilion down at GROUND LEVEL, unchanged height and human scale. Preserve the separation between left/right legs and clear open space around the entrance. Supports still read as heavy credible infrastructure, not excessively chunky. Upper habitat/drum is narrower relative to the new TOTAL HEIGHT because legs are longer, rather than being squeezed sideways.\nExactly same original design, red-copper framing, pale industrial body, dark vents and blue diagonal glazed gallery. Neutral daytime lighting, no new text or vehicles or artificial glow. All ground/paving outside the actual footings/building remains genuinely transparent alpha0; do not add a ground diamond, planter boxes or floor. Keep ALL of the enlarged-height building, entire dome/crown and feet visible with ample transparent framing; extend canvas vertically rather than cropping or shortening the new legs. Same orthographic2:1 dimetric camera and orientation, upright verticals. One same-angle transparent cutout only.",
+        "referenced_image_paths": [
+          "assets/landscape/civic/254-launch-arcology/scale-revision/building-cutout-raw.png"
+        ],
+        "transparent_background": true
+      },
+      "prompt_file": "longer-legs-prompt.txt",
+      "output": "longer-legs-raw.png",
+      "output_sha256": "c71817b73f24c211db7798cda29fe84fc05817a90bc241a9cf1b221cfbcdc613",
+      "reference_images": [
+        {
+          "path": "assets/landscape/civic/254-launch-arcology/scale-revision/building-cutout-raw.png",
+          "sha256": "434e05f89c4c3dfac768cbf9f265035bab4f0487996d24a7d6e7c135da6a882d"
+        }
+      ],
+      "selected_for": "production painting"
+    }
+  ]
+}

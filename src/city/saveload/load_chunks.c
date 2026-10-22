@@ -1,3 +1,11 @@
+#include "city/saveload/state.h"
+#include "city/saveload/runtime.h"
+#include "city/saveload/services.h"
+#include "city/engine/city_name.h"
+#include "city/maps/labels.h"
+#include "city/engine/simulation_state.h"
+#include "city/saveload/events_format.h"
+#include "city/saveload/map_format.h"
 #include "city/maps/ground.h"
 #include "city/events/events.h"
 #include "city/maps/map_types.h"
@@ -11,6 +19,11 @@
 #include "city/saveload/sc2k.h"
 #include "city/saveload/city_file_internal.h"
 #include "game/errors.h"
+#include "game/state.h"
+#include "base/byte_order.h"
+#include "base/text.h"
+#include <stdlib.h>
+#include <string.h>
 
 typedef struct {
   City *city;
@@ -178,7 +191,7 @@ bool LoadCityChunksFromInput(City *city, CityFileInput *input,
     position += payload_size + 8;
   } while ((int)position < (int)container_length);
   if (city->native_map_storage != saw_ground) return false;
-  if (!saw_name || city->name.length == 0) DeriveCityNameFromFilename(city, path);
+  if (!saw_name || city->name.length == 0) AssignCityNameFromHostFilename(city, path);
   if (!ConvertCityMapToNative(city)) {
     ReportCityChunkError(file, CITY_NOTICE_INVALID_CITY_CONTENTS, 1);
     return false;
@@ -203,11 +216,4 @@ bool LoadCityChunksFromInput(City *city, CityFileInput *input,
   // CNAM can follow MISC; derive labels only after the final city name is known.
   RefreshCityNeighborNames(city);
   return true;
-}
-
-// Decode City chunks from an already opened load stream using the common input adapter. Caller owns and closes the
-// stream; failure retains partial writes and does not run successful-load rebuilding.
-bool LoadCityFileChunks(City *city, void *stream, const char *path) {
-  CityFileInput input = {.kind = CITY_FILE_INPUT_PLATFORM, .stream = stream};
-  return LoadCityChunksFromInput(city, &input, path, 0);
 }

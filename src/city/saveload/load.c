@@ -1,3 +1,8 @@
+#include "base/file.h"
+#include "city/saveload/runtime.h"
+#include "city/saveload/services.h"
+#include "city/saveload/state.h"
+#include "city/engine/city_name.h"
 #include "city/economy/facilities.h"
 #include "city/presentation.h"
 #include "game/state.h"
@@ -6,6 +11,9 @@
 #include "city/economy/economy.h"
 
 #include "game/errors.h"
+#include "city/state.h"
+#include "base/byte_order.h"
+#include <string.h>
 
 // Load
 
@@ -84,6 +92,13 @@ bool LoadCityFile(City *city, const char *path) {
 }
 
 // Chunks
+
+// Decode City chunks from an already opened load stream using the common input adapter. Caller owns and closes the
+// stream; failure retains partial writes and does not run successful-load rebuilding.
+bool LoadCityFileChunks(City *city, void *stream, const char *path) {
+  CityFileInput input = {.kind = CITY_FILE_INPUT_PLATFORM, .stream = stream};
+  return LoadCityChunksFromInput(city, &input, path, 0);
+}
 
 // Read and discard one chunk payload through the configured input. Returns whether any bytes were read; throwing
 // input failures retain their normal unwind semantics and the scratch allocation is registered for cleanup.
@@ -206,7 +221,7 @@ bool CityFileValidateCityFileContainer(City *city, CityFileInput *input, const c
 
 // Host filenames already use native UTF-8. Path must be terminated host text; copies the derived name into City-owned
 // storage without retaining a pointer into the filename.
-void DeriveCityNameFromFilename(City *city, const char *path) {
+void AssignCityNameFromHostFilename(City *city, const char *path) {
   const char *name = PathFilename(path);
   AssignCityName(city, strlen(name), (const u8 *)name);
 }

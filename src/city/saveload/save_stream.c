@@ -1,10 +1,9 @@
+#include "base/file.h"
+#include "city/saveload/services.h"
+#include "city/saveload/state.h"
+#include "city/engine/city_name.h"
 #include "city/saveload/types.h"
-#include "city/engine/command_types.h"
-#include "city/presentation.h"
-#include "game/settings.h"
 #include "game/state.h"
-#include "base/text.h"
-#include "assets/catalog.h"
 #include <strings.h>
 #include <errno.h>
 #include <stdlib.h>
@@ -12,7 +11,6 @@
 
 #include "city/saveload/runtime.h"
 #include "game/observation.h"
-#include "game/state.h"
 #include "city/state.h"
 #include "city/saveload/file.h"
 
@@ -265,12 +263,11 @@ void FillCitySaveFileError(const CityFileRuntime *file, CityFileExceptionState *
   exception->os_error = GetCitySaveIOError(file);
 }
 
-// Commands
-// Save and Save As commands for the City file context.
+// Accepted save paths
 
 // Derive the City's UTF-8 name from a host filename, stripping a recognized city extension. Path must be terminated;
 // name storage is copied through AssignCityName and does not borrow the path.
-static void AssignCityNameFromPath(City *city, const char *path) {
+void AssignCityNameFromSavePath(City *city, const char *path) {
   const char *text = PathFilename(path);
   int length = strlen(text);
   const char *extension = strrchr(text, '.');
@@ -286,52 +283,17 @@ bool SaveCityToPath(City *city, const u8 *text, int length, bool rename) {
   bool owns_operation = city->game->file == NULL;
   if (owns_operation) BeginCityFileOperation(city->game, &operation);
   CityPath path = {0};
-  SetCityPathBytes(city->game, &path, length, (const char *)text);
-  char extension[5];
-  CopyText(extension, sizeof(extension), CityUsesSc2k(city) ? "sc2k" : "sc2");
-  if (!EnsureCityFileExtension(city->game, &path, extension)) {
-    FreeCityPathStorage(&path);
-    if (owns_operation) EndCityFileOperation(&operation);
-    return false;
-  }
+  bool saved = false;
+  if (!SetCityPathBytes(city->game, &path, length, (const char *)text)) goto cleanup;
+  const char *extension = CityUsesSc2k(city) ? "sc2k" : "sc2";
+  if (!EnsureCitySaveExtension(city->game, &path, extension)) goto cleanup;
   const char *destination = CityPathText(&path);
-  if (rename) AssignCityNameFromPath(city, destination);
-  bool saved = SaveCityToDestination(city, &path, destination);
+  if (rename) AssignCityNameFromSavePath(city, destination);
+  saved = SaveCityToDestination(city, &path, destination);
   // Saving may normalize the extension and reallocate path storage.
   if (saved) SetCityPathBytes(city->game, &city->game->city_path, path.length, CityPathText(&path));
+cleanup:
   FreeCityPathStorage(&path);
   if (owns_operation) EndCityFileOperation(&operation);
   return saved;
 }
-
-// Derive the name before saving; commit the normalized path only on success. Requires the active file/UI interaction;
-// cancellation leaves the host destination uncommitted and cleanup follows the real dialog lifetime.
-void HandleSaveCityAsCommand(City *city) {
-  CityPath path = {0};
-  if (city->game->city_active) {
-    static const char filter[] = "City files (*.sc2; *.sc2k) | *.sc2;*.sc2k ||";
-    char default_name[CITY_NAME_LIMIT + sizeof(".sc2")];
-    int length = Utf8PrefixBytes(CityNameText(&city->name), CITY_NAME_LIMIT);
-    memcpy(default_name, CityNameText(&city->name), (size_t)length);
-    memcpy(default_name + length, ".sc2", 5);
-    CityPath directory = {0};
-    GetCitySaveDirectory(city->game, &directory);
-    int choice = ChooseCitySaveFile(city, default_name, filter,
-        CityPathText(&directory));
-    if (choice != CITY_DIALOG_CANCEL) {
-      const char *text = ReadCitySaveSelectedPath(city);
-      AssignCityNameFromPath(city, text);
-      // Stock asks for the selected path again after changing the city name.
-      text = ReadCitySaveSelectedPath(city);
-      SetCityPathBytes(city->game, &path, (int)strlen(text), text);
-      if (SaveCityFile(city, &path)) {
-        SetCityPathBytes(city->game, &city->game->city_path, path.length, CityPathText(&path));
-      }
-    }
-    SetCitySavePromptActive(city, false);
-    FreeCityPathStorage(&directory);
-  }
-  FreeCityPathStorage(&path);
-}
-
-// Path

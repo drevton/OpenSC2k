@@ -1,5 +1,14 @@
+#include "game/timing.h"
+#include "city/engine/city_name.h"
+#include "city/economy/budget.h"
+#include "city/engine/simulation_state.h"
+#include "city/disasters/types.h"
+#include "city/infrastructure/utilities.h"
+#include "game/update.h"
+#include "city/events/emergency.h"
+#include "city/infrastructure/transport.h"
+#include "city/growth/growth.h"
 #include "city/economy/facilities.h"
-#include "city/infrastructure/infrastructure.h"
 #include "city/military.h"
 #include "audio/types.h"
 #include "city/economy/types.h"
@@ -10,18 +19,17 @@
 #include "city/maps/layers.h"
 #include "city/presentation.h"
 #include "city/engine/simulation.h"
+#include "city/engine/commands.h"
 
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "audio/audio.h"
+#include "game/audio.h"
 #include "city/disasters/disasters.h"
 #include "city/economy/economy.h"
 #include "city/economy/tables.h"
 #include "city/engine/city_types.h"
-#include "game/state.h"
-#include "city/engine/initialization.h"
 #include "city/events/events.h"
 #include "city/state.h"
 #include "city/tools/tools.h"
@@ -29,14 +37,13 @@
 #include "game/errors.h"
 #include "game/observation.h"
 #include "game/state.h"
-#include "audio/state.h"
 #include "assets/state.h"
 #include "base/text.h"
 
 // Direct commands apply page effects; only the comparison adapter retains a window caller. Edition must be supported;
 // applies page effects or retains the diagnostic newspaper caller through its observation boundary.
 void SelectCityNewspaperEdition(City *city, int edition) {
-  assert(edition >= CITY_NEWSPAPER_EDITION_FIRST && edition <= CITY_NEWSPAPER_EDITION_SEVENTH);
+  assert(IsCityNewspaperEditionValid(edition));
   city->newspaper.edition_index = edition;
   const GameObservation *observer = city->game->observation;
   if (observer && observer->open_manual_newspaper) observer->open_manual_newspaper(city, edition);
@@ -56,7 +63,7 @@ static i64 BeginCityMilitaryReward(City *city, u32 options, bool accept);
 static void FinishCityEconomyPhase(City *city, int milestone) {
   FinishCityEconomyPrimary(city, milestone);
   UpdateCityEconomySecondary(city);
-  Sc2kPhase21History(city);
+  RecordCityMonthlyHistory(city);
 }
 
 // Recompute month, quarter and year from the live tick, then clear population accumulators. Run only at the monthly
@@ -140,6 +147,7 @@ const CityTickContinuation *FindCityTickContinuation(const City *city, int token
 // Initialize the selected newspaper and retain any opening notice's continuation. Requires a valid edition; returns a
 // pending token or failure, with no restart of initialization after dismissal.
 i64 BeginCityNewspaperOpening(City *city, int edition) {
+  assert(IsCityNewspaperEditionValid(edition));
   city->newspaper.edition_index = edition;
   bool ended = city->game->resources->facility_resources_unavailable != 0;
   CityNewspaperInitialization state = BeginCityNewspaperOpeningPresentation(city, edition);
@@ -186,7 +194,7 @@ i64 ResumeCityTick(City *city, int token, bool resume, int answer) {
   if (dialog == CITY_TICK_DIALOG_NEWSPAPER_INITIALIZATION) {
     if (!(work.outcome & CITY_NEWSPAPER_INITIALIZATION_SKIP_TAIL))
       FinishCityNewspaperInitialization(city, work.edition);
-    return OpenInitializedCityNewspaper(city, work.edition, (work.outcome & CITY_NEWSPAPER_INITIALIZATION_ENDED) != 0);
+    return 1;
   } else if (dialog == CITY_TICK_DIALOG_BUDGET) {
     SetCityCursor(city, CITY_CURSOR_ARROW, 0);
     result = CompleteCityMonthlyPhase(city, options);
@@ -224,6 +232,17 @@ i64 ResumeCityTick(City *city, int token, bool resume, int answer) {
   } else if (options & CITY_TICK_FROM_IDLE)
     return FinishCityIdleSimulation(city->game, (options & CITY_TICK_ALLOW_TERRAIN_WATER) != 0);
   return GetGameError(city->game) == 0;
+}
+
+// Apply an explicit answer to the retained military offer and continue its result path. Validates answer/payload
+// before effects; TEST neither consumes the answer nor searches or zones a military site.
+i64 CmdAnswerMilitaryOffer(City *city, u32 flags, TileIndex tile, int token, int answer, int reserved) {
+  const CityTickContinuation *work = FindCityTickContinuation(city, token);
+  if (tile != INVALID_TILE || !work || work->dialog != CITY_TICK_DIALOG_MILITARY_OFFER || reserved ||
+      (answer != CITY_DIALOG_YES && answer != CITY_DIALOG_NO))
+    return CITY_COMMAND_COST_INVALID;
+  if (flags & CITY_COMMAND_TEST) return 0;
+  return ResumeCityTick(city, token, true, answer);
 }
 
 // Cancel and release every suspended tick caller owned by City. Cancellation performs each caller's real cleanup,
@@ -282,13 +301,6 @@ i64 AdvanceCityDisasterWithOptions(City *city, u32 options) {
     CancelCityDisasterWork(city);
   }
   return token;
-}
-
-// Apply the admitted tile's demolition synchronously, optionally queuing its visual effect. Requires a valid
-// tile/footprint; returns one when Game has no error and zero on error, with Drawing owning subsequent animation.
-i64 AdvanceCityDemolition(City *city, TileIndex tile, bool animate) {
-  BulldozeCityTile(city, tile, animate);
-  return GetGameError(city->game) == 0;
 }
 
 // Present or suspend for the captured mission/bankruptcy outcome. Options select deferred presentation; returns
@@ -462,13 +474,13 @@ i64 AdvanceCitySimulationPhaseWithOptions(City *city, u32 options) {
   } else if (phase == CITY_PHASE_TRAFFIC_DECAY) {
     DecayTrafficDensity(city);
   } else if (phase == CITY_PHASE_WATER_NETWORK) {
-    ScanCityMapPhase20(city);
+    ScanCityWaterNetwork(city);
   } else if (phase == CITY_PHASE_ECONOMY) {
     const GameObservation *observer = city->game->observation;
     if (observer && observer->primary_economy) {
       observer->primary_economy(city);
       UpdateCityEconomySecondary(city);
-      Sc2kPhase21History(city);
+      RecordCityMonthlyHistory(city);
     } else {
       CityMilestoneNotice notice = BeginCityEconomyPrimary(city);
       if (notice.show) {
@@ -518,14 +530,13 @@ i64 AdvanceCitySimulationPhaseWithOptions(City *city, u32 options) {
 // Preserve City transition ordering; UI owns tools, panels and map controls. Mode must select a supported simulation
 // mode; transition effects can change shared City state and presentation and must run once.
 void SetCityTimerMode(City *city, int mode) {
-  CityAudioState *audio = city->game->audio;
 
   if (mode == CITY_TIMER_STOPPED) {
     HideCitySimulationPanels(city);
     SetCityToolsVisible(city->game, 0);
     RebuildCityToolbar(city);
     ShowCityMapControls(city, false);
-    MaybeTriggerPeriodicCityEvent(city, audio, 1);
+    MaybePlayCityMusic(city->game, true);
     city->indicators.cash = 0;
     EmptyCityName(city);
     InvalidateCityInformation(city->game, CITY_UPDATE_STATUS);
@@ -540,7 +551,7 @@ void SetCityTimerMode(City *city, int mode) {
     city->settings.timer_mode = CITY_TIMER_RUNNING;
     RebuildCityToolbar(city);
     SetCityToolsVisible(city->game, 1);
-    MaybeTriggerPeriodicCityEvent(city, audio, 1);
+    MaybePlayCityMusic(city->game, true);
   } else if (mode == CITY_TIMER_EVENT) {
     InvalidateCityInformation(city->game, CITY_UPDATE_STATUS);
     if (city->settings.timer_mode == CITY_TIMER_STOPPED)

@@ -1,17 +1,12 @@
 #ifndef SC2K_UI_COMMANDS_H
 #define SC2K_UI_COMMANDS_H
 
-#include "city/economy/types.h"
-#include "city/presentation.h"
+#include "city/engine/cheats.h"
+#include "city/engine/commands.h"
+#include "city/types.h"
 
-#include "city/saveload/file.h"
-#include "city/economy/economy.h"
-#include "ui/startup/services.h"
-
-#include "game/state.h"
-#include "ui/startup/startup.h"
-
-void SelectCityToolGroupAndMode(Game *game, u32 group, u32 variant);
+typedef struct Game Game;
+typedef struct CityInterfaceState CityInterfaceState;
 
 typedef struct CityResourceNotice {
   struct CityResourceNotice *next;
@@ -21,6 +16,8 @@ typedef struct CityResourceNotice {
 
 // Borrowed by UI for one player command. Native gameplay errors come from its
 // return value; this scope carries presentation details and legacy diagnostic feedback.
+// The caller restores the enclosing scope after nested work. Collected notices remain
+// owned by this scope until transferred to PresentCityCommandNotices or discarded.
 typedef struct CityCommandFeedback {
   i64 error;
   TileIndex blocker, stadium_tile, inspection_tile;
@@ -28,26 +25,32 @@ typedef struct CityCommandFeedback {
   bool construction, reported, cancelled, notice_shown;
 } CityCommandFeedback;
 
-// UI commands and presentation services. City mutations use the command dispatcher.
+// Present action-specific construction sounds after the caller admits feedback. Arguments are borrowed;
+// succeeded is the captured command outcome and cost is its net treasury debit, not a new price query.
+// Other commands are silent. This does not submit another command or change deterministic City state.
+void PresentCityCommandAudio(City *city, CityCommandId id, const CityCommandArguments *args,
+    bool succeeded, i64 cost);
 
-void SetCityMapControlsVisible(CityInterfaceState *ui, bool visible);
-void ShowCityMapToolWindows(City *city);
-// Finish the detached budget caller before city replacement or host teardown.
-void CloseCityManualBudget(City *city);
-void OpenCityBudget(City *city);
-void CloseCityWindowsForReplacement(Game *game);
-void RecordGameInput(Game *game);
-void ConfigureNewCityFromSetupDialog(City *city);
-bool EnterCityPaletteModalState(City *city);
-bool LeaveCityPaletteModalState(City *city);
-int HandleNewCityCommand(City *city);
-void InitializeNewCityTerrainSession(City *city);
-void ResetCityToolboxForTerrainEditing(City *city);
-void OpenCityFromPath(City *city, const char *path);
-void OpenCityFromFileDialog(City *city);
+// Failure text is borrowed immutable presentation data.
+const char *CityCommandFailureSummary(const CityCommand *command);
+const char *CityCommandFailureReason(i64 error);
+bool IsCityCommandFailureResource(u32 resource);
 
-const CityBudgetState *ReadCityBudgetWindowState(const City *city);
-const CityBudgetState *FindCityBudgetWindowState(const City *city, int id);
-void OpenCityAdvisor(City *city, CityBudgetCategory category);
+// Resolved command prompts and their retained presentation notices. Prompt text retains its opening quote;
+// accepted actions use current City admission. Reply records live through deferred window completion.
+i64 RequestCityCheat(Game *game, CityCheat cheat);
+void PresentCityBondConfirmation(City *city, u32 id, int rate);
+void PresentCityTunnelConfirmation(City *city, TileIndex tile);
+void PresentCityNeighborConfirmation(City *city, CityCommand command, int cost);
+i64 CheckCityConstructionCommand(City *city, CityCommand command);
+// Submit a confirmation answer through its retained UI caller; this may close/reorder windows.
+void AnswerCityConfirmation(City *city, u32 window_id, bool accept);
+// Consume a detached command-notice list: present it in command order, or discard it before any window opens.
+void PresentCityCommandNotices(City *city, CityResourceNotice *notices);
+void DiscardCityCommandNotices(CityResourceNotice *notices);
+// Clear queued notices; the open window's completion callback keeps ownership of its current notice.
+void ClearCityResourceNotices(CityInterfaceState *ui);
+
+void ReportCityCommandResult(City *city, i64 error);
 
 #endif

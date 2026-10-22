@@ -1,17 +1,27 @@
-#include "ui/windows/state.h"
-#include "base/time.h"
-#include "game/application_internal.h"
+#include "ui/windows/window_internal.h"
+#include "ui/music/jukebox.h"
+
 #include <stdio.h>
 #include <string.h>
 
-#include "game/state.h"
-#include "drawing/drawing_internal.h"
+#include "assets/state.h"
+#include "game/audio.h"
+#include "audio/backend.h"
+#include "audio/state.h"
+#include "base/text.h"
+#include "base/time.h"
 #include "drawing/bitmaps.h"
-#include "ui/music/jukebox_state.h"
+#include "drawing/fonts/fonts.h"
+#include "drawing/raster/canvas_primitives.h"
+#include "drawing/raster/canvas_raster_internal.h"
+#include "game/settings.h"
+#include "game/state.h"
+#include "ui/sdl.h"
 #include "ui/state.h"
+#include "ui/windows/controls.h"
+#include "ui/windows/windows.h"
 
-// Jukebox
-// Drawing subsystem: jukebox.
+// Music controls, title animation, window painting and input.
 
 enum { MUSIC_TITLE_WIDTH = 103 };
 
@@ -21,14 +31,14 @@ static void MusicTitleText(const Jukebox *player, char *text, size_t capacity) {
   CopyText(text, capacity, player->count ? "-----" : "Empty playlist");
   if (current >= 0)
     snprintf(text, capacity, player->interrupt_track >= 0 ? "Interrupt: %s" : "\"%s\"",
-        jukebox_tracks[current].title);
+        kJukeboxTracks[current].title);
   if (player->error[0]) CopyText(text, capacity, player->error);
 }
 
 bool UpdateCityJukeboxTitle(CityInterfaceState *ui, u32 milliseconds) {
   const Jukebox *player = ui->jukebox_display;
   Window *window = NULL;
-  for (int i = 0; player && !player->collapsed && i < ui->desktop.count; ++i)
+  for (int i = 0; player && !ui->music_collapsed && i < ui->desktop.count; ++i)
     if (ui->desktop.windows[i].kind == CITY_CANVAS_JUKEBOX && !ui->desktop.windows[i].shaded) {
       window = &ui->desktop.windows[i];
       break;
@@ -275,7 +285,7 @@ static void MusicTransport(Game *game, Canvas *c, const Window *window, int x, i
     game->execution_failed = true;
 }
 
-void CanvasDrawJukebox(Game *game, Canvas *c, const Window *w) {
+static void CanvasDrawJukebox(Game *game, Canvas *c, const Window *w) {
   CityInterfaceState *ui = game->ui;
   const Jukebox *p = ui->jukebox_display;
   if (!p)
@@ -285,13 +295,13 @@ void CanvasDrawJukebox(Game *game, Canvas *c, const Window *w) {
   MusicBox(c, x, y, b.right - x, b.bottom - y, canvas_face, 1);
   if (w->kind == CITY_CANVAS_JUKEBOX) {
     DrawCityWindowCaption(c, b, "Jazz Jukebox", canvas_face, canvas_light, canvas_dark, 24);
-    MusicButton(c, b.right - 24, y, 12, JUKEBOX_TITLE_HEIGHT, "", p->collapsed, 0);
+    MusicButton(c, b.right - 24, y, 12, JUKEBOX_TITLE_HEIGHT, "", ui->music_collapsed, 0);
     DrawCityWindowControlIcon(c, (CityRect){b.right - 24, y, b.right - 12, y + JUKEBOX_TITLE_HEIGHT},
-        CITY_WINDOW_ICON_SHADE, p->collapsed || MusicHeld(ui, w, b.right - 24, y, 12, JUKEBOX_TITLE_HEIGHT));
-    MusicButton(c, b.right - 12, y, 12, JUKEBOX_TITLE_HEIGHT, "", p->pinned, 0);
+        CITY_WINDOW_ICON_SHADE, ui->music_collapsed || MusicHeld(ui, w, b.right - 24, y, 12, JUKEBOX_TITLE_HEIGHT));
+    MusicButton(c, b.right - 12, y, 12, JUKEBOX_TITLE_HEIGHT, "", ui->music_pinned, 0);
     DrawCityWindowControlIcon(c, (CityRect){b.right - 12, y, b.right, y + JUKEBOX_TITLE_HEIGHT},
-        CITY_WINDOW_ICON_STICKY, p->pinned || MusicHeld(ui, w, b.right - 12, y, 12, JUKEBOX_TITLE_HEIGHT));
-    if (p->collapsed)
+        CITY_WINDOW_ICON_STICKY, ui->music_pinned || MusicHeld(ui, w, b.right - 12, y, 12, JUKEBOX_TITLE_HEIGHT));
+    if (ui->music_collapsed)
       return;
     CityWidgetLayout layout[64];
     i32 count = MusicPlayerLayout(w, layout);
@@ -336,13 +346,13 @@ void CanvasDrawJukebox(Game *game, Canvas *c, const Window *w) {
     for (i32 tab = 0; tab < 6; ++tab) {
       CityRect control = MusicWidgetBounds(layout, count, JUKEBOX_SELECT + tab);
       MusicButton(c, control.left, control.top, control.right - control.left,
-                   control.bottom - control.top, jukebox_programmes[tab], p->programme == tab, 0);
+                   control.bottom - control.top, kJukeboxProgrammes[tab], p->programme == tab, 0);
     }
   } else {
     DrawCityWindowCaption(c, b, "Music Programme - OpenMSX", canvas_face, canvas_light, canvas_dark, 0);
     MusicLabel(c, x + 2, y + 15, 180, "Track Index", 0xFF101010u);
     char label[48];
-    snprintf(label, sizeof(label), "Programme - '%s'", jukebox_programmes[p->programme]);
+    snprintf(label, sizeof(label), "Programme - '%s'", kJukeboxProgrammes[p->programme]);
     MusicLabel(c, x + 251, y + 15, 179, label, 0xFF101010u);
     MusicBox(c, x + 2, y + 23, 180, 226, 0xFF101010u, 0);
     MusicBox(c, x + 251, y + 23, 179, 226, 0xFF101010u, 0);
@@ -354,13 +364,13 @@ void CanvasDrawJukebox(Game *game, Canvas *c, const Window *w) {
       for (i32 row = 0; row < count; ++row) {
         int track = list ? p->order[row] : row;
         char text[96];
-        snprintf(text, sizeof(text), "%02d\"%s\"", track, jukebox_tracks[track].title);
+        snprintf(text, sizeof(text), "%02d\"%s\"", track, kJukeboxTracks[track].title);
         MusicText(c, x + (list ? 253 : 4), y + 25 + row * 7, text, 0xFF80C4FCu);
       }
     }
     c->clip = list_clip;
     for (i32 tab = 0; tab < 6; ++tab)
-      MusicButton(c, x + 187, y + 46 + tab * 9, 60, 9, jukebox_programmes[tab],
+      MusicButton(c, x + 187, y + 46 + tab * 9, 60, 9, kJukeboxProgrammes[tab],
                    p->programme == tab, 0);
     MusicButton(c, x + 187, y + 115, 60, 9, "Clear", 0, p->programme < JUKEBOX_PROGRAMME_CUSTOM_1);
     if (p->programme < JUKEBOX_PROGRAMME_CUSTOM_1)
@@ -386,7 +396,7 @@ i32 Sc2kCanvasJukeboxActionAt(const CityInterfaceState *ui, const Window *w, i32
       return JUKEBOX_PIN;
     if (y < JUKEBOX_TITLE_HEIGHT && x >= width - 24)
       return JUKEBOX_COLLAPSE;
-    if (ui->jukebox_display->collapsed)
+    if (ui->music_collapsed)
       return JUKEBOX_NONE;
     CityWidgetLayout layout[64];
     i32 count = MusicPlayerLayout(w, layout);
@@ -411,150 +421,6 @@ i32 Sc2kCanvasJukeboxActionAt(const CityInterfaceState *ui, const Window *w, i32
     }
   }
   return JUKEBOX_NONE;
-}
-
-// Jukebox State
-
-const JukeboxTrack jukebox_tracks[JUKEBOX_TRACKS] = {
-  {"OpenTTD journey", "tttheme2.mid"},
-  {"Keep on Rolling", "keep_on_rolling.mid"},
-  {"Downtown cab ride", "ttsong_iv_imuh3.mid"},
-  {"Modern Motion", "modern_motion.mid"},
-  {"Busy Schedule", "busy_schedule.mid"},
-  {"The Fast Route", "the_fast_route.mid"},
-  {"Skydive", "ttsong_iii_imuh3.mid"},
-  {"Train filled with cash", "train_filled_with_cash.mid"},
-  {"Unidentifed Flying Scotsman", "flying_scotsman.mid"},
-  {"Chugga Chugga Cha-ching", "chuggachugga.mid"},
-  {"The Hobo", "the_hobo_redfarn.mid"},
-  {"Ultimate run", "ultimate_run.mid"},
-  {"Midnight snow run", "midnight_snow_run.mid"},
-  {"Excitement! Run for your life", "run_for_your_life.mid"},
-  {"Coconut run 2", "coconut_run2.mid"},
-  {"Harp harmony 'n humor", "harp_harmony.mid"},
-  {"Mighty giant run", "mighty_giant_run.mid"},
-  {"Wood whistles", "wood_whistles.mid"},
-  {"Linn's basket of treats", "linns_basket.mid"},
-  {"Plain simple relax song", "relax_song.mid"},
-  {"Deep down chemistry lab", "chemistry_lab.mid"},
-  {"5 4 3 2 .. Gone", "5432gone_redfarn.mid"},
-  {"Boogie Marabi", "boogi_marabi_redfarn.mid"},
-  {"Moo Moo Boogie", "moo_redfarn.mid"},
-  {"Say What", "say_what_redfarn.mid"},
-  {"Be Sharp Boogie", "be_sharp_bw_redfarn.mid"},
-  {"Careless Love", "careless_perc_redfarn.mid"},
-  {"Mosey Along", "mosey_along_redfarn.mid"},
-  {"Slow and Easy", "slow_neasy_redfarn.mid"},
-  {"City Blues", "city_blues_redfarn.mid"},
-  {"No Work Song", "no_work_song_redfarn.mid"},
-};
-const char *const jukebox_programmes[JUKEBOX_PROGRAMMES] = {
-  "All", "Old Style", "New Style", "Ezy Street", "Custom 1", "Custom 2"
-};
-
-static u32 RandomNext(Jukebox *p) {
-  u32 x = p->random;
-  x ^= x << 13; x ^= x >> 17; x ^= x << 5;
-  return p->random = x;
-}
-
-i32 JukeboxCurrent(const Jukebox *p) {
-  return p->count && p->position >= 0 && p->position < p->count ? p->order[p->position] : -1;
-}
-
-static void RebuildJukeboxProgramme(Jukebox *p, i32 preserve) {
-  p->count = 0;
-  if (p->programme >= JUKEBOX_PROGRAMME_CUSTOM_1) {
-    p->count = p->custom_count[p->programme - JUKEBOX_PROGRAMME_CUSTOM_1];
-    memcpy(p->order, p->custom[p->programme - JUKEBOX_PROGRAMME_CUSTOM_1], (size_t)p->count);
-  } else {
-    i32 first = p->programme == JUKEBOX_PROGRAMME_ALL ? 1 :
-        (p->programme - JUKEBOX_PROGRAMME_OLD_STYLE) * 10 + 1;
-    i32 last = p->programme == JUKEBOX_PROGRAMME_ALL ? 30 : first + 9;
-    for (int track = first; track <= last; ++track)
-      p->order[p->count++] = (u8)track;
-  }
-  if (p->shuffle)
-    for (i32 index = p->count - 1; index > 0; --index) {
-      i32 other = (i32)(RandomNext(p) % (u32)(index + 1));
-      int track = p->order[index]; p->order[index] = p->order[other]; p->order[other] = track;
-    }
-  p->position = 0;
-  for (i32 index = 0; index < p->count; ++index)
-    if (p->order[index] == preserve) { p->position = index; break; }
-}
-
-void JukeboxInit(Jukebox *p, u32 seed) {
-  memset(p, 0, sizeof(*p));
-  p->interrupt_track = -1;
-  p->random = seed ? seed : 1;
-  p->volume = 50;
-  p->effects_volume = 80;
-  RebuildJukeboxProgramme(p, -1);
-}
-
-void JukeboxSelect(Jukebox *p, i32 programme) {
-  if (programme < JUKEBOX_PROGRAMME_ALL || programme >= JUKEBOX_PROGRAMMES) return;
-  p->programme = programme;
-  RebuildJukeboxProgramme(p, -1);
-}
-
-void SelectJukeboxTrack(Jukebox *p, int track) {
-  if (track < 0 || track >= JUKEBOX_TRACKS) return;
-  for (int row = 0; row < p->count; ++row)
-    if (p->order[row] == track) {
-      p->position = row;
-      p->playing = 1;
-      return;
-    }
-  JukeboxSelect(p, JUKEBOX_PROGRAMME_ALL);
-  for (int row = 0; row < p->count; ++row)
-    if (p->order[row] == track) { p->position = row; p->playing = 1; return; }
-  // The OpenMSX title theme is listed, but excluded from automatic programmes.
-  if (track == 0) {
-    p->position = p->count;
-    p->order[p->count++] = 0;
-    p->playing = 1;
-  }
-}
-
-void JukeboxShuffle(Jukebox *p) {
-  i32 current = JukeboxCurrent(p);
-  p->shuffle = !p->shuffle;
-  RebuildJukeboxProgramme(p, current);
-}
-void JukeboxStep(Jukebox *p, i32 direction) {
-  if (p->count) p->position = (p->position + direction % p->count + p->count) % p->count;
-}
-void JukeboxAdd(Jukebox *p, i32 track) {
-  if (p->programme < JUKEBOX_PROGRAMME_CUSTOM_1 || track < 0 || track >= JUKEBOX_TRACKS) return;
-  i32 custom = p->programme - JUKEBOX_PROGRAMME_CUSTOM_1, count = p->custom_count[custom];
-  if (count == JUKEBOX_CAPACITY) return;
-  p->custom[custom][count] = (u8)track;
-  ++p->custom_count[custom];
-  // Insert into the shuffled order without changing the current song.
-  i32 insert = p->shuffle && p->count ? (i32)(RandomNext(p) % (u32)(p->count + 1)) : p->count;
-  memmove(p->order + insert + 1, p->order + insert, (size_t)(p->count - insert));
-  p->order[insert] = (u8)track;
-  if (p->count && insert <= p->position) ++p->position;
-  ++p->count;
-}
-void JukeboxRemove(Jukebox *p, i32 row) {
-  if (p->programme < JUKEBOX_PROGRAMME_CUSTOM_1 || row < 0 || row >= p->count) return;
-  i32 custom = p->programme - JUKEBOX_PROGRAMME_CUSTOM_1, index = 0;
-  if (p->shuffle) {
-    while (index < p->custom_count[custom] && p->custom[custom][index] != p->order[row]) ++index;
-  } else index = row;
-  if (index == p->custom_count[custom]) return;
-  memmove(p->custom[custom] + index, p->custom[custom] + index + 1,
-      (size_t)(--p->custom_count[custom] - index));
-  memmove(p->order + row, p->order + row + 1, (size_t)(--p->count - row));
-  if (row < p->position) --p->position;
-  if (p->position >= p->count) p->position = 0;
-}
-void JukeboxClear(Jukebox *p) {
-  if (p->programme < JUKEBOX_PROGRAMME_CUSTOM_1) return;
-  p->custom_count[p->programme - JUKEBOX_PROGRAMME_CUSTOM_1] = p->count = p->position = 0;
 }
 
 // Handles this window's painting and input; paint coordinates are local to the window.
@@ -619,6 +485,95 @@ bool MusicWindowProcedure(Game *game, const Window *window, const WindowEvent *e
     return true;
   }
   if (input->kind == CANVAS_SDL_KEY_DOWN && input->key == CITY_KEY_ESCAPE &&
-      window->kind == CITY_CANVAS_JUKEBOX && ui->jukebox.pinned) return true;
+      window->kind == CITY_CANVAS_JUKEBOX && ui->music_pinned) return true;
   return false;
+}
+
+void OpenCityMusicWindow(Game *game, int programme) {
+  CityInterfaceState *ui = game->ui;
+  WindowKind kind = programme ? CITY_CANVAS_MUSIC_PROGRAMME : CITY_CANVAS_JUKEBOX;
+  if (FocusCityCanvasWindowKind(&ui->desktop, kind) >= 0) return;
+  Sc2kCanvasDesktopOpen(
+      &ui->desktop,
+      (Window){
+          .kind = kind,
+          .bounds = programme ? (CityRect){84, 130, 84 + JUKEBOX_PROGRAMME_WIDTH,
+                                           130 + JUKEBOX_PROGRAMME_HEIGHT}
+                              : (CityRect){175, 42, 175 + JUKEBOX_PLAYER_WIDTH,
+                                           42 + (ui->music_collapsed ? JUKEBOX_TITLE_HEIGHT
+                                                                   : JUKEBOX_PLAYER_HEIGHT)},
+          .title = programme ? "Music Programme" : "Jazz Jukebox"});
+  KeepCityWindowCaptionVisible(&ui->desktop, &ui->desktop.windows[ui->desktop.count - 1].bounds);
+}
+
+void ApplyCityMusicAction(Game *game, int action, Window *window) {
+  CityInterfaceState *ui = game->ui;
+  CityAudioState *audio = game->audio;
+  Jukebox *player = &audio->jukebox;
+  int current = JukeboxCurrent(player), playing = player->playing, restart = 0;
+  if (action == JUKEBOX_CLOSE) {
+    Sc2kCanvasDesktopDismissWindow(&ui->desktop, window->window_id);
+    return;
+  }
+  if (action == JUKEBOX_PREVIOUS || action == JUKEBOX_NEXT) {
+    JukeboxStep(player, action == JUKEBOX_PREVIOUS ? -1 : 1);
+    restart = 1;
+  } else if (action == JUKEBOX_STOP) player->playing = 0;
+  else if (action == JUKEBOX_PLAY) { player->playing = 1; restart = 1; }
+  else if (action == JUKEBOX_SHUFFLE) JukeboxShuffle(player);
+  else if (action == JUKEBOX_PROGRAMME) OpenCityMusicWindow(game, 1);
+  else if (action == JUKEBOX_CLEAR) JukeboxClear(player);
+  else if (action == JUKEBOX_COLLAPSE) {
+    Sc2kDirtyMarkRect(&ui->desktop.dirty, window->bounds);
+    ui->music_collapsed = !ui->music_collapsed;
+    window->bounds.bottom =
+        window->bounds.top + (ui->music_collapsed ? JUKEBOX_TITLE_HEIGHT : JUKEBOX_PLAYER_HEIGHT);
+  } else if (action == JUKEBOX_PIN) ui->music_pinned = !ui->music_pinned;
+  else if (action >= JUKEBOX_PLAY_TRACK && action < JUKEBOX_PLAY_TRACK + JUKEBOX_TRACKS) {
+    SelectJukeboxTrack(player, action - JUKEBOX_PLAY_TRACK);
+    restart = 1;
+  } else if (action >= JUKEBOX_EFFECTS_VOLUME && action <= JUKEBOX_EFFECTS_VOLUME + 100)
+    player->effects_volume = action - JUKEBOX_EFFECTS_VOLUME;
+  else if (action >= JUKEBOX_MUSIC_VOLUME && action <= JUKEBOX_MUSIC_VOLUME + 100)
+    player->volume = action - JUKEBOX_MUSIC_VOLUME;
+  else if (action >= JUKEBOX_REMOVE && action < JUKEBOX_REMOVE + JUKEBOX_CAPACITY) {
+    restart = action - JUKEBOX_REMOVE == player->position &&
+        player->programme >= JUKEBOX_PROGRAMME_CUSTOM_1;
+    JukeboxRemove(player, action - JUKEBOX_REMOVE);
+  } else if (action >= JUKEBOX_ADD && action < JUKEBOX_ADD + JUKEBOX_TRACKS)
+    JukeboxAdd(player, action - JUKEBOX_ADD);
+  else if (action >= JUKEBOX_SELECT && action < JUKEBOX_SELECT + JUKEBOX_PROGRAMMES) {
+    JukeboxSelect(player, action - JUKEBOX_SELECT);
+    restart = 1;
+  }
+  if (audio->live_open) {
+    if (restart || current != JukeboxCurrent(player) || playing != player->playing)
+      NativeAudioPlay(audio);
+    NativeAudioVolume(audio);
+  }
+  StoreGameSettings(game);
+  DirtyCityMusicWindows(game);
+}
+
+const char *CityMusicTooltipAt(Game *game, const Window *window, int x, int y) {
+  int action = Sc2kCanvasJukeboxActionAt(game->ui, window, x, y);
+  switch (action) {
+  case JUKEBOX_PREVIOUS: return "Play the previous music track.";
+  case JUKEBOX_NEXT: return "Play the next music track.";
+  case JUKEBOX_STOP: return game->ui->desktop.menu.show_shortcuts ? "Stop music playback (F9)." :
+      "Stop music playback.";
+  case JUKEBOX_PLAY: return game->ui->desktop.menu.show_shortcuts ? "Start music playback (F9)." :
+      "Start music playback.";
+  case JUKEBOX_SHUFFLE: return "Shuffle the selected music programme.";
+  case JUKEBOX_PROGRAMME: return "Edit the music programme.";
+  case JUKEBOX_CLEAR: return "Clear the custom music programme.";
+  default:
+    if (action >= JUKEBOX_PLAY_TRACK) return "Play this track.";
+    if (action >= JUKEBOX_EFFECTS_VOLUME) return "Adjust sound effect volume.";
+    if (action >= JUKEBOX_MUSIC_VOLUME) return "Adjust music volume.";
+    if (action >= JUKEBOX_REMOVE) return "Remove this track from the custom programme.";
+    if (action >= JUKEBOX_ADD) return "Add this track to the custom programme.";
+    if (action >= JUKEBOX_SELECT) return "Select a music programme.";
+    return NULL;
+  }
 }

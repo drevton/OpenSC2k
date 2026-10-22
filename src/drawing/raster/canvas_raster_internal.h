@@ -3,7 +3,7 @@
 
 #include <string.h>
 
-#include "drawing/drawing.h"
+#include "drawing/canvas.h"
 
 // Small hot primitives stay inline so splitting painters does not add a
 // function call for every pixel or span. Runtime raster state has one owner.

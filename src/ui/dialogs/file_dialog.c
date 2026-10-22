@@ -1,37 +1,46 @@
-#include "city/engine/command_types.h"
-#include "city/presentation.h"
-#include "game/application_internal.h"
-#include "game/settings.h"
-#include "ui/tools/tools.h"
-#include "ui/dialogs/file_dialog_internal.h"
-
-#include "ui/input.h"
-
+#include "city/saveload/state.h"
+#include "base/file.h"
+#include <SDL.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include <SDL.h>
-
-#include "city/saveload/runtime.h"
-#include "game/state.h"
-#include "city/engine/initialization.h"
-#include "city/state.h"
-#include "city/maps/layers.h"
-#include "city/saveload/file.h"
-#include "game/errors.h"
-#include "city/saveload/services.h"
 #include "assets/catalog.h"
-#include "drawing/drawing_internal.h"
+#include "assets/state.h"
+#include "city/engine/command_types.h"
+#include "city/engine/city_name.h"
+#include "city/maps/layers.h"
+#include "city/presentation.h"
+#include "city/saveload/file.h"
+#include "city/saveload/runtime.h"
+#include "city/saveload/services.h"
+#include "city/state.h"
+#include "drawing/raster/canvas_primitives.h"
+#include "game/application.h"
+#include "game/errors.h"
+#include "game/observation.h"
+#include "game/settings.h"
+#include "game/state.h"
+#include "ui/windows/window_internal.h"
 #include "ui/charts/charts.h"
 #include "ui/commands.h"
+#include "ui/dialogs/dialogs.h"
 #include "ui/dialogs/file_browser.h"
+#include "ui/dialogs/file_dialog_internal.h"
+#include "ui/dialogs/messages.h"
+#include "ui/input.h"
+#include "ui/sdl.h"
 #include "ui/state.h"
 #include "ui/text/text.h"
-
-#include "game/observation.h"
+#include "ui/tools/tools.h"
+#include "ui/windows/controls.h"
+#include "ui/windows/windows.h"
 
 // File choices own presentation state; callbacks dispatch the accepted operation.
+
+static void RecordCityFileDialogCheckpoint(City *city, u32 kind, i32 token, i32 answer, const char *path) {
+  ObserveCityPresentation(city->game, kind, token, 0, 0, answer, path);
+}
 
 static WindowProcedure FileBrowserConfirmationWindowProcedure;
 
@@ -268,12 +277,10 @@ bool OpenCitySaveDialog(City *city, CityFileChoiceCallback *callback, void *cont
   return opened;
 }
 
-bool CityFileDialogWaiting(const City *city) {
-  CityFilePresentation *files = &city->game->ui->file_dialog;
-  NativeFileDialog *dialog = files->dialog;
-  NativeReplacementPrompt *prompt = files->prompt;
-  return (dialog && dialog->callback && !dialog->answer && FindCityCanvasWindow(files->desktop, dialog->window_id)) ||
-      (prompt && prompt->callback && !prompt->answer && FindCityCanvasWindow(files->desktop, prompt->window_id));
+bool CityFileDialogWaiting(const CityInterfaceState *ui) {
+  const CityFilePresentation *files = &ui->file_dialog;
+  const NativeFileDialog *dialog = files->dialog;
+  return dialog && dialog->callback && !dialog->answer && FindCityCanvasWindow(files->desktop, dialog->window_id);
 }
 
 i32 ChooseCityCanvasOpenFile(City *city, const char *name, const char *directory, const char *title,
@@ -349,35 +356,9 @@ i32 PresentCityReplacementQuestion(City *city, const char *text, u32 flags) {
   return CITY_DIALOG_CANCEL;
 }
 
-bool OpenCityFileQuestion(City *city, const char *text, u32 flags,
-    CityFileQuestionCallback *callback, void *context) {
-  CityFilePresentation *files = &city->game->ui->file_dialog;
-  if (!files->desktop || files->prompt || !callback ||
-      (flags != CITY_PROMPT_YES_NO_CANCEL && flags != CITY_PROMPT_YES_NO)) return false;
-  NativeReplacementPrompt *prompt = calloc(1, sizeof(*prompt));
-  if (!prompt) return false;
-  prompt->callback = callback;
-  prompt->context = context;
-  if (BeginCityFileQuestion(city, prompt, text, flags)) return true;
-  free(prompt);
-  return false;
-}
-
 void CompleteCityFileDialogs(City *city) {
   if (city->game->command_depth) return;
   CityFilePresentation *files = &city->game->ui->file_dialog;
-  NativeReplacementPrompt *prompt = files->prompt;
-  if (prompt && prompt->callback && (prompt->answer || !FindCityCanvasWindow(files->desktop, prompt->window_id))) {
-    int answer = prompt->answer ? prompt->answer :
-        prompt->flags == CITY_PROMPT_YES_NO_CANCEL ? CITY_DIALOG_CANCEL : CITY_DIALOG_NO;
-    prompt->answer = answer;
-    CityFileQuestionCallback *callback = prompt->callback;
-    void *context = prompt->context;
-    FinishCityFileQuestion(city, prompt);
-    free(prompt);
-    callback(city, answer, context);
-    return;
-  }
   NativeFileDialog *dialog = files->dialog;
   if (!dialog || !dialog->callback || (!dialog->answer && FindCityCanvasWindow(files->desktop, dialog->window_id))) return;
   if (!dialog->answer) dialog->answer = CITY_DIALOG_CANCEL;
@@ -457,15 +438,6 @@ bool InitializeCityFileDialogPresentation(City *city, CityCanvasDesktop *desktop
 void ShutdownCityFileDialogPresentation(City *city) {
   CityFilePresentation *files = &city->game->ui->file_dialog;
   if (files->scope != NULL) return;
-  if (files->prompt && files->prompt->callback) {
-    NativeReplacementPrompt *prompt = files->prompt;
-    prompt->answer = CITY_DIALOG_CANCEL;
-    CityFileQuestionCallback *callback = prompt->callback;
-    void *context = prompt->context;
-    FinishCityFileQuestion(city, prompt);
-    free(prompt);
-    callback(city, CITY_DIALOG_CANCEL, context);
-  }
   if (files->dialog && files->dialog->callback) {
     NativeFileDialog *dialog = files->dialog;
     dialog->answer = CITY_DIALOG_CANCEL;
@@ -819,6 +791,36 @@ void HandleSaveCityCommand(City *city) {
   }
 }
 
+// Derive the name before saving; commit the normalized path only on success. Requires the active file/UI interaction;
+// cancellation leaves the host destination uncommitted and cleanup follows the real dialog lifetime.
+void HandleSaveCityAsCommand(City *city) {
+  CityPath path = {0};
+  if (city->game->city_active) {
+    static const char filter[] = "City files (*.sc2; *.sc2k) | *.sc2;*.sc2k ||";
+    char default_name[CITY_NAME_LIMIT + sizeof(".sc2")];
+    int length = Utf8PrefixBytes(CityNameText(&city->name), CITY_NAME_LIMIT);
+    memcpy(default_name, CityNameText(&city->name), (size_t)length);
+    memcpy(default_name + length, ".sc2", 5);
+    CityPath directory = {0};
+    GetCitySaveDirectory(city->game, &directory);
+    int choice = ChooseCitySaveFile(city, default_name, filter,
+        CityPathText(&directory));
+    if (choice != CITY_DIALOG_CANCEL) {
+      const char *text = ReadCitySaveSelectedPath(city);
+      AssignCityNameFromSavePath(city, text);
+      // Stock asks for the selected path again after changing the city name.
+      text = ReadCitySaveSelectedPath(city);
+      SetCityPathBytes(city->game, &path, (int)strlen(text), text);
+      if (SaveCityFile(city, &path)) {
+        SetCityPathBytes(city->game, &city->game->city_path, path.length, CityPathText(&path));
+      }
+    }
+    SetCitySavePromptActive(city, false);
+    FreeCityPathStorage(&directory);
+  }
+  FreeCityPathStorage(&path);
+}
+
 // File replacement and deletion questions answer their owning browser. Capture
 // the answer before closing the question: submitting it can close both windows.
 static bool FileBrowserConfirmationWindowProcedure(Game *game, const Window *window, const WindowEvent *event) {
@@ -844,4 +846,57 @@ static bool FileBrowserConfirmationWindowProcedure(Game *game, const Window *win
     }
   }
   return false;
+}
+
+static void SaveCityFileChoice(City *city, const char *path, void *context) {
+  (void)context;
+  // Restore the live speed before serializing; the temporary picker pause is UI state.
+  ApplicationUpdateDialogPause(city);
+  if (path) {
+    u32 error_serial = city->game->ui->command_error_serial;
+    ClearGameError(city->game);
+    if (SaveCityToPath(city, (const u8 *)path, (u32)strlen(path), true))
+      SetText(&city->game->ui->file_dialog.destination, CityPathText(&city->game->city_path));
+    else if (error_serial == city->game->ui->command_error_serial)
+      PresentCityFileNotice(city, "The city could not be saved.", true);
+  }
+  ApplicationUpdateDialogPause(city);
+}
+
+void RequestCitySave(Game *game) {
+  if (game->observation && game->observation->open_save_dialog) {
+    game->observation->open_save_dialog(game->city);
+    return;
+  }
+  if (!game->city_active || NativeSaveDialogOpen(game->city)) return;
+  if (!OpenCitySaveDialog(game->city, SaveCityFileChoice, NULL))
+    PresentCityFileNotice(game->city, "The save dialog could not be opened.", true);
+  ApplicationUpdateDialogPause(game->city);
+}
+
+void PresentCityFileNotice(City *city, const char *text, bool error) {
+  if (city->game->execution_failed || city->game->close_requested) return;
+  CityInterfaceState *ui = city->game->ui;
+  int index;
+  if (error) {
+    const char *summary = ui->active_command ? CityCommandFailureSummary(ui->active_command) : NULL;
+    if (!summary && (city->game->idle_state == CITY_IDLE_LOAD_CITY ||
+        city->game->idle_state == CITY_IDLE_LOAD_SCENARIO)) summary = "Can't load game...";
+    // The error window owns the formatted detail; the source text is borrowed only during this call.
+    index = OpenCityCommandErrorWindow(city->game, summary ? summary : "Can't complete file operation...",
+        text, true, INVALID_TILE);
+    ++ui->command_error_serial;
+    if (ui->command_feedback) ui->command_feedback->notice_shown = true;
+  } else {
+    size_t length = strlen(text) + 1;
+    char *message = malloc(length);
+    if (!message) { city->game->execution_failed = true; return; }
+    memcpy(message, text, length);
+    index = OpenCityMessageBox(&ui->desktop, (Window){.kind = CITY_CANVAS_NOTICE,
+        .bounds = {110, 90, 490, 210}, .title = "City file", .message = message, .owned_message = message},
+        CITY_MESSAGE_INFORMATION | CITY_MESSAGE_OK);
+    if (index < 0) free(message);
+  }
+  if (index < 0) return;
+  ApplicationUpdateDialogPause(city);
 }

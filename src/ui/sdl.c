@@ -13,6 +13,7 @@
 #include "ui/state.h"
 #include "ui/map.h"
 #include "ui/cursor/cursor.h"
+#include "drawing/cursors.h"
 #include "ui/text/text.h"
 #include "drawing/raster/screen_damage.h"
 
@@ -36,6 +37,7 @@ struct CanvasSDL {
   SDL_Cursor *cursors[CITY_CANVAS_TOOL_COUNT + 1]; // Gold arrow, then tool badges.
   SDL_Cursor *previous_cursor, *installed_cursor;
   int cursor_size;
+  u32 cursor_revision;
   i32 width;
   i32 height;
   i32 texture_scale, texture_width, texture_height;
@@ -73,7 +75,7 @@ void Sc2kSDLPasteText(char *text, size_t capacity, int *caret, int *select_all) 
 static SDL_Cursor *CreateCityCursor(CanvasSDL *display, int tool, int size) {
   SDL_Surface *surface = SDL_CreateRGBSurfaceWithFormat(0, size, size, 32, SDL_PIXELFORMAT_ARGB8888);
   if (!surface) return NULL;
-  RunSprite *sprite = PrepareCityCursorSprite(display->game, tool, size);
+  RunSprite *sprite = PrepareCityCursorSprite(GetCityCursorSprite(display->game, tool), size);
   bool copied = sprite && CopyRunSpriteRgba(sprite, surface->pixels, surface->pitch / sizeof(u32), NULL, NULL);
   FreeRunSprite(sprite);
   if (!copied) { SDL_FreeSurface(surface); return NULL; }
@@ -82,15 +84,10 @@ static SDL_Cursor *CreateCityCursor(CanvasSDL *display, int tool, int size) {
   return cursor;
 }
 
-// SDL's native cursor dimensions are window points, not Retina backing pixels.
-static int ConfigureCursorScale(CanvasSDL *display, int scale) {
-  int output_width, output_height, window_width, window_height;
-  if (SDL_GetRendererOutputSize(display->renderer, &output_width, &output_height)) return -1;
-  SDL_GetWindowSize(display->window, &window_width, &window_height);
-  if (output_width < 1 || window_width < 1) return SDL_SetError("Invalid cursor display size");
-  int pixel_size = Sc2kCanvasCursorBounds(0, 0, scale).right;
-  int size = IntMax(1, ((i64)pixel_size * window_width + output_width - 1) / output_width);
-  if (display->cursor_size == size) return 0;
+// Build the replacement before releasing host cursors so a failed preparation retains the installed image.
+static int ConfigureCursorSize(CanvasSDL *display, int size) {
+  if (display->cursor_size == size && display->cursor_revision == display->game->drawing->cursors.revision)
+    return 0;
   SDL_Cursor *cursor = CreateCityCursor(display, CITY_CANVAS_TOOL_NONE, size);
   if (!cursor) return -1;
   if (!display->installed_cursor) display->previous_cursor = SDL_GetCursor();
@@ -102,7 +99,20 @@ static int ConfigureCursorScale(CanvasSDL *display, int scale) {
   display->cursors[0] = cursor;
   display->installed_cursor = cursor;
   display->cursor_size = size;
+  // Creating the arrow may initialize the composed tool cache. Retain the revision after that work.
+  display->cursor_revision = display->game->drawing->cursors.revision;
   return 0;
+}
+
+// SDL's native cursor dimensions are window points, not Retina backing pixels.
+static int ConfigureCursorScale(CanvasSDL *display, int scale) {
+  int output_width, output_height, window_width, window_height;
+  if (SDL_GetRendererOutputSize(display->renderer, &output_width, &output_height)) return -1;
+  SDL_GetWindowSize(display->window, &window_width, &window_height);
+  if (output_width < 1 || window_width < 1) return SDL_SetError("Invalid cursor display size");
+  int pixel_size = Sc2kCanvasCursorBounds(0, 0, scale).right;
+  int size = IntMax(1, ((i64)pixel_size * window_width + output_width - 1) / output_width);
+  return ConfigureCursorSize(display, size);
 }
 
 const char *Sc2kSDLError(void) {
@@ -111,6 +121,11 @@ const char *Sc2kSDLError(void) {
 
 void Sc2kSDLClose(CanvasSDL *display) {
   if (display != NULL) {
+    CityInterfaceState *ui = display->game->ui;
+    if (ui) {
+      if (ui->display == display) ui->display = NULL;
+      if (ui->command_display == display) ui->command_display = NULL;
+    }
     if (display->installed_cursor && SDL_GetCursor() == display->installed_cursor)
       SDL_SetCursor(display->previous_cursor);
 #ifdef __APPLE__
@@ -363,6 +378,7 @@ i32 Sc2kSDLPresentFramebuffer(CanvasSDL *display, const Canvas *canvas,
 // Cache each badge at the current interface scale. Pointer motion neither
 // redraws the canvas nor presents an extra frame while draining input events.
 static void UpdateCursor(CanvasSDL *display) {
+  if (ConfigureCursorSize(display, display->cursor_size)) return;
   int tool = display->cursor_badge && display->cursor_inside && display->cursor_focus ?
       display->cursor_tool : CITY_CANVAS_TOOL_NONE;
   int index = tool + 1;
@@ -416,7 +432,7 @@ static void FramebufferPointer(CanvasSDL *display, CanvasSDLEvent *event) {
   event->x = (i32)(x / map_scale - (x % map_scale < 0));
   event->y = (i32)(y / map_scale - (y % map_scale < 0));
 }
-void Sc2kSDLDisplayOptions(CanvasSDL *display, GameOptions *options) {
+void Sc2kSDLDisplayOptions(CanvasSDL *display, DrawingOptions *options) {
   SDL_GetRendererOutputSize(display->renderer, &options->window_width, &options->window_height);
   SDL_DisplayMode mode;
   options->refresh_rate = SDL_GetCurrentDisplayMode(SDL_GetWindowDisplayIndex(display->window),

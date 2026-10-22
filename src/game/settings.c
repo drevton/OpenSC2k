@@ -1,3 +1,5 @@
+#include "base/file.h"
+#include "game/commands.h"
 #include "game/settings.h"
 
 #include <stdio.h>
@@ -77,9 +79,6 @@ static bool TransferGameSettings(Game *game, int mode, bool scale_override) {
         (setting->action == GAME_OPTIONS_AUTO || !strcmp(setting->key, "display.scale"))) continue;
     value = mode == SETTINGS_STORE || HasConfigKey(config, setting->key) || setting->preserve_initial
         ? ReadCitySettingValue(game, setting, true) : setting->default_value;
-    if (mode == SETTINGS_STORE && setting->command && setting->command != CITY_COMMAND_SET_FIX) {
-      if (!ReadConfigInteger(config, setting->key, &value)) value = setting->default_value;
-    }
     if (!TransferInteger(config, setting->key, &value, setting->minimum, setting->maximum,
         setting->maximum == 1, mode)) return false;
     if (mode == SETTINGS_LOAD) WriteCitySettingValue(game, setting, (int)value, true);
@@ -104,16 +103,17 @@ static bool TransferGameSettings(Game *game, int mode, bool scale_override) {
     if (mode == SETTINGS_STORE) {
       size_t length = 0;
       text[0] = 0;
-      for (int i = 0; i < ui->jukebox.custom_count[list]; ++i)
-        length += snprintf(text + length, sizeof(text) - length, "%s%d", i ? "," : "", ui->jukebox.custom[list][i]);
+      for (int i = 0; i < audio->jukebox.custom_count[list]; ++i)
+        length += snprintf(text + length, sizeof(text) - length, "%s%d",
+            i ? "," : "", audio->jukebox.custom[list][i]);
       if (!SetConfigString(config, key, text)) return false;
     } else if (saved) {
       u8 tracks[JUKEBOX_CAPACITY];
       i32 count;
       if (!ReadPlaylist(saved, tracks, &count)) return false;
       if (mode == SETTINGS_LOAD) {
-        memcpy(ui->jukebox.custom[list], tracks, count);
-        ui->jukebox.custom_count[list] = count;
+        memcpy(audio->jukebox.custom[list], tracks, count);
+        audio->jukebox.custom_count[list] = count;
       }
     }
   }
@@ -185,14 +185,15 @@ void ApplyGameSettings(Game *game, bool scale_override) {
   }
   if (game->audio->live_open && game->audio->custom_soundfont && !SetCitySoundFont(game->audio, NULL, true))
     fprintf(stderr, "Could not load the configured MIDI soundfont.\n");
-  JukeboxSelect(&game->ui->jukebox, game->ui->jukebox.programme);
-  game->audio->music_enabled = game->ui->jukebox.playing;
-  NativeAudioVolume(game->audio, &game->ui->jukebox);
+  JukeboxSelect(&game->audio->jukebox, game->audio->jukebox.programme);
+  game->audio->music_enabled = game->audio->jukebox.playing;
+  NativeAudioVolume(game->audio);
   // Saved native cities retain their deterministic settings. Apply configured defaults
   // to stock cities through resolved commands, outside command execution itself.
+  // Keep their import rule for flat-land flooding; the user can change it per city.
   if (!game->city->file_extensions) {
     for (int fix = 0; fix < CITY_FIX_COUNT; ++fix)
-      if (CITY_FIX_SIMULATION_MASK & (1ull << fix))
+      if (fix != CITY_FIX_WATER_SPREADING && (CITY_FIX_SIMULATION_MASK & (1ull << fix)))
         RunCityCommand(game, CITY_COMMAND_SET_FIX, INVALID_TILE, fix,
             (game->default_city_fixes & (1ull << fix)) != 0, 0, NULL, NULL);
   }
@@ -200,22 +201,21 @@ void ApplyGameSettings(Game *game, bool scale_override) {
   if (!game->city_active) ApplyGameCityDefaults(game);
 }
 
-void ApplyGameCityDefaults(Game *game) {
-  if (!game->settings) return;
-  Config *config = &game->settings->document;
+bool ApplyGameCityDefaults(Game *game) {
+  if (!game->settings) return false;
   for (int i = 0; i < kCitySettingsCount; ++i) {
     const CitySetting *setting = &kCitySettings[i];
     if (!setting->command) continue;
-    i64 value = setting->default_value;
-    ReadConfigInteger(config, setting->key, &value);
+    int value = ReadGameCityDefault(game, setting);
     if (setting->command == CITY_COMMAND_SET_SIMULATION_SPEED) {
       // Pause is temporary; older configurations can contain paused or zero speeds.
       if (value < CITY_SPEED_SLOW) value = CITY_SPEED_NORMAL;
-      game->ui->resume_speed = (int)value;
+      game->ui->resume_speed = value;
       if (game->ui->dialog_pause_requested) continue;
     }
-    RunCitySettingCommand(game, setting, (int)value);
+    if (!RunCitySettingCommand(game, setting, value)) return false;
   }
+  return true;
 }
 
 void StoreGameSettings(Game *game) {
@@ -225,15 +225,40 @@ void StoreGameSettings(Game *game) {
     game->settings->write_at = -1;
 }
 
-void StoreGameCitySetting(Game *game, const char *key, i64 value) {
-  if (!game->settings || !game->settings->writable) return;
-  const CitySetting *setting = NULL;
-  for (int i = 0; i < kCitySettingsCount; ++i)
-    if (!strcmp(kCitySettings[i].key, key)) { setting = &kCitySettings[i]; break; }
-  if (!setting || value < setting->minimum || value > setting->maximum) return;
-  if (!SetConfigInteger(&game->settings->document, key, value, setting->maximum == 1))
-    fprintf(stderr, "Could not update configuration: %s\n", key);
+// City defaults live in the config document; the fix mask is cached for City initialization and stock imports.
+int ReadGameCityDefault(const Game *game, const CitySetting *setting) {
+  if (setting->command == CITY_COMMAND_SET_FIX) {
+    bool enabled = (game->default_city_fixes & setting->mask) != 0;
+    return setting->inverted ? !enabled : enabled;
+  }
+  i64 value = setting->default_value;
+  if (game->settings) ReadConfigInteger(&game->settings->document, setting->key, &value);
+  return (int)value;
+}
+
+// Intro edits change defaults without running a City command. An invalid on-disk config remains untouched;
+// its replacement document may still hold this run's defaults in memory.
+bool StoreGameCityDefault(Game *game, const CitySetting *setting, int value) {
+  if (!game->settings || setting->owner != SETTING_CITY || !setting->command ||
+      value < setting->minimum || value > setting->maximum) return false;
+  if (!SetConfigInteger(&game->settings->document, setting->key, value, setting->maximum == 1)) return false;
+  WriteCitySettingValue(game, setting, value, true);
   StoreGameSettings(game);
+  return true;
+}
+
+// Copy only gameplay values. Presentation preferences keep their existing global owners.
+bool CopyCitySettingsToDefaults(Game *game) {
+  if (!game->settings) return false;
+  for (int i = 0; i < kCitySettingsCount; ++i) {
+    const CitySetting *setting = &kCitySettings[i];
+    if (setting->owner != SETTING_CITY) continue;
+    int value = ReadCitySettingValue(game, setting, false);
+    if (!SetConfigInteger(&game->settings->document, setting->key, value, setting->maximum == 1)) return false;
+    WriteCitySettingValue(game, setting, value, true);
+  }
+  StoreGameSettings(game);
+  return true;
 }
 
 void PollGameSettings(Game *game, double now) {

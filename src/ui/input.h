@@ -5,6 +5,8 @@
 
 #include "city/types.h"
 
+typedef struct CanvasSDLEvent CanvasSDLEvent;
+
 // Original mouse-message low-byte flags, separate from recorded sample flags.
 enum {
   CITY_MOUSE_LEFT_BUTTON = 0x01, CITY_MOUSE_RIGHT_BUTTON = 0x02,
@@ -13,6 +15,10 @@ enum {
 };
 
 typedef struct CityInterfaceState CityInterfaceState;
+typedef struct Game Game;
+
+// Apply focus changes to UI, audio and palette presentation without advancing simulation phases.
+void HandleApplicationActivation(Game *game, int active);
 
 // Printable keys use uppercase ASCII; named keys and modifiers have stable integer codes.
 typedef u32 CityHotkey;
@@ -51,5 +57,15 @@ void SetCityShiftKeyPressed(CityInterfaceState *ui, bool pressed);
 void SetCityCtrlKeyPressed(CityInterfaceState *ui, bool pressed);
 void SetCityBorderConnectionAnswer(CityInterfaceState *ui, bool accept);
 void SetCitySpanChoice(CityInterfaceState *ui, i16 choice);
+
+// Convert SDL logical coordinates to framebuffer pixels, then to the captured window's logical coordinates.
+void CityInterfacePixels(Game *game, const CanvasSDLEvent *event, i32 *x, i32 *y);
+CanvasSDLEvent TransformCityInterfaceEvent(Game *game, const CanvasSDLEvent *event);
+void BeginCityCanvasButtonFeedback(Game *game, const CanvasSDLEvent *event);
+void HandleCityCanvasPointerDown(City *city, const CanvasSDLEvent *map_event);
+void HandleCityCanvasPointerMove(City *city, const CanvasSDLEvent *map_event);
+void HandleCityCanvasPointerUp(City *city, const CanvasSDLEvent *event);
+void ScrollCityCanvas(City *city, const CanvasSDLEvent *event);
+void DispatchCityCanvasEvent(City *city, CanvasSDLEvent *event);
 
 #endif

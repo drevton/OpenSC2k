@@ -38,34 +38,6 @@ static inline int CityMapHighwayLayoutAxis(int sprite) {
       sprite <= CITY_MAP_TILE_SPRITE_HIGHWAY_LAST ? (sprite - CITY_MAP_TILE_SPRITE_HIGHWAY_FIRST) & 1 : sprite & 1;
 }
 
-// Event Tables
-
-// Native immutable values; no executable mapping is needed.
-extern const u16 kCityMapEventBaseSprite[17];
-extern const u8 kCityMapEventMinZoom[17];
-extern const u8 kCityMapEventSpriteVerticalOffset[24];
-extern const u8 kCityMapEventSpriteHeight[24];
-extern const u8 kCityMapEventSpriteHalfWidth[24];
-extern const u8 kCityMapEventDirectionSprite[8];
-extern const u8 kCityMapEventDirectionFlip[8];
-extern const u8 kCityMapEventDefaultSprite[4];
-extern const u8 kCityMapEventDefaultFlip[4];
-extern const u8 kCityMapEventXDivisor[4];
-extern const u8 kCityMapEventYDivisor[4];
-
-typedef struct {
-  i8 upper_span_x[2];
-  i8 upper_adjust_x[2];
-  i8 upper_span_y[2];
-  i8 upper_adjust_y[2];
-  i8 lower_span_x[2];
-  i8 lower_adjust_x[2];
-  i8 lower_span_y[2];
-  i8 lower_adjust_y[2];
-} CityEventStructureOffsets;
-
-extern const CityEventStructureOffsets kCityEventStructureOffsets;
-
 // Sprite Tables
 
 enum { CITY_TERRAIN_SPRITE_COUNT = 70 };

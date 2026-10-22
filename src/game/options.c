@@ -1,3 +1,5 @@
+#include "game/commands.h"
+#include "ui/windows/controls.h"
 #include "city/engine/city_types.h"
 #include <stddef.h>
 
@@ -67,42 +69,42 @@ const CitySetting kCitySettings[] = {
       .group = CITY_SETTINGS_INTERFACE, .action = GAME_OPTIONS_AUTO,
       .default_value = true,
       .key = "display.automatic", .owner = SETTING_DISPLAY, .type = SETTING_I32,
-      .offset = offsetof(GameOptions, automatic), .maximum = 1,
+      .offset = offsetof(DrawingOptions, automatic), .maximum = 1,
       .effects = SETTING_SYNC_DISPLAY,
   },
   {"Snap windows", "Snap dragged windows to nearby windows and screen edges.",
       .group = CITY_SETTINGS_INTERFACE, .action = GAME_OPTIONS_SNAP,
       .default_value = true,
       .key = "display.snapping", .owner = SETTING_DISPLAY, .type = SETTING_I32,
-      .offset = offsetof(GameOptions, snapping), .maximum = 1,
+      .offset = offsetof(DrawingOptions, snapping), .maximum = 1,
       .effects = SETTING_SYNC_DISPLAY,
   },
   {"Scale bevels", "Scale window and control borders with the interface.",
       .group = CITY_SETTINGS_INTERFACE, .action = GAME_OPTIONS_BEVELS,
       .default_value = true,
       .key = "display.scale_bevels", .owner = SETTING_DISPLAY, .type = SETTING_BOOL,
-      .offset = offsetof(GameOptions, scale_bevels), .maximum = 1,
+      .offset = offsetof(DrawingOptions, scale_bevels), .maximum = 1,
       .effects = SETTING_REDRAW_INTERFACE,
   },
   {"Traditional sprite font", "Use OpenTTD-style sprite glyphs. Off selects scalable Noto Sans.",
       .group = CITY_SETTINGS_INTERFACE, .action = GAME_OPTIONS_SPRITE_FONT,
       .default_value = true,
       .key = "display.sprite_font", .owner = SETTING_DISPLAY, .type = SETTING_BOOL,
-      .offset = offsetof(GameOptions, sprite_font), .maximum = 1,
+      .offset = offsetof(DrawingOptions, sprite_font), .maximum = 1,
       .effects = SETTING_REDRAW_INTERFACE,
   },
   {"Anti-alias scalable fonts", "Smooth scalable font edges. Only available when the sprite font is off.",
       .group = CITY_SETTINGS_INTERFACE, .action = GAME_OPTIONS_FONT_ANTIALIAS,
       .default_value = true,
       .key = "display.font_antialias", .owner = SETTING_DISPLAY, .type = SETTING_BOOL,
-      .offset = offsetof(GameOptions, font_antialias), .maximum = 1,
+      .offset = offsetof(DrawingOptions, font_antialias), .maximum = 1,
       .effects = SETTING_REDRAW_INTERFACE,
   },
   {"Fullscreen", "Switch between a desktop window and fullscreen.",
       .group = CITY_SETTINGS_DISPLAY, .action = GAME_OPTIONS_FULLSCREEN,
       .default_value = false,
       .key = "display.fullscreen", .owner = SETTING_DISPLAY, .type = SETTING_I32,
-      .offset = offsetof(GameOptions, fullscreen), .maximum = 1,
+      .offset = offsetof(DrawingOptions, fullscreen), .maximum = 1,
       .effects = SETTING_SYNC_DISPLAY,
   },
   {"Music", "Play or stop the selected jukebox programme.",
@@ -116,6 +118,14 @@ const CitySetting kCitySettings[] = {
       .default_value = true,
       .key = "audio.enabled", .owner = SETTING_AUDIO, .type = SETTING_U32,
       .offset = offsetof(CityAudioState, enabled), .maximum = 1,
+  },
+  {"Ambient sounds", "Play routine airplane, helicopter, ship, train and bird sounds, traffic and distant sirens, "
+      "and explosions that do not trigger disasters. Construction sounds and disaster warnings remain enabled.",
+      .group = CITY_SETTINGS_SOUND, .action = GAME_OPTIONS_AMBIENT_SOUNDS,
+      .default_value = true,
+      .key = "audio.ambient_sounds", .owner = SETTING_AUDIO, .type = SETTING_BOOL,
+      .offset = offsetof(CityAudioState, ambient_sounds), .maximum = 1,
+      .effects = SETTING_STOP_EFFECTS,
   },
   {"Overlapping sound effects", "Mix up to eight city effects, keeping loops independent of construction "
       "and explosion sounds. Stops affect only the requested sound. Off restores the single-effect controller.",
@@ -261,14 +271,14 @@ const CitySetting kCitySettings[] = {
       .group = CITY_SETTINGS_DISPLAY, .action = GAME_OPTIONS_BLACK_BACKGROUND,
       .default_value = true,
       .key = "display.black_background", .owner = SETTING_DISPLAY, .type = SETTING_BOOL,
-      .offset = offsetof(GameOptions, black_background), .maximum = 1,
+      .offset = offsetof(DrawingOptions, black_background), .maximum = 1,
       .effects = SETTING_REDRAW_MAP,
   },
   {"Land-value city center", "Show the calculated city center on the land-value map.",
       .group = CITY_SETTINGS_DISPLAY, .action = GAME_OPTIONS_DRAWING_FIX + DRAWING_FIX_CITY_CENTER,
       .default_value = false,
       .key = "display.city_center", .owner = SETTING_DISPLAY, .type = SETTING_MASK,
-      .offset = offsetof(GameOptions, fixes), .maximum = 1, .mask = 1u << DRAWING_FIX_CITY_CENTER,
+      .offset = offsetof(DrawingOptions, fixes), .maximum = 1, .mask = 1u << DRAWING_FIX_CITY_CENTER,
       .effects = SETTING_REDRAW_INTERFACE,
   },
   {"Advanced Alt-query", "Hold Alt when querying a tile to see map layer values and simulation flags.",
@@ -332,7 +342,7 @@ const CitySetting kCitySettings[] = {
       .group = CITY_SETTINGS_SIMCITY_FIXES, .action = GAME_OPTIONS_SAVE_VIEW_POSITION,
       .default_value = true,
       .key = "display.save_view_position", .owner = SETTING_DISPLAY, .type = SETTING_BOOL,
-      .offset = offsetof(GameOptions, save_view_position), .maximum = 1,
+      .offset = offsetof(DrawingOptions, save_view_position), .maximum = 1,
   },
   {"Recover zero-length save headers", "sc2kfix: recover .sc2 saves with a zero FORM length using the actual file "
       "size. Does not change the source file or repair damaged chunks.",
@@ -368,7 +378,7 @@ const CitySetting kCitySettings[] = {
       .group = CITY_SETTINGS_SIMCITY_FIXES, .action = GAME_OPTIONS_FIX + CITY_FIX_DEMOLITION_ELEVATION,
       .default_value = true,
       .key = "display.demolition_elevation", .owner = SETTING_DISPLAY, .type = SETTING_U8,
-      .offset = offsetof(GameOptions, demolition_elevation), .maximum = 1,
+      .offset = offsetof(DrawingOptions, demolition_elevation), .maximum = 1,
   },
   {"Preserve terrain above buried utilities", "Keep surface slopes and river/lake beds intact when laying pipes "
       "or subways, without a grading surcharge. Allow utilities to cross banks in either direction. "
@@ -409,7 +419,7 @@ const CitySetting kCitySettings[] = {
       .group = CITY_SETTINGS_SIMCITY_FIXES, .action = GAME_OPTIONS_DRAWING_FIX + DRAWING_FIX_PIXEL_SCROLLING,
       .default_value = true,
       .key = "display.pixel_scrolling", .owner = SETTING_DISPLAY, .type = SETTING_MASK,
-      .offset = offsetof(GameOptions, fixes), .maximum = 1, .mask = 1u << DRAWING_FIX_PIXEL_SCROLLING,
+      .offset = offsetof(DrawingOptions, fixes), .maximum = 1, .mask = 1u << DRAWING_FIX_PIXEL_SCROLLING,
       .effects = SETTING_REDRAW_INTERFACE,
   },
   {"Bounded disaster location search", "Avoid an endless aircraft disaster search when the central map has no "
@@ -445,8 +455,17 @@ const CitySetting kCitySettings[] = {
       .offset = offsetof(City, fixes), .maximum = 1, .mask = 1ull << CITY_FIX_COMPACT_HIGHWAYS,
       .command = CITY_COMMAND_SET_FIX, .parameter = CITY_FIX_COMPACT_HIGHWAYS,
   },
+  {"Water spreads onto flat land", "Allow adjacent open water to flood flat clear land at or below its waterline. "
+      "Water can always reclaim shore slopes through reachable edges. Stock city imports start with this off.",
+      .group = CITY_SETTINGS_INFRASTRUCTURE, .action = GAME_OPTIONS_FIX + CITY_FIX_WATER_SPREADING,
+      .default_value = true,
+      .key = "fixes.water_spreading", .owner = SETTING_CITY, .type = SETTING_MASK64,
+      .offset = offsetof(City, fixes), .maximum = 1, .mask = 1ull << CITY_FIX_WATER_SPREADING,
+      .command = CITY_COMMAND_SET_FIX, .parameter = CITY_FIX_WATER_SPREADING,
+  },
   {"Native landscape behavior", "Use native landscape artwork, terrain editing and placement improvements. "
       "Route trips along bridge surfaces and enforce their height and direction. "
+      "Keep sailboats off shore banks and rapids. "
       "Tile storage always uses the native encoding, including when this option is off.",
       .group = CITY_SETTINGS_SIMCITY_FIXES, .action = GAME_OPTIONS_FIX + CITY_FIX_NATIVE_LANDSCAPE,
       .default_value = true,
@@ -483,7 +502,7 @@ const CitySetting kCitySettings[] = {
   },
   // General controls share this schema without appearing twice in the advanced browser.
   {.key = "display.scale", .owner = SETTING_DISPLAY, .type = SETTING_I32,
-      .offset = offsetof(GameOptions, scale),
+      .offset = offsetof(DrawingOptions, scale),
       .minimum = 100, .maximum = 500, .default_value = 100, .hidden = true, .preserve_initial = true},
   {.key = "audio.master_volume", .owner = SETTING_AUDIO, .type = SETTING_U8,
       .offset = offsetof(CityAudioState, master_volume),
@@ -509,11 +528,11 @@ const CitySetting kCitySettings[] = {
   {.key = "music.effects_volume", .owner = SETTING_JUKEBOX, .type = SETTING_I32,
       .offset = offsetof(Jukebox, effects_volume),
       .minimum = 0, .maximum = 100, .default_value = 80, .hidden = true, .preserve_initial = true},
-  {.key = "music.collapsed", .owner = SETTING_JUKEBOX, .type = SETTING_I32,
-      .offset = offsetof(Jukebox, collapsed),
+  {.key = "music.collapsed", .owner = SETTING_UI, .type = SETTING_I32,
+      .offset = offsetof(CityInterfaceState, music_collapsed),
       .minimum = 0, .maximum = 1, .default_value = 0, .hidden = true, .preserve_initial = true},
-  {.key = "music.pinned", .owner = SETTING_JUKEBOX, .type = SETTING_I32,
-      .offset = offsetof(Jukebox, pinned),
+  {.key = "music.pinned", .owner = SETTING_UI, .type = SETTING_I32,
+      .offset = offsetof(CityInterfaceState, music_pinned),
       .minimum = 0, .maximum = 1, .default_value = 0, .hidden = true, .preserve_initial = true},
   {.key = "game.speed", .owner = SETTING_CITY, .type = SETTING_I16,
       .offset = offsetof(City, settings.speed),
@@ -542,12 +561,13 @@ static const void *CitySettingOwnerAddress(const Game *game, CitySettingOwner ow
   case SETTING_UI: return game->ui;
   case SETTING_AUDIO: return game->audio;
   case SETTING_DISPLAY: return &game->drawing->options;
-  case SETTING_JUKEBOX: return &game->ui->jukebox;
+  case SETTING_JUKEBOX: return &game->audio->jukebox;
   }
   return NULL;
 }
 
 int ReadCitySettingValue(const Game *game, const CitySetting *setting, bool defaults) {
+  if (defaults && setting->owner == SETTING_CITY) return ReadGameCityDefault(game, setting);
   const u8 *field = (const u8 *)CitySettingOwnerAddress(game, setting->owner) + setting->offset;
   int value;
   switch (setting->type) {
@@ -560,8 +580,7 @@ int ReadCitySettingValue(const Game *game, const CitySetting *setting, bool defa
     value = (*(const u32 *)field & setting->mask) != 0;
     break;
   case SETTING_MASK64:
-    value = ((defaults && setting->command == CITY_COMMAND_SET_FIX ? game->default_city_fixes :
-        *(const u64 *)field) & setting->mask) != 0;
+    value = (*(const u64 *)field & setting->mask) != 0;
     break;
   }
   return setting->inverted ? !value : value;
@@ -590,8 +609,6 @@ void WriteCitySettingValue(Game *game, const CitySetting *setting, int value, bo
 bool RunCitySettingCommand(Game *game, const CitySetting *setting, int value) {
   if (setting->toggle && ReadCitySettingValue(game, setting, false) == value) return true;
   bool fix = setting->command == CITY_COMMAND_SET_FIX;
-  if (!RunCityCommand(game, setting->command, INVALID_TILE,
-      fix ? setting->parameter : setting->toggle ? 0 : value, fix ? value : 0, 0, NULL, NULL)) return false;
-  if (fix) WriteCitySettingValue(game, setting, value, true);
-  return true;
+  return RunCityCommand(game, setting->command, INVALID_TILE,
+      fix ? setting->parameter : setting->toggle ? 0 : value, fix ? value : 0, 0, NULL, NULL);
 }

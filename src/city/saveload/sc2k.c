@@ -1,3 +1,6 @@
+#include "city/engine/city_name.h"
+#include "city/maps/labels.h"
+#include "city/engine/simulation.h"
 #include "city/economy/facilities.h"
 #include "city/events/events.h"
 #include "city/maps/map_types.h"
@@ -15,6 +18,8 @@
 #include "city/saveload/services.h"
 #include "city/saveload/map_format.h"
 #include <zlib.h>
+#include <stdlib.h>
+#include "base/text.h"
 
 // Native RIFF/SC2K saves contain native records and individually compressed chunks.
 _Static_assert(kNativeLittleEndian, "native SC2K raw records require a little-endian host");

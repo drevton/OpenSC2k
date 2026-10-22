@@ -3,16 +3,19 @@
 
 #include "city/maps/tile_storage.h"
 #include "city/engine/city_types.h"
-#include "ui/sdl.h"
 #include "drawing/fonts/fonts.h"
+#include "drawing/palette.h"
 #include "drawing/maps/map_render.h"
+#include "drawing/maps/map_cache.h"
+#include "drawing/maps/map_events.h"
+#include "drawing/maps/map_animation.h"
+#include "drawing/maps/map_effects.h"
 #include "drawing/raster/screen_damage.h"
 #include "drawing/bitmaps.h"
+#include "drawing/cursors.h"
 #include "drawing/sprites/sprites.h"
-#include "ui/cursor/cursor.h"
-#include "ui/menus/menu.h"
-#include "ui/dialogs/game_options.h"
-#include "ui/news/newspaper_layout.h"
+#include "drawing/options.h"
+#include "drawing/newspaper.h"
 
 enum { kDefaultCityCanvasWidth = 600, kDefaultCityCanvasHeight = 490 };
 
@@ -21,53 +24,6 @@ typedef struct {
   const char *text;
   int diagonal, row;
 } MapSignPaint;
-
-// Short-lived construction feedback is presentation state, never saved City state.
-enum { CITY_COST_TEXT_COUNT = 16, CITY_COST_TEXT_CAPACITY = 41 };
-typedef struct {
-  TileIndex tile;
-  char text[CITY_COST_TEXT_CAPACITY];
-  double started;
-  u16 age_ms;
-  bool active;
-} CityCostText;
-
-enum { CITY_DEMOLITION_EFFECT_COUNT = 64 };
-typedef struct {
-  TileIndex tile;
-  double started;
-  u8 frame, elevation, flipped;
-  bool large, active;
-} CityDemolitionEffect;
-
-typedef struct {
-  CityRect *event_bounds;
-  CityMapEvent *events;
-  int capacity;
-  int animation_phase;
-  int origin_x, origin_y, zoom;
-  u8 helicopter_frame;
-  bool initialized;
-} MapSpriteFootprints;
-
-// Positions are large-zoom pixels with eight fractional bits. This history is
-// presentation-only: XTHG records keep their original deterministic cadence.
-typedef struct { int x, y, z; } VehiclePosition3D;
-
-typedef struct {
-  VehiclePosition3D from, target, offset;
-  double started;
-  u8 type, train_heading;
-} VehicleMotion;
-
-typedef struct {
-  VehicleMotion *slots;
-  int capacity;
-  double time;
-  int rotation;
-  u8 helicopter_frame;
-  bool enabled, initialized, animating;
-} DrawingVehicles;
 
 enum { CITY_ROAD_CAR_COUNT = 1024, CITY_ROAD_CAR_BUCKETS = 1024, CITY_ROAD_CAR_AGE_PHASES = 16 };
 typedef struct RoadCar {
@@ -136,19 +92,11 @@ typedef struct CityExtraMapView {
   CityMapAnimationFootprints animations;
 } CityExtraMapView;
 
-typedef struct {
-  TileIndex tile;
-  SimulationRandomState random;
-  CityRect bounds;
-} MapAnimation;
-
-typedef enum MapAnimationMode { ANIMATION_INACTIVE, ANIMATION_CAPTURE, ANIMATION_REPLAY } MapAnimationMode;
-
 // Cached immutable sprite extents and reusable event anchors for clip-derived tile traversal.
 typedef struct {
   int width, height, left_extent;
   CityPoint sprite_extents[3];
-  const CityMapSprite *extent_catalog;
+  const MapSpriteMetrics *extent_metrics;
   u32 extent_revision;
   bool extent_native;
   u8 extent_valid;
@@ -156,14 +104,6 @@ typedef struct {
   int capacity;
   int event_count;
 } MapTileTraversal;
-
-typedef struct {
-  MapAnimation *records;
-  int count, capacity;
-  SimulationRandomState random_after, saved_random;
-  CityRect *saved_bounds;
-  MapAnimationMode mode;
-} DrawingAnimations;
 
 // Map paint and pointer scratch. No executable addresses or OS objects.
 typedef struct {
@@ -218,38 +158,21 @@ typedef struct {
   u16 data_mode;
   u32 data_overlay_enabled;
   u32 event_structure_background;
-  CitySavedViewState saved_view;
+  CityLoadedMapView loaded_view;
   i32 tile_information_line_height;
   u32 tile_information_warning_color;
-  CityMapPaintParameters paint_parameters;
-  CitySpriteCatalog sprite_catalog;
-  CityNewspaperSharedChoices newspaper_shared_choices;
-  CityNewspaperLayouts newspaper_layouts;
-  CityNewspaperFontTable newspaper_fonts;
-  CityNewspaperAlignmentTable newspaper_alignments;
+  CityRect paint_rect;
+  const MapSpriteMetrics *sprite_metrics; // Borrowed from Assets until release; revision changes invalidate extents.
 } CityMapDrawingState;
-
-typedef struct CityPaletteState {
-  CityPaletteEntry current[256];
-  CityPaletteEntries source;
-  CityPaletteEntry fast[49];
-  CityPaletteEntry slow[16];
-  u32 fast_due, slow_due, direct_animation;
-  u32 background_enabled;
-  u32 refresh_deferred, refresh_active;
-  u32 fast_tick;
-  u32 slow_tick;
-} CityPaletteState;
 
 // Native presentation ownership. This state is neither serialized nor compared
 // with the original simulation. Screen storage follows drawable dimensions.
 typedef struct Drawing {
   CityMapDrawingState map_state;
+  CityNewspaperDrawing newspaper;
   CityRect client_rect;
   CityOverlayFont overlay_font;
   CityCursorCache cursors;
-  CityMapImmediatePaintState line_preview_surface;
-  bool line_preview_surface_bound;
   CityPaletteState palette;
   u32 *display_palette;
   u32 data_map_pixels[CITY_MAP_SIZE * CITY_MAP_SIZE];
@@ -258,7 +181,7 @@ typedef struct Drawing {
   RunSprite *toolbar_icons[CITY_TOOLBAR_ICON_COUNT][CITY_TOOLBAR_ICON_CACHE_VARIANTS];
   u8 toolbar_icon_next[CITY_TOOLBAR_ICON_COUNT];
   const CityInterfaceIcons *toolbar_icon_source;
-  const u8 *toolbar_icon_data;
+  const u8 *toolbar_icon_data; // Atlas whose standard button preparations all succeeded; NULL while incomplete.
   int toolbar_icon_scale;
   CityWindowDrawing *window_drawing;
   u32 sprite_revision;
@@ -270,11 +193,9 @@ typedef struct Drawing {
   u32 *animation_composite_bounds;
   int target_scale, target_x, target_y, target_cache;
   int map_width, map_height;
-  bool target_physical_clip;
   CityPoint sprite_offset;
-  CityRect target_clip;
   bool map_navigation_enabled, map_navigation_interactive, map_capture_active;
-  GameOptions options;
+  DrawingOptions options;
   u32 colors[256], resolved_palette[256];
   u32 animation_palette[SPRITE_ANIMATION_COLORS];
   double next_water_palette_tick; // GAME_TIME_UNPAUSED seconds.
@@ -282,13 +203,10 @@ typedef struct Drawing {
   double power_smoke_time, power_smoke_phase;
   u8 power_smoke_frame, power_smoke_speed, wind_power_frame;
   bool power_smoke_visible, wind_power_visible;
-  CanvasSDL *ui_display, *status_display, *shake_display;
   CityMapViewConfig map_view_storage, drag_view_storage;
   CityMapViewConfig *default_map_view;
   CityMapViewConfig *drag_map_view;
-  bool (*present_map)(Game *game);
   bool tile_damage_enabled;
-  bool shake_frame_presented;
   bool screen_shake_active;
   double screen_shake_started;
   int screen_shake_offset;
@@ -308,9 +226,6 @@ typedef struct Drawing {
   CityRect redraw_rects_bounds;
   u32 redraw_tint_sequence;
   CityPoint scroll_pixels; // Physical pixels below the logical camera resolution.
-  // Keep large retained buffers after frequently accessed presentation fields.
-  u8 map_framebuffer[600 * 490];
-  u8 scroll_source[600 * 490];
   MapTileTraversal tile_traversal;
   DrawingAnimations animation;
   NativeMapCache main_cache;
@@ -340,5 +255,8 @@ typedef struct Drawing {
 
 void InitializeDrawingDefaults(Drawing *drawing);
 void InitializeDrawing(Drawing *drawing);
+// Stop painting and detach window callbacks first. Releases Drawing-owned pixels and caches, retaining preferences.
+// Assets and the host display have separate lifetimes. Safe to repeat after partial initialization.
+void ReleaseDrawing(Drawing *drawing);
 
 #endif

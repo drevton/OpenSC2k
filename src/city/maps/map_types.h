@@ -8,7 +8,8 @@
 #include "city/events/events.h"
 #include "city/types.h"
 
-// Native tile-kind totals. Signed working values and unsigned counts share one storage record.
+// Simulation counters use the stock-compatible slots selected by CityTileStatisticsKind, not native TileKind IDs.
+// Signed working values and unsigned counts share the same 32-bit elements.
 typedef union CityStatistics {
   i32 value[TK_COUNT];
   u32 count[TK_COUNT];
@@ -27,6 +28,13 @@ typedef struct {
 
 _Static_assert(sizeof(CityHalfMapStatistics) == 4 && sizeof(CityQuarterMapStatistics) == 4,
     "coarse map records have no padding");
+
+// Retained environment stage/cursor and city-center sums. Zero initializes the pollution-input stage.
+// City owns this record for incremental work; whole-pass callers can keep it on the stack.
+typedef struct CityEnvironmentScan {
+  int row, stage, count, center_x, center_y;
+  i64 sum_x, sum_y;
+} CityEnvironmentScan;
 
 // One-based land-use summary buckets; zero excludes construction/abandoned tiles.
 typedef enum CityLandUseCategory {
@@ -90,7 +98,7 @@ enum {
   CITY_OVERLAY_LEGACY_NAME_MAX_LENGTH = CITY_OVERLAY_LEGACY_NAME_BYTES - 2,
 };
 
-typedef struct {
+typedef struct CityOverlayName {
   u8 character[CITY_OVERLAY_NAME_BYTES];
 } CityOverlayName;
 

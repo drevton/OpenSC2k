@@ -1,25 +1,28 @@
 // TileInfo storage for exposed/occupied water (zero-based bits):
-// kind carries water presence: TK_WATER spreads, TK_RIVER stays confined, TK_WATER_BANK selects shore behavior.
+// kind carries water presence: TK_WATER and TK_WATER_BANK can spread; TK_RIVER stays confined.
 // Wet power lines, bridge middles, hydro, piers and marinas retain their own water-class kind; no TF_WATER exists.
 // terrain[0..3] on a wet occupant is the underlying exposed kind minus TK_WATER: 0 water, 1 river, 2 bank.
 // Exposed water stores that form in kind instead. Banks use terrain[0..3] for ground recovery (0 or 7..10).
 // terrain[4..7] belongs to the occupant (wire connections, bridge metadata or building facing/links), not water.
-// altitude[0..4] is bed height; altitude[5..9] is water height, both in map levels. zone[4] selects the bed slope in
-// zone[0..3]; without it, the tile is flat and the low nibble can hold zoning. Rapids are derived from river+slope
-// at water level, not stored as another water-form field. flags[0] selects salt versus fresh water.
+// altitude[0..4] is bed height; altitude[5..9] is water height, both in map levels.
+// zone[4] selects the bed slope in zone[0..3]; without it, the tile is flat and the low nibble can hold zoning.
+// Rapids are derived from river+slope at water level, not stored as another water-form field.
+// flags[0] selects salt versus fresh water.
 // Banks use zone[5..7] for their modulo-eight ground recovery counter. Other shared fields follow tile_storage.h.
 
+#include "city/infrastructure/lines.h"
+#include "city/saveload/map_format.h"
+#include "city/engine/random.h"
 #include "city/infrastructure/power_lines.h"
 #include "city/maps/water.h"
+#include "city/maps/terrain.h"
 #include "city/maps/ground.h"
 
 #include <assert.h>
 
-#include "audio/audio.h"
+#include "game/audio.h"
 #include "city/engine/commands.h"
-#include "city/engine/simulation.h"
 #include "city/events/events.h"
-#include "city/infrastructure/infrastructure.h"
 #include "city/maps/layers.h"
 #include "city/maps/module.h"
 #include "city/presentation.h"
@@ -62,12 +65,35 @@ void ClearCityExposedWater(City *city, TileIndex tile_index) {
   InvalidateTileRange(city, MapTileXY(city, left, top), point.x + 2 - left, point.y + 2 - top);
 }
 
+// Convert a dry tile to freshwater river at its bed elevation, preserving its slope.
+void CreateCityRiverTile(City *city, TileIndex tile) {
+  assert(IsMapTileValid(city, tile));
+  TileInfo *tp = &city->tile[tile];
+  if (HasTileWater(tp)) return;
+  int shape = ReadTerrainCode(tp), water = ReadCityLandHeight(tp);
+  ReplaceCityTileAndStatistics(city, tile, TK_CLEAR);
+  // A new river starts at bed level. Its kind retains channel behavior on both
+  // flat stretches and rapids, independently of the open-water datum.
+  tp->altitude = (tp->altitude & CITY_ALTITUDE_CLEAR_WATER) | water << CITY_ALTITUDE_WATER_SHIFT;
+  tp->flags &= ~TF_SALTWATER;
+  tp->kind = TK_RIVER;
+  SetCityTerrainWater(city, tile, water, shape, true);
+  CityPoint point = MapTilePt(city, tile);
+  int left = IntMax(0, point.x - 1), top = IntMax(0, point.y - 1);
+  InvalidateTileRange(city, MapTileXY(city, left, top), point.x + 2 - left, point.y + 2 - top);
+  RefreshCityPowerConnections(city, tile);
+  RefreshCityTileClimates(city, tile);
+}
+
 // Reclaim low clear ground during a landscape visit, retaining its bed and slope. Cardinal neighbors must reach a
-// shared edge; confined rivers cannot flood out of their channel. This allocates nothing and consumes no RNG.
+// shared edge; rivers cannot spread. The City rule gates flat land only, so shore slopes remain eligible.
+// This allocates nothing and consumes no RNG.
 bool FloodCityClearTile(City *city, TileIndex tile) {
   assert(IsMapTileValid(city, tile) && city->tile[tile].kind == TK_CLEAR);
   static const i8 kNeighborX[4] = {0, 1, 0, -1}, kNeighborY[4] = {-1, 0, 1, 0};
   TileInfo *tp = &city->tile[tile];
+  int shape = ReadTerrainCode(tp);
+  if (!shape && !(city->fixes & (1ull << CITY_FIX_WATER_SPREADING))) return false;
   int land = ReadCityLandHeight(tp), water = -1, salt = 0;
   for (int direction = 0; direction < 4; ++direction) {
     TileIndex next = GetRelativeTileOrInvalid(city, tile, kNeighborX[direction], kNeighborY[direction]);
@@ -82,7 +108,7 @@ bool FloodCityClearTile(City *city, TileIndex tile) {
   }
   if (water < 0) return false;
   InvalidateTile(city, tile);
-  SetCityTerrainWater(city, tile, water, ReadTerrainCode(tp), false);
+  SetCityTerrainWater(city, tile, water, shape, false);
   tp->flags = (tp->flags & ~TF_SALTWATER) | salt;
   RefreshCityTileClimates(city, tile);
   CityPoint point = MapTilePt(city, tile);
@@ -176,7 +202,7 @@ void CarveTerrainWaterChannel(City *city, TileIndex tile_index, int length) {
   const TileInfo *start = &city->tile[tile_index];
   if ((city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)) &&
       !HasTileWater(start) && ReadTerrainCode(start) > CITY_TERRAIN_SHAPE_4) return;
-  RegradeCityTerrainCell(city, tile_index);
+  CreateCityRiverTile(city, tile_index);
   while (remaining != 0) {
     --remaining;
     int elevation = ReadCityLandHeight(&city->tile[tile_index]);
@@ -207,11 +233,58 @@ void CarveTerrainWaterChannel(City *city, TileIndex tile_index, int length) {
       return;
     point = (CityPoint){next_x, next_y};
     tile_index = next_tile;
-    RegradeCityTerrainCell(city, tile_index);
+    CreateCityRiverTile(city, tile_index);
     heading += kTerrainChannelTurns[choice];
     if (Sc2kCrtRandRange(city, 3) != 0)
       heading = (heading + 2 * Sc2kCrtRand(city) + 1) & 3;
   }
+}
+
+static bool CanPlaceStreamCell(const City *city, TileIndex tile) {
+  const TileInfo *tp = &city->tile[tile];
+  return IsTileKindUnbuilt(tp->kind) && tp->kind != TK_RADIOACTIVE_WASTE &&
+      ReadCityZoneKind(tp) == ZONE_NONE && ReadUnderground(city, tile) == TUK_CLEAR && !tp->overlay;
+}
+
+// Grow a freshwater channel downhill, favoring the current heading with occasional gentle turns. Admission only
+// checks the source; execution consumes City RNG and stops at water, obstructions, a basin or the length limit.
+i64 CmdPlaceStream(City *city, u32 flags, TileIndex tile, int length) {
+  if (!IsMapTileValid(city, tile) || length < 1 || length > 256) return CITY_COMMAND_COST_INVALID;
+  if (city->settings.timer_mode != CITY_TIMER_STOPPED || HasTileWater(&city->tile[tile]) ||
+      !CanPlaceStreamCell(city, tile)) return CITY_COMMAND_COST_BLOCKED;
+  if (flags & CITY_COMMAND_TEST) return 0;
+  int heading = Sc2kCrtRandRange(city, 4);
+  int reach = length / 2 + Sc2kCrtRandRange(city, length - length / 2 + 1);
+  TileIndex previous = INVALID_TILE;
+  int placed = 0;
+  do {
+    int height = ReadCityLandHeight(&city->tile[tile]);
+    InvalidateTile(city, tile);
+    CreateCityRiverTile(city, tile);
+    ++placed;
+    if (placed >= reach) break;
+    if (Sc2kCrtRandRange(city, 5) == 0)
+      heading = (heading + (Sc2kCrtRandRange(city, 2) ? 1 : 3)) & 3;
+    static const int kTurns[4] = {0, 1, -1, 2};
+    TileIndex next = INVALID_TILE;
+    int next_heading = heading, lowest = height + 1;
+    for (int turn = 0; turn < 4; ++turn) {
+      int direction = (heading + kTurns[turn]) & 3;
+      TileIndex candidate = GetRelativeTileOrInvalid(city, tile, kLineXStep[direction], kLineYStep[direction]);
+      if (candidate == INVALID_TILE || candidate == previous || !CanPlaceStreamCell(city, candidate)) continue;
+      CityTileGeometry geometry = ReadCityTileGeometry(city, candidate);
+      int elevation = geometry.water != CITY_WATER_NONE ? geometry.surface_height : geometry.land_height;
+      if (elevation >= lowest) continue;
+      lowest = elevation;
+      next = candidate;
+      next_heading = direction;
+    }
+    if (next == INVALID_TILE || HasTileWater(&city->tile[next])) break;
+    previous = tile;
+    tile = next;
+    heading = next_heading;
+  } while (true);
+  return placed;
 }
 
 // Check whether a valid tile can be converted to a canal. Uses native terrain, water and obstruction rules only; it
@@ -245,7 +318,7 @@ CityCommandCost GetCityCanalRectangleCost(const City *city, TileIndex start, Til
 // this single-cell operation leaves pricing and payment to its caller.
 i64 ApplyWaterToolAtTile(City *city, TileIndex tile) {
   if (!CanPlaceCityCanal(city, tile)) return CITY_COMMAND_COST_BLOCKED;
-  RegradeCityTerrainCell(city, tile);
+  CreateCityRiverTile(city, tile);
   WriteTileZoneByte(&city->tile[tile], ReadTileZoneByte(&city->tile[tile]) & CITY_ZONE_METADATA_MASK);
   return true;
 }

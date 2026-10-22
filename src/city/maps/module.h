@@ -1,7 +1,9 @@
 #ifndef SC2K_CITY_MAPS_MODULE_H
 #define SC2K_CITY_MAPS_MODULE_H
 
-#include "city/maps/map.h"
+#include "city/types.h"
+
+typedef struct CityTileGeometry CityTileGeometry;
 
 // Immutable kind metadata, never stored in a tile or save file. Four bits permit sixteen families.
 typedef enum TileModuleId {

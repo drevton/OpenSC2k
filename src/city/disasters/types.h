@@ -1,6 +1,8 @@
 #ifndef SC2K_CITY_DISASTERS_TYPES_H
 #define SC2K_CITY_DISASTERS_TYPES_H
 
+#include "city/types.h"
+
 // Disaster
 
 // Pending and processed disaster IDs use u16 storage. Status names cover IDs 0..16.
@@ -47,5 +49,53 @@ typedef enum CityDisasterSpawnSide {
   CITY_DISASTER_SPAWN_SOUTH = 0, CITY_DISASTER_SPAWN_EAST = 1,
   CITY_DISASTER_SPAWN_NORTH = 2, CITY_DISASTER_SPAWN_WEST = 3,
 } CityDisasterSpawnSide;
+
+// State
+
+typedef struct {
+  i32 y;
+  i32 x;
+} CityDisasterLocation;
+
+typedef struct {
+  i16 months[4];
+} CityDisasterPeriods;
+
+typedef struct {
+  CityDisasterLocation location;
+  CityDisasterPeriods periods;
+  u32 map_update_pending;
+  u16 pending_type;
+  u16 last_type;
+  u16 last_event_slot;
+  i16 event_data;
+  i16 tile237_count;
+  i16 tile248_count;
+  i16 tornado_count;
+  i16 monster_count;
+  i16 type1_count;
+  i16 type2_count;
+  i16 type16_count;
+  i16 border_water_count;
+  u16 border_water_x;
+  u16 border_water_y;
+  i16 event_decay_ticks;
+  u16 event_cleanup_ticks;
+} CityDisasterState;
+
+// Explicit operation locals retained across animation boundaries. No C stack
+// or tile snapshot is retained; resumption uses the live City.
+enum { CITY_OPERATION_PENDING = -2 };
+typedef struct {
+  u8 type, phase;
+  i16 iteration, attempts;
+  int origin_x, origin_y;
+  int x, y, direction, run_length, run_position, remaining;
+  u32 update_gate;
+  bool applied, terrain_water_allowed;
+  TileIndex strike;
+  i64 cash_restore;
+  u32 label_restore, redraw_counter;
+} CityDisasterWork;
 
 #endif

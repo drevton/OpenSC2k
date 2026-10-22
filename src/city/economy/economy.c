@@ -1,13 +1,16 @@
+#include "city/economy/budget.h"
+#include "city/engine/random.h"
 #include "city/economy/facilities.h"
 #include "city/maps/trees.h"
 #include "audio/types.h"
 #include "city/economy/types.h"
 #include "city/engine/city_types.h"
+#include "city/engine/weather.h"
 #include "city/events/news.h"
 #include "city/maps/tile_storage.h"
 #include "city/terrain/terrain.h"
 #include "city/tools/types.h"
-#include "audio/audio.h"
+#include "game/audio.h"
 #include "game/state.h"
 #include "city/presentation.h"
 #include "base/fixed.h"
@@ -23,145 +26,6 @@
 #include "city/saveload/file.h"
 #include "city/saveload/map_format.h"
 #include "base/text.h"
-
-// The dialog's initial forecast refresh writes all 16 projected sector totals. Requires initialized sectors and
-// attached budget context; replaces derived projections without booking those amounts as income/cost.
-void RefreshBudgetDialogEstimates(City *city) {
-  CityEconomyMonths *economy = &city->economy;
-  for (int sector = 0; sector < CITY_ECONOMY_SECTOR_COUNT; ++sector) {
-    EconomySector *account = &economy->sector[sector];
-    int annual_rate = account->current_rate * account->current_amount;
-    account->projected_annual_total = city->indicators.year_flag != 0 ? 12 * annual_rate :
-        account->accumulated + annual_rate * (11 - city->clock.month);
-  }
-  InvalidateCityInformation(city->game, CITY_UPDATE_FINANCES);
-}
-
-// Signed policy income/cost for one active city option. Index must select a supported policy; returns its signed
-// monetary contribution without toggling the policy or debiting cash.
-int Phase0PolicyCost(City *city, int index) {
-  CityEconomyMonths *economy = &city->economy;
-  int residential = economy->sector[CITY_ECONOMY_RESIDENTIAL].current_amount;
-  int commercial = economy->sector[CITY_ECONOMY_COMMERCIAL].current_amount;
-  int industrial = economy->sector[CITY_ECONOMY_INDUSTRIAL].current_amount;
-  switch (index) {
-  case CITY_POLICY_SALES_TAX:
-    return commercial;
-  case CITY_POLICY_INCOME_TAX:
-    return residential;
-  case CITY_POLICY_LEGALIZED_GAMBLING:
-    return 2 * commercial;
-  case CITY_POLICY_PARKING_FINES:
-    return residential / 2;
-  case CITY_POLICY_VOLUNTEER_FIRE:
-  case CITY_POLICY_NEIGHBORHOOD_WATCH:
-    return residential / -3;
-  case CITY_POLICY_PUBLIC_SMOKING_BAN:
-    return commercial / -6;
-  case CITY_POLICY_FREE_CLINICS:
-  case CITY_POLICY_HOMELESS_SHELTERS:
-    return residential / -2;
-  case CITY_POLICY_JUNIOR_SPORTS:
-  case CITY_POLICY_CITY_BEAUTIFICATION:
-    return residential / -4;
-  case CITY_POLICY_PRO_READING:
-  case CITY_POLICY_CPR_TRAINING:
-    return residential / -6;
-  case CITY_POLICY_ANTI_DRUG:
-    return residential / -5;
-  case CITY_POLICY_TOURIST_ADVERTISING:
-    return -commercial;
-  case CITY_POLICY_BUSINESS_ADVERTISING:
-  case CITY_POLICY_POLLUTION_CONTROLS:
-    return -industrial;
-  case CITY_POLICY_ANNUAL_CARNIVAL:
-    return commercial / -3;
-  case CITY_POLICY_ENERGY_CONSERVATION:
-    return (int)(0 - city->indicators.population - city->indicators.arcology_population);
-  case CITY_POLICY_NUCLEAR_FREE_ZONE:
-    return 0;
-  default:
-    return 0;
-  }
-}
-
-// Estimate city assets from tile statistics for bond limits and rates. Requires consistent tile counters; returns the
-// live unsigned valuation and leaves its cached City field unchanged.
-static u64 CalculateCityAssetValue(const City *city) {
-  static const CityAssetValueRule kAssetValues[] = {{TK_HYDRO_POWER, 1, 400},
-      {TK_WIND_POWER, 1, 6600},
-      {TK_GAS_POWER_PLANT, 16, 6600}, {TK_OIL_POWER_PLANT, 16, 2000},
-      {TK_NUCLEAR_POWER_PLANT, 16, 15000}, {TK_SOLAR_POWER_PLANT, 16, 100},
-      {TK_MICROWAVE_POWER_PLANT, 16, 1300}, {TK_FUSION_POWER_PLANT, 16, 28000},
-      {TK_COAL_POWER_PLANT, 16, 40000}, {TK_HOSPITAL, 9, 500},
-      {TK_POLICE_STATION, 9, 500}, {TK_FIRE_STATION, 9, 500}, {TK_MUSEUM, 9, 1000},
-      {TK_LARGE_PARK, 9, 150}, {TK_SCHOOL, 9, 250}, {TK_STADIUM, 16, 5000},
-      {TK_PRISON, 16, 3000}, {TK_COLLEGE, 16, 1000}, {TK_ZOO, 16, 3000},
-      {TK_WATER_PUMP, 1, 100}, {TK_RUNWAY_FIRST, 1, 250}, {TK_RUNWAY_LAST, 1, 250},
-      {TK_PIER, 1, 150}, {TK_CRANE, 1, 150}, {TK_CONTROL_TOWER_1X1_1, 1, 250},
-      {TK_WAREHOUSE_1X1_4, 1, 150}, {TK_BUILDING_1X1_1, 1, 250},
-      {TK_BUILDING_1X1_2, 1, 250}, {TK_TARMAC, 1, 250}, {TK_SUBWAY_STATION, 1, 250},
-      {TK_RADAR, 1, 250}, {TK_WATER_TOWER, 4, 250}, {TK_BUS_STATION, 4, 250},
-      {TK_RAIL_STATION, 4, 500}, {TK_PARKING_LOT_2X2_1, 1, 250}, {TK_LOADING_BAY, 1, 150},
-      {TK_CARGO_YARD, 1, 150}, {TK_WATER_TREATMENT_PLANT, 9, 500}, {TK_LIBRARY, 4, 500},
-      {TK_HANGAR_3X3, 1, 250}, {TK_MARINA, 9, 1000}, {TK_DESALINATION_PLANT, 9, 1000}};
-  const CityStatistics *statistics = &city->statistics;
-  bool repaired = city->fixes & (1 << CITY_FIX_ASSET_VALUES);
-  u64 asset_value = repaired ? (u64)kCityToolCosts[CITY_TOOL_GROUP_RAIL * CITY_TOOL_VARIANT_CAPACITY + 1] *
-      city->infrastructure.subway_tiles : 0 - (u32)(i16)city->infrastructure.subway_tiles;
-
-  for (int statistic = TKL_POWER_LINE_EAST_WEST; statistic <= TKL_SUBWAY_TO_RAIL_LAST; ++statistic) {
-    int count = statistics->value[statistic];
-    u32 multiplier;
-    if (statistic < TKL_ROAD_EAST_WEST)
-      multiplier = kCityToolCosts[CITY_TOOL_GROUP_POWER * CITY_TOOL_VARIANT_CAPACITY + 0];
-    else if (statistic < TKL_RAIL_FIRST)
-      multiplier = kCityToolCosts[CITY_TOOL_GROUP_ROAD * CITY_TOOL_VARIANT_CAPACITY + 0];
-    else if (statistic < TKL_TUNNEL_ENTRANCE_FIRST)
-      multiplier = kCityToolCosts[CITY_TOOL_GROUP_RAIL * CITY_TOOL_VARIANT_CAPACITY + 0];
-    else if (statistic < TKL_SUSPENSION_BRIDGE_FIRST)
-      multiplier = 15;
-    else if (statistic < TKL_HIGHWAY_INCLINE_FIRST)
-      multiplier = 100;
-    else if (statistic < TKL_SUBWAY_TO_RAIL_FIRST)
-      multiplier = repaired ? kCityToolCosts[CITY_TOOL_GROUP_ROAD * CITY_TOOL_VARIANT_CAPACITY + 1] : 100;
-    else
-      multiplier = 250;
-    asset_value += (u64)count * multiplier;
-  }
-
-  for (int i = 0; i < (int)(sizeof(kAssetValues) / sizeof(kAssetValues[0])); ++i) {
-    const CityAssetValueRule *rule = &kAssetValues[i];
-    int statistic = rule->statistic;
-    int divisor = statistic == TK_WATER_TREATMENT_PLANT &&
-        (city->fixes & (1 << CITY_FIX_TREATMENT_VALUE)) ? 4 : rule->divisor;
-    u32 multiplier = rule->multiplier;
-    if (repaired && statistic >= TK_HYDRO_POWER && statistic <= TK_COAL_POWER_PLANT) {
-      int variant = statistic == TK_HYDRO_POWER ? CITY_POWER_HYDRO :
-          statistic == TK_WIND_POWER ? CITY_POWER_WIND :
-          kPowerPlantToolVariants[statistic - TK_GAS_POWER_PLANT];
-      multiplier = kCityToolCosts[CITY_TOOL_GROUP_POWER * CITY_TOOL_VARIANT_CAPACITY + variant];
-    }
-    int count = statistics->value[statistic] / divisor;
-    asset_value += (u64)count * multiplier;
-  }
-  for (int statistic = TK_PLYMOUTH_ARCOLOGY; statistic <= TK_LAUNCH_ARCOLOGY; ++statistic) {
-    int count = statistics->value[statistic] / 16;
-    u32 cost = repaired ? kCityToolCosts[CITY_TOOL_GROUP_REWARDS * CITY_TOOL_VARIANT_CAPACITY +
-        5 + statistic - TK_PLYMOUTH_ARCOLOGY] :
-        kCityAssetTailWeights.multiplier[statistic - TK_PLYMOUTH_ARCOLOGY];
-    asset_value += (u64)count * cost;
-  }
-
-  // Disabling corrected asset values retains the stock 32-bit result.
-  return repaired ? asset_value : (u32)asset_value;
-}
-
-// Store the valuation derived from the City's current tile statistics. Requires initialized statistics; read-only
-// credit queries use CalculateCityAssetValue instead of changing this cached value.
-void RecalculateCityAssetValue(City *city) {
-  city->indicators.asset_value = CalculateCityAssetValue(city);
-}
 
 // Apply the January settlement gate and prepare the year's budget bookkeeping. Returns false outside the due January
 // boundary; a true result means the caller must continue the settlement sequence once.
@@ -257,7 +121,7 @@ void FinishCityMonthlyEconomy(City *city) {
   u32 options = city->unlocks.ordinance_flags;
   for (int index = 0; index < CITY_ORDINANCE_COUNT; ++index) {
     if (options & (1u << index))
-      economy->sector[CITY_ECONOMY_ORDINANCES].current_amount += Phase0PolicyCost(city, index);
+      economy->sector[CITY_ECONOMY_ORDINANCES].current_amount += CityPolicyMonthlyCost(city, index);
   }
   if (city->indicators.event_flag == 0) {
     u32 draw = Sc2kCrtRand(city);
@@ -273,23 +137,6 @@ void FinishCityMonthlyEconomy(City *city) {
   InvalidateCityInformation(city->game, CITY_UPDATE_FINANCES | CITY_UPDATE_POLICIES);
 }
 
-// Stock gate called at the start of MaybeTriggerPeriodicCityEvent. Trigger mode must be supported; event admission may
-// consume deterministic RNG and coordinate audio/event presentation.
-void MaybeTriggerPeriodicCityEvent(City *city, CityAudioState *audio, int trigger_mode) {
-  if (audio->music_active != 0)
-    return;
-  if (trigger_mode != 0) {
-    PlayNextCityEventMusicSequence(city->game);
-    return;
-  }
-  int speed = city->settings.speed;
-  if (speed == 1)
-    speed = 2;
-  int divisor = 8 * (3 * speed - 3);
-  if (Sc2kCrtRandRange(city, divisor) == 0)
-    PlayCityEventMusicById(city->game, Sc2kCrtRandRange(city, CITY_MUSIC_TRACK_COUNT));
-}
-
 // Update the primary economy accounts. Runs the primary economy path through any milestone notice and its real tail;
 // this is a simulation update, not a preview.
 void UpdateCityEconomyPrimary(City *city) {
@@ -301,8 +148,7 @@ void UpdateCityEconomyPrimary(City *city) {
 // Apply primary population/economy updates and select any due milestone newspaper. Returns the captured milestone
 // notice for the caller's continuation; this is a simulation effect and must not be repeated after presentation.
 CityMilestoneNotice BeginCityEconomyPrimary(City *city) {
-  CityAudioState *audio = city->game->audio;
-  MaybeTriggerPeriodicCityEvent(city, audio, 0);
+  MaybePlayCityMusic(city->game, false);
   CityPopulationSectors *population_state = &city->population;
   CityIndustrySectors *sector_state = &city->industry_sectors;
   CityEconomyMonths *economy_state = &city->economy;
@@ -396,7 +242,7 @@ CityMilestoneNotice BeginCityEconomyPrimary(City *city) {
         ReadCityWaterGroundKind(tp));
   }
   GrowCityStockTrees(city, tile_index);
-  Sc2kPhase21SortFacilities(city);
+  DecayCityNewsRankings(city);
   InsertRankedCityEvent(city, CITY_NEWS_LOCAL_NEWS, 0);
   {
     u32 selection = Sc2kCrtRandRange(city, 6);
@@ -473,12 +319,7 @@ void FinishCityEconomyPrimary(City *city, int milestone) {
     city->economic_tables.milestone_years.due_year[milestone] = 0;
     RebuildCityUnlockState(city);
   }
-  int new_weather = city_weather_transitions.quarter[city->clock.quarter][city->weather.state].next_state[
-      Sc2kCrtRand(city) & 7];
-  city->weather.rainfall = (city->weather.rainfall + city_weather_properties.rainfall[new_weather]) / 2;
-  city->weather.wind = (city->weather.wind + city_weather_properties.wind[new_weather]) / 2;
-  city->weather.temperature = (city->weather.temperature + city_weather_properties.temperature[new_weather]) / 2;
-  city->weather.state = new_weather;
+  AdvanceCityWeather(city);
 }
 
 // Scale a signed demand by an integer percentage with a widened intermediate. Division truncates toward zero; callers
@@ -822,71 +663,4 @@ void UpdateCityEconomySecondary(City *city) {
   city->indicators.workforce_percent = UintDiv(100 * working_count, city->indicators.population + 1);
   InvalidateCityInformation(city->game, CITY_UPDATE_NEIGHBORS | CITY_UPDATE_INDUSTRY |
       CITY_UPDATE_POPULATION | CITY_UPDATE_FINANCES);
-}
-
-// Read live asset values without changing City during command admission or UI inspection. Returns the score derived
-// from live debt/assets without refreshing the cached valuation or changing borrowing state.
-static int CityBondCreditScore(const City *city) {
-  u64 assets = CalculateCityAssetValue(city);
-  if (assets != UINT64_MAX) ++assets;
-  return (2500 * (u64)city->indicators.bond_count) / assets;
-}
-
-// Check the live bond count and credit score without updating the City's valuation cache. Returns admission only;
-// issuing the bond and its cash effects require a command.
-bool CanCityIssueBond(const City *city) {
-  return city->indicators.bond_count < 50 && CityBondCreditScore(city) < 6;
-}
-
-// sc2kfix debt-to-assets premium. A zero valuation still has a denominator of one. Returns an integer rate premium
-// without mutation; a zero asset valuation uses the explicit minimum denominator.
-static int CityBondRatePremium(const City *city) {
-  u64 assets = city->indicators.asset_value;
-  if (assets != UINT64_MAX) ++assets;
-  return (25000 * (u64)city->indicators.bond_count) / assets;
-}
-
-// Compute the current borrowing rate from the federal rate and credit premium. Returns a percentage clamped to 1
-// through 100 without mutating City.
-int CityBondInterestRate(const City *city) {
-  return IntClamp(city->indicators.federal_interest_rate + CityBondRatePremium(city) + 1, 1, 100);
-}
-
-// Return the displayed credit grade for the same live score used by bond admission. The result is a borrowed immutable
-// literal and must not be freed or modified.
-const char *CityBondCreditRating(const City *city) {
-  // The displayed grade and borrowing eligibility use the same credit score.
-  static const char *const kGrades[] = {"AAA", "AA", "A", "BBB", "BB", "B", "CCC", "CC", "C", "D"};
-  return kGrades[IntClamp(CityBondCreditScore(city), 0, 9)];
-}
-
-// Compute the aggregate rate metric for outstanding bonds with stock fixed-width arithmetic. Requires at least one
-// bond so the bond-count division is defined.
-static int BondAverageRate(const City *city) {
-  u32 bits = 10000 * (u32)city->indicators.bond_rate_total;
-  return (int)bits / (int)city->indicators.bond_count;
-}
-
-// Validated command effects, also shared by the retained diagnostic callers. Caller must establish admission and
-// available bond capacity; rate is the agreed captured percentage and the cash/debt effects run once.
-void ApplyCityBondIssue(City *city, int rate) {
-  city->indicators.cash = AddInt64Clamped(city->indicators.cash, 10000);
-  city->economic_tables.bond_rates.rate[city->indicators.bond_count] = rate;
-  city->indicators.bond_rate_total += rate;
-  ++city->indicators.bond_count;
-  city->economy.sector[CITY_ECONOMY_BONDS].current_amount = city->indicators.bond_count;
-  city->economy.sector[CITY_ECONOMY_BONDS].current_rate = BondAverageRate(city);
-}
-
-// Debit one bond principal, remove the supplied oldest rate and compact the rate queue. Admission, sufficient funds
-// and the captured rate must already be established by the caller.
-void ApplyCityBondRedemption(City *city, int rate) {
-  city->indicators.cash = AddInt64Clamped(city->indicators.cash, -10000);
-  city->indicators.bond_rate_total -= rate;
-  --city->indicators.bond_count;
-  for (int index = 0; index < (int)city->indicators.bond_count; ++index)
-    city->economic_tables.bond_rates.rate[index] = city->economic_tables.bond_rates.rate[index + 1];
-  city->economy.sector[CITY_ECONOMY_BONDS].current_amount = city->indicators.bond_count;
-  city->economy.sector[CITY_ECONOMY_BONDS].current_rate =
-      city->indicators.bond_count != 0 ? BondAverageRate(city) : 0;
 }

@@ -1,108 +1,45 @@
-#include "city/economy/facilities.h"
-#include "city/military.h"
-#include "city/disasters/types.h"
-#include "city/economy/types.h"
-#include "city/engine/city_types.h"
-#include "city/events/events.h"
-#include "city/events/news.h"
-#include "city/maps/map_types.h"
-#include "city/maps/tile_storage.h"
-#include "city/tools/types.h"
-#include "game/application.h"
-#include "city/presentation.h"
+#include "city/engine/city_name.h"
 #include "city/engine/initialization.h"
 
-#include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
-#include "audio/state.h"
+#include "game/audio.h"
+#include "city/disasters/types.h"
+#include "city/economy/economy.h"
+#include "city/economy/facilities.h"
 #include "city/economy/tables.h"
-#include "game/state.h"
+#include "city/economy/types.h"
+#include "city/engine/city_types.h"
+#include "city/engine/commands.h"
+#include "city/engine/random.h"
 #include "city/engine/simulation.h"
+#include "city/events/events.h"
+#include "city/events/news.h"
+#include "city/maps/labels.h"
 #include "city/maps/layers.h"
+#include "city/maps/map.h"
+#include "city/maps/map_types.h"
+#include "city/maps/tile_storage.h"
+#include "city/military.h"
+#include "city/presentation.h"
+#include "city/saveload/map_format.h"
 #include "city/state.h"
-#include "city/saveload/file.h"
-#include "assets/catalog.h"
-#include "assets/resources.h"
-#include "base/text.h"
-
-// Initialization
-
-// The nine reserved facility types start with empty 25-byte names rather than localized defaults.
-static const CityOverlayName kReservedFacilityDefaultName = {0};
-
-// Change industry tax rates and refresh the sector's mean rate. Index must select an industry tax entry; updates its
-// baseline and derived mean without opening a budget interaction.
-void AdjustIndustryTaxRates(City *city, int direction) {
-  CityIndustryDemand *baseline = &city->industry_baseline;
-  int total = 0;
-  for (int index = 0; index < CITY_INDUSTRY_COUNT; ++index) {
-    // Stock adds in AX before its signed clamp; narrowing here is intentional.
-    int value = (i16)(baseline->value[index] + direction);
-    value = IntClamp(value, 0, 20);
-    baseline->value[index] = value;
-    total += value;
-  }
-  city->economy.sector[CITY_ECONOMY_INDUSTRIAL].current_rate = (total + 6) / CITY_INDUSTRY_COUNT;
-}
+#include "city/terrain/terrain.h"
+#include "game/application.h"
+#include "game/errors.h"
+#include "game/state.h"
 
 // Reset overlay, annual-facility, and city-event state for a new city. Requires allocated map/event storage; discards
 // old labels, facility instances and event records for a new City.
 void ResetNewCityOverlayAndEventState(City *city) {
-  static const u8 facility_types[CITY_FACILITY_RECORD_RESERVED_COUNT] = {TK_BUS_STATION, TK_BUS_STATION,
-      TK_RAIL_STATION, TK_SUBWAY_STATION, TK_WIND_POWER, TK_HYDRO_POWER,
-      TK_LARGE_PARK, TK_MUSEUM, TK_LIBRARY, TK_MARINA};
-
-  CityAnnualFacilityRecord stock_prefix[CITY_FACILITY_RECORD_COUNT];
-  if (!city->individual_facilities) memcpy(stock_prefix, city->annual_facilities.record, sizeof(stock_prefix));
-  ReleaseCityAssociations(city);
-  // Stock resets only the type of unused records; preserve their other payload fields.
-  if (!city->individual_facilities) memcpy(city->annual_facilities.record, stock_prefix, sizeof(stock_prefix));
-  for (int y = 0; y < city->map_height; ++y)
-    for (int x = 0; x < city->map_width; ++x)
-      city->tile[MapTileXY(city, x, y)].overlay = 0;
-
-  for (int overlay = CITY_OVERLAY_SIGN_FIRST; overlay < CITY_OVERLAY_NAME_COUNT; ++overlay)
-    city->overlay_names.entry[overlay].character[0] = 0;
-
-  for (int index = 0; index < CITY_TEAM_NAME_COUNT; ++index) {
-    const char *text = kCityTeamNames[index];
-    CityOverlayName *name = &city->overlay_names.entry[index + CITY_TEAM_NAME_FIRST];
-    snprintf((char *)name->character, sizeof(name->character), "%s", text != NULL ? text : "");
-  }
-  const char *mayor = "Mayor McSim";
-  CityOverlayName *name = &city->overlay_names.entry[0];
-  snprintf((char *)name->character, sizeof(name->character), "%s", mayor != NULL ? mayor : "");
-
-  CityAnnualFacilities *facilities = &city->annual_facilities;
-  for (int index = 0; index < CITY_FACILITY_RECORD_COUNT; ++index)
-    facilities->record[index].type = TK_CLEAR;
-
-  for (int index = 0; !city->individual_facilities && index < CITY_FACILITY_RECORD_RESERVED_COUNT; ++index) {
-    CityAnnualFacilityRecord *record = &facilities->record[index];
-    record->type = facility_types[index];
-    if (index == 0)
-      continue;
-    record->age = 0;
-    record->value_02 = 0;
-    record->value_04 = 0;
-    record->value_06 = 0;
-    memcpy(city->overlay_names.entry[index + CITY_OVERLAY_FACILITY_FIRST].character,
-        kReservedFacilityDefaultName.character, sizeof(CityOverlayName));
-  }
-
-  city->infrastructure.counter_a = 0;
-  city->infrastructure.counter_b = 0;
-  city->infrastructure.counter_c = 0;
-
-  memset(city->events.event, 0, city->events.capacity * sizeof(CityMapEvent));
-  memset(city->events.buckets, 0, CITY_EVENT_HASH_BUCKETS * sizeof(u16));
+  ResetCityMapAssociations(city);
+  ResetCityFacilityState(city);
+  ClearCityMapEvents(city);
 }
 
 // Clear terrain-generation layers before a fresh new-city setup. Requires bound complete map layers; this resets
 // generated data rather than preserving a loaded City.
-void ResetNewCityMapGenerationLayers(City *city) {
+static void ResetNewCityMapGenerationLayers(City *city) {
   for (int y = 0; y < city->map_height; ++y) {
     for (int x = 0; x < city->map_width; ++x) {
       const TileIndex cell_index = MapTileXY(city, x, y);
@@ -290,7 +227,7 @@ void InitializeNewCitySimulationState(City *city) {
   city->disasters.type2_count = 0;
   city->disasters.border_water_count = 0;
   city->disasters.monster_count = 0;
-  city->game->audio->helicopter_sound_deadline = SimulationFrameTime(city);
+  ResetCityHelicopterSoundTiming(city);
   city->disasters.tile237_count = 0;
   city->infrastructure.counter_a = 0;
   city->disasters.type16_count = 0;
@@ -307,91 +244,116 @@ void InitializeNewCitySimulationState(City *city) {
   InvalidateCityInformation(city->game, CITY_UPDATE_STATUS);
 }
 
-// Exchange two bytes in the newspaper edition table. Both pointers must address writable bytes; overlapping identical
-// pointers are allowed and no ownership changes.
-void SwapCityNewspaperByte(u8 *first, u8 *second) {
-  int saved = *first;
-  *first = *second;
-  *second = saved;
-}
-
-// Shuffle newspaper editions and initialize facility article caches. Requires initialized resource and City buffers;
-// consumes the deterministic shuffle draws and replaces cached article state.
-void InitializeCityNewspaperAndFacilityState(City *city) {
-  CityNewspaperEditions *editions = &city->newspaper_editions;
-  FacilityRankings *rankings = &city->facility_rankings;
-
-  for (int i = 0; i < 6; ++i) {
-    CityNewspaperEdition *edition = &editions->edition[i];
-    edition->title_kind = i;
-    edition->layout_style = i % 3;
-    edition->era_kind = i % 3;
-    edition->report_kind = i;
-    edition->subtitle_kind = i;
-  }
-
-  SwapCityNewspaperByte(
-      &editions->edition[0].report_kind, &editions->edition[3 + (Sc2kCrtRand(city) & 1)].report_kind);
-  if ((Sc2kCrtRand(city) & 1) != 0)
-    SwapCityNewspaperByte(&editions->edition[0].layout_style, &editions->edition[1].layout_style);
-
-  for (int shuffle = 0; shuffle < 12; ++shuffle) {
-    int first = Sc2kCrtRandRange(city, 6);
-    int second = Sc2kCrtRandRange(city, 6);
-    SwapCityNewspaperByte(&editions->edition[first].title_kind, &editions->edition[second].title_kind);
-
-    first = Sc2kCrtRandRange(city, 5);
-    second = Sc2kCrtRandRange(city, 5);
-    SwapCityNewspaperByte(&editions->edition[first + 1].layout_style, &editions->edition[second + 1].layout_style);
-
-    first = Sc2kCrtRandRange(city, 6);
-    second = Sc2kCrtRandRange(city, 6);
-    SwapCityNewspaperByte(&editions->edition[first].era_kind, &editions->edition[second].era_kind);
-
-    first = Sc2kCrtRandRange(city, 5);
-    second = Sc2kCrtRandRange(city, 5);
-    SwapCityNewspaperByte(&editions->edition[first + 1].report_kind, &editions->edition[second + 1].report_kind);
-
-    first = Sc2kCrtRandRange(city, 6);
-    second = Sc2kCrtRandRange(city, 6);
-    SwapCityNewspaperByte(&editions->edition[first].subtitle_kind, &editions->edition[second].subtitle_kind);
-  }
-
-  for (int i = 0; i < 9; ++i) {
-    FacilityRankingRecord *record = &rankings->record[i];
-    record->id = i + CITY_NEWS_CONGRESS;
-    record->score = 0;
-    record->event_data = 0;
-    record->article_cache[0] = 0xFF;
-    record->article_cache[1] = 0xFF;
-    record->article_cache[2] = 0xFF;
-  }
-
-  city->newspaper.edition_index = CITY_NEWSPAPER_EDITION_FIRST;
-}
-
-// Initialize City-owned newspaper and facility state. Requires City-owned buffers; resets their runtime defaults
-// without adding a backing allocation.
-void InitializeCityRuntimeBuffers(City *city) {
-  city->indicators.ranked_disaster_gate = 1;
-  city->newspaper.enabled = 0;
-  int seed = (i16)SimulationFrameTime(city);
-  city->newspaper.random_base_seed = seed;
-  Sc2kSeedCrtRandom(city, seed);
-  InitializeCityNewspaperAndFacilityState(city);
-}
-
-// Startup
-// Original startup dialog lifetimes; platform creation/destruction uses canvas services.
-
 // Initialize the pre-load disaster flag; city creation and saved MISC supply gameplay state. Call before load/setup
 // fields are applied; this is a default write, not a request to toggle the disaster rule.
 void InitializeCityDisasterDefaults(City *city) {
   city->indicators.event_flag = 1;
 }
 
-// Runtime
+// Found the configured city on the edited map. Admission is independent of local tools and windows.
+i64 CmdStartCity(City *city, u32 flags, TileIndex tile, int reserved1, int reserved2, int reserved3) {
+  if (tile != INVALID_TILE || reserved1 || reserved2 || reserved3) return CITY_COMMAND_COST_INVALID;
+  if (city->settings.timer_mode != CITY_TIMER_STOPPED || !city->name.length) return CITY_COMMAND_COST_BLOCKED;
+  if (flags & CITY_COMMAND_TEST) return 0;
+  RecordRankedCityEvent(city, CITY_NEWS_CITY_FOUNDED, 0);
+  city->geography.settings_preserved = 0;
+  SetCityTimerMode(city, CITY_TIMER_RUNNING);
+  return 1;
+}
 
-// Replace the City's CRT random seed with the supplied deterministic value. This seeds only that generator and does
-// not draw a random number.
-void Sc2kSeedCrtRandom(City *city, u32 seed) { city->random.crt = seed; }
+// Install a prepared terrain map into the reset City's existing storage. Legacy conversion can fail after writes;
+// success restores generator RNG state, statistics and climate before the caller resets the viewport.
+bool InstallCityTerrainMap(City *city, const CityTerrainMap *map, const CityTerrainSettings *settings) {
+  for (TileIndex tile = 0; tile < map->cell_count; ++tile) {
+    TileInfo *tp = &city->tile[tile];
+    tp->altitude = map->altitude[tile];
+    tp->zone = 0;
+    tp->terrain = 0;
+    if (map->legacy) tp->terrain = map->terrain[tile];
+    else WriteTerrainCode(tp, map->terrain[tile]);
+    tp->kind = map->legacy && !IsTileKindTree(map->buildings[tile]) ? TK_CLEAR : map->buildings[tile];
+    tp->flags = map->flags[tile];
+  }
+  if (map->legacy) {
+    BeginLegacyCityMapImport(city);
+    if (!ConvertCityMapToNative(city)) {
+      SetGameError(city->game, SC2K_ERROR_HOST_ALLOCATION_FAILURE);
+      return false;
+    }
+  }
+  RecountCityTileStatistics(city);
+  city->random.crt = map->process_state;
+  city->random.event = map->game_state;
+  city->geography.rotation = 0;
+  GenerateCityLandscape(city, map);
+  city->geography.ocean = map->ocean;
+  city->geography.river = map->river;
+  city->geography.edit_height = map->water_level;
+  city->geography.hills = settings->hills;
+  city->geography.water = settings->water;
+  city->geography.trees = settings->trees;
+  return true;
+}
+
+// Initialize the accepted year, difficulty, national economy, milestones and starting accounts. The caller has reset
+// the City's accounts and supplied setup values; all milestone draws and presentation calls retain their order.
+void InitializeCitySetupState(City *city, int start_year, int economy_year, int difficulty) {
+  city->geography.start_year = start_year;
+  city->indicators.difficulty = difficulty;
+  switch (economy_year) {
+  case CITY_START_YEAR_1900:
+    city->indicators.national_population = 10000;
+    break;
+  case CITY_START_YEAR_1950:
+    city->indicators.national_population = 25000;
+    break;
+  case CITY_START_YEAR_2000:
+    city->indicators.national_population = 60000;
+    break;
+  case CITY_START_YEAR_2050:
+    city->indicators.national_population = 150000;
+    break;
+  }
+  city->indicators.federal_interest_rate = 3;
+  city->indicators.national_value = (3 * city->indicators.national_population) / 10;
+  city->indicators.national_economy_trend = city->indicators.difficulty - CITY_DIFFICULTY_EASY;
+  WriteHistorySample(city, CITY_HISTORY_GNP, 0, 3);
+  WriteHistorySample(city, CITY_HISTORY_NATIONAL_POPULATION, 0, city->indicators.national_population);
+  for (int index = 0; index < CITY_MILESTONE_COUNT; ++index) {
+    int due = Sc2kCrtRandRange(city, 20) + CityMilestoneDefaultYear(index);
+    city->economic_tables.milestone_years.due_year[index] = due < city->geography.start_year ? 0 : due;
+  }
+  RebuildCityUnlockState(city);
+  switch ((int)city->indicators.difficulty) {
+  case CITY_DIFFICULTY_EASY:
+    city->indicators.cash = 20000;
+    break;
+  case CITY_DIFFICULTY_MEDIUM:
+    city->indicators.cash = 10000;
+    break;
+  case CITY_DIFFICULTY_HARD: {
+    city->indicators.cash = 10000;
+    city->economic_tables.bond_rates.rate[city->indicators.bond_count] = city->indicators.federal_interest_rate;
+    city->indicators.bond_rate_total = city->indicators.federal_interest_rate;
+    ++city->indicators.bond_count;
+    EconomySector *bonds = &city->economy.sector[CITY_ECONOMY_BONDS];
+    bonds->current_amount = city->indicators.bond_count;
+    bonds->current_rate =
+        (u32)(10000 * city->indicators.bond_rate_total / (int)city->indicators.bond_count);
+    bonds->monthly_amount[0] = 1;
+    bonds->monthly_rate[0] =
+        (u32)(10000 * city->indicators.bond_rate_total / (int)city->indicators.bond_count);
+    bonds->accumulated = bonds->current_rate * bonds->current_amount;
+    bonds->projected_annual_total = 12 * bonds->accumulated;
+    break;
+  }
+  }
+  if (city->geography.ocean != 0) {
+    city->account_names.value[0] = 0;
+    memcpy(city->geography.neighbor_names.name[0], "Ocean", 6u);
+    city->primary_accounts.value[0] = 0;
+    city->secondary_accounts.value[0] = 0;
+    city->fourth_accounts.value[0] = 0;
+  }
+  RefreshCityNeighborNames(city);
+}

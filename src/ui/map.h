@@ -1,62 +1,36 @@
 #ifndef SC2K_DOMAIN_SRC_UI_MAP_H
 #define SC2K_DOMAIN_SRC_UI_MAP_H
 
-#include "drawing/canvas.h"
-#include "drawing/maps/map_view.h"
-#include "ui/windows/state.h"
 #include "city/types.h"
+#include "drawing/maps/map_view.h"
 
-// Map Data
+typedef struct Drawing Drawing;
+typedef struct CityMapViewConfig CityMapViewConfig;
+typedef struct CityCanvasDesktop CityCanvasDesktop;
 
-// Map categories; fire protection and education have independent tabs.
-typedef enum CityMapDataGroup {
-  CITY_DATA_GROUP_SURFACE = 0, CITY_DATA_GROUP_TRANSPORT = 1,
-  CITY_DATA_GROUP_POWER = 2, CITY_DATA_GROUP_WATER = 3,
-  CITY_DATA_GROUP_POPULATION = 4, CITY_DATA_GROUP_POLICE = 5,
-  CITY_DATA_GROUP_POLLUTION = 6, CITY_DATA_GROUP_LAND_VALUE = 7,
-  CITY_DATA_GROUP_FIRE = 8, CITY_DATA_GROUP_EDUCATION = 9, CITY_DATA_GROUP_COUNT = 10,
-  CITY_DATA_SELECTION_STRIDE = 10
-} CityMapDataGroup;
+// UI owns the committed selection and reusable scratch. Cells use City TileIndex values; UI resolves the
+// sorted selection during tile painting and Drawing supplies marker bounds and pixels.
+typedef struct {
+  TileIndex tile;
+} CityCanvasPlacementCell;
 
-// group*10 + option. Names follow exact original string resources327..344,
-// not historical names of reconstruction helpers or map accessors.
-typedef enum CityMapDataSelection {
-  CITY_DATA_SELECTION_STRUCTURES = 0,
-  CITY_DATA_SELECTION_ZONES = 1,
-  CITY_DATA_SELECTION_ROADS = 10,
-  CITY_DATA_SELECTION_RAIL = 11,
-  CITY_DATA_SELECTION_TRAFFIC = 12,
-  CITY_DATA_SELECTION_POWER = 20,
-  CITY_DATA_SELECTION_WATER = 30,
-  CITY_DATA_SELECTION_DENSITY = 40,
-  CITY_DATA_SELECTION_GROWTH = 41,
-  CITY_DATA_SELECTION_CRIME = 50,
-  CITY_DATA_SELECTION_POLICE_COVERAGE = 51,
-  CITY_DATA_SELECTION_POLICE_STATIONS = 52,
-  CITY_DATA_SELECTION_POLLUTION = 60,
-  CITY_DATA_SELECTION_LAND_VALUE = 70,
-  CITY_DATA_SELECTION_FIRE_COVERAGE = 80,
-  CITY_DATA_SELECTION_FIRE_STATIONS = 81,
-  CITY_DATA_SELECTION_SCHOOLS = 90,
-  CITY_DATA_SELECTION_COLLEGES = 91
-} CityMapDataSelection;
-
-// Options per image tab; command admission and the map window use the same bounds.
-static inline int CityMapDataOptionCount(int group) {
-  static const u8 kCounts[CITY_DATA_GROUP_COUNT] = {2, 3, 1, 1, 2, 3, 1, 1, 2, 2};
-  return kCounts[group];
-}
-
-static inline bool IsCityMapDataSelection(int selection) {
-  return selection >= 0 && selection < CITY_DATA_GROUP_COUNT * CITY_DATA_SELECTION_STRIDE &&
-      selection % CITY_DATA_SELECTION_STRIDE < CityMapDataOptionCount(selection / CITY_DATA_SELECTION_STRIDE);
-}
+typedef struct {
+  CityCanvasPlacementCell *cells, *scratch; // Committed cells are sorted by TileIndex.
+  int count, capacity;
+  CityRect bounds;
+  int origin_x, origin_y;
+  u32 zoom, magnified, underground;
+  bool point;
+} CityCanvasPlacementSelection;
 
 // Map Cursor
 
 typedef struct City City;
 typedef struct Game Game;
 typedef struct CityInterfaceState CityInterfaceState;
+
+// Change a local display layer. Disabling vehicles clears their visualization; a change refreshes every map view.
+void ToggleCityMapLayer(Game *game, CityMapLayer layer);
 
 // Cursor read/results observed by optional diagnostics; no native pointer identities.
 typedef enum CityCursorInputKind {
@@ -82,30 +56,38 @@ void ReadCityMapCursorPosition(Game *game, int *x, int *y);
 u32 LoadCityWaitCursor(Game *game);
 u32 InstallCityMapCursor(Game *game, u32 handle);
 bool ShowCityMapCursor(Game *game);
+void Sc2kRefreshCityStatusPanel(City *city);
 void RefreshCityCursorStatus(City *city, i32 mode);
 void InvalidateCityMapSelection(City *city, const CityRect *rect);
 
 // Native presentation input, in the map's canvas coordinates.
 void SetCityMapCursorPosition(CityInterfaceState *ui, int x, int y);
 
-// Map Data Dialog
-
-bool IsCityMapDataVisible(City *city);
-void SetCityMapDataPresentation(City *city, CityCanvasDesktop *desktop);
-bool CityMapDataServiceAvailable(City *city);
-int ReadCityMapDataSelection(City *city);
-void SetCityMapDataSelection(City *city, int selection);
-void HideCityMapDataDialog(City *city);
-
 // Map Navigation
 
 void SetCityMapNavigationPresentation(Game *game, bool enabled, bool interactive);
 void ReadCityMapClientRect(Drawing *drawing, CityRect *rect);
+// Read the host client area without scrollbar strips; return the resulting bottom coordinate.
+i32 GetCityMapClientRect(Drawing *drawing, CityRect *rect);
 // Map renderer rectangles are scaled into native window pixels before queuing UI damage.
 bool InvalidateCityMap(Game *game, const CityRect *rect);
-bool InvalidateCityMapDataPreview(City *city);
 bool CaptureCityMapPointer(Game *game);
 int ReleaseCityMapWindowPointer(Game *game);
+
+// Main-camera controls preserve the existing zoom, scroll and preview refresh ordering.
+// NULL selects the default view only for centering; the other operations require a supplied view.
+i32 CenterCityMapViewAtTile(City *city, CityMapViewConfig *view, int x, int y);
+void ZoomCityMapViewOut(City *city, CityMapViewConfig *view);
+void ZoomCityMapViewIn(City *city, CityMapViewConfig *view);
+void OffsetCityMapOrigin(City *city, CityMapViewConfig *view, int delta_x, int delta_y);
+// These controls use the bound main-camera origin and supplied view configuration. Rotation discards its retained
+// pixels, sprites, animation and label bounds; scroll updates return the vertical scrollbar percentage.
+void RotateCityMapView(City *city, CityMapViewConfig *view, bool clockwise);
+i32 UpdateCityMapViewScrollPosition(City *city, CityMapViewConfig *view);
+void MaskCityMapOriginForZoom(Drawing *drawing, CityMapViewConfig *view);
+// An unknown/zero viewport ID falls back to the main camera. Shaded viewports retain their rotation.
+void RotateCityMapViewport(City *city, u32 window_id, bool clockwise);
+void RotateFocusedCityMapView(City *city, bool clockwise);
 
 // Presentation
 
@@ -113,40 +95,14 @@ int ReleaseCityMapWindowPointer(Game *game);
 bool ReserveCityPlacementCells(CityCanvasDesktop *desktop, int count);
 // Replace the sorted selection using Drawing's bounds. True means the visible selection changed;
 // City and its RNG remain read-only.
+// Input may be unordered and contain duplicates. External input is copied;
+// the desktop's scratch may be sorted in place.
 bool SetCityCanvasPlacementCells(const City *city, CityCanvasDesktop *desktop, const CityCanvasPlacementCell *cells,
     int count, bool point);
-// Retained command drag presentation: prepare its drawing clip, delegate construction counts/damage to City,
+// Retained command drag between valid tile endpoints: prepare its drawing clip, delegate counts/damage to City,
 // then reset the clip. Admission and City updates keep their original order; this does not place any infrastructure.
-void UpdateInfrastructureLinePlacementPreview(City *city, CityMapViewConfig *view, int x,
-    int y, int end_x, int end_y);
+void UpdateInfrastructureLinePlacementPreview(City *city, CityMapViewConfig *view, TileIndex start, TileIndex end);
 
-void SetCityPaletteDialogState(City *city, bool paused);
-void PresentCityScreenShake(City *city, CityMapViewConfig *view, CityRect destination, CityRect source);
-
-// Present the native canvas, including all visible map windows.
-bool PresentCityMapView(Game *game);
-
-void ApplicationUpdateDialogPause(City *city);
-
-// Tile Dialog
-
-typedef struct City City;
-
-// UI owns the rendered inspection pages and window lifetime.
-void PresentCityTileInformationDialog(City *city, TileIndex tile);
-
-// Zone Cost
-
-// Borrowed presentation data, restored by each nested caller.
-typedef struct CityZoneCostPresentation {
-  Canvas *canvas;
-  const char *text;
-  CityMapViewConfig *view;
-} CityZoneCostPresentation;
-typedef struct Drawing Drawing;
-void PresentCityZoneDragCost(City *city, Drawing *drawing, CityMapViewConfig *view, u32 cost, int x, int y);
-int MeasureCityZoneCostText(const CityZoneCostPresentation *presentation, int cost, int zoom);
-void DrawCityZoneCostText(Game *game, const CityZoneCostPresentation *presentation, int cost, int zoom,
-    int x, int baseline_y, u32 color, const CityRect *bounds);
+void ShowCityConstructionCost(City *city, TileIndex tile, i64 cost);
 
 #endif

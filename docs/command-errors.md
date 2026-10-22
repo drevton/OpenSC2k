@@ -41,8 +41,8 @@ Only a tile away from the action's target that prevents the operation gets a mar
 fallback quotes never guess a location. Recursive landscaping reports the military or
 water tile blocking its affected terrain; the terrain editor identifies the lower
 neighbour preventing a raise. Target refusals, unsuitable ground and insufficient funds
-show only the dialog. `Game.error_tile` retains the blocker, with its
-error-window identity in UI. Drawing reuses the red OpenGFX2
+show only the dialog. UI retains the blocker tile and its error-window identity together.
+Drawing reuses the red OpenGFX2
 selection sprite at the current terrain slope, elevation and zoom, clipped below
 windows. Replacing or closing that window damages only the old/new marker bounds.
 Replacing or rotating the city clears it. This presentation state is never saved or

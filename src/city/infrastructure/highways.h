@@ -3,7 +3,7 @@
 
 #include "city/engine/input.h"
 #include "city/infrastructure/types.h"
-#include "city/maps/map.h"
+#include "city/maps/terrain.h"
 
 // The planning variants write only caller-owned working state, never City or its maps.
 typedef struct {
@@ -85,5 +85,11 @@ void DrawCityHighwaySharedFootprint(City *city, TileIndex tile, int layout, int 
     const CityTileGeometry *geometry);
 // Paint the road/rail underneath an unmodified native crossing during depth-ground collection.
 void DrawCityHighwayCrossingGround(City *city, int layout, int zoom, int screen_x, int ground_y);
+
+// Shared command admission is read-only in TEST mode; execution retains the family placement/payment order.
+i64 CmdPlaceTransportLine(City *city, u32 flags, TileIndex start,
+    TileIndex end, int options, int reserved);
+i64 CmdPlaceHighwayOnramp(City *city, u32 flags, TileIndex tile,
+    int reserved);
 
 #endif

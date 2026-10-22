@@ -1,28 +1,31 @@
 #ifndef SC2K_SIMULATION_STATE_H
 #define SC2K_SIMULATION_STATE_H
 
+#include "city/disasters/types.h"
 #include "city/economy/facilities.h"
-#include "city/military.h"
-#include <assert.h>
-
-#include "city/disasters/disasters.h"
-#include "city/economy/economy.h"
 #include "city/economy/state.h"
 #include "city/economy/tables.h"
 #include "city/engine/city_types.h"
 #include "city/engine/input.h"
 #include "city/engine/questions.h"
-#include "city/engine/simulation.h"
+#include "city/engine/random.h"
+#include "city/engine/simulation_state.h"
+#include "city/engine/weather.h"
 #include "city/events/events.h"
-#include "city/infrastructure/infrastructure.h"
+#include "city/events/news.h"
+#include "city/fixes.h"
+#include "city/infrastructure/types.h"
 #include "city/maps/map.h"
 #include "city/maps/map_types.h"
-#include "city/fixes.h"
+#include "city/maps/tile_queue.h"
+#include "city/military.h"
 #include "city/terrain/terrain.h"
+#include <assert.h>
 
 // Native simulation ownership, independent of the original executable's layout.
 // Pending command contexts are not serialized by the SC2 save format.
 typedef struct Game Game;
+typedef struct CityTickContinuation CityTickContinuation;
 typedef struct CityFileExtensions CityFileExtensions;
 
 typedef struct City {
@@ -71,7 +74,7 @@ typedef struct City {
   CityMissionState mission;
   CitySavedSettings settings;
   CityNewspaperState newspaper;
-  RouteQueueCursor route_queue_cursor;
+  CityTileQueueCursor route_queue_cursor;
   u8 question_count;           // 0..CITY_PENDING_QUESTION_CAPACITY
   i8 unlock_bonus_answer;      // -1 pending, dialog choice otherwise
   u8 command_name_answer;      // CITY_DIALOG_OK/CANCEL
@@ -110,7 +113,7 @@ typedef struct City {
   CityIndustryDemand industry_baseline;
   CityNewspaperEditions newspaper_editions;
   CityEconomicTables economic_tables;
-  FacilityRankings facility_rankings;
+  CityNewsRecords news_records;
   // Defined compatibility observation of the stock one-past-sector clamp.
   // It is independent of the real sixteen-sector array and never indexes it.
   i32 budget_transit_clamp_rate;
@@ -208,20 +211,23 @@ _Static_assert(
     offsetof(City, mission) + sizeof(CityMissionState) <= 4096, "mission state fits ARM64 immediate addressing");
 _Static_assert(offsetof(City, newspaper) + sizeof(CityNewspaperState) <= 4096,
     "settings and newspaper state fit ARM64 immediate addressing");
-_Static_assert(offsetof(City, route_queue_cursor) + sizeof(RouteQueueCursor) <= 4096,
+_Static_assert(offsetof(City, route_queue_cursor) + sizeof(CityTileQueueCursor) <= 4096,
     "route cursors fit ARM64 immediate addressing");
 _Static_assert(offsetof(City, zone_drag_input) % sizeof(void *) == 0, "native input pointer alignment");
 _Static_assert(
     offsetof(City, pointer_command) % _Alignof(CityPointerCommandState) == 0, "native pointer cursor alignment");
 
-// Initial backing must hold CityMapStorageSize(CITY_MAP_SIZE, CITY_MAP_SIZE) bytes.
+// Initial backing must be suitably aligned and hold CityMapStorageSize(CITY_MAP_SIZE, CITY_MAP_SIZE) bytes.
+// Borrowed fixtures may bind live storage; replacing, growing or releasing backing requires heap ownership.
 void InitializeSimulation(City *city, void *map_storage);
+// Final release of owned name, archive, associations and map backing. Stop simulation, release tick
+// continuations and drop external map aliases first. Reinitialize before reuse; City and Game stay caller-owned.
+void ReleaseSimulation(City *city);
 bool ResizeCityMap(City *city, int width, int height);
 bool ReserveCityEventSlots(City *city, int capacity);
 void InitializeCityDefaults(City *city);
 void InitializeCityHistoryStorage(City *city);
 void InitializeCityStorage(City *city);
 void BindOwnedSimulationMapLayers(City *city);
-void DetachSimulationMapLayers(City *city);
 
 #endif

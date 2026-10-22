@@ -63,4 +63,11 @@ typedef enum CityLegacyTerrain {
   CITY_TERRAIN_BANK_48_SHAPE_15 = 63,
 } CityLegacyTerrain;
 
+// Stock regrading can produce these intermediate offsets before adding a bank code. Codecs and the retained
+// terrain-classification table preserve that range; these are not native slope shapes.
+typedef enum CityTerrainRegradeShape {
+  CITY_REGRADE_SHAPE_16 = 16, CITY_REGRADE_SHAPE_17 = 17, CITY_REGRADE_SHAPE_18 = 18,
+  CITY_REGRADE_SHAPE_19 = 19, CITY_REGRADE_SHAPE_20 = 20, CITY_REGRADE_SHAPE_21 = 21,
+} CityTerrainRegradeShape;
+
 #endif

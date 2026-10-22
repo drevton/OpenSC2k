@@ -2,6 +2,7 @@
 #define SC2K_MAP_CAMERA_H
 
 #include "city/maps/map.h"
+#include "city/maps/terrain.h"
 #include "city/types.h"
 
 typedef struct City City;
@@ -42,33 +43,28 @@ CityMapUnderworldPatch CityMapUnderworldSurface(const City *city, TileIndex tile
 double CityMapUnderworldHeight(const CityMapUnderworldPatch *patch, double u, double v);
 int CityMapUnderworldShape(const CityMapUnderworldPatch *patch);
 int CityMapViewTerrainCode(const City *city, TileIndex tile);
+// Reuse this tile's decoded camera geometry for native dry land; visible water returns -1.
+// Raw stock records retain their combined-code interpretation, with water codes normalized to -1.
+int CityMapDryGroundShape(const City *city, TileIndex tile, const CityTileGeometry *geometry);
 int CityMapViewUnderground(const City *city, TileIndex tile);
 int CityMapViewOrientation(const City *city, TileIndex tile);
 // The leftmost visible footprint corner, used to paint shared building artwork once.
 bool IsCityMapViewFootprintAnchor(const City *city, TileIndex tile);
-// Camera-only controls; preserve the world point under the view center.
+// Pick logical camera pixels or transfer the world point at its center. Neither operation binds or modifies a view.
+// Terrain, layer visibility and underground mode come from the supplied City and its Drawing options.
 TileIndex PickCityMapCameraPoint(City *city, CityMapCamera camera, CityPoint point);
 CityPoint TransferCityMapCameraCenter(City *city, CityMapCamera source, CityMapCamera target);
+// Inclusive origin bounds for the supplied viewport, zoom and rotation; no map scan.
+CityRect CityMapOriginBounds(const City *city, CityMapCamera camera);
 CityPoint ClampCityMapCameraOrigin(const City *city, CityMapCamera camera);
-void RotateCityMapViewport(City *city, u32 window_id, bool clockwise);
-void RotateCityMapView(City *city, CityMapViewConfig *view, bool clockwise);
 
-// Projection and local camera controls. These functions read geometry or change the view, never world tile data.
+// Projection reads geometry without changing the camera or world tile data.
 void CityMapTileCorners(const City *city, TileIndex tile, int zoom, int points[8]);
 
-int *CityMapTileToScreen(City *city, const CityMapViewConfig *view, int x, int y, int *screen_x, int *screen_y);
-i32 UpdateCityMapViewScrollPosition(City *city, CityMapViewConfig *view);
-void MaskCityMapOriginForZoom(Drawing *drawing, CityMapViewConfig *view);
-void OffsetCityMapOrigin(City *city, CityMapViewConfig *view, int delta_x, int delta_y);
+// Project a world tile coordinate into the view's logical screen pixels. City and view remain unchanged.
+CityPoint CityMapTileToScreen(const City *city, const CityMapViewConfig *view, CityPoint world);
 
-// NULL selects the default map view.
-i32 CenterCityMapViewAtTile(City *city, CityMapViewConfig *view, int x, int y);
-void ZoomCityMapViewOut(City *city, CityMapViewConfig *view);
-void ZoomCityMapViewIn(City *city, CityMapViewConfig *view);
-
-i32 CenterCityMapViewAndResetOverlays(City *city, int x, int y, int zoom);
-
-int CityMapTileElevation(City *city, int x, int y);
+int CityMapTileElevation(const City *city, int x, int y);
 int CityMapDiagonalToTileSmall(City *city, int diagonal_x, int diagonal_y);
 int CityMapDiagonalToTileMedium(City *city, int diagonal_x, int diagonal_y);
 int CityMapDiagonalToTileLarge(City *city, int diagonal_x, int diagonal_y);
@@ -76,9 +72,6 @@ int CityMapScreenToTile(City *city, const CityMapViewConfig *view, int screen_x,
 TileIndex PickCityMapTile(City *city, const CityMapViewConfig *view, int screen_x, int screen_y);
 TileIndex PickCityMapTerrainPoint(City *city, const CityMapViewConfig *view, int screen_x, int screen_y);
 int ReadCityMapTerrainPointHeight(const City *city, TileIndex tile);
-
-// Rotate the focused camera without changing world tile data.
-void RotateFocusedCityMapView(City *city, bool clockwise);
 
 // Eight height pixels per 64-pixel tile, without changing City elevations.
 enum { CITY_MAP_HEIGHT_UNIT = 1 };

@@ -33,7 +33,9 @@ typedef struct {
   u32 count[CITY_SPECIAL_TILE_COUNT];
 } CitySpecialTileCounts;
 
-void Sc2kQueueUnlockBonusAnswer(City *city, i32 answer);
+// Stage the legacy reward offer's answer (UNANSWERED/YES/NO) without opening or dismissing presentation.
+// Reserved fields must be zero; TEST leaves the pending choice unchanged. The command ignores map location.
+i64 CmdSetMilitaryRewardAnswer(City *city, u32 flags, int answer, int reserved1, int reserved2);
 enum { CITY_MILITARY_FINISH_DONE, CITY_MILITARY_FINISH_ZONE, CITY_MILITARY_FINISH_UNAVAILABLE };
 typedef struct {
   TileIndex site;

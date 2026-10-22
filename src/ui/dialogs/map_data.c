@@ -1,22 +1,30 @@
-#include "city/maps/map_types.h"
-#include "city/maps/tile_storage.h"
-#include "drawing/maps/map_view.h"
-#include "game/application_internal.h"
-#include "drawing/drawing_internal.h"
-#include "drawing/bitmaps.h"
+#include "ui/windows/window_internal.h"
+#include "ui/map.h"
+#include "ui/dialogs/map_data.h"
 
+#include <stdio.h>
+#include <string.h>
+
+#include "assets/state.h"
+#include "city/economy/economy.h"
+#include "city/maps/layers.h"
+#include "city/presentation.h"
+#include "city/state.h"
+#include "drawing/bitmaps.h"
+#include "drawing/fonts/fonts.h"
+#include "drawing/maps/map_render.h"
+#include "drawing/maps/map_view.h"
+#include "drawing/raster/canvas_primitives.h"
+#include "drawing/raster/canvas_raster_internal.h"
+#include "drawing/state.h"
 #include "game/errors.h"
 #include "game/state.h"
-#include "audio/state.h"
-#include "city/state.h"
-#include "drawing/state.h"
-#include "assets/state.h"
+#include "ui/dialogs/budget.h"
+#include "ui/sdl.h"
 #include "ui/state.h"
-#include "ui/map.h"
-#include "drawing/drawing.h"
+#include "ui/windows/windows.h"
 
-// Map Data
-// Drawing subsystem: map data.
+// Data-layer preview, controls, overlay selection and land-use windows.
 
 enum { MAP_CATEGORY_SIZE = 20, MAP_CONTROL_GROUP_GAP = 10,
   MAP_MAX_OPTIONS = CITY_MAP_BITMAP_OPTIONS, MAP_RESIZE_WIDTH = 12 };
@@ -54,10 +62,11 @@ _Static_assert(CITY_MAP_BITMAP_CATEGORIES == CITY_DATA_GROUP_COUNT, "Map cache c
 static int MapButtonSize(const Window *window) {
   // Reserve room for the largest option group, so changing categories never overlaps buttons.
   int count = CITY_DATA_GROUP_COUNT + MAP_MAX_OPTIONS + 2;
-  return IntMin(MAP_CATEGORY_SIZE, (window->bounds.right - window->bounds.left - MAP_CONTROL_GROUP_GAP - MAP_RESIZE_WIDTH) / count);
+  return IntMin(MAP_CATEGORY_SIZE,
+      (window->bounds.right - window->bounds.left - MAP_CONTROL_GROUP_GAP - MAP_RESIZE_WIDTH) / count);
 }
 
-CityRect CityMapResizeGripBounds(const Window *window) {
+static CityRect CityMapResizeGripBounds(const Window *window) {
   CityRect b = window->bounds;
   return (CityRect){b.right - MAP_RESIZE_WIDTH, b.bottom - MAP_RESIZE_WIDTH, b.right, b.bottom};
 }
@@ -175,13 +184,13 @@ void DrawCityMapDataWindow(Drawing *drawing, Canvas *canvas, const Window *windo
   if (!window->shaded)
     CanvasBeveledBox(canvas, bounds.left, bounds.top + 14, bounds.right, bounds.bottom, canvas_title, true);
   DrawCityWindowCaption(canvas, bounds, title, canvas_title, 0xFFD3BB93, 0xFF674F2B, 33);
-  for (int control = CITY_VIEWPORT_SHADE; control <= CITY_VIEWPORT_STICKY; ++control) {
-    CityRect rect = CityViewportControlBounds(window, control);
-    bool pressed = (control == CITY_VIEWPORT_SHADE && window->shaded) ||
-        (control == CITY_VIEWPORT_STICKY && window->sticky);
+  for (int control = CITY_CAPTION_SHADE; control <= CITY_CAPTION_STICKY; ++control) {
+    CityRect rect = CityCaptionControlBounds(window, control);
+    bool pressed = (control == CITY_CAPTION_SHADE && window->shaded) ||
+        (control == CITY_CAPTION_STICKY && window->sticky);
     DrawCanvasButtonFrame(canvas, rect, canvas_title, 0xFFD3BB93, 0xFF674F2B, !pressed);
-    DrawCityWindowControlIcon(canvas, rect, control == CITY_VIEWPORT_SHADE ? CITY_WINDOW_ICON_SHADE :
-        control == CITY_VIEWPORT_DEFAULT_SIZE ? CITY_WINDOW_ICON_DEFAULT_SIZE : CITY_WINDOW_ICON_STICKY, pressed);
+    DrawCityWindowControlIcon(canvas, rect, control == CITY_CAPTION_SHADE ? CITY_WINDOW_ICON_SHADE :
+        control == CITY_CAPTION_DEFAULT_SIZE ? CITY_WINDOW_ICON_DEFAULT_SIZE : CITY_WINDOW_ICON_STICKY, pressed);
   }
   if (window->shaded) return;
   int buttons_top = bounds.bottom - MapButtonSize(window);
@@ -215,8 +224,8 @@ void DrawCityMapDataWindow(Drawing *drawing, Canvas *canvas, const Window *windo
           bounds.right - 2 - pixel, bounds.bottom - 2 - line * 2 + pixel, 0xFF674F2B);
 }
 
-void Sc2kCanvasDrawLandUse(Canvas *canvas, const Window *window) {
-  static const char *const labels[11] = {
+static void Sc2kCanvasDrawLandUse(Canvas *canvas, const Window *window) {
+  static const char *const labels[CITY_LAND_USE_COUNT] = {
     "Transportation", "Power", "Water", "Residential", "Commercial", "Industrial",
     "Ports/Airports", "Education", "Health/Safety", "Recreation", "Arcologies"
   };
@@ -241,7 +250,93 @@ void Sc2kCanvasDrawLandUse(Canvas *canvas, const Window *window) {
   }
 }
 
-// Map Data Host
+// Snapshot updates and preview damage.
+
+i32 Sc2kCanvasDesktopOpenLandUse(CityCanvasDesktop *desktop, CityRect bounds,
+    const CityStatistics *statistics) {
+  Window window = {.kind = CITY_CANVAS_LAND_USE, .bounds = bounds, .title = "Land Use"};
+  CalculateCityLandUse(statistics, window.land_use_acres, window.land_use_percent);
+  return Sc2kCanvasDesktopOpen(desktop, window);
+}
+
+void Sc2kCanvasDesktopUpdateLandUse(CityCanvasDesktop *desktop, const CityStatistics *statistics) {
+  u32 acres[CITY_LAND_USE_COUNT];
+  u16 percent[CITY_LAND_USE_COUNT];
+  CalculateCityLandUse(statistics, acres, percent);
+  for (i32 index = 0; index < desktop->count; ++index) {
+    Window *window = &desktop->windows[index];
+    if (window->kind != CITY_CANVAS_LAND_USE)
+      continue;
+    if (memcmp(acres, window->land_use_acres, sizeof(acres)) == 0 &&
+        memcmp(percent, window->land_use_percent, sizeof(percent)) == 0)
+      continue;
+    memcpy(window->land_use_acres, acres, sizeof(acres));
+    memcpy(window->land_use_percent, percent, sizeof(percent));
+    Sc2kDirtyMarkRect(&desktop->dirty, CanvasWindowPaintRect(window));
+  }
+}
+
+void UpdateCityMapDataWindows(City *city) {
+  Drawing *drawing = city->game->drawing;
+  i32 open = 0;
+  for (i32 index = 0; index < city->game->ui->desktop.count; ++index)
+    open |= city->game->ui->desktop.windows[index].kind == CITY_CANVAS_MAP_DATA;
+  if (!open)
+    return;
+  int selection = ReadCityMapDataSelection(&city->game->ui->map_data);
+  bool changed = BuildCityMapDataPreview(city, selection, drawing->data_map_pixels);
+  if (changed && city->game->ui->map_data.drawing) city->game->ui->map_data.drawing->preview.valid = false;
+  Sc2kCanvasDesktopUpdateMapData(&city->game->ui->desktop, selection, drawing->data_map_pixels);
+}
+
+bool InvalidateCityMapDataPreview(City *city) {
+  Drawing *drawing = city->game->drawing;
+  if (!drawing->map_navigation_enabled || city->game->ui == NULL) {
+    return false;
+  }
+  CityCanvasDesktop *desktop = &city->game->ui->desktop;
+  int scale = drawing->ui_scale_applied > 0 ? drawing->ui_scale_applied : 100;
+  bool result = true;
+  for (int index = 0; index < desktop->count; ++index) {
+    const Window *panel = &desktop->windows[index];
+    if (panel->kind != CITY_CANVAS_MAP_DATA) continue;
+    CityRect preview = Sc2kCanvasMapDataPreviewRect(panel);
+    CityRect rect = {preview.left - panel->bounds.left, preview.top - panel->bounds.top,
+        preview.right - panel->bounds.left, preview.bottom - panel->bounds.top};
+    rect = (CityRect){rect.left * scale / 100, rect.top * scale / 100,
+        (rect.right * scale + 99) / 100, (rect.bottom * scale + 99) / 100};
+    result = InvalidateCityCanvasWindow(city->game, panel->window_id, &rect) && result;
+  }
+  return result;
+}
+
+// Request preview damage only while the map-data window enables refresh.
+bool RefreshCityMapDataPreview(City *city) {
+  if (city->game->ui->map_data.refresh_enabled)
+    return InvalidateCityMapDataPreview(city);
+  return false;
+}
+
+// Window lifetime.
+
+i32 Sc2kCanvasDesktopOpenMapData(CityCanvasDesktop *desktop, CityRect bounds, i32 selection) {
+  bounds.right = IntMax(bounds.right, bounds.left + CITY_MAP_DATA_DEFAULT_WIDTH);
+  return Sc2kCanvasDesktopOpen(desktop,
+      (Window){.kind = CITY_CANVAS_MAP_DATA, .bounds = bounds,
+          .title = "Map Data", .data_map_selection = selection});
+}
+
+void Sc2kCanvasDesktopUpdateMapData(CityCanvasDesktop *desktop, i32 selection,
+    const u32 *map_preview) {
+  for (i32 index = 0; index < desktop->count; ++index) {
+    Window *window = &desktop->windows[index];
+    if (window->kind != CITY_CANVAS_MAP_DATA)
+      continue;
+    window->data_map_selection = selection;
+    window->map_preview = map_preview;
+    Sc2kDirtyMarkRect(&desktop->dirty, CanvasWindowPaintRect(window));
+  }
+}
 
 static void ReleaseMapDataDrawing(City *city, void *context) {
   CityMapDataWindowDrawing *pixels = context;
@@ -253,17 +348,12 @@ void SetCityMapDataPresentation(City *city, CityCanvasDesktop *desktop) {
   city->game->ui->map_data.desktop = desktop;
   city->game->ui->map_data.isometric = true;
 }
-bool IsCityMapDataVisible(City *city) { return city->game->ui->map_data.visible; }
-bool CityMapDataServiceAvailable(City *city) {
-  return city->game->ui->map_data.desktop != NULL;
-}
-int ReadCityMapDataSelection(City *city) {
-  CityMapDataState *state = &city->game->ui->map_data;
+int ReadCityMapDataSelection(const CityMapDataState *state) {
   return state->group * CITY_DATA_SELECTION_STRIDE + state->option;
 }
 void SetCityMapDataSelection(City *city, int selection) {
   CityMapDataState *state = &city->game->ui->map_data;
-  if (ReadCityMapDataSelection(city) != selection && state->drawing)
+  if (ReadCityMapDataSelection(state) != selection && state->drawing)
     InvalidateCityWindowBitmaps(&state->drawing->base);
   state->group = selection / CITY_DATA_SELECTION_STRIDE;
   state->option = selection % CITY_DATA_SELECTION_STRIDE;
@@ -290,14 +380,14 @@ void HideCityMapDataDialog(City *city) {
 }
 bool ToggleCityMapDataDialog(City *city) {
   CityMapDataState *state = &city->game->ui->map_data;
-  if (!CityMapDataServiceAvailable(city)) {
+  if (state->desktop == NULL) {
     return false;
   }
   if (state->visible) {
     HideCityMapDataDialog(city);
   } else {
     int index = Sc2kCanvasDesktopOpenMapData(state->desktop, (CityRect){70, 18, 370, 288},
-        ReadCityMapDataSelection(city));
+        ReadCityMapDataSelection(state));
     if (index < 0) {
       SetGameError(city->game, SC2K_ERROR_GUEST_ALLOCATION_FAILURE);
       return false;
@@ -305,7 +395,7 @@ bool ToggleCityMapDataDialog(City *city) {
     Window *window = &state->desktop->windows[index];
     window->city = city;
     state->drawing = (CityMapDataWindowDrawing *)CreateCityWindowDrawing(city->game->drawing,
-        CITY_WINDOW_DRAWING_MAP_DATA);
+        CITY_WINDOW_DRAWING_MAP_DATA, 0);
     if (!state->drawing || !AttachCityWindowCallback(window, ReleaseMapDataDrawing, state->drawing)) {
       if (state->drawing) ReleaseCityWindowDrawing(&state->drawing->base);
       state->drawing = NULL;
@@ -408,13 +498,13 @@ bool MapDataWindowProcedure(Game *game, const Window *window, const WindowEvent 
     for (int group = 0; group < CITY_DATA_GROUP_COUNT; ++group)
       if (CanvasPointInRect(MapButtonBounds(window, MAP_BUTTON_CATEGORY, group), x, y)) {
         CityMapDataDialogOnOverlaySelectionChanged(city, group * CITY_DATA_SELECTION_STRIDE);
-        ApplicationRefreshMapData(city);
+        UpdateCityMapDataWindows(city);
         return true;
       }
     for (int option = 0; option < CityMapDataOptionCount(selected_group); ++option)
       if (CanvasPointInRect(MapButtonBounds(window, MAP_BUTTON_OPTION, option), x, y)) {
         CityMapDataDialogOnListSelectionChanged(city, selected_group * CITY_DATA_SELECTION_STRIDE + option);
-        ApplicationRefreshMapData(city);
+        UpdateCityMapDataWindows(city);
         return true;
       }
     if (CanvasPointInRect(MapButtonBounds(window, MAP_BUTTON_PROJECTION, 0), x, y)) {
@@ -433,18 +523,18 @@ bool MapDataWindowProcedure(Game *game, const Window *window, const WindowEvent 
       return true;
     }
   }
-  for (int control = CITY_VIEWPORT_SHADE; control <= CITY_VIEWPORT_STICKY; ++control) {
-    if (!CanvasPointInRect(CityViewportControlBounds(window, control), x, y)) continue;
+  for (int control = CITY_CAPTION_SHADE; control <= CITY_CAPTION_STICKY; ++control) {
+    if (!CanvasPointInRect(CityCaptionControlBounds(window, control), x, y)) continue;
     Window *target = FindCityCanvasWindow(desktop, window->window_id);
     Sc2kDirtyMarkRect(&desktop->dirty, target->bounds);
-    if (control == CITY_VIEWPORT_SHADE) {
+    if (control == CITY_CAPTION_SHADE) {
       if (target->shaded) target->bounds.bottom = target->bounds.top + target->restore_height;
       else {
         target->restore_height = target->bounds.bottom - target->bounds.top;
         target->bounds.bottom = target->bounds.top + 14;
       }
       target->shaded = !target->shaded;
-    } else if (control == CITY_VIEWPORT_DEFAULT_SIZE) ResetCityWindowSize(target);
+    } else if (control == CITY_CAPTION_DEFAULT_SIZE) ResetCityWindowSize(target);
     else target->sticky = !target->sticky;
     Sc2kDirtyMarkRect(&desktop->dirty, target->bounds);
     return true;

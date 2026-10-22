@@ -1,8 +1,10 @@
+#include "city/maps/labels.h"
+#include "city/infrastructure/utilities.h"
+#include "city/maps/terrain.h"
 #include "city/maps/buildings.h"
 #include "city/maps/map.h"
 #include "city/maps/layers.h"
 #include "city/saveload/map_format.h"
-#include "city/infrastructure/infrastructure.h"
 #include <string.h>
 
 static int CityTileMetricRating(int metric) {
@@ -78,7 +80,7 @@ CityTileInformation ReadCityTileInformation(const City *city, TileIndex tile) {
   return information;
 }
 
-void CalculateCityLandUse(const i16 *tile_counts, u16 acres[CITY_LAND_USE_COUNT],
+void CalculateCityLandUse(const CityStatistics *statistics, u32 acres[CITY_LAND_USE_COUNT],
     u16 percent[CITY_LAND_USE_COUNT]) {
   static const u8 kThreshold[40] = {
     TKL_POWER_LINE_EAST_WEST, TKL_ROAD_EAST_WEST, TK_RESIDENTIAL_FIRST, TK_GAS_STATION_1X1_1,
@@ -112,23 +114,24 @@ void CalculateCityLandUse(const i16 *tile_counts, u16 acres[CITY_LAND_USE_COUNT]
   memset(acres, 0, CITY_LAND_USE_COUNT * sizeof(acres[0]));
   memset(percent, 0, CITY_LAND_USE_COUNT * sizeof(percent[0]));
 
-  for (i32 tile = TKL_PARK; tile < TK_COUNT; ++tile) {
+  // These thresholds describe statistic slots. Building slots retain their established IDs after native kind remaps.
+  for (int statistic = TKL_PARK; statistic < TK_COUNT; ++statistic) {
     i32 index = 0;
-    while (kThreshold[index] <= tile) {
+    while (kThreshold[index] <= statistic) {
       if (++index >= 40)
         break;
     }
     if (index >= 40 || kCategory[index] == CITY_LAND_USE_NONE)
       continue;
     i32 group = kCategory[index] - 1;
-    acres[group] += tile_counts[tile];
+    acres[group] += statistics->count[statistic];
   }
 
-  u32 total = 0;
+  u64 total = 0;
   for (i32 group = 0; group < CITY_LAND_USE_COUNT; ++group)
     total += acres[group];
   if (total == 0)
     return;
   for (i32 group = 0; group < CITY_LAND_USE_COUNT; ++group)
-    percent[group] = 100 * acres[group] / total;
+    percent[group] = (u64)100 * acres[group] / total;
 }

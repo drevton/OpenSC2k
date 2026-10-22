@@ -1,11 +1,11 @@
 #ifndef SC2K_DOMAIN_SRC_UI_DIALOGS_SCENARIO_H
 #define SC2K_DOMAIN_SRC_UI_DIALOGS_SCENARIO_H
 
-#include "ui/input.h"
-#include "drawing/drawing.h"
 #include "city/types.h"
-#include "ui/dialogs/dialog_state.h"
 #include "ui/dialogs/file_dialog.h"
+#include "ui/startup/startup.h"
+
+typedef struct CityInterfaceState CityInterfaceState;
 
 // Scenario Dialog
 
@@ -13,6 +13,7 @@ typedef struct CityScenarioSelectionDialog {
   CityStartupWindow base;
   City *city;
   int selected_index;
+  // Retained pickers admit only paths that fit this field, including the terminator.
   char selected_path[260];
 } CityScenarioSelectionDialog;
 
@@ -42,11 +43,12 @@ void ClearCityScenarioSelection(City *city);
 int RunCityScenarioSelectionDialog(City *city, CityScenarioSelectionDialog *dialog);
 int ChooseCityScenarioDialog(City *city, CityScenarioSelectionDialog *dialog);
 int ShowCityScenarioTextDialog(CityTextMessageDialog *dialog, const char *text);
-int GetCityScenarioListTextLength(CityScenarioSelectionDialog *dialog, int index);
-int GetCityScenarioListText(CityScenarioSelectionDialog *dialog, int index, char *text);
 void CloseCityScenarioSelectionDialog(City *city, CityScenarioSelectionDialog *dialog, int result);
 bool EditCityScenarioSelectionControl(City *city, int token, int control, int value);
-bool NativeScenarioDialogWaiting(City *city);
+// Read the innermost picker's answer state without advancing or completing its caller.
+bool NativeScenarioDialogWaiting(const CityInterfaceState *ui);
 void DrawCityScenarioSelectionWindow(City *city, Canvas *canvas, const Window *window);
+
+void ApplicationOpenScenarioInstructions(City *city, const char *path);
 
 #endif

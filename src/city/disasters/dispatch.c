@@ -1,13 +1,16 @@
+#include "city/maps/labels.h"
+#include "city/engine/random.h"
 #include "city/military.h"
 #include "audio/types.h"
 #include "city/disasters/types.h"
 #include "city/economy/types.h"
 #include "city/engine/city_types.h"
+#include "city/engine/command_types.h"
 #include "city/events/news.h"
 #include "city/maps/tile_storage.h"
 #include "game/application.h"
 #include "city/maps/layers.h"
-#include "audio/audio.h"
+#include "game/audio.h"
 #include "city/presentation.h"
 #include <stdio.h>
 #include <string.h>
@@ -15,14 +18,13 @@
 #include "game/observation.h"
 #include "game/errors.h"
 #include "city/disasters/disasters.h"
+#include "city/engine/commands.h"
 #include "city/economy/economy.h"
-#include "city/engine/initialization.h"
 #include "city/engine/simulation.h"
 #include "city/events/events.h"
 #include "city/state.h"
 #include "city/saveload/file.h"
 #include "game/state.h"
-#include "audio/state.h"
 #include "assets/state.h"
 #include "assets/catalog.h"
 #include "base/text.h"
@@ -311,52 +313,52 @@ i64 AdvanceCityDisasterEffects(City *city, bool terrain_water_allowed) {
       succeeded = ApplyCityFireDisaster(city, disaster_type == CITY_DISASTER_FIRE_STORM);
       break;
     case CITY_DISASTER_FLOOD:
-      succeeded = ApplyDisasterType2(city);
+      succeeded = ApplyCityFloodDisaster(city);
       break;
     case CITY_DISASTER_RIOTS:
-      succeeded = ApplyDisasterType3(city);
+      succeeded = ApplyCityRiotDisaster(city);
       if (succeeded != 0) {
-        ApplyDisasterType3(city);
-        ApplyDisasterType3(city);
+        ApplyCityRiotDisaster(city);
+        ApplyCityRiotDisaster(city);
       }
       break;
     case CITY_DISASTER_POLLUTION:
-      succeeded = ApplyDisasterType4(city);
+      succeeded = ApplyCityPollutionDisaster(city);
       break;
     case CITY_DISASTER_CRASH:
       succeeded = 1;
       break;
     case CITY_DISASTER_EARTHQUAKE:
-      succeeded = ApplyDisasterType6(city);
+      succeeded = ApplyCityEarthquakeDisaster(city);
       break;
     case CITY_DISASTER_TORNADO:
     case CITY_DISASTER_MONSTER:
       succeeded = ApplyCityMobileDisaster(city, disaster_type == CITY_DISASTER_MONSTER);
       break;
     case CITY_DISASTER_MELTDOWN:
-      succeeded = ApplyDisasterType9(city);
+      succeeded = ApplyCityMeltdownDisaster(city);
       break;
     case CITY_DISASTER_MICROWAVE:
-      succeeded = ApplyDisasterType10(city);
+      succeeded = ApplyCityMicrowaveDisaster(city);
       break;
     case CITY_DISASTER_VOLCANO:
-      succeeded = ApplyDisasterType11(city, terrain_water_allowed);
+      succeeded = ApplyCityVolcanoDisaster(city, terrain_water_allowed);
       break;
     case CITY_DISASTER_MASS_RIOTS:
     case CITY_DISASTER_MAJOR_FLOOD:
       succeeded = ApplyCityRandomDisasterStrikes(city, disaster_type == CITY_DISASTER_MAJOR_FLOOD);
       break;
     case CITY_DISASTER_CHEMICAL_SPILL:
-      succeeded = ApplyDisasterType15(city);
+      succeeded = ApplyCityChemicalSpillDisaster(city);
       break;
     case CITY_DISASTER_HURRICANE:
-      succeeded = ApplyDisasterType16(city);
+      succeeded = ApplyCityHurricaneDisaster(city);
       break;
     case CITY_DISASTER_HELICOPTER_CRASH:
       succeeded = 1;
       break;
     case CITY_DISASTER_SCHEDULED_PLANE_CRASH:
-      succeeded = ApplyDisasterType18(city);
+      succeeded = ApplyCityAirCrashDisaster(city);
       break;
     default:
       succeeded = 0;
@@ -440,7 +442,76 @@ i64 AdvanceCityDisasterEffects(City *city, bool terrain_water_allowed) {
   return true;
 }
 
-// Menu
+// Toggle the City's shared random-disaster suppression rule. Reserved payload must be zero; TEST changes neither City
+// nor local preferences.
+i64 CmdToggleNoDisasters(City *city, u32 flags, int reserved1, int reserved2, int reserved3) {
+  if (reserved1 != 0 || reserved2 != 0 || reserved3 != 0)
+    return CITY_COMMAND_COST_INVALID;
+  if (flags & CITY_COMMAND_TEST) return 0;
+  city->indicators.event_flag = city->indicators.event_flag == 0;
+  return 1;
+}
+
+// Queue the explicitly selected disaster through its deterministic selector. Rejects unsupported kinds and reserved
+// input; TEST performs no location selection or random draws.
+i64 CmdStartDisaster(City *city, u32 flags, TileIndex location,
+    int kind, int parameter2, int parameter3) {
+  int invalid = CITY_COMMAND_COST_INVALID;
+  static const struct { int kind; void (*select)(City *); } kSelections[] = {
+    {CITY_DISASTER_FIRE, SelectCityFireDisaster},
+    {CITY_DISASTER_FLOOD, SelectCityFloodDisaster},
+    {CITY_DISASTER_SCHEDULED_PLANE_CRASH, SelectCityAirCrashDisaster},
+    {CITY_DISASTER_TORNADO, SelectCityTornadoDisaster},
+    {CITY_DISASTER_EARTHQUAKE, SelectCityEarthquakeDisaster},
+    {CITY_DISASTER_MONSTER, SelectCityMonsterDisaster},
+    {CITY_DISASTER_HURRICANE, SelectCityHurricaneDisaster},
+    {CITY_DISASTER_RIOTS, SelectCityRiotsDisaster},
+    {CITY_DISASTER_MICROWAVE, SelectCityMicrowaveDisaster},
+    {CITY_DISASTER_POLLUTION, SelectCityPollutionDisaster},
+    {CITY_DISASTER_VOLCANO, SelectCityVolcanoDisaster},
+    {CITY_DISASTER_FIRE_STORM, SelectCityFireStormDisaster},
+    {CITY_DISASTER_MAJOR_FLOOD, SelectCityMajorFloodDisaster},
+    {CITY_DISASTER_MASS_RIOTS, SelectCityMassRiotsDisaster},
+    {CITY_DISASTER_MELTDOWN, SelectCityMeltdownDisaster},
+  };
+  if (!parameter2 && !parameter3) for (int index = 0; index < sizeof(kSelections) / sizeof(*kSelections); ++index) {
+    if (kind != kSelections[index].kind) continue;
+    if (flags & CITY_COMMAND_TEST) return 0;
+    kSelections[index].select(city);
+    return 1;
+  }
+  if (location != INVALID_TILE || parameter2 || parameter3 ||
+      (kind != CITY_DISASTER_CRASH && kind != CITY_DISASTER_HELICOPTER_CRASH &&
+       kind != CITY_DISASTER_CHEMICAL_SPILL)) return invalid;
+  TileIndex tile = MapTileXYOrInvalid(city, city->geography.center_x, city->geography.center_y);
+  if (tile == INVALID_TILE) return invalid;
+  int slot = kind == CITY_DISASTER_CHEMICAL_SPILL ? 0 : FindFreeCityEventSlot(city);
+  if (kind != CITY_DISASTER_CHEMICAL_SPILL && !slot) return invalid;
+  if (flags & CITY_COMMAND_TEST) return 0;
+  if (slot) {
+    CityMapEvent *event = &city->events.event[slot];
+    memset(event, 0, sizeof(*event));
+    event->tile = tile;
+    event->previous_overlay = ReadCityStockBaseOverlay(city, tile);
+    if (kind == CITY_DISASTER_HELICOPTER_CRASH) {
+      event->type = CITY_MAP_EVENT_HELICOPTER;
+      event->state = event->next_slot = CITY_HELICOPTER_CRASH;
+      event->height = 16;
+    } else {
+      event->type = CITY_MAP_EVENT_EXPLOSION;
+      event->next_slot = CITY_DISASTER_CRASH;
+      event->direction = CITY_EXPLOSION_START;
+      event->explosion.trigger_disaster = 1;
+    }
+    LinkCityMapEvent(city, slot);
+    InvalidateCityMapEvent(city, slot);
+  }
+  SetDisasterLocation(&city->disasters.location, city->geography.center_x, city->geography.center_y);
+  city->disasters.pending_type = kind;
+  return 1;
+}
+
+// Explicit disaster requests
 
 // Fire starts within a 40-tile square around the developed city center. Queues the selected location/type and consumes
 // the original CRT draws; does not apply the fire effect immediately.
@@ -458,7 +529,7 @@ void SelectCityFloodDisaster(City *city) {
   SetDisasterLocation((&city->disasters.location), city->geography.center_x, city->geography.center_y);
 }
 
-// The dispatcher creates the airplane; this menu callback only queues it. Changes the pending disaster request only;
+// The dispatcher creates the airplane; this selector only queues it. Changes the pending disaster request only;
 // existing event capacity and spawn admission are checked when dispatching.
 void SelectCityAirCrashDisaster(City *city) { city->disasters.pending_type = CITY_DISASTER_SCHEDULED_PLANE_CRASH; }
 
@@ -549,22 +620,6 @@ void SelectCityMeltdownDisaster(City *city) {
 // Tables
 
 const CityDisasterPeriods kCityDefaultDisasterPeriods = {{0, 100, 60, 30}};
-
-const u8 kEventDataPriority[67] = {
-  0, 1, 1, 1, 1, 1, 1, 1, 4, 8, 5, 5, 5, 5, 5, 5,
-  5, 5, 5, 3, 4, 4, 4, 2, 2, 3, 2, 4, 3, 2, 3, 2,
-  8, 8, 2, 4, 8, 1, 4, 1, 1, 8, 1, 1, 3, 8, 2, 2,
-  2, 1, 1, 4, 1, 1, 2, 2, 2, 1, 3, 2, 5, 3, 6, 6,
-  6, 6, 6,
-};
-
-const i8 kDisasterType10DirectionY[8] = {
-  0, 1, 1, 1, 0, -1, -1, -1,
-};
-
-const i8 kDisasterType10DirectionX[8] = {
-  -1, -1, 0, 1, 1, 1, 0, -1,
-};
 
 const i8 kCardinalNeighborY[4] = {
   0, 1, 0, -1,

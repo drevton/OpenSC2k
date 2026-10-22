@@ -41,17 +41,23 @@ typedef struct {
 } CitySetting;
 extern const int kCitySettingsCount;
 extern const CitySetting kCitySettings[];
+// defaults selects config defaults for City-owned settings; local presentation values always use their live owners.
 int ReadCitySettingValue(const Game *game, const CitySetting *setting, bool defaults);
 // Local fields and Game's City-fix defaults only. Shared effects use setting->command.
 void WriteCitySettingValue(Game *game, const CitySetting *setting, int value, bool defaults);
+// Execute only the City's resolved command. Config defaults remain separate.
 bool RunCitySettingCommand(Game *game, const CitySetting *setting, int value);
 
 // Game owns the parsed document; UI actions update it without disk I/O.
 void LoadGameSettings(Game *game);
 void ApplyGameSettings(Game *game, bool scale_override);
 void StoreGameSettings(Game *game);
-void ApplyGameCityDefaults(Game *game);
-void StoreGameCitySetting(Game *game, const char *key, i64 value);
+// Apply gameplay defaults through City commands, stopping at the first failed command.
+bool ApplyGameCityDefaults(Game *game);
+bool CopyCitySettingsToDefaults(Game *game);
+// Read/change defaults for future cities without mutating the current City.
+int ReadGameCityDefault(const Game *game, const CitySetting *setting);
+bool StoreGameCityDefault(Game *game, const CitySetting *setting, int value);
 void PollGameSettings(Game *game, double now);
 void CloseGameSettings(Game *game);
 // Caller frees the allocated path. NULL if no settings directory is available.

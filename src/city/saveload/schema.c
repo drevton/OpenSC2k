@@ -1,3 +1,5 @@
+#include "city/saveload/events_format.h"
+#include "city/events/news.h"
 #include "city/economy/facilities.h"
 #include "city/saveload/types.h"
 #include "city/events/events.h"
@@ -5,6 +7,7 @@
 #include "city/maps/tile_storage.h"
 #include "city/state.h"
 #include "city/saveload/city_file_internal.h"
+#include "audio/state.h"
 
 const CityFileChunkSpec kCityFileChunks[] = {
     {"CNAM", 32, CITY_FILE_ONLY, 0, 0, 0, CITY_FILE_NAME},
@@ -115,16 +118,16 @@ const CityMiscArray kCityMiscArrays[] = {
     {441, 4, 4, 4, 0, 0, 0, offsetof(City, fourth_accounts)},
     {454, 1, 8, 2, 1, 0, 0, offsetof(City, economic_tables.sector_rates)},
     {462, 1, 17, 2, 1, 0, 0, offsetof(City, economic_tables.milestone_years)},
-    {916, 5, 6, 1, 0, 5, 0, offsetof(City, newspaper_editions)},
-    {917, 5, 6, 1, 0, 5, 1, offsetof(City, newspaper_editions)},
-    {918, 5, 6, 1, 0, 5, 2, offsetof(City, newspaper_editions)},
-    {919, 5, 6, 1, 0, 5, 3, offsetof(City, newspaper_editions)},
-    {920, 5, 6, 1, 0, 5, 4, offsetof(City, newspaper_editions)},
-    {946, 6, 9, 2, 1, 8, 0, offsetof(City, facility_rankings)},
-    {947, 6, 9, 2, 1, 8, 2, offsetof(City, facility_rankings)},
-    {948, 6, 9, 1, 0, 8, 4, offsetof(City, facility_rankings)},
-    {949, 6, 9, 1, 0, 8, 5, offsetof(City, facility_rankings)},
-    {950, 6, 9, 1, 0, 8, 6, offsetof(City, facility_rankings)},
-    {951, 6, 9, 1, 0, 8, 7, offsetof(City, facility_rankings)},
+    {916, 5, CITY_NEWSPAPER_EDITION_COUNT, 1, 0, 5, 0, offsetof(City, newspaper_editions)},
+    {917, 5, CITY_NEWSPAPER_EDITION_COUNT, 1, 0, 5, 1, offsetof(City, newspaper_editions)},
+    {918, 5, CITY_NEWSPAPER_EDITION_COUNT, 1, 0, 5, 2, offsetof(City, newspaper_editions)},
+    {919, 5, CITY_NEWSPAPER_EDITION_COUNT, 1, 0, 5, 3, offsetof(City, newspaper_editions)},
+    {920, 5, CITY_NEWSPAPER_EDITION_COUNT, 1, 0, 5, 4, offsetof(City, newspaper_editions)},
+    {946, 6, 9, 2, 1, 8, 0, offsetof(City, news_records)},
+    {947, 6, 9, 2, 1, 8, 2, offsetof(City, news_records)},
+    {948, 6, 9, 1, 0, 8, 4, offsetof(City, news_records)},
+    {949, 6, 9, 1, 0, 8, 5, offsetof(City, news_records)},
+    {950, 6, 9, 1, 0, 8, 6, offsetof(City, news_records)},
+    {951, 6, 9, 1, 0, 8, 7, offsetof(City, news_records)},
     {1002, 1, 16, 2, 1, 0, 0, offsetof(City, special_tile_counts), 4},
 };

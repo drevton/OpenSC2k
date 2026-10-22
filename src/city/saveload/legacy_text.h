@@ -3,9 +3,9 @@
 
 #include "base/utf8.h"
 
-typedef enum { CITY_TEXT_WINDOWS_1252, CITY_TEXT_OEM_437, CITY_TEXT_SCENARIO } CityLegacyTextEncoding;
-u16 DecodeCityWindows1252Byte(u8 byte);
-u8 EncodeCityWindows1252Character(u32 unicode);
+typedef enum CityLegacyTextEncoding {
+  CITY_TEXT_WINDOWS_1252, CITY_TEXT_OEM_437, CITY_TEXT_SCENARIO,
+} CityLegacyTextEncoding;
 u32 DecodeLegacyCityCharacter(u8 byte, CityLegacyTextEncoding encoding);
 // Decode stock bytes at import. Output truncates only between complete UTF-8 characters.
 size_t DecodeLegacyCityText(char *output, size_t capacity, const void *bytes, size_t length,

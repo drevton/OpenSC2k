@@ -1,15 +1,28 @@
-#include "ui/state.h"
-#include "drawing/drawing_internal.h"
-#include <ctype.h>
-#include <limits.h>
+#include "ui/windows/window_internal.h"
+#include "ui/console.h"
 
+#include <ctype.h>
 #include <lauxlib.h>
+#include <limits.h>
 #include <lua.h>
 #include <lualib.h>
+#include <stdlib.h>
 
-#include "game/application_internal.h"
+#include "assets/state.h"
+#include "audio/backend.h"
+#include "city/engine/cheats.h"
 #include "city/maps/layers.h"
+#include "drawing/fonts/fonts.h"
+#include "drawing/raster/canvas_primitives.h"
+#include "drawing/raster/canvas_raster_internal.h"
+#include "game/errors.h"
+#include "game/state.h"
+#include "ui/commands.h"
+#include "ui/dialogs/dialogs.h"
 #include "ui/sdl.h"
+#include "ui/state.h"
+#include "ui/windows/controls.h"
+#include "ui/windows/windows.h"
 
 // Native console, Lua bindings and persistent shortcut overrides.
 
@@ -76,7 +89,7 @@ static void DrawConsoleScrollArrow(Canvas *canvas, CityRect b, bool up) {
   }
 }
 
-void DrawCityDeveloperConsole(Game *game, Canvas *canvas, const Window *window) {
+static void DrawCityDeveloperConsole(Game *game, Canvas *canvas, const Window *window) {
   CityInterfaceState *ui = game->ui;
   ConsoleLayout layout = ReadConsoleLayout(game, window->bounds);
   CanvasPanelFrame(canvas, window->bounds, window->title);

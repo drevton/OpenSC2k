@@ -8,6 +8,7 @@
 // water-height field and must be cleared when their old interpretation stops applying. Callers install new payloads.
 // Kind classes and drawing/module metadata live in immutable tables, never in TileInfo bits.
 
+#include "city/infrastructure/lines.h"
 #include "city/maps/buildings.h"
 #include "city/infrastructure/bridges.h"
 #include "city/infrastructure/highways.h"
@@ -19,7 +20,6 @@
 #include "city/maps/map_types.h"
 #include "city/maps/map.h"
 #include "city/growth/growth.h"
-#include "city/infrastructure/infrastructure.h"
 #include "city/saveload/map_format.h"
 
 // Shared map metadata operations; field access and simple kind predicates stay in layers.h.

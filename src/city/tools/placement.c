@@ -1,31 +1,19 @@
-#include "city/infrastructure/tunnels.h"
-#include "city/maps/buildings.h"
+#include "city/infrastructure/lines.h"
+#include "city/infrastructure/spans.h"
+#include "city/maps/terrain.h"
+#include "city/saveload/map_format.h"
+#include "city/tools/tools.h"
+#include "city/engine/commands.h"
+#include "city/fixes.h"
 #include "city/infrastructure/bridges.h"
 #include "city/infrastructure/highways.h"
 #include "city/infrastructure/surface_lines.h"
-#include "city/maps/water.h"
-#include "city/infrastructure/types.h"
-#include "city/maps/tile_storage.h"
-#include "city/tools/types.h"
-#include "city/presentation.h"
-#include <assert.h>
-#include <string.h>
-
-#include "audio/audio.h"
-#include "city/state.h"
-#include "city/engine/simulation.h"
-#include "city/engine/commands.h"
-#include "city/infrastructure/infrastructure.h"
+#include "city/infrastructure/tunnels.h"
+#include "city/maps/buildings.h"
 #include "city/maps/layers.h"
-#include "city/tools/tools.h"
-#include "city/saveload/file.h"
-#include "game/errors.h"
-#include "city/fixes.h"
-#include "game/state.h"
-#include "audio/state.h"
-#include "assets/state.h"
-#include "base/text.h"
-
+#include "city/maps/water.h"
+#include "city/presentation.h"
+#include "city/state.h"
 
 // Map explicit construction tool choices to a building kind. Unlisted and picker entries return TK_CLEAR.
 // This does not check placement or mutate City.
@@ -89,37 +77,39 @@ bool CanZoneCityTile(const TileInfo *tp) {
 
 // Read-only admission checks: previews must not execute commands or consume RNG. Invalid tile/tool combinations return
 // false; the result is admission only and native commands use resolved domain predicates.
-bool CanPlaceCityToolCell(const City *city, TileIndex index, int group, int variant) {
-  if (!IsMapTileValid(city, index) || group < 0 || group > CITY_TOOL_GROUP_SIGN ||
+bool CanPlaceCityToolCell(const City *city, TileIndex tile, int group, int variant, int terrain_options) {
+  if (!IsMapTileValid(city, tile) || group < 0 || group > CITY_TOOL_GROUP_SIGN ||
       variant < 0 || variant >= CITY_TOOL_VARIANT_CAPACITY) return false;
-  int tile = ReadTile(city, index);
-  int terrain = ReadTerrainCode(&city->tile[index]);
-  bool water = HasTileWater(&city->tile[index]);
-  int zone = ReadCityZoneKind(&city->tile[index]);
+  const TileInfo *tp = &city->tile[tile];
+  int kind = tp->kind;
+  int terrain = ReadTerrainCode(tp);
+  bool water = HasTileWater(tp);
+  int zone = ReadCityZoneKind(tp);
   bool military = zone == ZONE_MILITARY;
-  CityPoint point = MapTilePt(city, index);
+  CityPoint point = MapTilePt(city, tile);
   if (group == CITY_TOOL_GROUP_SIGN) return true;
   if (group == CITY_TOOL_GROUP_DEMOLISH) {
     if (variant == CITY_DEMOLISH_RAISE || variant == CITY_DEMOLISH_LOWER)
-      return GetCityTerrainCost(city, index, variant == CITY_DEMOLISH_RAISE, variant, city->command_choices.terrain_options).error == CITY_COMMAND_COST_OK;
-    if (variant == CITY_DEMOLISH_CLEAR) return CanBulldozeCityTile(city, index, false, false);
+      return GetCityTerrainCost(city, tile, variant == CITY_DEMOLISH_RAISE, variant,
+          terrain_options).error == CITY_COMMAND_COST_OK;
+    if (variant == CITY_DEMOLISH_CLEAR) return CanBulldozeCityTile(city, tile, false, false);
     if (variant != CITY_DEMOLISH_DEZONE || zone == ZONE_NONE) return true;
   }
   if (group == CITY_TOOL_GROUP_TREE_WATER) {
     if (variant == CITY_TREE_WATER_WATER)
-      return CanPlaceCityCanal(city, index);
-    bool shore = IsTileKindShoreBank(tile) &&
-        ReadCityTileGeometry(city, index).water_surface == CITY_WATER_SURFACE_SHORE;
-    return (!water || shore) && IsTileKindUnbuilt(tile) && tile != TK_RADIOACTIVE_WASTE;
+      return CanPlaceCityCanal(city, tile);
+    bool shore = IsTileKindShoreBank(kind) &&
+        ReadCityTileGeometry(city, tile).water_surface == CITY_WATER_SURFACE_SHORE;
+    return (!water || shore) && IsTileKindUnbuilt(kind) && kind != TK_RADIOACTIVE_WASTE;
   }
   if (group == CITY_TOOL_GROUP_POWER && variant == CITY_POWER_HYDRO)
-    return IsTileKindExposedWater(tile) &&
-        ReadCityTileGeometry(city, index).water_surface == CITY_WATER_SURFACE_RAPIDS;
+    return IsTileKindExposedWater(kind) &&
+        ReadCityTileGeometry(city, tile).water_surface == CITY_WATER_SURFACE_RAPIDS;
   if ((group == CITY_TOOL_GROUP_WATER && variant == CITY_WATER_PIPES) ||
       (group == CITY_TOOL_GROUP_RAIL && variant == CITY_RAIL_SUBWAY)) {
-    int depth = (city->tile[index].altitude & CITY_ALTITUDE_TUNNEL_MASK) >> CITY_ALTITUDE_TUNNEL_SHIFT;
+    int depth = (tp->altitude & CITY_ALTITUDE_TUNNEL_MASK) >> CITY_ALTITUDE_TUNNEL_SHIFT;
     if (military || depth == 1 || depth == 2) return false;
-    int underground = ReadUnderground(city, index);
+    int underground = tp->underground & CITY_UNDERGROUND_KIND_MASK;
     if (group == CITY_TOOL_GROUP_WATER)
       return underground == TUK_CLEAR || underground == TUK_SUBWAY_EW ||
           underground == TUK_SUBWAY_NS ||
@@ -132,20 +122,20 @@ bool CanPlaceCityToolCell(const City *city, TileIndex index, int group, int vari
   bool rail = group == CITY_TOOL_GROUP_RAIL && variant == CITY_RAIL_RAIL;
   bool power = group == CITY_TOOL_GROUP_POWER && variant == CITY_POWER_LINES;
   if (road || rail || power) {
-    if (IsTileKindBridge(tile))
-      return (road || rail) && CanPlaceCityBridgeUnderpass(city, index,
+    if (IsTileKindBridge(kind))
+      return (road || rail) && CanPlaceCityBridgeUnderpass(city, tile,
           rail ? TK_RAIL : TK_ROAD, -1);
-    if (military || tile == TK_RADIOACTIVE_WASTE || tile == TK_PARK) return false;
+    if (military || kind == TK_RADIOACTIVE_WASTE || kind == TK_PARK) return false;
     if (water)
-      return FindCityInfrastructureSpan(city, index, city->geography.rotation, true).end != INVALID_TILE;
-    if (IsTileKindLandscape(tile)) return true;
-    int axis = ReadCityStraightLineAxis(city, index, 0);
+      return FindCityInfrastructureSpan(city, tile, city->geography.rotation, true).end != INVALID_TILE;
+    if (IsTileKindLandscape(kind)) return true;
+    int axis = ReadCityStraightLineAxis(city, tile, 0);
     if (road)
-      return IsTileKindRoadRoute(tile) || axis >= 0;
+      return IsTileKindRoadRoute(kind) || axis >= 0;
     if (rail)
-      return IsTileKindRailRoute(tile) || axis >= 0;
-    return (city->tile[index].flags & TF_POWERABLE) ||
-        (!IsTileKindPlainPowerLine(tile) && axis >= 0);
+      return IsTileKindRailRoute(kind) || axis >= 0;
+    return (tp->flags & TF_POWERABLE) ||
+        (!IsTileKindPlainPowerLine(kind) && axis >= 0);
   }
   if (group == CITY_TOOL_GROUP_ROAD && variant == CITY_ROAD_HIGHWAY) {
     point.x &= ~1; point.y &= ~1;
@@ -154,29 +144,28 @@ bool CanPlaceCityToolCell(const City *city, TileIndex index, int group, int vari
             CITY_SPAN_COMPATIBILITY_INVALID;
   }
   if (group == CITY_TOOL_GROUP_ROAD && variant == CITY_ROAD_TUNNEL)
-    return !water && IsTileKindLandscape(tile) && tile != TK_RADIOACTIVE_WASTE &&
-        ReadUnderground(city, index) == TUK_CLEAR &&
+    return !water && IsTileKindLandscape(kind) && kind != TK_RADIOACTIVE_WASTE &&
+        (tp->underground & CITY_UNDERGROUND_KIND_MASK) == TUK_CLEAR &&
         terrain >= CITY_TERRAIN_SHAPE_1 && terrain <= CITY_TERRAIN_SHAPE_4 &&
-        !(city->tile[index].altitude & CITY_ALTITUDE_TUNNEL_MASK);
+        !(tp->altitude & CITY_ALTITUDE_TUNNEL_MASK);
   if (group == CITY_TOOL_GROUP_ROAD && variant == CITY_ROAD_ONRAMP)
-    return CanPlaceCityOnramp(city, index);
+    return CanPlaceCityOnramp(city, tile);
   if (group == CITY_TOOL_GROUP_RAIL && variant == CITY_RAIL_SUBWAY_RAIL_CONNECTION)
-    return CanPlaceCitySubwayRailConnection(city, index);
+    return CanPlaceCitySubwayRailConnection(city, tile);
   bool zoning = (group >= CITY_TOOL_GROUP_PORT && group <= CITY_TOOL_GROUP_INDUSTRIAL) ||
       (group == CITY_TOOL_GROUP_DEMOLISH && variant == CITY_DEMOLISH_DEZONE);
-  if (zoning) return CanZoneCityTile(&city->tile[index]);
+  if (zoning) return CanZoneCityTile(tp);
   bool marina = group == CITY_TOOL_GROUP_RECREATION && variant == CITY_RECREATION_MARINA;
   int size = kCityToolFootprintSizes[group * CITY_TOOL_VARIANT_CAPACITY + variant];
   if (size > 1 && (point.x == 0 || point.y == 0 || point.x == city->map_width - 1 || point.y == city->map_height - 1))
     return false;
   if (group == CITY_TOOL_GROUP_REWARDS && variant == CITY_REWARD_MAYORS_HOUSE &&
       city->statistics.count[TK_MAYORS_HOUSE]) return false;
-  if (IsTileKindTransportOrBuilding(tile) || tile == TK_RADIOACTIVE_WASTE || tile == TK_PARK ||
+  if (IsTileKindTransportOrBuilding(kind) || kind == TK_RADIOACTIVE_WASTE || kind == TK_PARK ||
       (military && !(city->fixes & (1 << CITY_FIX_MILITARY_GROWTH))))
     return false;
   return (marina && water) || (!water && terrain == CITY_TERRAIN_FLAT);
 }
-
 
 // Placement
 
@@ -184,30 +173,17 @@ bool CanPlaceCityToolCell(const City *city, TileIndex index, int group, int vari
 void UpdateCityZoneRectanglePreview(City *city, TileIndex origin, TileIndex previous, TileIndex next) {
   city->construction.terrain_surcharge_count = 0;
   city->construction.cell_count = 0;
-  CityPoint start = MapTilePt(city, origin), before = MapTilePt(city, previous), after = MapTilePt(city, next);
-  int x = start.x, y = start.y;
-  int previous_x = before.x, previous_y = before.y, next_x = after.x, next_y = after.y;
-  int previous_min_y = IntMin(y, previous_y);
-  int previous_max_y = IntMax(y, previous_y);
-  int previous_min_x = IntMin(x, previous_x);
-  int previous_max_x = IntMax(x, previous_x);
-  int next_min_y = IntMin(y, next_y);
-  int next_max_y = IntMax(y, next_y);
-  int next_min_x = IntMin(x, next_x);
-  int next_max_x = IntMax(x, next_x);
-  int first_y = IntMin(previous_min_y, next_min_y);
-  int last_y = IntMax(previous_max_y, next_max_y);
-  int first_x = IntMin(previous_min_x, next_min_x);
-  int last_x = IntMax(previous_max_x, next_max_x);
-  for (int y = first_y; y <= last_y; ++y) {
-    for (int x = first_x; x <= last_x; ++x) {
-      TileIndex tile_index = MapTileXY(city, x, y);
+  CityRect before = MapTileRectangle(city, origin, previous);
+  CityRect after = MapTileRectangle(city, origin, next);
+  CityRect bounds = UnionCityRects(before, after);
+  for (int y = bounds.top; y < bounds.bottom; ++y) {
+    TileIndex tile_index = MapTileXY(city, bounds.left, y);
+    for (int x = bounds.left; x < bounds.right; ++x, ++tile_index) {
       const TileInfo *tp = &city->tile[tile_index];
       if (!CanZoneCityTile(tp)) continue;
       int zone = ReadCityZoneKind(tp);
-      bool in_previous = y >= previous_min_y && y <= previous_max_y &&
-          x >= previous_min_x && x <= previous_max_x;
-      bool in_next = y >= next_min_y && y <= next_max_y && x >= next_min_x && x <= next_max_x;
+      bool in_previous = y >= before.top && y < before.bottom && x >= before.left && x < before.right;
+      bool in_next = y >= after.top && y < after.bottom && x >= after.left && x < after.right;
       if (zone != city->construction.zone_code && in_next)
         ++city->construction.cell_count;
       if (in_previous != in_next)
@@ -236,9 +212,9 @@ i64 CalculateCityZoneCost(const City *city, TileIndex start, TileIndex end, int 
   i64 cost = 0;
   for (int y = bounds.top; y < bounds.bottom; ++y) {
     TileIndex tile = MapTileXY(city, bounds.left, y);
-    for (int x = bounds.left; x < bounds.right; ++x, ++tile)
-      if (CanZoneCityTile(&city->tile[tile]) &&
-          ReadCityZoneKind(&city->tile[tile]) != zone)
+    const TileInfo *tp = &city->tile[tile];
+    for (int x = bounds.left; x < bounds.right; ++x, ++tp)
+      if (CanZoneCityTile(tp) && ReadCityZoneKind(tp) != zone)
         cost += unit_cost;
   }
   return cost;
@@ -279,29 +255,24 @@ CityCommandCost GetCityZoneRectangleCost(const City *city, TileIndex start, Tile
 // Apply the live prepared zone/cost state to valid endpoints. The caller owns pricing and payment; nested callers
 // may have overwritten construction state, so this operation does not reconstruct it from an earlier selection.
 i64 ApplyPreparedCityZoneRectangle(City *city, TileIndex origin_tile, TileIndex endpoint) {
-  CityPoint origin_point = MapTilePt(city, origin_tile);
-  CityPoint end_point = MapTilePt(city, endpoint);
   if (city->construction.cost == 0 &&
       CityZoneRectangleContainsZone(city, origin_tile, endpoint, city->construction.zone_code)) {
     return true;
   }
   if (!city->construction.cost) return CITY_COMMAND_COST_BLOCKED;
   InvalidateCityInformation(city->game, CITY_UPDATE_STATUS);
-  int first_y = IntMin(origin_point.y, end_point.y);
-  int last_y = IntMax(origin_point.y, end_point.y);
-  int first_x = IntMin(origin_point.x, end_point.x);
-  int last_x = IntMax(origin_point.x, end_point.x);
-  for (int y = first_y; y <= last_y; ++y)
-    for (int x = first_x; x <= last_x; ++x) {
-      const TileIndex cell_index = MapTileXY(city, x, y);
-      TileInfo *tp = &city->tile[cell_index];
-      int tile = tp->kind;
+  CityRect bounds = MapTileRectangle(city, origin_tile, endpoint);
+  for (int y = bounds.top; y < bounds.bottom; ++y) {
+    TileIndex tile = MapTileXY(city, bounds.left, y);
+    for (int x = bounds.left; x < bounds.right; ++x, ++tile) {
+      TileInfo *tp = &city->tile[tile];
       if (!CanZoneCityTile(tp)) continue;
-      if (city->construction.zone_code == ZONE_NONE && IsLegacyRubbleKind(tile))
-        ReplaceCityTileAndStatistics(city, cell_index, TK_CLEAR);
-      WriteTileZoneByte(tp, (ReadTileZoneByte(tp) & CITY_ZONE_METADATA_MASK) | (u8)city->construction.zone_code);
-      InvalidateTile(city, cell_index);
+      if (city->construction.zone_code == ZONE_NONE && IsLegacyRubbleKind(tp->kind))
+        ReplaceCityTileAndStatistics(city, tile, TK_CLEAR);
+      WriteCityZoneKind(tp, city->construction.zone_code);
+      InvalidateTile(city, tile);
     }
+  }
   return true;
 }
 
@@ -312,6 +283,16 @@ i64 PlaceCityZoneRectangleAt(City *city, TileIndex start, TileIndex end, int zon
   city->construction.zone_code = zone;
   city->construction.cost = CalculateCityZoneCost(city, start, end, zone, kCityZoneCosts[zone]);
   return ApplyPreparedCityZoneRectangle(city, start, end);
+}
+
+// Apply the supplied ZoneKind to an inclusive rectangle with resolved endpoints. Invalid endpoints and zone codes are
+// rejected; TEST only quotes cost, and execution updates the construction working state before committing eligible
+// cells.
+i64 CmdPlaceZoneRect(City *city, u32 flags, TileIndex tile, int zone, TileIndex end) {
+  if (!IsMapTileValid(city, tile) || !IsMapTileValid(city, end) ||
+      zone < 0 || zone >= ZONE_RESERVED_FIRST || kCityZoneCosts[zone] < 0) return CITY_COMMAND_COST_INVALID;
+  if (flags & CITY_COMMAND_TEST) return CityCommandPriceResult(GetCityZoneRectangleCost(city, tile, end, zone));
+  return PlaceCityZoneRectangleAt(city, tile, end, zone);
 }
 
 // Tables
@@ -417,7 +398,6 @@ const u32 kCityToolCosts[CITY_TOOL_GROUP_COUNT * CITY_TOOL_VARIANT_CAPACITY] = {
   CITY_TOOL_COST_UNAVAILABLE, CITY_TOOL_COST_UNAVAILABLE, CITY_TOOL_COST_UNAVAILABLE, CITY_TOOL_COST_UNAVAILABLE
 };
 
-
 const u8 kZoneTerrainSurchargeFlags[16] = {
   0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0
 };
@@ -433,7 +413,7 @@ const u8 kPowerPlantToolVariants[TK_COAL_POWER_PLANT - TK_GAS_POWER_PLANT + 1] =
 };
 
 static CityCommandCost PlanCityConstruction(const City *city, TileIndex start, TileIndex end, int group,
-    int variant, int span_styles, CityInfrastructureSpan *planned_span) {
+    int variant, CityInfrastructureSpan *planned_span) {
   if (planned_span) *planned_span = (CityInfrastructureSpan){.end = INVALID_TILE, .error_tile = INVALID_TILE};
   CityCommandCost quote = {.error = CITY_COMMAND_COST_INVALID, .error_tile = INVALID_TILE};
   if (!IsMapTileValid(city, start) || !IsMapTileValid(city, end) || group < 0 ||
@@ -451,7 +431,7 @@ static CityCommandCost PlanCityConstruction(const City *city, TileIndex start, T
     CityInfrastructureKind kind = highway ? CITY_INFRASTRUCTURE_HIGHWAY :
         road ? CITY_INFRASTRUCTURE_ROAD : rail ? CITY_INFRASTRUCTURE_RAIL :
         power ? CITY_INFRASTRUCTURE_POWER : pipe ? CITY_INFRASTRUCTURE_PIPE : CITY_INFRASTRUCTURE_SUBWAY;
-    return GetCityInfrastructureCost(city, start, end, kind, span_styles, planned_span);
+    return GetCityInfrastructureCost(city, start, end, kind, -1, planned_span);
   } else if ((group >= CITY_TOOL_GROUP_PORT && group <= CITY_TOOL_GROUP_INDUSTRIAL) ||
       (group == CITY_TOOL_GROUP_DEMOLISH && variant == CITY_DEMOLISH_DEZONE)) {
     int zone = CityToolZoneCode(group, variant);
@@ -488,7 +468,7 @@ static CityCommandCost PlanCityConstruction(const City *city, TileIndex start, T
     int replacement = GetCityFacilityTile(group, variant);
     if (replacement != TK_CLEAR) {
       return GetCityBuildingCost(city, start, replacement);
-    } else if (!CanPlaceCityToolCell(city, start, group, variant)) {
+    } else if (!CanPlaceCityToolCell(city, start, group, variant, 0)) {
       return quote;
     }
     quote.cost = group == CITY_TOOL_GROUP_RAIL && variant == CITY_RAIL_SUBWAY_RAIL_CONNECTION ? 0 : unit_cost;
@@ -500,12 +480,12 @@ static CityCommandCost PlanCityConstruction(const City *city, TileIndex start, T
 
 CityInfrastructureSpan GetCityConstructionSpan(const City *city, TileIndex start, TileIndex end, int group, int variant) {
   CityInfrastructureSpan span;
-  PlanCityConstruction(city, start, end, group, variant, -1, &span);
+  PlanCityConstruction(city, start, end, group, variant, &span);
   return span;
 }
 
 CityCommandCost PriceCityConstruction(const City *city, TileIndex start, TileIndex end, int group, int variant) {
-  return ApplyCityCommandCostPolicy(city, PlanCityConstruction(city, start, end, group, variant, -1, NULL));
+  return ApplyCityCommandCostPolicy(city, PlanCityConstruction(city, start, end, group, variant, NULL));
 }
 
 // The preview retains the requested price even when the treasury cannot afford it.

@@ -131,7 +131,7 @@ def SubwayRailPortal(direction):
   Face([(.11,.20,5),(.89,.20,5),(.89,.31,5),(.11,.31,5)],(194,191,173))
   Face([(.11,.31,1),(.89,.31,1),(.89,.31,5),(.11,.31,5)],(124,128,121))
   for layer,depth,points,color in sorted(faces,key=lambda face:face[:2]):
-    draw.polygon([(round((64+64*(u-v))*detail),round((64+32*(u+v)-z)*detail))
+    draw.polygon([(round((64+64*(v-u))*detail),round((64+32*(u+v)-z)*detail))
         for u,v,z in points],fill=(*color,255))
   return Downsample(image,(128,128))
 

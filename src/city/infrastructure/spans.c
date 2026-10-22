@@ -1,32 +1,39 @@
+#include "city/infrastructure/spans.h"
+
+#include "city/infrastructure/lines.h"
+#include "city/maps/terrain.h"
 #include "city/infrastructure/surface_lines.h"
 #include "city/infrastructure/bridges.h"
 #include "city/infrastructure/power_lines.h"
-#include "city/maps/water.h"
 #include "city/engine/commands.h"
-#include "audio/types.h"
-#include "city/engine/command_types.h"
-#include "city/infrastructure/types.h"
-#include "city/maps/tile_storage.h"
-#include "city/tools/types.h"
-#include "audio/audio.h"
-#include "city/presentation.h"
-#include <assert.h>
-#include <stdlib.h>
-#include <string.h>
-
-#include "city/state.h"
-#include "city/growth/growth.h"
-#include "city/infrastructure/infrastructure.h"
 #include "city/maps/layers.h"
-#include "city/maps/map.h"
-#include "city/tools/tools.h"
-#include "city/saveload/file.h"
-#include "game/state.h"
-#include "audio/state.h"
-#include "assets/state.h"
-#include "base/text.h"
-#include "city/maps/map_types.h"
+#include "city/presentation.h"
 #include "city/saveload/map_format.h"
+#include "city/state.h"
+#include <assert.h>
+
+const u16 kSpanCostPerCell[CITY_SPAN_STYLE_COUNT] = {
+  [CITY_SPAN_POWER] = 10,
+  [CITY_SPAN_RAIL] = 75,
+  [CITY_SPAN_CAUSEWAY] = 25,
+  [CITY_SPAN_RAISING_BRIDGE] = 50,
+  [CITY_SPAN_SUSPENSION] = 75,
+  [CITY_SPAN_HIGHWAY] = 200,
+  [CITY_SPAN_REINFORCED_HIGHWAY] = 300,
+  [CITY_SPAN_WOOD] = 20,
+  [CITY_SPAN_CONCRETE] = 28,
+  [CITY_SPAN_ARCH_STEEL] = 36,
+  [CITY_SPAN_SUSPENSION_CONCRETE] = 42,
+  [CITY_SPAN_SUSPENSION_STEEL] = 46,
+  [CITY_SPAN_SUSPENSION_YELLOW] = 48,
+  [CITY_SPAN_CANTILEVER_STEEL] = 56,
+  [CITY_SPAN_CANTILEVER_BROWN] = 58,
+  [CITY_SPAN_CANTILEVER_RED] = 62,
+  [CITY_SPAN_GIRDER_STEEL] = 60,
+  [CITY_SPAN_TUBULAR_STEEL] = 64,
+  [CITY_SPAN_TUBULAR_YELLOW] = 95,
+  [CITY_SPAN_TUBULAR_SILICON] = 128,
+};
 
 const char *const kCitySpanNames[CITY_SPAN_STYLE_COUNT] = {
   "Raised power lines", "Rail bridge", "Causeway", "Raising bridge", "Suspension bridge",
@@ -36,7 +43,7 @@ const char *const kCitySpanNames[CITY_SPAN_STYLE_COUNT] = {
   "Girder, steel", "Tubular, steel", "Tubular, yellow steel", "Tubular, silicon"
 };
 
-// Water flags identify the crossing; water height supplies its level. Terrain codes describe the bed or shoreline, not
+// Water kinds identify the crossing; water height supplies its level. Terrain codes describe the bed or shoreline, not
 // a different kind of bridge.
 static int NativeSpanBankStyles(const City *city, TileIndex tile, int water, int direction) {
   assert(IsMapTileValid(city, tile));
@@ -64,7 +71,7 @@ static int NativeSpanBankStyles(const City *city, TileIndex tile, int water, int
 static CityInfrastructureSpan FindNativeWaterSpan(const City *city, TileIndex origin, int direction) {
   CityInfrastructureSpan span = {.start = origin, .end = INVALID_TILE, .error_tile = INVALID_TILE, .direction = direction,
       .error = CITY_NOTICE_NEEDS_OPPOSITE_SHORE};
-  int dx = kSpanXStep[direction], dy = kSpanYStep[direction];
+  int dx = kLineXStep[direction], dy = kLineYStep[direction];
   TileIndex start = GetRelativeTileOrInvalid(city, origin, -dx, -dy);
   if (start == INVALID_TILE) return span;
   int water = ReadCityWaterHeight(&city->tile[origin]);
@@ -153,8 +160,8 @@ CityInfrastructureSpan FindCityInfrastructureSpan(const City *city, TileIndex or
       span.error = CITY_NOTICE_CROSSING_BLOCKED;
       return span;
     }
-    end_y += kSpanYStep[direction];
-    end_x += kSpanXStep[direction];
+    end_y += kLineYStep[direction];
+    end_x += kLineXStep[direction];
     end_index = MapTileXYOrInvalid(city, end_x, end_y);
     if (end_index == INVALID_TILE) {
       span.error = CITY_NOTICE_NEEDS_OPPOSITE_SHORE;
@@ -165,7 +172,7 @@ CityInfrastructureSpan FindCityInfrastructureSpan(const City *city, TileIndex or
     if (next_terrain < CITY_TERRAIN_WATER_FIRST || next_terrain >= CITY_TERRAIN_BANK_END)
       break;
   }
-  span.end = MapTileXY(city, end_x - kSpanXStep[direction], end_y - kSpanYStep[direction]);
+  span.end = MapTileXY(city, end_x - kLineXStep[direction], end_y - kLineYStep[direction]);
   span.direction = direction;
   span.length = distance;
   return span;
@@ -237,7 +244,7 @@ i64 PlaceInfrastructureSpan(City *city, TileIndex origin_tile, int styles, int c
     PlaceCityRailCell(city, tile_index);
   else if ((choice >= CITY_SPAN_CAUSEWAY && choice <= CITY_SPAN_SUSPENSION) || native_road)
     PlaceCityRoadCell(city, tile_index);
-  int stride = kSpanYStep[direction] * city->map_width + kSpanXStep[direction];
+  int stride = kLineYStep[direction] * city->map_width + kLineXStep[direction];
   for (int position = 1; position < distance - 1; ++position) {
     tile_index += stride;
     if (choice == CITY_SPAN_POWER) {

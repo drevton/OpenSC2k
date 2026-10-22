@@ -3,7 +3,6 @@
 
 #include "city/economy/types.h"
 #include "city/maps/map_types.h"
-#include "city/economy/economy.h"
 #include "city/types.h"
 
 // Native nonmodal questions retain the original caller's pending game context.
@@ -56,9 +55,9 @@ typedef struct {
 
 enum { CITY_PENDING_QUESTION_CAPACITY = 16 };
 
-int CityQuestionCount(City *city);
-const CityQuestion *CityQuestionAt(City *city, int index);
-const CityQuestion *FindCityQuestion(City *city, int id);
+int CityQuestionCount(const City *city);
+const CityQuestion *CityQuestionAt(const City *city, int index);
+const CityQuestion *FindCityQuestion(const City *city, int id);
 bool QueueCityFacilityNameQuestion(City *city, int id, TileIndex tile);
 enum {
   CITY_FACILITY_OPENING_READY = 1,
@@ -76,5 +75,8 @@ bool QueueCityBudgetAdvisorQuestion(City *city, int id, i32 budget_session,
 i64 ReplyToCityQuestion(City *city, int id, CityQuestionReply reply);
 bool ReplyToQuestion(City *city, int id, CityQuestionReply reply);
 bool CanReplyToCityQuestion(City *city, int id, CityQuestionReply reply);
+
+// Resolved scalar reply command. TEST validates only; execution preserves the retained caller's result.
+i64 CmdReplyToQuestion(City *city, u32 flags, int id, int answer, int selection);
 
 #endif

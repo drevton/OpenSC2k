@@ -1,0 +1,30 @@
+{
+  "tool": "image_gen.imagegen",
+  "scope": "Smaller habitat lakes and fewer, finer subdued dome frame members; scale and longer supports preserved.",
+  "reproduction_note": "Exact prompt, input snapshot and raw output retained. Built-in tool exposes no seed, effort, model revision or quality setting.",
+  "runs": [
+    {
+      "id": "smaller-lakes-subtle-frame",
+      "kind": 254,
+      "tool": "image_gen.imagegen",
+      "args": {
+        "prompt": "Use case: precise-object-edit. Image1 is the EDIT TARGET, an isolated Launch Arcology game sprite. Make ONLY these two changes INSIDE/ON THE GLASS DOME:\n1. Reduce the visible blue lakes/ponds by about30% in water-surface area. Keep smaller attractive irregular blue pools and the small connecting waterfall/stream, but bring the grassy banks inward so green land, paths and rocky garden details occupy the reclaimed area. Keep the landscape lush and varied with readable little trees/shrubs/rocks; do not replace the lakes with buildings or new mountains.\n2. Reduce the visually dominant RED TRIANGULAR GRID. Use fewer, finer structural members and larger uninterrupted glass panels: remove about one third of the small crossing/diagonal brace segments while keeping a coherent structurally plausible dome frame. The remaining ribs should be about half as thick, in subdued dark bronze/neutral graphite with only restrained copper highlights, not bright red/orange lines or large red circular joint buttons. Make junctions small and discreet. Retain the dome's round geodesic silhouette, fine perimeter rim and a few graceful structural curves so the glass shell still reads clearly. The interior landscape and transparent blue glass should dominate rather than the grid.\nSTRICT INVARIANTS: Keep the dome's EXACT outer shape/width/height and position, same cylindrical habitat below it, identical building height/width, all body/vent/diagonal blue gallery details, LONG SUPPORT LEGS and small ground-level entrance pavilion exactly as supplied. Do NOT shorten legs, fatten the body, resize or reposition the building, change the camera or add more storeys. Preserve the same full1099x1431canvas and identical pixel-space silhouette/placement if possible. No artistic changes below the dome except any tiny necessary rim integration. Neutral natural DAYTIME illumination. Entire building is a true RGBA transparent cutout: no pavement diamond, base floor, backdrop, shadow halo, planter boxes, vehicles, writing or new glow. Keep alpha-transparent gaps between the legs and every foot and crown in frame. One same-angle sprite only.",
+        "referenced_image_paths": [
+          "assets/landscape/civic/254-launch-arcology/scale-revision/longer-legs-raw.png"
+        ],
+        "transparent_background": true
+      },
+      "original_input_path": "assets/landscape/civic/254-launch-arcology/approved-original.png",
+      "input_snapshot_note": "The installed input is preserved at the referenced longer-legs raw output.",
+      "prompt_file": "prompt.txt",
+      "output": "smaller-lakes-subtle-frame-raw.png",
+      "output_sha256": "f52fd4bbccff295b8473af3db57cd8f6b6b3a0fa8d741073d8e662eb2a3d0327",
+      "reference_images": [
+        {
+          "path": "assets/landscape/civic/254-launch-arcology/scale-revision/longer-legs-raw.png",
+          "sha256": "c71817b73f24c211db7798cda29fe84fc05817a90bc241a9cf1b221cfbcdc613"
+        }
+      ]
+    }
+  ]
+}

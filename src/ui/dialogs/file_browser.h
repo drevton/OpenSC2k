@@ -1,8 +1,10 @@
 #ifndef SC2K_UI_FILE_BROWSER_H
 #define SC2K_UI_FILE_BROWSER_H
 
-#include "city/saveload/summary.h"
-#include "drawing/drawing.h"
+#include "city/types.h"
+
+typedef struct Canvas Canvas;
+typedef struct Window Window;
 
 enum { CITY_FILE_BROWSER_WIDTH = 500, CITY_FILE_BROWSER_HEIGHT = 286, CITY_FILE_BROWSER_ROW_HEIGHT = 10 };
 typedef enum CityFileBrowserControl {

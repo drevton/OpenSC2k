@@ -1,3 +1,7 @@
+#include "city/saveload/services.h"
+#include "city/saveload/state.h"
+#include "city/saveload/events_format.h"
+#include "city/saveload/map_format.h"
 #include "city/events/events.h"
 #include "city/maps/tile_storage.h"
 #include "game/state.h"
@@ -7,6 +11,8 @@
 #include "city/saveload/city_file_internal.h"
 #include "city/maps/layers.h"
 #include "base/text.h"
+#include "base/byte_order.h"
+#include "game/errors.h"
 
 // Write a staged block through the active save stream and report its error at that boundary. Bytes must provide size
 // readable bytes; false stops normal serialization while retaining partial output and the first I/O cause.

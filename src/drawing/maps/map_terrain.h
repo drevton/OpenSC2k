@@ -2,6 +2,7 @@
 #define SC2K_DRAWING_MAPS_MAP_TERRAIN_H
 
 #include "city/maps/map.h"
+#include "city/maps/terrain.h"
 #include "drawing/maps/map_camera.h"
 #include "drawing/sprites/sprites.h"
 
@@ -27,7 +28,5 @@ void DrawCityMapTerrainSkirt(City *city, TileIndex tile, int zoom, int screen_x,
 // overlays may supply a colored surface. Geometry must match the tile.
 void DrawCityMapTerrainTile(City *city, TileIndex tile, int zoom, int sprite, int screen_x, int ground_y,
     const CityTileGeometry *geometry);
-// Placement overlays read local UI selections without changing City.
-void DrawCityMapPlacementTile(City *city, TileIndex tile);
 
 #endif

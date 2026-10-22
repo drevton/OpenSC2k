@@ -1,7 +1,12 @@
-#include "ui/windows/state.h"
-#include "drawing/drawing_internal.h"
+#include "ui/windows/window_internal.h"
 
-// Drawing subsystem: window pixels.
+#include <string.h>
+
+#include "drawing/raster/canvas_primitives.h"
+#include "ui/menus/menu.h"
+#include "ui/news/newspaper.h"
+
+// Convert window geometry between logical UI units, map pixels and framebuffer pixels.
 
 static const CityRect *CanvasPixelLogicalBounds(const CityCanvasDesktop *desktop, u32 id) {
   for (i32 i = 0; i < desktop->count; ++i)
@@ -14,7 +19,7 @@ static CanvasPixelPosition *FindCanvasPixelPosition(CityCanvasDesktop *desktop, 
   if (!desktop->pixel_state.scale) return NULL;
   // Explicit positioning owns subpixel anchors; read-only queries derive movement without changing them.
   CanvasPixelPosition *available = NULL;
-  for (i32 i = 0; i < 16; ++i) {
+  for (i32 i = 0; i < CITY_CANVAS_WINDOW_CAPACITY; ++i) {
     CanvasPixelPosition *p = &desktop->pixel_state.positions[i];
     if (p->id == id) {
       p->x += CanvasScaleCeil(bounds.left, desktop->pixel_state.scale, 100) -
@@ -42,7 +47,7 @@ void Sc2kCanvasDesktopPixelMetrics(CityCanvasDesktop *desktop, i32 scale, i32 ma
   } else if (desktop->pixel_state.scale != scale || desktop->pixel_state.map_scale != map_scale) {
     // Preserve the sub-unit placement when logical bounds are resized by the
     // host. Normal moves/recentering still follow their new logical bounds.
-    for (i32 i = 0; i < 16; ++i) {
+    for (i32 i = 0; i < CITY_CANVAS_WINDOW_CAPACITY; ++i) {
       CanvasPixelPosition *p = &desktop->pixel_state.positions[i];
       const CityRect *b = p->id ? CanvasPixelLogicalBounds(desktop, p->id) : NULL;
       if (!b) { p->id = 0; continue; }
@@ -64,7 +69,7 @@ CityRect Sc2kCanvasDesktopPixelBounds(const CityCanvasDesktop *desktop, u32 id) 
   if (!desktop->pixel_state.scale) return *logical;
   int scale = desktop->pixel_state.scale;
   int x = CanvasScaleCeil(logical->left, scale, 100), y = CanvasScaleCeil(logical->top, scale, 100);
-  for (int i = 0; i < 16; ++i) {
+  for (int i = 0; i < CITY_CANVAS_WINDOW_CAPACITY; ++i) {
     const CanvasPixelPosition *p = &desktop->pixel_state.positions[i];
     if (p->id != id) continue;
     x += p->x - CanvasScaleCeil(p->logical_x, scale, 100);
@@ -140,16 +145,11 @@ void Sc2kCanvasDesktopPixelPointer(const CityCanvasDesktop *desktop, u32 capture
 }
 
 u32 Sc2kCanvasDesktopFocusPixels(CityCanvasDesktop *desktop, i32 x, i32 y) {
-  for (i32 i = desktop->count - 1; i >= 0; --i) {
-    Window window = desktop->windows[i];
-    if (!window.visible || !CanvasPointInRect(
-        Sc2kCanvasDesktopPixelBounds(desktop, window.window_id), x, y)) continue;
-    for (i32 next = i; next < desktop->count - 1; ++next) desktop->windows[next] = desktop->windows[next + 1];
-    desktop->windows[desktop->count - 1] = window;
-    Sc2kDirtyMarkRect(&desktop->dirty, CanvasWindowPaintRect(&window));
-    return window.window_id;
-  }
-  return 0;
+  Window *window = FindCityWindowAtPixels(desktop, x, y);
+  if (!window) return 0;
+  u32 id = window->window_id;
+  FocusCanvasWindow(desktop, id, false);
+  return id;
 }
 
 void Sc2kCanvasDesktopBeginPixelDrag(CityCanvasDesktop *desktop, i32 x, i32 y) {

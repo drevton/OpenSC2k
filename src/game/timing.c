@@ -1,3 +1,4 @@
+#include "city/engine/clock.h"
 // Host clock sampling and presentation deadlines, separate from City time.
 #include "city/engine/city_types.h"
 #include "game/timing.h"
@@ -14,6 +15,44 @@ static u32 ReadGameDelayClock(Game *game, bool poll_timers) {
   const GameObservation *observer = game->observation;
   if (observer && observer->delay_clock) return observer->delay_clock(game, poll_timers);
   return (u32)(u64)(ReadGameTime(game, GAME_TIME_REALTIME) * 1000);
+}
+
+// Advance the City's logical clock by one presentation-delay frame. Returns whether that advance crossed the cadence
+// counter boundary; this function advances even when its Boolean result is false.
+bool AdvanceGameDelayFrame(Game *game) {
+  u64 before = SimulationFrameCount(game->city);
+  AdvanceCityClock(game->city, CITY_CLOCK_DELAY, 1);
+  return before / CITY_CADENCE_INTERVAL_MS != SimulationFrameCount(game->city) / CITY_CADENCE_INTERVAL_MS;
+}
+
+// Observe logical time before advancing a screen-shake frame, then publish that sample to the observer.
+u32 ReadCityScreenShakeTime(City *city) {
+  u32 value = SimulationFrameTime(city);
+  AdvanceCityClock(city, CITY_CLOCK_SCREEN_SHAKE, 1);
+  if (city->game != NULL && city->game->time_sampled != NULL)
+    city->game->time_sampled(city->game, value);
+  return value;
+}
+
+// Observe animation time without advancing City or sampling the host clock.
+u32 ReadCityAnimationTime(City *city) {
+  u32 value = SimulationFrameTime(city);
+  if (city->game != NULL && city->game->time_sampled != NULL)
+    city->game->time_sampled(city->game, value);
+  return value;
+}
+
+// Deliver at most one due cadence from the retained delay poll; ordinary Game delays use the outer cadence loop.
+void PumpGameDelayCadence(Game *game) {
+  const GameObservation *observer = game->observation;
+  bool due;
+  if (observer && observer->poll_delay_cadence) due = observer->poll_delay_cadence(game);
+  else {
+    due = AdvanceGameDelayFrame(game);
+    if (game->cadence_polled != NULL) game->cadence_polled(game, due);
+  }
+  if (due)
+    UpdateCityCadence(game->city);
 }
 
 void BeginGameDelay(Game *game, GameDelay *delay, int milliseconds, bool poll_timers) {

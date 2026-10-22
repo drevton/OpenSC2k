@@ -1,31 +1,37 @@
-#include "city/infrastructure/types.h"
-#include "city/maps/map_types.h"
+#include "city/engine/clock.h"
+#include <string.h>
+
+#include "game/audio.h"
+#include "base/text.h"
 #include "base/time.h"
-#include "ui/tools/tools.h"
-#include "game/application_internal.h"
 #include "city/economy/economy.h"
 #include "city/engine/simulation.h"
+#include "city/events/news.h"
+#include "city/infrastructure/types.h"
+#include "city/maps/map_types.h"
+#include "city/state.h"
+#include "drawing/display.h"
+#include "drawing/state.h"
+#include "game/application.h"
+#include "game/commands.h"
+#include "game/errors.h"
+#include "game/frame.h"
+#include "game/graphics.h"
 #include "game/observation.h"
-
-bool ScreenshotCityCanvas(City *city, const char *path, int physical) {
-  Drawing *drawing = city->game->drawing;
-  FILE *file = fopen(path, "wb");
-  if (file == NULL)
-    return false;
-  i32 factor = physical ? drawing->map_pixel_scale : 1;
-  const Canvas *canvas = &drawing->framebuffer;
-  i32 output_width = physical ? canvas->width : kDefaultCityCanvasWidth;
-  i32 output_height = physical ? canvas->height : kDefaultCityCanvasHeight;
-  i32 ok = fprintf(file, "P6\n%d %d\n255\n", output_width, output_height) > 0;
-  for (i32 index = 0; ok && index < output_width * output_height; ++index) {
-    i32 x = index % output_width, y = index / output_width;
-    u32 color = canvas->pixels[(size_t)(y * drawing->map_pixel_scale / factor) * canvas->stride +
-        x * drawing->map_pixel_scale / factor];
-    u8 rgb[] = {(u8)(color >> 16), (u8)(color >> 8), (u8)color};
-    ok = fwrite(rgb, 1, 3, file) == 3;
-  }
-  return fclose(file) == 0 && ok;
-}
+#include "game/state.h"
+#include "game/update.h"
+#include "ui/charts/charts.h"
+#include "ui/dialogs/alerts.h"
+#include "ui/dialogs/budget.h"
+#include "ui/dialogs/information.h"
+#include "ui/dialogs/name_editor.h"
+#include "ui/dialogs/scenario.h"
+#include "ui/input.h"
+#include "ui/news/newspaper.h"
+#include "ui/sdl.h"
+#include "ui/state.h"
+#include "ui/tools/tools.h"
+#include "ui/windows/tooltips.h"
 
 static void TrackScriptPlacementDrag(Game *game, const CityCommand *arguments,
     const CityPointerInput input[2], bool infrastructure) {
@@ -95,7 +101,8 @@ bool ApplicationNextScriptAction(Game *game) {
         .shift = !!(key & CITY_HOTKEY_SHIFT), .ctrl = !!(key & CITY_HOTKEY_CTRL), .alt = !!(key & CITY_HOTKEY_ALT)};
     DispatchCityCanvasEvent(game->city, &event);
   } else if (strncmp(line, "screenshot ", 11) == 0) {
-    if (!RedrawCityCanvas(game->city, NULL) || !ScreenshotCityCanvas(game->city, line + 11, 0)) game->execution_failed = 1;
+    if (!RedrawCityCanvas(game->city, NULL) || !ScreenshotCityCanvas(game, line + 11, false))
+      game->execution_failed = true;
   } else if (strncmp(line, "type ", 5) == 0) {
     const char *text = line + 5;
     while (*text) {
@@ -200,7 +207,7 @@ bool ApplicationNextScriptAction(Game *game) {
     }
     i32 bitmap_id, text_id;
     i32 edition;
-    if (sscanf(line, "newspaper %d %c", &edition, &trailing) == 1 && edition >= 0 && edition < 6) {
+    if (sscanf(line, "newspaper %d %c", &edition, &trailing) == 1 && IsCityNewspaperEditionValid(edition)) {
       PresentCityNewspaperEdition(game->city, edition);
       return true;
     }
@@ -209,9 +216,10 @@ bool ApplicationNextScriptAction(Game *game) {
       return true;
     }
     int width, height;
-    if (sscanf(line, "resize %d %d %c", &width, &height, &trailing) == 2 && width > 0 && height > 0 && game->drawing->ui_display) {
-      Sc2kSDLResize(game->drawing->ui_display, width, height);
-      if (!RedrawCityCanvas(game->city, game->drawing->ui_display)) game->execution_failed = true;
+    if (sscanf(line, "resize %d %d %c", &width, &height, &trailing) == 2 &&
+        width > 0 && height > 0 && game->ui->display) {
+      Sc2kSDLResize(game->ui->display, width, height);
+      if (!RedrawCityCanvas(game->city, game->ui->display)) game->execution_failed = true;
       return true;
     }
     float wheel_x, wheel_y;

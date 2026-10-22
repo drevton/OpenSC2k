@@ -3,6 +3,14 @@
 
 #include "city/types.h"
 
+typedef struct CityExtraMapView CityExtraMapView;
+
+// Borrowed for one synchronous paint/damage visit. A null view selects Drawing's main map target.
+typedef struct CityMapPaint {
+  City *city;
+  CityExtraMapView *view;
+} CityMapPaint;
+
 // Main-map renderer selector: distinct from the dialog's combined codes.
 typedef enum CityMapDataMode {
   CITY_DATA_MODE_NONE = 0,
@@ -78,33 +86,27 @@ typedef struct {
   u32 underground[5];
 } CityMapOverlaySettings;
 
-typedef struct __attribute__((packed)) {
-  u16 y;
-  u16 unknown_02;
-  u16 x;
-  u16 unknown_06;
-  u16 mode;
-} CitySavedViewState;
+// Loaded camera parameters awaiting restoration; no executable layout or reserved fields.
+typedef struct {
+  u16 x, y, zoom;
+} CityLoadedMapView;
 
 typedef struct {
   i16 min_y, max_y, min_x, max_x;
 } CityMapSelectionBounds;
-// Borrowed target snapshot for temporary preview-surface binding; owns no pixels.
-typedef struct {
-  u8 *pixels;
-  u32 pixel_stride;
-  int mode_word;
-  CityRect clip;
-} CityMapImmediatePaintState;
+
+// Camera and pointer state; pixel targets belong to the bound canvas, not to a viewport.
 struct CityMapViewConfig {
-  u32 paint_pixel_stride, paint_mode_word;
   int vertical_scroll_position, horizontal_scroll_position;
   CityRect pointer_exclusion_rect, view_rect;
   int pointer_x, pointer_y;
   u8 zoom, rotation;
   u8 pointer_command_stage, pointer_drag_active, pointer_moved, pan_capture_active, magnified_large_zoom;
-  u8 *pixels;
 };
+
+// Logical sprite zoom and display magnification for an extra map camera; no window or input state is read.
+int CityViewportMapZoom(const CityExtraMapView *view);
+int CityViewportMagnification(const CityExtraMapView *view);
 
 // Original camera levels 0..3; level 3 magnifies the large sprite set.
 // Presentation levels include the extra magnified view of the large map.

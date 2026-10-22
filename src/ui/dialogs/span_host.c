@@ -1,41 +1,176 @@
-#include "city/infrastructure/bridges.h"
-#include "city/engine/city_types.h"
-#include "city/engine/command_types.h"
-#include "city/infrastructure/types.h"
-#include "ui/windows/state.h"
-#include "city/presentation.h"
-#include "game/observation.h"
-#include "game/state.h"
-#include "audio/state.h"
-#include "city/state.h"
-#include "drawing/state.h"
-#include "assets/state.h"
-#include "assets/catalog.h"
-#include "ui/state.h"
-#include "ui/tools/tools.h"
+#include "city/infrastructure/spans.h"
+#include "ui/windows/window_internal.h"
+#include "ui/commands.h"
+#include "game/commands.h"
+#include "ui/dialogs/spans.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "ui/startup/services.h"
-#include "drawing/drawing.h"
-#include "ui/dialogs/span_internal.h"
-
-#include "game/application_internal.h"
-#include "city/economy/state.h"
-#include "city/engine/simulation.h"
-#include "city/infrastructure/infrastructure.h"
+#include "assets/state.h"
+#include "city/infrastructure/bridges.h"
+#include "city/state.h"
+#include "drawing/bitmaps.h"
+#include "drawing/fonts/fonts.h"
+#include "drawing/raster/canvas_primitives.h"
+#include "drawing/raster/canvas_raster_internal.h"
 #include "game/errors.h"
-#include "ui/dialogs/alerts.h"
-#include "ui/input.h"
+#include "game/observation.h"
+#include "game/state.h"
+#include "ui/dialogs/dialogs.h"
+#include "ui/dialogs/span_internal.h"
 #include "ui/map.h"
-#include "ui/news/newspaper.h"
-#include "drawing/drawing_internal.h"
-#include "ui/charts/charts.h"
-#include "ui/commands.h"
+#include "ui/sdl.h"
+#include "ui/state.h"
+#include "ui/text/text.h"
+#include "ui/windows/controls.h"
+#include "ui/windows/windows.h"
 
+// Bridge chooser state, layout, drawing and input.
 
-// Span Host
+void Sc2kCanvasDrawSpanStyle(Canvas *canvas, CityRect bounds, const char *title, const char *message) {
+  static const char *const styles[CITY_ROAD_SPAN_STYLE_COUNT] = {"Basic", "Arch", "Decorated"};
+  CanvasPanelFrame(canvas, bounds, title);
+  CanvasBeveledBox(canvas, bounds.left + 9, bounds.top + 28, bounds.right - 9, bounds.top + 58,
+      canvas_light, 0);
+  CanvasTextWrapped(canvas, bounds.left + 16, bounds.top + 38, bounds.right - 16,
+      bounds.top + 54, message, canvas_text);
+  for (i32 style = 0; style < CITY_ROAD_SPAN_STYLE_COUNT; ++style) {
+    i32 top = bounds.top + 64 + style * 30;
+    DrawCanvasButtonBox(canvas, bounds.left + 24, top, bounds.right - 24, top + 24, canvas_light, 1);
+    CanvasTextAt(canvas, bounds.left + 42, top + 8, styles[style], canvas_text);
+  }
+  DrawCanvasButtonBox(canvas, bounds.right - 68, bounds.bottom - 29, bounds.right - 12, bounds.bottom - 10,
+      canvas_light, 1);
+  CanvasTextAt(canvas, bounds.right - 59, bounds.bottom - 24, "Cancel", canvas_text);
+}
+
+int ReadCitySpanList(const Window *window, u8 order[CITY_SPAN_STYLE_COUNT]) {
+  int count = 0;
+  for (int style = 0; style < CITY_SPAN_STYLE_COUNT; ++style) {
+    if (!(window->span_styles & (1 << style))) continue;
+    int position = count++;
+    while (position > 0) {
+      int previous = order[position - 1];
+      int compare = window->span_sort == CITY_SPAN_SORT_NAME ? strcmp(kCitySpanNames[style], kCitySpanNames[previous]) :
+          window->span_prices[style] < window->span_prices[previous] ? -1 :
+          window->span_prices[style] > window->span_prices[previous];
+      if (window->span_descending ? compare <= 0 : compare >= 0) break;
+      order[position] = previous;
+      --position;
+    }
+    order[position] = style;
+  }
+  return count;
+}
+
+int CitySpanVisibleRows(const Window *window) {
+  return IntMax(1, (window->bounds.bottom - window->bounds.top - CITY_SPAN_LIST_TOP -
+      CITY_SPAN_FOOTER_HEIGHT) / CITY_SPAN_ROW_HEIGHT);
+}
+
+CityRect CitySpanControlBounds(const Window *window, int control) {
+  CityRect b = window->bounds;
+  if (control >= 0) {
+    int top = b.top + CITY_SPAN_LIST_TOP + control * CITY_SPAN_ROW_HEIGHT;
+    return (CityRect){b.left + 1, top, b.right - 12, top + CITY_SPAN_ROW_HEIGHT};
+  }
+  switch (control) {
+  case CITY_CANVAS_SPAN_HIT_DIRECTION: return (CityRect){b.left + 1, b.top + 14, b.left + 65, b.top + 26};
+  case CITY_CANVAS_SPAN_HIT_SORT: return (CityRect){b.left + 65, b.top + 14, b.right - 12, b.top + 26};
+  case CITY_CANVAS_SPAN_HIT_UP: return (CityRect){b.right - 12, b.top + 14, b.right, b.top + 26};
+  case CITY_CANVAS_SPAN_HIT_DOWN: return (CityRect){b.right - 12, b.bottom - 26, b.right, b.bottom - 14};
+  case CITY_CANVAS_SPAN_HIT_TRACK: return (CityRect){b.right - 12, b.top + 26, b.right, b.bottom - 26};
+  case CITY_CANVAS_SPAN_HIT_RESTORE: return (CityRect){b.right - 11, b.top, b.right, b.top + 14};
+  default: return (CityRect){0};
+  }
+}
+
+CityRect CitySpanScrollThumb(const Window *window) {
+  CityRect track = CitySpanControlBounds(window, CITY_CANVAS_SPAN_HIT_TRACK);
+  u8 order[CITY_SPAN_STYLE_COUNT];
+  int count = ReadCitySpanList(window, order), visible = CitySpanVisibleRows(window);
+  CityRect thumb = ReadCityScrollbar(track, count, visible, window->span_scroll, 8).thumb;
+  if (count > visible) { ++thumb.left; --thumb.right; }
+  return thumb;
+}
+
+static void DrawBridgeArrow(Canvas *canvas, CityRect b, bool up, u32 ink) {
+  int x = (b.left + b.right) / 2, y = (b.top + b.bottom) / 2;
+  for (int row = 0; row < 4; ++row) {
+    int top = y + (up ? 1 - row : row - 2);
+    CanvasFill(canvas, x - 4 + row, top, x + 4 - row, top + 1, ink);
+  }
+}
+
+void CanvasDrawSpanChoices(Canvas *canvas, const Window *window) {
+  _Static_assert(CITY_BRIDGE_CHOICE_ICON_COUNT == CITY_BRIDGE_BITMAP_COUNT, "Bridge cache covers every style");
+  NativeSpanDialog *dialog = window->city->game->ui->span.active;
+  while (dialog->window_id != window->window_id) dialog = dialog->parent;
+  CityBridgeWindowDrawing *pixels = dialog->drawing;
+  const u32 face = 0xFF687B48, light = 0xFF9BB56C, dark = 0xFF3D4F29, ink = 0xFF101010;
+  CityRect b = window->bounds;
+  DrawCanvasFrame(canvas, b, face, light, dark, true);
+  DrawCityWindowCaption(canvas, b, window->title, face, light, dark, 11);
+  CityRect restore = CitySpanControlBounds(window, CITY_CANVAS_SPAN_HIT_RESTORE);
+  DrawCanvasButtonFrame(canvas, restore, face, light, dark, true);
+  DrawCityWindowControlIcon(canvas, restore, CITY_WINDOW_ICON_DEFAULT_SIZE, false);
+  CityRect direction = CitySpanControlBounds(window, CITY_CANVAS_SPAN_HIT_DIRECTION);
+  CityRect sort = CitySpanControlBounds(window, CITY_CANVAS_SPAN_HIT_SORT);
+  DrawCanvasButtonFrame(canvas, direction, face, light, dark, true);
+  DrawCanvasButtonFrame(canvas, sort, face, light, dark, true);
+  DrawCityInterfaceText(canvas->interface_font, canvas, direction.left + 3, direction.top + 1, "Sort by", ink, false);
+  DrawBridgeArrow(canvas, (CityRect){direction.right - 13, direction.top, direction.right, direction.bottom},
+      window->span_descending, ink);
+  DrawCityInterfaceText(canvas->interface_font, canvas, sort.left + 3, sort.top + 1,
+      window->span_sort == CITY_SPAN_SORT_NAME ? "Name" : "Cost", ink, false);
+  DrawBridgeArrow(canvas, (CityRect){sort.right - 12, sort.top, sort.right, sort.bottom}, false, ink);
+  u8 order[CITY_SPAN_STYLE_COUNT];
+  int count = ReadCitySpanList(window, order), visible = CitySpanVisibleRows(window);
+  int scroll = IntMin(window->span_scroll, IntMax(0, count - visible));
+  CityRect clip = canvas->clip;
+  canvas->clip = IntersectCityRects(clip, (CityRect){b.left + 1, b.top + CITY_SPAN_LIST_TOP,
+      b.right - 12, b.bottom - CITY_SPAN_FOOTER_HEIGHT});
+  for (int row = 0; row < IntMin(visible, count - scroll); ++row) {
+    int style = order[scroll + row];
+    CityRect rect = CitySpanControlBounds(window, row);
+    DrawCanvasButtonFrame(canvas, rect, style == window->span_selected ? 0xFF7B8D53 : face, light, dark, true);
+    const CityInterfaceIcons *icons = window->city ? &window->city->game->resources->bridge_choice_icons : NULL;
+    int icon = style + (window->span_rail && style >= CITY_ROAD_BRIDGE_STYLE_FIRST ?
+        CITY_ROAD_BRIDGE_STYLE_COUNT : 0);
+    if (icons && !DrawCityInterfaceIcon(canvas,
+        &pixels->icons[icon], icons, icon,
+        (CityRect){rect.left + 2, rect.top, rect.left + 48, rect.bottom}))
+      window->city->game->execution_failed = true;
+    DrawCityInterfaceText(canvas->interface_font, canvas, rect.left + 51, rect.top + 1,
+        kCitySpanNames[style], 0xFFFFD800, true);
+    char price[CITY_CURRENCY_TEXT_CAPACITY];
+    if (window->city) FormatCityCurrency(window->city->game, price, window->span_prices[style]);
+    else snprintf(price, sizeof(price), "$%u", window->span_prices[style]);
+    DrawCityInterfaceText(canvas->interface_font, canvas, rect.left + 51, rect.top + 12,
+        price, 0xFFFCFCFC, true);
+  }
+  canvas->clip = clip;
+  CityRect track = CitySpanControlBounds(window, CITY_CANVAS_SPAN_HIT_TRACK);
+  DrawCanvasFrame(canvas, track, dark, light, dark, false);
+  if (count > visible)
+    DrawCanvasFrame(canvas, CitySpanScrollThumb(window), face, light, dark, true);
+  else DrawCanvasFrame(canvas, track, face, light, dark, false);
+  for (int control = CITY_CANVAS_SPAN_HIT_UP; control >= CITY_CANVAS_SPAN_HIT_DOWN; --control) {
+    CityRect rect = CitySpanControlBounds(window, control);
+    bool up = control == CITY_CANVAS_SPAN_HIT_UP;
+    bool disabled = up ? scroll == 0 : scroll >= count - visible;
+    DrawCanvasButtonFrame(canvas, rect, face, light, dark, true);
+    DrawBridgeArrow(canvas, rect, up, disabled ? dark : ink);
+  }
+  CityRect grip = {b.right - 12, b.bottom - 12, b.right, b.bottom};
+  DrawCanvasFrame(canvas, grip, face, light, dark, true);
+  for (int line = 0; line < 3; ++line)
+    for (int pixel = 0; pixel < 3 + line * 2; ++pixel)
+      CanvasFill(canvas, b.right - 3 - pixel, b.bottom - 3 - line * 2 + pixel,
+          b.right - 2 - pixel, b.bottom - 2 - line * 2 + pixel, dark);
+}
 
 // Answering closes the chooser. Native windows then dispatch their saved command;
 // diagnostic windows resume their retained placement caller.
@@ -64,7 +199,9 @@ bool NativeSpanDialogWaiting(const CityInterfaceState *ui) {
   return ui->span.active != NULL && !ui->span.active->answered;
 }
 
-int OpenCitySpanWindow(City *city, NativeSpanDialog *dialog, int distance, int styles) {
+// Build and bind the caller without running pause or observation hooks. The returned slot is borrowed only
+// until presentation; native callers attach completion before publishing this scope.
+int CreateCitySpanWindow(City *city, NativeSpanDialog *dialog, int distance, int styles) {
   CitySpanPresentation *span = &city->game->ui->span;
   if (span->desktop == NULL || !styles || (styles & ~CITY_SPAN_STYLES_ALL)) {
     return -1;
@@ -99,7 +236,7 @@ int OpenCitySpanWindow(City *city, NativeSpanDialog *dialog, int distance, int s
   span->desktop->windows[index].city = city;
   span->desktop->windows[index].span_rail = rail;
   dialog->drawing = (CityBridgeWindowDrawing *)CreateCityWindowDrawing(city->game->drawing,
-      CITY_WINDOW_DRAWING_BRIDGE_CHOICES);
+      CITY_WINDOW_DRAWING_BRIDGE_CHOICES, 0);
   if (!dialog->drawing) {
     Sc2kCanvasDesktopDismissWindow(span->desktop, span->desktop->windows[index].window_id);
     SetGameError(city->game, SC2K_ERROR_HOST_ALLOCATION_FAILURE);
@@ -107,11 +244,14 @@ int OpenCitySpanWindow(City *city, NativeSpanDialog *dialog, int distance, int s
   }
   dialog->window_id = span->desktop->windows[index].window_id;
   span->active = dialog;
+  return index;
+}
+
+// Pass opening values, not a borrowed dialog: hooks can close the window and complete/free the caller.
+void PresentCitySpanWindow(City *city, int token, int distance, int styles) {
   ApplicationUpdateDialogPause(city);
   RefreshCityChartPanels(city);
-  ObserveCityPresentation(city->game, CITY_PRESENTATION_SPAN_OPEN, dialog->token, distance, styles, CITY_SPAN_CANCEL, NULL);
-
-  return index;
+  ObserveCityPresentation(city->game, CITY_PRESENTATION_SPAN_OPEN, token, distance, styles, CITY_SPAN_CANCEL, NULL);
 }
 
 static void CompleteCitySpanCommand(City *city, void *context) {
@@ -143,7 +283,7 @@ bool OpenCitySpanCommand(City *city, CityCommand command, int distance, int styl
     return false;
   }
   dialog->command = command;
-  int opened = OpenCitySpanWindow(city, dialog, distance, styles);
+  int opened = CreateCitySpanWindow(city, dialog, distance, styles);
   if (opened < 0) {
     free(dialog);
     return false;
@@ -157,6 +297,7 @@ bool OpenCitySpanCommand(City *city, CityCommand command, int distance, int styl
     SetGameError(city->game, SC2K_ERROR_HOST_ALLOCATION_FAILURE);
     return false;
   }
+  PresentCitySpanWindow(city, dialog->token, distance, styles);
   return true;
 }
 
@@ -202,197 +343,6 @@ int SelectInfrastructureSpan(City *city, int distance, int enabled_styles) {
   if (observer && observer->select_span) return observer->select_span(city, distance, enabled_styles);
   int choice = city->command_choices.supplied ? city->command_choices.span : CITY_SPAN_CANCEL;
   return choice >= 0 && choice < CITY_SPAN_STYLE_COUNT && (enabled_styles & (1 << choice)) ? choice : CITY_SPAN_CANCEL;
-}
-
-// Connection Host
-
-bool CityConnectionQuestionWaiting(const CityInterfaceState *ui) {
-  return ui->connection.active != NULL && !ui->connection.active->answered;
-}
-
-bool AnswerCityConnectionQuestion(City *city, int token, bool accept) {
-  CityInterfaceState *ui = city->game->ui;
-  CityConnectionDialog *dialog = ui->connection.active;
-  if (dialog == NULL || dialog->token != token || dialog->answered) return false;
-  dialog->answered = true;
-  dialog->answer = accept ? CITY_DIALOG_YES : CITY_DIALOG_NO;
-  Sc2kCanvasDesktopDismissWindow(&ui->desktop, dialog->window_id);
-  dialog->window_id = 0;
-  ApplicationUpdateDialogPause(city);
-  return true;
-}
-
-int ChooseCityConnectionQuestion(City *city, int kind, int cost) {
-  const GameObservation *observer = city->game->observation;
-  if (observer && observer->choose_connection) return observer->choose_connection(city, kind, cost);
-  bool bond = kind == CITY_CONNECTION_ISSUE_BOND || kind == CITY_CONNECTION_REDEEM_BOND;
-  return !bond && city->command_choices.supplied && city->command_choices.border ? CITY_DIALOG_YES : CITY_DIALOG_NO;
-}
-
-// Mission Host
-
-bool CityMissionNoticeWaiting(const CityInterfaceState *ui) {
-  return ui->mission_notice.active != NULL && !ui->mission_notice.active->answered;
-}
-
-bool AnswerCityNotice(City *city, int token, int kind) {
-  CityInterfaceState *ui = city->game->ui;
-  CityMissionNotice *notice = ui->mission_notice.active;
-  if (notice == NULL || notice->token != token || notice->answered ||
-      notice->kind != kind) return false;
-  notice->answered = true;
-  Sc2kCanvasDesktopDismissWindow(&ui->desktop, notice->window_id);
-  notice->window_id = 0;
-  ApplicationUpdateDialogPause(city);
-  return true;
-}
-
-bool AnswerCityMissionNotice(City *city, int token) { return AnswerCityNotice(city, token, NOTICE_MISSION); }
-bool AnswerCityResourceAlert(City *city, int token) { return AnswerCityNotice(city, token, NOTICE_RESOURCE); }
-bool AnswerCityTextNotice(City *city, int token) { return AnswerCityNotice(city, token, NOTICE_TEXT); }
-
-static void WaitForNotice(City *city, CityNoticeRequest request) {
-  const GameObservation *observer = city->game->observation;
-  if (observer && observer->wait_notice) {
-    observer->wait_notice(city, &request);
-    return;
-  }
-  fprintf(stderr, "Cannot resume a retained notice without a diagnostic wait handler.\n");
-  city->game->execution_failed = true;
-}
-
-void WaitForCityMissionNotice(City *city, u32 window_id, int outcome) {
-  WaitForNotice(city, (CityNoticeRequest){window_id, outcome, 0, NOTICE_MISSION});
-}
-
-void WaitForCityResourceAlert(City *city, u32 window_id, int bitmap_id, int text_id) {
-  WaitForNotice(city, (CityNoticeRequest){window_id, bitmap_id, text_id, NOTICE_RESOURCE});
-}
-
-void WaitForCityTextNotice(City *city, u32 window_id, int resource) {
-  WaitForNotice(city, (CityNoticeRequest){window_id, resource, 0, NOTICE_TEXT});
-}
-
-// Dialog Host
-// Native canvas dialog presentation.
-
-void ShowCityMissionOutcome(City *city, i32 outcome) {
-  PresentCityMissionOutcome(city, outcome);
-}
-
-// Present the requested bitmap and string together.
-void ShowCityResourceAlertDialog(City *city, i32 bitmap_id, i32 text_id) {
-  if (!city->game->observation) {
-    ReportCityResourceNotice(city, bitmap_id, text_id);
-    return;
-  }
-  PresentCityResourceAlert(city, bitmap_id, text_id);
-}
-
-void ShowCityMessage(City *city, u32 resource_id) {
-  const GameObservation *observer = city->game->observation;
-  if (!observer) {
-    if (IsCityCommandFailureResource(resource_id)) ReportCityCommandResult(city, -(i64)resource_id);
-    else ReportCityResourceNotice(city, 0, resource_id);
-    return;
-  }
-  if (observer->show_message) observer->show_message(city, resource_id);
-}
-
-i32 QueryCityOverlayNameDialog(City *city, int slot, CityNameCommandInput *state) {
-  CityCanvasNameRequest request = {CITY_CANVAS_NAME_DIALOG_REQUEST, slot, state};
-  i32 answer = RunPausedCityModalDialog(city, &request);
-  return answer;
-}
-
-void ShowRankedCityEventModal(City *city, u32 event_code, u32 event_data) {
-  PresentRankedCityEvent(city, event_code, event_data);
-}
-
-void ShowCityNewspaper(City *city, i32 edition_index) {
-  PresentCityNewspaperEdition(city, edition_index);
-}
-
-void SetCityCanvasPaletteDialogState(City *city, bool paused) {
-  SetCityPaletteDialogState(city, paused);
-}
-
-static i32 RunNewspaperHost(City *city, void *dialog) {
-  const GameObservation *observer = city->game->observation;
-  if (observer && observer->choose_newspaper) return observer->choose_newspaper(city, dialog);
-  return CITY_DIALOG_UNANSWERED;
-}
-
-i32 RunPausedCityNewspaperDialog(City *city, CityNewspaperDialog *dialog) {
-  return RunPausedCityAction(city, RunNewspaperHost, dialog);
-}
-
-i32 ChooseCityCanvasDialog(City *city, void *dialog) {
-  const GameObservation *observer = city->game->observation;
-  if (observer && observer->choose_canvas_dialog) return observer->choose_canvas_dialog(city, dialog);
-  return CITY_DIALOG_UNANSWERED;
-}
-
-// Retain the original game prefix and shared modal pause lifetime.
-// Canvas dialogs retain the original pause lifetime and City effects.
-void ShowAnnualBudgetDialog(City *city) {
-  if (!PrepareCityAnnualBudget(city)) return;
-  CityCanvasBudgetRequest request = {CITY_CANVAS_BUDGET_DIALOG_REQUEST};
-  RunPausedCityModalDialog(city, &request);
-  SetCityCursor(city, CITY_CURSOR_ARROW, 0);
-}
-
-bool BeginCityDialogPause(City *city, int token) {
-  CityInterfaceState *ui = city->game->ui;
-  if (token <= 0) return false;
-  int free_slot = -1;
-  for (int index = 0; index < CITY_DIALOG_PAUSE_TOKEN_CAPACITY; ++index) {
-    if (ui->dialog_pause_tokens[index] == token)
-      return false;
-    if (ui->dialog_pause_tokens[index] == 0 && free_slot == -1)
-      free_slot = index;
-  }
-  if (free_slot == -1)
-    return false;
-  // Optional comparison retains the original activation wait; native pauses never pump input.
-  const GameObservation *observer = city->game->observation;
-  if (observer && observer->before_dialog_pause && !observer->before_dialog_pause(city)) return false;
-  // The first temporary pause saves the live speed for final dismissal.
-  if (ui->dialog_pause_depth == 0) {
-    ui->dialog_input_blocked = 1;
-    SetCityCanvasPaletteDialogState(city, 1);
-    ui->dialog_pause_saved_speed = city->settings.speed;
-    if (observer) city->settings.speed = CITY_SPEED_PAUSED;
-    Sc2kRefreshCityStatusPanel(city);
-  }
-  ++ui->dialog_pause_depth;
-  ui->dialog_pause_tokens[free_slot] = token;
-  return 1;
-}
-bool EndCityDialogPause(City *city, int token) {
-  CityInterfaceState *ui = city->game->ui;
-  if (token <= 0) return false;
-  for (int index = 0; index < CITY_DIALOG_PAUSE_TOKEN_CAPACITY; ++index) {
-    if (ui->dialog_pause_tokens[index] != token)
-      continue;
-    ui->dialog_pause_tokens[index] = 0;
-    // Restore only after every temporary pause has ended.
-    if (--ui->dialog_pause_depth == 0) {
-      ui->dialog_input_blocked = 0;
-      SetCityCanvasPaletteDialogState(city, 0);
-      if (city->game->observation) city->settings.speed = ui->dialog_pause_saved_speed;
-      Sc2kRefreshCityStatusPanel(city);
-    }
-    return 1;
-  }
-  return false;
-}
-
-bool HasCityDialogPause(const CityInterfaceState *ui, int token) {
-  if (token <= 0) return false;
-  for (int index = 0; index < CITY_DIALOG_PAUSE_TOKEN_CAPACITY; ++index)
-    if (ui->dialog_pause_tokens[index] == token) return true;
-  return false;
 }
 
 // Handles this window's painting and input; paint coordinates are local to the window.
@@ -495,53 +445,43 @@ bool SpanWindowProcedure(Game *game, const Window *window, const WindowEvent *ev
   return false;
 }
 
-// A retained connection prompt answers only its innermost active caller.
-// The prompt procedure is installed when that caller opens its window.
-bool ConnectionWindowProcedure(Game *game, const Window *window, const WindowEvent *event) {
-  if (event->kind == WINDOW_PAINT) {
-    DrawCityMessageBox(event->canvas, window);
-    return true;
-  }
-  if (event->kind != WINDOW_INPUT) return false;
-  CityConnectionDialog *dialog = game->ui->connection.active;
-  if (!dialog || dialog->window_id != window->window_id) return true;
-  const CanvasSDLEvent *input = event->input;
-  if (input->kind == CANVAS_SDL_KEY_DOWN) {
-    if (input->key == CITY_KEY_RETURN || input->key == CITY_KEY_ESCAPE)
-      AnswerCityConnectionQuestion(game->city, dialog->token, input->key == CITY_KEY_RETURN);
-    return true;
-  }
-  if (input->kind == CANVAS_SDL_POINTER_DOWN && input->button == CANVAS_SDL_BUTTON_LEFT) {
-    int answer = CityMessageAnswerAt(window, event->x, event->y);
-    if (answer == CITY_DIALOG_YES || answer == CITY_DIALOG_NO) {
-      AnswerCityConnectionQuestion(game->city, dialog->token, answer == CITY_DIALOG_YES);
-      return true;
-    }
-  }
-  return false;
+i32 Sc2kCanvasDesktopOpenSpanChoices(CityCanvasDesktop *desktop, CityRect bounds,
+    const char *title, const char *message, u32 styles, const u32 *prices) {
+  if (styles == 0 || (styles & ~CITY_SPAN_STYLES_ALL) != 0 || prices == NULL)
+    return -1;
+  Window window = {.kind = CITY_CANVAS_SPAN_STYLE, .bounds = bounds,
+      .title = title, .message = message, .span_styles = styles};
+  memcpy(window.span_prices, prices, sizeof(window.span_prices));
+  for (int style = 0; style < CITY_SPAN_STYLE_COUNT; ++style)
+    if (styles & (1 << style)) { window.span_selected = style; break; }
+  return Sc2kCanvasDesktopOpen(desktop, window);
 }
 
-// Closing a retained notice must answer its caller synchronously before it resumes.
-bool NoticeWindowProcedure(Game *game, const Window *window, const WindowEvent *event) {
-  if (event->kind == WINDOW_PAINT) {
-    DrawCityMessageBox(event->canvas, window);
-    return true;
+i32 CitySpanChoiceAt(const Window *window, i32 x, i32 y) {
+  CityRect bounds = window->bounds;
+  if (window->span_styles) {
+    if (CanvasCloseAt(bounds, x, y)) return CITY_CANVAS_SPAN_HIT_CANCEL;
+    for (int control = CITY_CANVAS_SPAN_HIT_SORT; control >= CITY_CANVAS_SPAN_HIT_RESTORE; --control)
+      if (CanvasPointInRect(CitySpanControlBounds(window, control), x, y)) return control;
+    u8 order[CITY_SPAN_STYLE_COUNT];
+    int count = ReadCitySpanList(window, order), visible = CitySpanVisibleRows(window);
+    int scroll = IntMin(window->span_scroll, IntMax(0, count - visible));
+    for (int row = 0; row < IntMin(visible, count - scroll); ++row)
+      if (CanvasPointInRect(CitySpanControlBounds(window, row), x, y)) return order[scroll + row];
+    return CITY_CANVAS_SPAN_HIT_NONE;
   }
-  if (event->kind != WINDOW_INPUT) return false;
-  CityMissionNotice *notice = game->ui->mission_notice.active;
-  if (!notice || notice->window_id != window->window_id) return true;
-  const CanvasSDLEvent *input = event->input;
-  if (input->kind == CANVAS_SDL_KEY_DOWN) {
-    if (input->key == CITY_KEY_RETURN || input->key == CITY_KEY_ESCAPE)
-      AnswerCityNotice(game->city, notice->token, notice->kind);
-    return true;
+  i32 row = 0;
+  for (i32 style = 0;
+      style < (window->span_styles != 0 ? CITY_SPAN_STYLE_COUNT : CITY_ROAD_SPAN_STYLE_COUNT); ++style) {
+    if (window->span_styles != 0 && (window->span_styles & (1u << style)) == 0)
+      continue;
+    i32 top = bounds.top + 64 + row++ * 30;
+    if (x >= bounds.left + 24 && x < bounds.right - 24 && y >= top && y < top + 24)
+      return style;
   }
-  if (input->kind == CANVAS_SDL_POINTER_DOWN && input->button == CANVAS_SDL_BUTTON_LEFT) {
-    Sc2kCanvasDesktopPointerDown(&game->ui->desktop, event->x, event->y);
-    if (!FindCityCanvasWindow(&game->ui->desktop, notice->window_id))
-      AnswerCityNotice(game->city, notice->token, notice->kind);
-    ApplicationUpdateDialogPause(game->city);
-    return true;
-  }
-  return false;
+  if ((x >= bounds.right - 68 && x < bounds.right - 12 &&
+       y >= bounds.bottom - 29 && y < bounds.bottom - 10) ||
+      (CanvasCloseAt(bounds, x, y)))
+    return CITY_CANVAS_SPAN_HIT_CANCEL;
+  return CITY_CANVAS_SPAN_HIT_NONE;
 }

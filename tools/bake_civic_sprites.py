@@ -11,6 +11,8 @@ retains the authoritative footprint for validation.
 import argparse
 import hashlib
 import json
+import shutil
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -649,10 +651,43 @@ def ExtractCivicForeground(directory):
   (directory/'ground-separation-result.json').write_text(json.dumps(result,indent=2)+'\n')
 
 
+def BakeApproved(directory):
+  """Rebuild a portable installed recipe without the discarded artwork study directories."""
+  config = json.loads((directory / 'approved-bake.json').read_text())
+  if len(config['views']) != 1:
+    raise ValueError('Approved baking requires one shared view')
+  for key in ('mask', 'paving', 'terrain_masks'):
+    config[key] = str((directory / config[key]).resolve())
+  for entry in config['views']:
+    for key in ('original', 'foreground'):
+      if key in entry: entry[key] = str((directory / entry[key]).resolve())
+  with tempfile.TemporaryDirectory(prefix='sc2k-approved-bake-') as temporary:
+    output = Path(temporary)
+    (output / 'bake.json').write_text(json.dumps(config, indent=2) + '\n')
+    Bake(output)
+    result = json.loads((output / 'bake-result.json').read_text())[0]
+    if any(result[key] for key in ('ground_mask_mismatches', 'native_terrain_union_mismatches',
+        'foreground_opaque_pixels_trimmed', 'sprite_pixels_outside_site_prism')):
+      raise ValueError('Approved bake failed foundation or silhouette validation')
+    for source, target in [('view-0.png', 'approved-view.png'), ('ground-0.png', 'approved-ground.png'),
+        ('bake-result.json', 'approved-bake-result.json')]:
+      shutil.copyfile(output / source, directory / target)
+  path = directory / 'approved-provenance.json'
+  provenance = json.loads(path.read_text())
+  provenance['installed_view_sha256'] = hashlib.sha256((directory / 'approved-view.png').read_bytes()).hexdigest()
+  root = Path(__file__).resolve().parents[1]
+  for dependency in provenance['dependencies']:
+    dependency['sha256'] = hashlib.sha256((root / dependency['installed']).read_bytes()).hexdigest()
+  path.write_text(json.dumps(provenance, indent=2) + '\n')
+
+
 if __name__ == '__main__':
   parser = argparse.ArgumentParser(description=__doc__)
   parser.add_argument('directory', type=Path, help='building directory containing bake.json')
-  parser.add_argument('--split-foreground', action='store_true')
+  mode = parser.add_mutually_exclusive_group()
+  mode.add_argument('--split-foreground', action='store_true')
+  mode.add_argument('--approved', action='store_true', help='Rebake the installed approved single view')
   args = parser.parse_args()
-  if args.split_foreground: ExtractCivicForeground(args.directory)
+  if args.approved: BakeApproved(args.directory)
+  elif args.split_foreground: ExtractCivicForeground(args.directory)
   else: Bake(args.directory)

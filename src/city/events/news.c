@@ -1,0 +1,264 @@
+#include "city/engine/clock.h"
+// Deterministic news ranking, insertion and problem-rating updates. Presentation may interrupt the caller;
+// insertion happens first, and retained callers resume the existing tail after dismissal.
+#include "city/maps/labels.h"
+#include "city/events/news.h"
+
+#include "assets/resource_types.h"
+#include "assets/state.h"
+#include "game/audio.h"
+#include "audio/types.h"
+#include "city/economy/facilities.h"
+#include "city/engine/random.h"
+#include "city/maps/layers.h"
+#include "city/presentation.h"
+#include "city/state.h"
+#include "game/state.h"
+
+// Exchange two bytes in the newspaper edition table. Both pointers must address writable bytes; overlapping identical
+// pointers are allowed and no ownership changes.
+static void SwapCityNewspaperByte(u8 *first, u8 *second) {
+  int saved = *first;
+  *first = *second;
+  *second = saved;
+}
+
+// Initialize and shuffle the six stored edition configurations, then reset article records and caches.
+// The CRT stream is already seeded; retain the field-by-field swap order and all 122 draws.
+static void InitializeCityNewspaperState(City *city) {
+  CityNewspaperEditions *editions = &city->newspaper_editions;
+  CityNewsRecords *rankings = &city->news_records;
+
+  for (int i = 0; i < CITY_NEWSPAPER_EDITION_COUNT; ++i) {
+    CityNewspaperEdition *edition = &editions->edition[i];
+    edition->title_kind = i;
+    edition->layout_style = i % 3;
+    edition->era_kind = i % 3;
+    edition->report_kind = i;
+    edition->subtitle_kind = i;
+  }
+
+  SwapCityNewspaperByte(
+      &editions->edition[0].report_kind, &editions->edition[3 + (Sc2kCrtRand(city) & 1)].report_kind);
+  if ((Sc2kCrtRand(city) & 1) != 0)
+    SwapCityNewspaperByte(&editions->edition[0].layout_style, &editions->edition[1].layout_style);
+
+  for (int shuffle = 0; shuffle < 12; ++shuffle) {
+    int first = Sc2kCrtRandRange(city, CITY_NEWSPAPER_EDITION_COUNT);
+    int second = Sc2kCrtRandRange(city, CITY_NEWSPAPER_EDITION_COUNT);
+    SwapCityNewspaperByte(&editions->edition[first].title_kind, &editions->edition[second].title_kind);
+
+    first = Sc2kCrtRandRange(city, CITY_NEWSPAPER_EDITION_COUNT - 1);
+    second = Sc2kCrtRandRange(city, CITY_NEWSPAPER_EDITION_COUNT - 1);
+    SwapCityNewspaperByte(&editions->edition[first + 1].layout_style, &editions->edition[second + 1].layout_style);
+
+    first = Sc2kCrtRandRange(city, CITY_NEWSPAPER_EDITION_COUNT);
+    second = Sc2kCrtRandRange(city, CITY_NEWSPAPER_EDITION_COUNT);
+    SwapCityNewspaperByte(&editions->edition[first].era_kind, &editions->edition[second].era_kind);
+
+    first = Sc2kCrtRandRange(city, CITY_NEWSPAPER_EDITION_COUNT - 1);
+    second = Sc2kCrtRandRange(city, CITY_NEWSPAPER_EDITION_COUNT - 1);
+    SwapCityNewspaperByte(&editions->edition[first + 1].report_kind, &editions->edition[second + 1].report_kind);
+
+    first = Sc2kCrtRandRange(city, CITY_NEWSPAPER_EDITION_COUNT);
+    second = Sc2kCrtRandRange(city, CITY_NEWSPAPER_EDITION_COUNT);
+    SwapCityNewspaperByte(&editions->edition[first].subtitle_kind, &editions->edition[second].subtitle_kind);
+  }
+
+  for (int i = 0; i < CITY_NEWS_RECORD_COUNT; ++i) {
+    CityNewsRecord *record = &rankings->record[i];
+    record->id = i + CITY_NEWS_CONGRESS;
+    record->score = 0;
+    record->event_data = 0;
+    record->article_cache[0] = CITY_NEWS_CACHE_INVALID;
+    record->article_cache[1] = CITY_NEWS_CACHE_INVALID;
+    record->article_cache[2] = CITY_NEWS_CACHE_INVALID;
+  }
+
+  city->newspaper.edition_index = CITY_NEWSPAPER_EDITION_FIRST;
+}
+
+// Seed startup news from the signed low word of logical time before shuffling edition choices.
+// These are existing City fields; initialization allocates no storage.
+void InitializeCityNews(City *city) {
+  city->indicators.ranked_disaster_gate = 1;
+  city->newspaper.enabled = 0;
+  int seed = (i16)SimulationFrameTime(city);
+  city->newspaper.random_base_seed = seed;
+  Sc2kSeedCrtRandom(city, seed);
+  InitializeCityNewspaperState(city);
+}
+
+// Complete the captured edition after any opening notice. Read live City values, then consume the original
+// single event-RNG draw for its music request. This tail must not repeat when the window is repainted.
+void FinishCityNewspaperInitialization(City *city, int edition_index) {
+  static const u8 kSpecialReportGroup[6] = {
+      CITY_NEWS_FREDS_OPINION, CITY_NEWS_EDITOR_COMMENTARY, CITY_NEWS_EDITOR_COMMENTARY,
+      CITY_NEWS_OPINION_SURVEY, CITY_NEWS_OPINION_SURVEY, CITY_NEWS_ADVICE};
+  static const u8 kMusicTrack[5] = {9, 15, 14, 6, 2};
+  const CityNewspaperEdition *edition = &city->newspaper_editions.edition[edition_index];
+  CityNewsRecords *rankings = &city->news_records;
+  rankings->record[7].id = CITY_NEWS_WEATHER;
+  rankings->record[7].event_data = city->weather.state;
+  rankings->record[8].id = kSpecialReportGroup[edition->report_kind];
+  rankings->record[8].event_data = (u8)city->newspaper.problems.category_order[0];
+  int music = NextCityMapRandomModulo(city, 5);
+  PlayCityEventMusicById(city->game, CITY_MUSIC_TRACK_00 + kMusicTrack[music]);
+}
+
+// Read the newest history sample for one of the four ranked environment problems. Index must select the supported
+// history rows; the read has no ranking or newspaper side effects.
+static inline u16 NewspaperProblemMetric(City *city, i32 index) {
+  // These four original pointer slots are history rows 4 through 7.
+  return ReadHistorySample(city, CITY_HISTORY_TRAFFIC + index, 0);
+}
+
+// Rank the seven city problems for the newspaper. Applies ranking once and returns whether its parade notice is due;
+// the caller must retain the matching tail across dismissal.
+bool BeginCityNewspaperProblemRankings(City *city) {
+  CityNewspaperProblemRankings *rankings = &city->newspaper.problems;
+  CityEconomyMonths *economy = &city->economy;
+  int weights[7] = {(int)(i16)(NewspaperProblemMetric(city, 0)), (int)(i16)(NewspaperProblemMetric(city, 1)),
+      (int)(i16)(NewspaperProblemMetric(city, 3)),
+      (int)(i16)(3 * economy->sector[CITY_ECONOMY_RESIDENTIAL].current_rate),
+      (int)(i16)city->indicators.unemployment,
+      city->indicators.workforce_education <= 100 ? 100 - city->indicators.workforce_education : 0,
+      city->indicators.workforce_life_expectancy <= 70 ? 70 - city->indicators.workforce_life_expectancy : 0};
+  // Stock stores each weight as a signed word before selecting categories.
+  // Multiply the unsigned saved rate before narrowing so host overflow is defined.
+  int total = (int)(i16)(NewspaperProblemMetric(city, 2) + 50);
+  int counts[7] = {0};
+  for (int index = 0; index < 7; ++index) {
+    total = (int)(i16)(total + weights[index]);
+    rankings->scores[index] = 0;
+    rankings->category_order[index] = index;
+  }
+  if (total == 0 || city->indicators.population < 100)
+    return false;
+  int prior_value = city->infrastructure.mayor_rating;
+  city->infrastructure.mayor_rating = 0;
+  for (int draw = 0; draw < 100; ++draw) {
+    int choice = (int)Sc2kCrtRandRange(city, total);
+    int category = 0;
+    for (; category < 7; ++category) {
+      if (choice < weights[category])
+        break;
+      choice = (int)(i16)(choice - weights[category]);
+    }
+    if (category == 7)
+      ++city->infrastructure.mayor_rating;
+    else
+      ++counts[category];
+  }
+  for (int upper = 6; upper > 0; --upper)
+    for (int index = 0; index < upper; ++index) {
+      int current = rankings->category_order[index];
+      int next = rankings->category_order[index + 1];
+      if (counts[next] > counts[current]) {
+        rankings->category_order[index] = next;
+        rankings->category_order[index + 1] = current;
+      }
+    }
+  for (int index = 0; index < 7; ++index)
+    rankings->scores[index] = counts[rankings->category_order[index]];
+  if (prior_value < 80 && city->infrastructure.mayor_rating >= 80) {
+    PlayCitySound(city, INVALID_TILE, CITY_SOUND_CIVIC_PLACEMENT);
+    return true;
+  }
+  return false;
+}
+
+// Rank current City problems and show the mayor-parade notice when the ranking step requests it. The ranking effects
+// happen before presentation, so callers must not repeat this after dismissal.
+void UpdateCityNewspaperProblemRankings(City *city) {
+  if (BeginCityNewspaperProblemRankings(city))
+    ShowCityResourceAlertDialog(city, CITY_BITMAP_NOTICE_407, CITY_NOTICE_MAYOR_PARADE);
+}
+
+// Refresh newspaper rankings and the corresponding type-0xF3 records. Executes ranking and the facility tail in the
+// original order; nested notice callbacks may change City before the tail resumes.
+void UpdateCityNewspaperRanksAndF3Records(City *city) {
+  UpdateCityNewspaperProblemRankings(city);
+  FinishCityNewspaperRanksAndF3Records(city);
+}
+
+// Complete the facility-record updates that follow newspaper problem ranking. Uses live facility state after any
+// intervening notice; the caller must preserve the original phase ordering.
+void FinishCityNewspaperRanksAndF3Records(City *city) {
+  for (int index = 1; index < CityFacilityRecordLimit(city); ++index) {
+    CityAnnualFacilityRecord *facility = CityFacilityRecordAt(city, index);
+    if (facility->type != TK_MAYORS_HOUSE)
+      continue;
+    facility->value_04 = city->infrastructure.mayor_rating;
+    if (facility->value_06 != 0) {
+      --facility->value_06;
+      ++facility->age;
+    }
+  }
+}
+
+// Subtract each ranked article's baseline and reorder those records by descending score.
+// Requires initialized article records and ranking resources.
+void DecayCityNewsRankings(City *city) {
+  if (city->game->resources->facility_resources_unavailable)
+    return;
+  CityNewsRecords *rankings = &city->news_records;
+  for (int index = 0; index < CITY_NEWS_RANKED_COUNT; ++index) {
+    CityNewsRecord *record = &rankings->record[index];
+    int baseline = city->game->resources->rankings.facility_baselines[record->id];
+    record->score = record->score > baseline ? record->score - baseline : 0;
+  }
+  for (int index = 0; index < CITY_NEWS_RANKED_COUNT - 1; ++index)
+    for (int candidate = index + 1; candidate < CITY_NEWS_RANKED_COUNT; ++candidate) {
+      CityNewsRecord *first = &rankings->record[index];
+      CityNewsRecord *second = &rankings->record[candidate];
+      if (second->score > first->score) {
+        CityNewsRecord saved = *first;
+        *first = *second;
+        *second = saved;
+      }
+    }
+}
+
+// Insert one ranked city event before any UI callback. Requires supported event code/data; returns whether insertion
+// was admitted and performs it before any newspaper callback.
+bool RecordRankedCityEvent(City *city, int event_code, u8 event_data) {
+  if (city->game->ranked_events_suppressed != 0 || city->game->resources->facility_resources_unavailable != 0)
+    return false;
+  CityNewsRecords *rankings = &city->news_records;
+  int severity = city->game->resources->rankings.event_severity[event_code];
+  int insert = 0;
+  for (int index = CITY_NEWS_RANKED_COUNT - 2; index >= 0; --index) {
+    CityNewsRecord *source = &rankings->record[index];
+    if (source->score > severity) {
+      insert = index + 1;
+      break;
+    }
+    rankings->record[index + 1] = *source;
+  }
+  CityNewsRecord *target = &rankings->record[insert];
+  target->id = event_code;
+  target->score = severity;
+  target->event_data = event_data;
+  target->article_cache[0] = CITY_NEWS_CACHE_INVALID;
+  target->article_cache[1] = CITY_NEWS_CACHE_INVALID;
+  target->article_cache[2] = CITY_NEWS_CACHE_INVALID;
+  return true;
+}
+
+// Insert an event into the ranked history and determine whether its newspaper should open. Returns false when
+// insertion or presentation gating declines it; a true result does not mean the newspaper has been dismissed.
+bool PrepareRankedCityEvent(City *city, int event_code, u8 event_data) {
+  if (!RecordRankedCityEvent(city, event_code, event_data)) return false;
+  return event_code == CITY_NEWS_CITY_FOUNDED ||
+      (city->indicators.ranked_disaster_gate != 0 &&
+          ((event_code >= CITY_NEWS_POPULATION_REWARD && event_code <= CITY_NEWS_BUILDING_AVAILABLE) ||
+              event_code == CITY_NEWS_POWER_PLANT_AGING));
+}
+
+// Record a ranked City event and present its newspaper when admitted. Callers supply a valid event code and data;
+// nested presentation must retain this caller's lifetime.
+void InsertRankedCityEvent(City *city, int event_code, u8 event_data) {
+  if (PrepareRankedCityEvent(city, event_code, event_data))
+    ShowRankedCityEventModal(city, event_code, event_data);
+}

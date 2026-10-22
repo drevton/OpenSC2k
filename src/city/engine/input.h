@@ -21,7 +21,7 @@ typedef struct {
 } CityConstructionState;
 
 // Immutable command text, independent of the canvas editor that collects it.
-typedef struct {
+typedef struct CityNameCommandInput {
   CityOverlayName name;
   int length;
 } CityNameCommandInput;
@@ -37,7 +37,7 @@ typedef struct {
 } CityZoneDragInput;
 _Static_assert(sizeof(CityZoneDragInput) == 12, "zone drag input payload size");
 _Static_assert(offsetof(CityZoneDragInput, flags) == 8, "zone drag input flags offset");
-typedef struct {
+typedef struct CityPointerInput {
   CityPoint point;
   u32 flags;
 } CityPointerInput;

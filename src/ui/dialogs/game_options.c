@@ -1,9 +1,13 @@
+#include "assets/state.h"
 #include "audio/state.h"
-#include "game/state.h"
 #include "city/state.h"
-#include "drawing/drawing_internal.h"
+#include "drawing/raster/canvas_primitives.h"
+#include "drawing/raster/canvas_raster_internal.h"
 #include "drawing/state.h"
+#include "game/state.h"
 #include "ui/state.h"
+#include "ui/windows/controls.h"
+#include "ui/windows/windows.h"
 
 // Drawing subsystem: game options.
 
@@ -14,21 +18,19 @@ static const u32 kOptionsGold = 0xFFE8B810, kOptionsBlue = 0xFF80C4FC, kOptionsL
 const char *const kCitySettingsGroups[CITY_SETTINGS_GROUP_COUNT] = {
   "Interface", "Display", "Sound", "Economy", "Infrastructure", "Military", "Labels", "SimCity 2000 fixes"
 };
-bool CitySettingEnabled(const Game *game, int index) {
-  return ReadCitySettingValue(game, &kCitySettings[index], false) != 0;
-}
 
 CityRect CitySettingsControlBounds(CityRect b, int control) {
-  if (control == GAME_OPTIONS_CATEGORY) return (CityRect){b.left + 70, b.top + 61, b.right - 12, b.top + 74};
-  if (control == GAME_OPTIONS_TYPE) return (CityRect){b.left + 70, b.top + 77, b.right - 12, b.top + 90};
-  if (control == GAME_OPTIONS_FILTER) return (CityRect){b.left + 50, b.top + 93, b.right - 26, b.top + 106};
-  if (control == GAME_OPTIONS_CLEAR_FILTER) return (CityRect){b.right - 26, b.top + 93, b.right - 12, b.top + 106};
+  if (control == GAME_OPTIONS_SCOPE) return (CityRect){b.right - 29, b.top + 1, b.right - 13, b.top + 13};
+  if (control == GAME_OPTIONS_CATEGORY) return (CityRect){b.left + 70, b.top + 89, b.right - 12, b.top + 102};
+  if (control == GAME_OPTIONS_TYPE) return (CityRect){b.left + 70, b.top + 105, b.right - 12, b.top + 118};
+  if (control == GAME_OPTIONS_FILTER) return (CityRect){b.left + 50, b.top + 121, b.right - 26, b.top + 134};
+  if (control == GAME_OPTIONS_CLEAR_FILTER) return (CityRect){b.right - 26, b.top + 121, b.right - 12, b.top + 134};
   if (control >= GAME_OPTIONS_EXPAND_ALL && control <= GAME_OPTIONS_RESET_ALL) {
     int width = b.right - b.left - 24, column = control - GAME_OPTIONS_EXPAND_ALL;
     return (CityRect){b.left + 12 + column * width / 3, b.bottom - 28,
         b.left + 12 + (column + 1) * width / 3, b.bottom - 14};
   }
-  return (CityRect){b.left + 12, b.top + 111, b.right - 12, b.bottom - 34};
+  return (CityRect){b.left + 12, b.top + 139, b.right - 12, b.bottom - 34};
 }
 
 // A bounded list of descriptor IDs, rebuilt without allocating or retaining City values.
@@ -186,10 +188,12 @@ static const CityWidget options_general = OW_CHILDREN
              OW_LEAF(CITY_WIDGET_LABEL, 0, 0, 10, "Ctrl+0: auto-detect interface size")));
 static const CityWidget options_sound = OW_CHILDREN
 (
-    CITY_WIDGET_COLUMN, 0, 173, 0, 12,
-    OW_GROUP(96, "Volume", OW_SPACE(4), OW_VOLUME("Master", GAME_OPTIONS_MASTER, 24),
+    CITY_WIDGET_COLUMN, 0, 193, 0, 12,
+    OW_GROUP(116, "Volume", OW_SPACE(4), OW_VOLUME("Master", GAME_OPTIONS_MASTER, 24),
              OW_SPACE(4), OW_VOLUME("Sound effects", GAME_OPTIONS_EFFECTS, 24),
-             OW_SPACE(4), OW_VOLUME("Music", GAME_OPTIONS_MUSIC, 24)),
+             OW_SPACE(4), OW_VOLUME("Music", GAME_OPTIONS_MUSIC, 24), OW_SPACE(4),
+             OW_HELP(CITY_WIDGET_TOGGLE, GAME_OPTIONS_AMBIENT_SOUNDS, 0, 14, "Ambient sounds",
+                 "Enable routine vehicle, bird and other background city sounds.")),
     OW_GROUP(93, "Music set", OW_SPACE(10),
              OW_LEAF(CITY_WIDGET_LABEL, 0, 0, 10, "OpenMSX - 31 General MIDI tracks"), OW_SPACE(8),
              OW_LEAF(CITY_WIDGET_LABEL, 0, 0, 10, "OpenMSX authors - GPL version 2"), OW_SPACE(16),
@@ -203,16 +207,16 @@ static const CityWidget options_sound = OW_CHILDREN
 #undef OW_CHILDREN
 #undef OW_GROUP
 #undef OW_VOLUME
-static i32 OptionsLayout(const GameOptions *options, CityWidgetLayout *out,
+static i32 OptionsLayout(int tab, CityWidgetLayout *out,
     int left, int top, int right, int bottom) {
   CityRect b = {left, top, right, bottom};
   i32 first = Sc2kCanvasWidgetLayout(
       &options_tabs, (CityRect){b.left + 12, b.top + 23, b.right - 12, b.top + 43}, out, 96);
   if (first < 0)
     return 0;
-  if (options->tab == GAME_OPTIONS_TAB_ADVANCED) return first;
-  const CityWidget *body = options->tab == GAME_OPTIONS_TAB_GRAPHICS ? &options_graphics :
-      options->tab == GAME_OPTIONS_TAB_GENERAL ? &options_general : &options_sound;
+  if (tab == GAME_OPTIONS_TAB_ADVANCED) return first;
+  const CityWidget *body = tab == GAME_OPTIONS_TAB_GRAPHICS ? &options_graphics :
+      tab == GAME_OPTIONS_TAB_GENERAL ? &options_general : &options_sound;
   i32 rest = Sc2kCanvasWidgetLayout(
       body, (CityRect){b.left + 12, b.top + 63, b.right - 12, b.bottom - 26}, out + first,
       96 - first);
@@ -284,6 +288,14 @@ static void DrawSettingsArrow(Canvas *canvas, CityRect b, bool up) {
 static void DrawCitySettings(Game *game, Canvas *canvas, CityRect window) {
   CitySettingsBrowser *browser = &game->ui->settings;
   const CityInterfaceFont *font = &game->resources->interface_font;
+  Canvas scope = *canvas;
+  scope.clip = IntersectCityRects(scope.clip, (CityRect){window.left + 12, window.top + 55,
+      window.right - 12, window.top + 83});
+  DrawCityInterfaceTextSized(font, &scope, window.left + 12, window.top + 57,
+      browser->city_defaults ? "Gameplay changes become new-city defaults." :
+          "Gameplay changes are saved with this city.", kOptionsLabel, true, 9);
+  DrawCityInterfaceTextSized(font, &scope, window.left + 12, window.top + 69,
+      "Interface and audio changes apply to all cities.", kOptionsBlue, true, 9);
   CityRect b = CitySettingsControlBounds(window, GAME_OPTIONS_CATEGORY);
   DrawOptionsText(font, canvas, window.left + 12, b.top + 1, "Category:", kOptionsBlue);
   DrawOptionsBox(canvas, b, kOptionsGold, true);
@@ -296,7 +308,7 @@ static void DrawCitySettings(Game *game, Canvas *canvas, CityRect window) {
   DrawOptionsText(font, canvas, window.left + 12, b.top + 1, "Type:", kOptionsBlue);
   DrawOptionsBox(canvas, b, kOptionsGold, true);
   DrawOptionsText(font, canvas, b.left + 2, b.top + 1,
-      browser->type == 1 ? "Interface settings" : browser->type == 2 ? "City simulation fixes" : "All setting types",
+      browser->type == 1 ? "Interface settings" : browser->type == 2 ? "City gameplay settings" : "All setting types",
       0xFF101010);
   DrawSettingsArrow(canvas, (CityRect){b.right - 13, b.top, b.right, b.bottom}, false);
   b = CitySettingsControlBounds(window, GAME_OPTIONS_FILTER);
@@ -323,7 +335,8 @@ static void DrawCitySettings(Game *game, Canvas *canvas, CityRect window) {
     } else {
       int index = id - GAME_OPTIONS_SETTING;
       const CitySetting *entry = &kCitySettings[index];
-      bool enabled = CitySettingEnabled(game, index);
+      int current = ReadCitySettingValue(game, entry, browser->city_defaults);
+      bool enabled = current != 0;
       bool disabled = entry->action == GAME_OPTIONS_FONT_ANTIALIAS && game->drawing->options.sprite_font;
       CanvasFill(&list, b.left + 10, y, b.left + 11, y + 16, kOptionsLabel);
       CanvasFill(&list, b.left + 10, y + 8, b.left + 24, y + 9, kOptionsLabel);
@@ -332,7 +345,6 @@ static void DrawCitySettings(Game *game, Canvas *canvas, CityRect window) {
       else DrawCityCheckbox(&list, (CityRect){b.left + 26, y + 1, b.left + 46, y + 13},
           enabled, kOptionsFace, kOptionsLight, kOptionsDark);
       char number[32];
-      int current = ReadCitySettingValue(game, entry, false);
       snprintf(number, sizeof(number), "%lld", (long long)current);
       const char *value = entry->choices ? entry->choices[current].text : entry->maximum == 1 ?
           (enabled ? "On" : "Off") : number;
@@ -361,7 +373,7 @@ bool PollCitySettingsCaret(Game *game, double now) {
   CityCanvasDesktop *desktop = &game->ui->desktop;
   Window *window = desktop->count ? &desktop->windows[desktop->count - 1] : NULL;
   bool focused = browser->filter_focused && window && window->kind == CITY_CANVAS_GAME_OPTIONS &&
-      game->drawing->options.tab == GAME_OPTIONS_TAB_ADVANCED;
+      browser->tab == GAME_OPTIONS_TAB_ADVANCED;
   bool old = browser->caret_visible;
   if (!focused) { browser->caret_visible = false; browser->caret_blink_at = 0; }
   else if (!browser->caret_blink_at) { browser->caret_visible = true; browser->caret_blink_at = now + 0.5; }
@@ -407,17 +419,20 @@ static void DrawOptionsSliderTrack(Canvas *canvas, CityRect bounds, int steps, i
   }
 }
 
-void DrawGameOptions(Game *game, Canvas *c, int left, int top, int right, int bottom) {
-  const GameOptions *p = &game->drawing->options;
+void DrawGameOptions(Game *game, Canvas *c, const Window *window) {
+  int left = window->bounds.left, top = window->bounds.top;
+  int right = window->bounds.right, bottom = window->bounds.bottom;
+  const DrawingOptions *p = &game->drawing->options;
   const CityInterfaceState *ui = game->ui;
   const CityInterfaceFont *font = &game->resources->interface_font;
   CityRect b = {left, top, right, bottom};
   DrawOptionsBox(c, b, kOptionsFace, true);
-  DrawCityWindowCaption(c, b, "Game Options", kOptionsFace, kOptionsLight, kOptionsDark, 11);
+  DrawCityWindowCaption(c, b, window->title, kOptionsFace, kOptionsLight, kOptionsDark, 11);
   DrawCanvasButtonFrame(c, (CityRect){right - 11, top, right, top + 14},
       kOptionsFace, kOptionsLight, kOptionsDark, true);
   CanvasFill(c, left, top + 14, right, top + 15, kOptionsLight);
   DrawCityWindowControlIcon(c, (CityRect){right - 11, top, right, top + 14}, CITY_WINDOW_ICON_DEFAULT_SIZE, false);
+  DrawSettingsArrow(c, CitySettingsControlBounds(b, GAME_OPTIONS_SCOPE), false);
   CanvasFill(c, left, top + 51, right, top + 52, kOptionsDark);
   CanvasFill(c, left, top + 52, right, top + 53, kOptionsLight);
   for (int line = 0; line < 3; ++line)
@@ -425,7 +440,7 @@ void DrawGameOptions(Game *game, Canvas *c, int left, int top, int right, int bo
       CanvasFill(c, right - 3 - pixel, bottom - 3 - line * 2 + pixel,
           right - 2 - pixel, bottom - 2 - line * 2 + pixel, kOptionsDark);
   CityWidgetLayout layout[96];
-  i32 count = OptionsLayout(p, layout, left, top, right, bottom);
+  i32 count = OptionsLayout(ui->settings.tab, layout, left, top, right, bottom);
   for (i32 i = 0; i < count; ++i) {
     const CityWidget *widget = layout[i].widget;
     b = layout[i].bounds;
@@ -434,7 +449,7 @@ void DrawGameOptions(Game *game, Canvas *c, int left, int top, int right, int bo
     if (widget->kind == CITY_WIDGET_GROUP) {
       DrawOptionsGroup(font, c, b, label);
     } else if (widget->kind == CITY_WIDGET_BUTTON) {
-      bool active = widget->id == GAME_OPTIONS_TAB + p->tab;
+      bool active = widget->id == GAME_OPTIONS_TAB + ui->settings.tab;
       DrawOptionsBox(c, b, active ? 0xFFFCD400 : kOptionsGold, !active);
       CityRect text_bounds = {b.left + active, b.top + active, b.right + active, b.bottom + active};
       DrawCityInterfaceTextCentered(font, c, text_bounds, label, 0xFF101010, false, 10);
@@ -444,6 +459,7 @@ void DrawGameOptions(Game *game, Canvas *c, int left, int top, int right, int bo
                     : widget->id == GAME_OPTIONS_BEVELS ? p->scale_bevels
                     : widget->id == GAME_OPTIONS_SPRITE_FONT ? p->sprite_font
                     : widget->id == GAME_OPTIONS_FONT_ANTIALIAS ? p->font_antialias
+                    : widget->id == GAME_OPTIONS_AMBIENT_SOUNDS ? game->audio->ambient_sounds
                                                       : p->fullscreen;
       bool disabled = widget->id == GAME_OPTIONS_FONT_ANTIALIAS && p->sprite_font;
       DrawCityCheckbox(c, (CityRect){b.left, b.top, b.left + 20, b.top + 12},
@@ -473,7 +489,7 @@ void DrawGameOptions(Game *game, Canvas *c, int left, int top, int right, int bo
     } else if (widget->kind == CITY_WIDGET_SLIDER) {
       i32 span = b.right - b.left - 3, marks = widget->id == GAME_OPTIONS_SCALE;
       i32 maximum = marks ? 400 : 100;
-      i32 value = marks ? p->preview_scale - 100 : widget->id == GAME_OPTIONS_MASTER ?
+      i32 value = marks ? ui->settings.preview_scale - 100 : widget->id == GAME_OPTIONS_MASTER ?
           game->audio->master_volume : !ui->jukebox_display ? 0 :
           widget->id == GAME_OPTIONS_MUSIC ? ui->jukebox_display->volume : ui->jukebox_display->effects_volume;
       int steps = marks ? 16 : 8, label_step = marks ? 4 : 2;
@@ -498,12 +514,14 @@ void DrawGameOptions(Game *game, Canvas *c, int left, int top, int right, int bo
           kOptionsGold, 0xFFFCF880, 0xFFB87818, true);
     }
   }
-  if (p->tab == GAME_OPTIONS_TAB_ADVANCED) DrawCitySettings(game, c, (CityRect){left, top, right, bottom});
+  if (ui->settings.tab == GAME_OPTIONS_TAB_ADVANCED) DrawCitySettings(game, c, (CityRect){left, top, right, bottom});
 }
 
 const char *CityOptionsTooltipAt(const Game *game, const Window *window, int x, int y) {
-  const GameOptions *options = &game->drawing->options;
-  if (options->tab == GAME_OPTIONS_TAB_ADVANCED) {
+  int tab = game->ui->settings.tab;
+  if (CanvasPointInRect(CitySettingsControlBounds(window->bounds, GAME_OPTIONS_SCOPE), x, y))
+    return "Choose city settings or global defaults, or copy gameplay settings between them.";
+  if (tab == GAME_OPTIONS_TAB_ADVANCED) {
     int action = SettingsActionAt(game, window->bounds, x, y);
     if (action >= GAME_OPTIONS_SETTING && action < GAME_OPTIONS_SETTING + kCitySettingsCount)
       return kCitySettings[action - GAME_OPTIONS_SETTING].tooltip;
@@ -511,28 +529,31 @@ const char *CityOptionsTooltipAt(const Game *game, const Window *window, int x, 
       return "Expand or collapse this group of settings.";
     switch (action) {
     case GAME_OPTIONS_CATEGORY: return "Show all categories or just one group of settings.";
-    case GAME_OPTIONS_TYPE: return "Filter interface settings or optional city simulation fixes.";
+    case GAME_OPTIONS_TYPE: return "Filter interface preferences or city gameplay settings.";
     case GAME_OPTIONS_FILTER: return "Search setting names, categories and descriptions. Clear with the X button.";
     case GAME_OPTIONS_CLEAR_FILTER: return "Clear the text filter.";
     case GAME_OPTIONS_EXPAND_ALL: return "Expand every settings group.";
     case GAME_OPTIONS_COLLAPSE_ALL: return "Collapse every settings group. Search reveals matching settings.";
-    case GAME_OPTIONS_RESET_ALL: return "Restore all settings to their defaults. SimCity 2000 fixes are enabled by default.";
+    case GAME_OPTIONS_RESET_ALL: return game->ui->settings.city_defaults ?
+        "Reset new-city gameplay defaults and global interface/audio preferences." :
+        "Reset this city's gameplay settings and global interface/audio preferences.";
     case GAME_OPTIONS_SCROLL_UP: case GAME_OPTIONS_SCROLL_DOWN: case GAME_OPTIONS_PAGE_UP:
     case GAME_OPTIONS_PAGE_DOWN: case GAME_OPTIONS_SCROLL_THUMB: return "Scroll the settings list.";
     }
   }
   CityWidgetLayout layout[96];
-  int count = OptionsLayout(options, layout, window->bounds.left, window->bounds.top,
+  int count = OptionsLayout(tab, layout, window->bounds.left, window->bounds.top,
       window->bounds.right, window->bounds.bottom);
   return CityWidgetTooltipAt(layout, count, x, y);
 }
 
-i32 Sc2kCanvasGameOptionsSliderAt(const GameOptions *options, const Window *w,
+i32 Sc2kCanvasGameOptionsSliderAt(const CitySettingsBrowser *browser, const Window *w,
     i32 slider, i32 x, i32 continuous) {
-  if (!options || !w || w->kind != CITY_CANVAS_GAME_OPTIONS)
+  if (!browser || !w || w->kind != CITY_CANVAS_GAME_OPTIONS)
     return GAME_OPTIONS_NONE;
   CityWidgetLayout layout[96];
-  i32 count = OptionsLayout(options, layout, w->bounds.left, w->bounds.top, w->bounds.right, w->bounds.bottom);
+  i32 count = OptionsLayout(browser->tab, layout, w->bounds.left, w->bounds.top,
+      w->bounds.right, w->bounds.bottom);
   for (i32 i = 0; i < count; ++i)
     if (layout[i].widget->kind == CITY_WIDGET_SLIDER && layout[i].widget->id == slider) {
       CityRect b = layout[i].bounds;
@@ -552,20 +573,23 @@ i32 Sc2kCanvasGameOptionsSliderAt(const GameOptions *options, const Window *w,
 
 i32 Sc2kCanvasGameOptionsActionAt(const Game *game, const Window *w,
     i32 x, i32 y, i32 continuous) {
-  const GameOptions *options = &game->drawing->options;
+  const DrawingOptions *options = &game->drawing->options;
+  const CitySettingsBrowser *browser = &game->ui->settings;
   if (!w->visible || w->kind != CITY_CANVAS_GAME_OPTIONS)
     return GAME_OPTIONS_NONE;
+  if (CanvasPointInRect(CitySettingsControlBounds(w->bounds, GAME_OPTIONS_SCOPE), x, y)) return GAME_OPTIONS_SCOPE;
   if (x >= w->bounds.left && x < w->bounds.left + 11 && y >= w->bounds.top &&
       y < w->bounds.top + 14)
     return GAME_OPTIONS_CLOSE;
   if (x >= w->bounds.right - 11 && x < w->bounds.right && y >= w->bounds.top && y < w->bounds.top + 14)
     return GAME_OPTIONS_RESET_SIZE;
   CityWidgetLayout layout[96];
-  i32 count = OptionsLayout(options, layout, w->bounds.left, w->bounds.top, w->bounds.right, w->bounds.bottom);
+  i32 count = OptionsLayout(browser->tab, layout, w->bounds.left, w->bounds.top,
+      w->bounds.right, w->bounds.bottom);
   i32 id = Sc2kCanvasWidgetHit(layout, count, x, y);
-  if (!id && options->tab == GAME_OPTIONS_TAB_ADVANCED) id = SettingsActionAt(game, w->bounds, x, y);
+  if (!id && browser->tab == GAME_OPTIONS_TAB_ADVANCED) id = SettingsActionAt(game, w->bounds, x, y);
   if (id == GAME_OPTIONS_FONT_ANTIALIAS && options->sprite_font) return GAME_OPTIONS_NONE;
   if (id == GAME_OPTIONS_SCALE || id == GAME_OPTIONS_MUSIC || id == GAME_OPTIONS_EFFECTS || id == GAME_OPTIONS_MASTER)
-    return Sc2kCanvasGameOptionsSliderAt(options, w, id, x, continuous);
+    return Sc2kCanvasGameOptionsSliderAt(browser, w, id, x, continuous);
   return id;
 }

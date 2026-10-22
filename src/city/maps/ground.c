@@ -11,13 +11,13 @@
 
 #include "city/maps/buildings.h"
 #include "city/maps/ground.h"
+#include "city/maps/terrain.h"
 #include "city/maps/module.h"
 
 #include <assert.h>
 
 #include "city/engine/random.h"
 #include "city/growth/growth.h"
-#include "city/infrastructure/infrastructure.h"
 #include "city/maps/layers.h"
 #include "city/maps/trees.h"
 #include "city/maps/water.h"
@@ -330,7 +330,7 @@ void DrawCityGroundTileFallback(City *city, TileIndex tile, int layout, int zoom
     const CityTileGeometry *geometry) {
   Drawing *drawing = city->game->drawing;
   const TileInfo *tp = &city->tile[tile];
-  int terrain = CityMapViewTerrainCode(city, tile), zone = ReadCityZoneKind(tp);
+  int terrain = CityMapDryGroundShape(city, tile, geometry), zone = ReadCityZoneKind(tp);
   int ground = terrain == CITY_TERRAIN_FLAT && zone != ZONE_NONE ? MapSpriteZoomIndex(290 + zone, zoom) : -1;
   DrawCityMapTerrainTile(city, tile, zoom, ground, screen_x, ground_y, geometry);
   bool details = CityMapTileDetailsVisible(drawing), park = layout == CITY_MAP_TILE_SPRITE_PARK;

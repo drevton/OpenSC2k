@@ -3,9 +3,6 @@
 
 #include "game/state.h"
 
-// Local command-error marker, excluded from City state. Damages the old/new marker before changing the tile.
-void SetCityErrorTile(Game *game, TileIndex tile);
-
 enum {
   SC2K_ERROR_GUEST_INTEGER_DIVIDE_BY_ZERO = -3,
   SC2K_ERROR_GUEST_ALLOCATION_FAILURE = -4,

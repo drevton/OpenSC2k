@@ -1,7 +1,7 @@
 #ifndef SC2K_RENDER_SCREEN_DAMAGE_H
 #define SC2K_RENDER_SCREEN_DAMAGE_H
 
-#include "drawing/drawing.h"
+#include "drawing/canvas.h"
 
 enum { SCREEN_DIRTY_BLOCK_WIDTH = 64, SCREEN_DIRTY_BLOCK_HEIGHT = 8,
   SCREEN_DAMAGE_MAX_WIDTH = 600 * 16, SCREEN_DAMAGE_MAX_HEIGHT = 490 * 16,

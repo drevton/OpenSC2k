@@ -32,8 +32,8 @@ EFFECTS = (
         "generated", "Original low rumble and debris impacts"),
     (503, "tree or zone placement", "opensfx/effects/osfx_31.wav",
         "approximation", "Generic construction placement"),
-    (504, "explosion", "opensfx/effects/osfx_18.wav",
-        "match", "Explosion"),
+    (504, "explosion", "edited/explosion.wav",
+        "match", "OpenSFX explosion shortened to 0.4 seconds at 25% amplitude with softened edges"),
     (505, "query", "opensfx/selection.wav",
         "approximation", "Generic interface beep"),
     (506, "police or hospital", "generated/emergency-siren.wav",
@@ -54,16 +54,16 @@ EFFECTS = (
         "generated", "Original three-note completion chime"),
     (514, "power lines", "opensfx/effects/osfx_12.wav",
         "match", "Electric sparking"),
-    (515, "aircraft crash", "opensfx/effects/osfx_19.wav",
-        "approximation", "Big crash; not an aircraft-specific recording"),
+    (515, "aircraft crash", "edited/aircraft-crash.wav",
+        "approximation", "OpenSFX big crash shortened to 0.5 seconds at 20% amplitude; not aircraft-specific"),
     (516, "helicopter stage", "freesound/helicopter-start.wav",
         "approximation", "Helicopter ignition recorded by Paul368; exact stage role unproved"),
-    (517, "ship", "opensfx/effects/osfx_06.wav",
-        "match", "Ship horn"),
-    (518, "airplane takeoff", "opensfx/effects/osfx_09.wav",
-        "match", "Jet takeoff"),
-    (519, "airplane landing", "opensfx/effects/osfx_23.wav",
-        "match", "Plane wheels touching ground"),
+    (517, "ship", "edited/ship-horn.wav",
+        "match", "OpenSFX ship horn shortened to 0.65 seconds at 30% amplitude"),
+    (518, "airplane takeoff", "edited/airplane-takeoff.wav",
+        "match", "OpenSFX jet takeoff shortened to one second at 30% amplitude"),
+    (519, "airplane landing", "edited/airplane-landing.wav",
+        "match", "OpenSFX plane wheels touching ground at 25% amplitude with softened edges"),
     (520, "disaster warning", "generated/disaster-warning.wav",
         "generated", "Original slow civil-warning siren"),
     (521, "bus depot", "opensfx/effects/osfx_27.wav",
@@ -87,6 +87,32 @@ EFFECTS = (
     (531, "bridge construction", "opensfx/effects/osfx_39.wav",
         "match", "OpenTTD bridge construction; smithy/anvil recording"),
 )
+
+# Explicit offline edits of the retained OpenSFX originals. Normal builds only read the resulting WAVs.
+# Source, destination, maximum duration in ms, amplitude percent, fade-in ms, fade-out ms.
+RECORDING_EDITS = (
+    ("osfx_18.wav", "explosion.wav", 400, 25, 10, 80),
+    ("osfx_19.wav", "aircraft-crash.wav", 500, 20, 10, 100),
+    ("osfx_06.wav", "ship-horn.wav", 650, 30, 40, 150),
+    ("osfx_09.wav", "airplane-takeoff.wav", 1000, 30, 40, 200),
+    ("osfx_23.wav", "airplane-landing.wav", 200, 25, 10, 40),
+)
+
+
+def EditRecordings():
+  destination = AUDIO / "edited"
+  destination.mkdir(exist_ok=True)
+  for source, filename, duration, gain, fade_in, fade_out in RECORDING_EDITS:
+    samples = array.array("h", ReadPCM(AUDIO / "opensfx/effects" / source)[:duration * RATE // 1000 * 2])
+    if sys.byteorder != "little": samples.byteswap()
+    attack, release = fade_in * RATE // 1000, fade_out * RATE // 1000
+    for index, sample in enumerate(samples):
+      envelope = min(1, index / attack, (len(samples) - index - 1) / release)
+      samples[index] = round(sample * gain / 100 * envelope)
+    if sys.byteorder != "little": samples.byteswap()
+    with wave.open(str(destination / filename), "wb") as output:
+      output.setparams((1, 2, RATE, 0, "NONE", "not compressed"))
+      output.writeframes(samples.tobytes())
 
 
 def Synthesise(name, duration):
@@ -171,6 +197,7 @@ def ReadPCM(path):
 def main():
   parser = argparse.ArgumentParser(description=__doc__)
   parser.add_argument("--regenerate", action="store_true", help="replace the six synthesized source WAVs")
+  parser.add_argument("--edit-recordings", action="store_true", help="recreate the quieter edited OpenSFX WAVs")
   parser.add_argument("--ids", nargs="+", type=int, help="bake only these IDs into an incremental override pack")
   parser.add_argument("--output", type=Path, help="destination pack (default: base or override in assets/audio)")
   args = parser.parse_args()
@@ -181,6 +208,8 @@ def main():
   output = args.output or AUDIO / ("sound-effects.override.dat" if args.ids else "sound-effects.dat")
   if args.regenerate:
     BakeGenerated()
+  if args.edit_recordings:
+    EditRecordings()
   header_size = 24
   record_size = 80
   offset = header_size + record_size * len(effects)
@@ -201,6 +230,13 @@ def main():
         {"match": 0, "approximation": 1, "generated": 2}[match], filename.encode()))
     manifest.append(dict(id=sound_id, role=role, source=filename, match=match, note=reason,
         frames=frames, sha256=hashlib.sha256((AUDIO / filename).read_bytes()).hexdigest()))
+    for original, edited, duration, gain, fade_in, fade_out in RECORDING_EDITS:
+      if filename != f"edited/{edited}": continue
+      original = f"opensfx/effects/{original}"
+      manifest[-1].update(original_source=original,
+          original_sha256=hashlib.sha256((AUDIO / original).read_bytes()).hexdigest(),
+          edits=dict(maximum_duration_ms=duration, amplitude_percent=gain,
+              fade_in_ms=fade_in, fade_out_ms=fade_out))
   pack = struct.pack("<8sIIHHI", b"SC2KSFX\0", len(effects), RATE, 1, 16, offset) + records + payload
   output.parent.mkdir(parents=True, exist_ok=True)
   output.write_bytes(pack)

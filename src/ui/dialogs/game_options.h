@@ -1,10 +1,14 @@
 #ifndef SC2K_GAME_OPTIONS_H
 #define SC2K_GAME_OPTIONS_H
 
-#include "city/fixes.h"
-#include "game/settings.h"
 #include "city/engine/commands.h"
 #include "city/types.h"
+#include "game/settings.h"
+
+typedef struct CanvasSDL CanvasSDL;
+
+typedef struct Canvas Canvas;
+typedef struct Window Window;
 
 enum { CITY_SCROLLWHEEL_SCROLL, CITY_SCROLLWHEEL_ZOOM, CITY_SCROLLWHEEL_OFF };
 
@@ -15,24 +19,24 @@ typedef enum GameOptionsTab {
   GAME_OPTIONS_TAB_ADVANCED = 3,
   GAME_OPTIONS_TAB_COUNT = 4,
 } GameOptionsTab;
-typedef struct {
-  i32 tab, scale, preview_scale, automatic, snapping, fullscreen;
-  bool scale_bevels, sprite_font, font_antialias, save_view_position, black_background;
-  u8 demolition_elevation;
-  u32 fixes;
-  i32 window_width, window_height, refresh_rate;
-  char driver[48];
-} GameOptions;
 
 // Interaction state belongs to UI; values remain with their actual owners.
 typedef struct {
   char filter[96];
   int category, type, scroll, caret, text_scroll, select_all;
   u32 collapsed_groups;
-  bool filter_focused, caret_visible, dragging_scrollbar;
+  bool filter_focused, caret_visible, dragging_scrollbar, city_defaults;
   int scrollbar_offset;
   double caret_blink_at;
+  u16 preview_scale; // Pending slider value; applied to Drawing on release.
+  u8 tab; // GameOptionsTab.
 } CitySettingsBrowser;
+
+// Choices in the scope dropdown; copy actions select their destination for subsequent edits.
+typedef enum CitySettingsScopeChoice {
+  CITY_SETTINGS_EDIT_CITY, CITY_SETTINGS_EDIT_DEFAULTS,
+  CITY_SETTINGS_COPY_DEFAULTS_TO_CITY, CITY_SETTINGS_COPY_CITY_TO_DEFAULTS
+} CitySettingsScopeChoice;
 
 extern const char *const kCitySettingsGroups[CITY_SETTINGS_GROUP_COUNT];
 
@@ -63,6 +67,7 @@ enum {
   GAME_OPTIONS_PAGE_UP,
   GAME_OPTIONS_PAGE_DOWN,
   GAME_OPTIONS_SCROLL_THUMB,
+  GAME_OPTIONS_SCOPE = 50,
   GAME_OPTIONS_GROUP = 64,
   GAME_OPTIONS_SETTING = 128,
   GAME_OPTIONS_FIX = 256,
@@ -90,6 +95,7 @@ enum {
   GAME_OPTIONS_TERRAIN_SEAWATER,
   GAME_OPTIONS_OVERLAPPING_EFFECTS,
   GAME_OPTIONS_INDIVIDUAL_FACILITIES,
+  GAME_OPTIONS_AMBIENT_SOUNDS,
   GAME_OPTIONS_DRAWING_FIX = 600,
   GAME_OPTIONS_SCALE = 1000,
   GAME_OPTIONS_MUSIC = 2000,
@@ -97,11 +103,22 @@ enum {
   GAME_OPTIONS_MASTER = 4000
 };
 
-bool CitySettingEnabled(const Game *game, int index);
 CityRect CitySettingsControlBounds(CityRect window, int control);
 CityRect CitySettingsScrollbarThumb(const Game *game, CityRect window);
 int CitySettingsRowCount(const Game *game);
 CityRect CitySettingControlBounds(const Game *game, CityRect window, int index);
 bool PollCitySettingsCaret(Game *game, double now);
+
+// Action hit testing requires live Game/UI/Drawing owners and a live window.
+// Slider hit testing returns GAME_OPTIONS_NONE for a missing browser or window.
+i32 Sc2kCanvasGameOptionsActionAt(const Game *game, const Window *window,
+    i32 x, i32 y, i32 continuous);
+i32 Sc2kCanvasGameOptionsSliderAt(const CitySettingsBrowser *browser, const Window *window,
+    i32 slider, i32 x, i32 continuous);
+const char *CityOptionsTooltipAt(const Game *game, const Window *window, int x, int y);
+void DrawGameOptions(Game *game, Canvas *c, const Window *window);
+
+void SyncCityInterface(Game *game, CanvasSDL *display, i32 automatic_change);
+void OpenCityGameOptions(Game *game);
 
 #endif

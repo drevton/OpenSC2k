@@ -17,9 +17,10 @@ Original resources for diagnostic comparison remain confined to the optional com
 
 ## Shared format and loader
 
-`tools/package_assets.py` writes all three packs. `src/assets/asset_file.c` reads them through
-one archive loader and validates the index, IDs, category membership, ranges, decoded lengths,
-checksums and complete input consumption. All fields are little endian. The 32-byte header is:
+`tools/package_assets.py` writes all three packs. `src/assets/assets.c` selects their paths,
+loads the catalog and retains decoded blocks. `src/assets/asset_file.c` supplies byte reads and
+bounded Zstandard decoding. Together they validate the index, IDs, category membership, ranges,
+decoded lengths, checksums and complete input consumption. All fields are little endian. The 32-byte header is:
 
 | Offset | Field |
 | --- | --- |
@@ -66,4 +67,4 @@ ByteSpan GetAsset(CityAssets *assets, u32 id);
 
 This inline array lookup does no allocation, decompression, searching or locking. Assets also owns
 font glyph images and authored sprite variants; Drawing retains generated render caches. Optional
-SoundFont user files and imported city/tile-set files keep their own host-file codecs.
+SoundFont user files and imported cities keep their own host-file codecs.

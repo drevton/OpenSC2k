@@ -1,7 +1,19 @@
 #ifndef SC2K_AUDIO_TYPES_H
 #define SC2K_AUDIO_TYPES_H
 
+#include "base/types.h"
+
 // Audio
+
+// Playback tokens identify the current track; completion for an older token is ignored.
+enum { CITY_MUSIC_NO_TOKEN = UINT16_MAX };
+typedef enum CityMusicCompletion {
+  CITY_MUSIC_PENDING = 0, CITY_MUSIC_FINISHED = 1, CITY_MUSIC_FAILED = 8
+} CityMusicCompletion;
+
+typedef enum CityEffectPlayback {
+  CITY_EFFECT_ONCE, CITY_EFFECT_LOOP, CITY_EFFECT_REPLAY_LOOP, CITY_EFFECT_STOP
+} CityEffectPlayback;
 
 // Original WAV resource IDs. Names describe verified callers, not guessed recordings.
 // Resources without an established role retain their asset number.
@@ -31,6 +43,11 @@ typedef enum CitySoundResourceId {
   CITY_SOUND_ASSET_COUNT = CITY_SOUND_COUNT + 1,
   CITY_SOUND_NONE = -1,
 } CitySoundResourceId;
+
+static inline bool IsCitySoundEffectId(int sound_id) {
+  return (sound_id >= CITY_SOUND_FIRST && sound_id < CITY_SOUND_END) ||
+      sound_id == CITY_SOUND_BRIDGE_CONSTRUCTION;
+}
 
 // Event cue IDs select OpenMSX tracks; they are independent of soundtrack filenames.
 // Newspaper cue indices are distinct from these IDs.

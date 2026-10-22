@@ -9,15 +9,15 @@
 // altitude[5..9] is not tree age or construction progress. Shared flags, overlay and underground follow tile_storage.h.
 
 #include "city/maps/trees.h"
+#include "city/maps/terrain.h"
 #include "city/maps/ground.h"
 #include "city/maps/module.h"
 
 #include <assert.h>
 
-#include "audio/audio.h"
+#include "game/audio.h"
 #include "city/engine/commands.h"
 #include "city/engine/random.h"
-#include "city/engine/simulation.h"
 #include "city/maps/layers.h"
 #include "city/maps/map.h"
 #include "city/presentation.h"
@@ -27,6 +27,15 @@
 #include "drawing/maps/map_view.h"
 #include "game/state.h"
 #include "drawing/sprites/sprites.h"
+
+// Select natural tree aging and reseeding. Invalid or reserved values fail before TEST or mutation.
+i64 CmdSetTreeLifecycle(City *city, u32 flags, int enabled, int reserved1, int reserved2) {
+  if ((enabled != 0 && enabled != 1) || reserved1 || reserved2)
+    return CITY_COMMAND_COST_INVALID;
+  if (flags & CITY_COMMAND_TEST) return 0;
+  city->tree_lifecycle = enabled != 0;
+  return 1;
+}
 
 // Return the number of local tree species for a ground climate. Arctic climates have eight species and other climates
 // twelve; snow appearance is reduced to its permanent base climate first.

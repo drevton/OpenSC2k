@@ -1,23 +1,53 @@
 #ifndef SC2K_CITY_SAVELOAD_RUNTIME_H
 #define SC2K_CITY_SAVELOAD_RUNTIME_H
 
-#include "city/engine/commands.h"
-#include "city/saveload/file.h"
+#include "city/saveload/path.h"
 #include "city/types.h"
 
-// City Bootstrap
+// File context
 
 typedef struct Game Game;
+typedef struct CityFileRuntime CityFileRuntime;
+typedef struct CityFileExceptionState CityFileExceptionState;
 
-// Native startup initializes supplied owners without original-image transport.
-bool InitializeGameCity(Game *game, const char *path);
-
-enum { CITY_FILE_DIRECTORY_CAPACITY = 3 * CITY_FILE_DIALOG_PATH_LIMIT + 1 };
-char *CityFileDirectory(const CityFileRuntime *file);
+// Query the host working directory and copy it into Game; failure preserves the previous directory.
+bool InitializeCityFileDirectory(Game *game);
+// Borrowed Game storage, valid until the directory is replaced or released. Set copies a terminated host path.
+const char *CityFileDirectory(const CityFileRuntime *file);
 void SetCityFileDirectory(CityFileRuntime *file, const char *path);
 bool ShouldBackupCitySave(const CityFileRuntime *file);
 
-void ReleaseGameCityAssets(Game *game);
+// File operation lifetime
+
+// Cleanup records and their contexts are caller-owned. Keep them alive until popped or unwound.
+// Pop removes only the top record without running it; unwind unlinks each record before calling its destructor.
+typedef struct CityFileCleanup {
+  void (*destroy)(void *context);
+  void *context;
+  struct CityFileCleanup *previous;
+} CityFileCleanup;
+// Native temporary buffers are released before an escaping file exception.
+typedef struct {
+  CityFileRuntime *file;
+  void *bytes;
+} CityFileScratchCleanup;
+void ReleaseCityFileScratchBuffer(void *context);
+// Begin initializes caller storage, inherits its parent's error and installs it on Game. End requires all
+// streams, cleanups, scratch and retained scenario state to be released, then restores the parent and its error.
+void BeginCityFileOperation(Game *game, CityFileRuntime *file);
+void EndCityFileOperation(CityFileRuntime *file);
+// Window-owned operations may retain streams, but never stack cleanup/exception frames.
+void SuspendCityFileOperation(CityFileRuntime *file);
+void ResumeCityFileOperation(CityFileRuntime *file);
+void PushCityFileCleanup(CityFileRuntime *file, CityFileCleanup *cleanup);
+void PopCityFileCleanup(CityFileRuntime *file, CityFileCleanup *cleanup);
+CityFileCleanup *CityFileCleanupTop(const CityFileRuntime *file);
+void UnwindCityFileCleanups(CityFileRuntime *file, CityFileCleanup *until);
+
+// Run synchronously inside a scratch and exception boundary. Errors unwind registered cleanups and report the
+// failure while preserving partial City writes; nested commands restore the parent's workspace and exception frame.
+typedef void (*CityFileAction)(void *context);
+void RunCityFileCommand(CityFileRuntime *file, CityFileAction action, void *context);
 
 // City Save
 
@@ -60,12 +90,9 @@ i32 GetCitySaveAttemptError(const CityFileRuntime *file, const NativeCitySaveAtt
 // even when its saved I/O errno is nonzero.
 i32 EndCitySaveAttempt(CityFileRuntime *file, NativeCitySaveAttempt *attempt);
 
-// Invoke ONLY from the unified CityCommand mutation handler. The caller owns
-// an owned CityPath (existing Save path or Save As local). Destination is an explicit final filesystem path, including extension;
-// it is kept separate so game path lowercasing cannot rename POSIX directory
-// components. Cancellation happens before this call. This adapter invokes the
-// complete SaveCityFile inside a new nested attempt; Save/Save As caller/name/
-// document effects remain in the command handler. Returns false on any I/O failure, including close.
+// Save to an accepted host destination inside a private I/O attempt. The caller retains an active file operation
+// and a mutable CityPath; serialization may normalize that path. The attempt copies destination before writing.
+// The caller owns the chooser, name changes and final path commit. False includes serialization or close failure.
 bool SaveCityToDestination(City *city, CityPath *path,
     const char *destination);
 // Zero after successful platform operations, otherwise the first errno from
@@ -78,16 +105,13 @@ void FillCitySaveFileError(const CityFileRuntime *file, CityFileExceptionState *
 
 // City Load
 
-bool InitializeCityFileDirectory(Game *game);
-// WM_COMMAND framework exception boundary; action retains its original ABI.
+// Resolve and replace Game's directory for relative city paths. Returns zero on success or -1 on failure and
+// records the I/O outcome; path is borrowed for the call.
 i32 ChangeCityLoadDirectory(CityFileRuntime *file, const char *path);
-void NotifyCityLoaded(City *city);
-bool ShowCityLoadResourceMessage(City *city, u32 resource, u32 flags, u32 help);
 
-// File Dialog Actions
+// File presentation
 
-// Canvas continuations enter the same command dispatcher as ordinary input.
-void RecordCityFileDialogCheckpoint(City *city, u32 kind, i32 token, i32 answer, const char *path);
+// Text is borrowed only for this call. The opened window owns its displayed copy through dismissal.
 void PresentCityFileNotice(City *city, const char *text, bool error);
 void SetCityHostWindowTitle(City *city, const char *text);
 void InvalidateLoadedCityCanvas(City *city);

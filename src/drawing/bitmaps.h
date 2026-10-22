@@ -2,6 +2,7 @@
 #define SC2K_RENDER_BITMAPS_H
 
 #include "city/infrastructure/types.h"
+#include "city/maps/tile_storage.h"
 #include "drawing/canvas.h"
 #include "assets/graphics.h"
 #include "city/types.h"
@@ -17,11 +18,8 @@ typedef enum CityMapIcon {
   CITY_MAP_ICON_COUNT
 } CityMapIcon;
 
-void InitializeNativeCityPalette(Drawing *drawing);
-
 // Generated map previews keep one Drawing-owned sprite per control. Windows
 // invalidate content explicitly; changing raster size rebuilds the preview.
-typedef struct Game Game;
 typedef struct Drawing Drawing;
 typedef struct CityBitmapCache {
   struct RunSprite *sprite;
@@ -33,6 +31,8 @@ typedef struct {
   CityRect content;
 } CitySpriteImage;
 void ReleaseCitySpriteImage(CitySpriteImage *image);
+// Draw a non-NULL full sprite into logical canvas bounds through the existing clip/raster transform; retain no cache.
+bool DrawCanvasRunSprite(Canvas *canvas, const struct RunSprite *sprite, CityRect bounds, u32 flags);
 // One cache slot prepares a source region at its final raster dimensions.
 // A null slot streams a full source image through row scratch instead of caching it.
 bool DrawCanvasSpriteImage(Canvas *canvas, CitySpriteImage *image, const struct RunSprite *source,
@@ -42,7 +42,7 @@ bool DrawCanvasSpriteImage(Canvas *canvas, CitySpriteImage *image, const struct 
 typedef enum CityWindowDrawingKind {
   CITY_WINDOW_DRAWING_MAP_DATA, CITY_WINDOW_DRAWING_BRIDGE_CHOICES,
   CITY_WINDOW_DRAWING_TREE_PICKER, CITY_WINDOW_DRAWING_TERRAIN_PREVIEW,
-  CITY_WINDOW_DRAWING_SPRITE, CITY_WINDOW_DRAWING_NEIGHBORS, CITY_WINDOW_DRAWING_MUSIC
+  CITY_WINDOW_DRAWING_SPRITE
 } CityWindowDrawingKind;
 typedef struct CityWindowDrawing {
   Drawing *owner;
@@ -82,7 +82,9 @@ typedef struct {
   const void *context;
 } CityBitmapPaint;
 bool DrawCityCachedBitmap(Canvas *canvas, CityBitmapCache *cache, const CityBitmapPaint *paint);
-CityWindowDrawing *CreateCityWindowDrawing(Drawing *drawing, CityWindowDrawingKind kind);
+// UI supplies the required sprite-cache capacity: 1..255 images for SPRITE, zero for fixed drawing kinds.
+// A failed allocation leaves Drawing's list unchanged. The owner releases successful results at window close.
+CityWindowDrawing *CreateCityWindowDrawing(Drawing *drawing, CityWindowDrawingKind kind, int images);
 void InvalidateCityWindowBitmaps(CityWindowDrawing *state);
 void InvalidateCityWindowPaletteBitmaps(Drawing *drawing, u32 changed_buckets);
 void ReleaseCityWindowDrawing(CityWindowDrawing *state);
@@ -93,27 +95,20 @@ bool DrawCityInterfaceIcon(Canvas *canvas, CitySpriteImage *cache, const CityInt
 // Prepared toolbar sprites belong to Drawing, not the immutable asset atlas.
 enum { CITY_TOOLBAR_ICON_BUTTON_VARIANTS = 1, CITY_TOOLBAR_ICON_PREVIEW_VARIANTS = 4,
     CITY_TOOLBAR_ICON_CACHE_VARIANTS = CITY_TOOLBAR_ICON_BUTTON_VARIANTS + CITY_TOOLBAR_ICON_PREVIEW_VARIANTS };
-bool PrepareCityToolbarIcons(Game *game);
-bool PrepareCityToolbarIconSize(Game *game, int icon, int size);
-int CityToolbarIconColumns(int icon);
+// Look up a valid icon's borrowed preparation at exact physical dimensions; a miss returns NULL.
+const struct RunSprite *FindCityToolbarIcon(const Drawing *drawing, int icon, int width, int height);
+// Prepare a valid icon at positive physical dimensions from the installed source. Button and preview slots have
+// independent eviction ranges. Failure retains existing entries; returned sprites are borrowed from Drawing.
+const struct RunSprite *PrepareCityToolbarIcon(Drawing *drawing, int icon, int width, int height, bool button);
 void ReleaseCityToolbarIcons(Drawing *drawing);
-void DrawCityToolbarIcon(Game *game, Canvas *canvas, CityRect bounds, int icon, bool disabled, bool flipped);
-int CityToolSpriteTile(int tool);
-void DrawCityTreePreview(Game *game, Canvas *canvas, CitySpriteImage *cache, CityRect bounds, int species);
+// Draw the species' common climate crop using immutable Assets. Missing artwork/empty bounds are no-ops;
+// false reports sprite preparation failure. The caller owns application error handling.
+bool DrawCityTreePreview(const CityAssets *assets, Canvas *canvas, CitySpriteImage *cache, CityRect bounds,
+    int species);
 enum { CITY_BUILDING_PREVIEW_WIDTH = 144, CITY_BUILDING_PREVIEW_HEIGHT = 150 };
-void DrawCityBuildingPreview(Game *game, Canvas *canvas, CityRect bounds, int tool);
-
-// Palette
-
-typedef struct __attribute__((packed)) {
-  u8 red;
-  u8 green;
-  u8 blue;
-  u8 flags;
-} CityPaletteEntry;
-
-typedef struct __attribute__((packed)) {
-  CityPaletteEntry entry[256];
-} CityPaletteEntries;
+// kind must have a prepared construction-chooser preview; orientation is the resolved artwork facing in 0..3.
+// UI resolves tool selection and camera/placement rotation before this draw, which does not read the active tool.
+// City supplies artwork policy/year without mutation. False reports a missing prepared sprite to the caller.
+bool DrawCityBuildingPreview(const City *city, Canvas *canvas, CityRect bounds, TileKind kind, int orientation);
 
 #endif

@@ -24,6 +24,12 @@ extern const u16 kTransportValueBySize[CITY_GROWTH_TRANSPORT_WEIGHT_COUNT];
 
 // Zoning
 
+// Visit one interleaved quarter of the map for zoning growth, infrastructure maintenance and facility activity.
+// Offsets are 0..3. Batches preserve row/section/RNG order; first/count are multiples of 32 quarter-grid positions.
+void ScanCityTileBatch(City *city, int quarter_x, int quarter_y,
+    int first, int count, bool large_city_effect);
+void ScanQuarterCityTiles(City *city, int quarter_x, int quarter_y);
+
 // One valid tile zoned residential through seaport. May account population, grow, decline or spawn special-zone
 // vehicles. The caller owns visit order and the shared large-city-effect decision; reserved zones are excluded.
 void GrowCityZonedTile(City *city, TileIndex tile, bool large_city_effect_enabled);

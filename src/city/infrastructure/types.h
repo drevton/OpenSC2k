@@ -3,12 +3,54 @@
 
 #include "city/types.h"
 
+// City-owned network totals and retained infrastructure counters.
+typedef struct {
+  u32 power_total;
+  u32 power_percent;
+  u32 water_total;
+  u32 water_percent;
+  union {
+    u32 capacity_word;
+    struct {
+      u16 capacity;
+      u16 capacity_upper;
+    };
+  };
+  u32 counter_a;
+  u32 counter_b;
+  u32 counter_c;
+  u32 subway_tiles;
+  u32 facility_total;
+  i16 facility_ratio;
+  i16 mayor_rating;
+  u32 service_bonus_a;
+  u32 service_bonus_b;
+  u16 stadium_team_mask;
+} CityInfrastructureState;
+
+// Connected-component traversal is retained City work, never stored in tile payloads or presentation owners.
+typedef enum CityUtilityStage {
+  CITY_UTILITY_COMPLETE, CITY_UTILITY_MEASURE, CITY_UTILITY_DISTRIBUTE,
+} CityUtilityStage;
+
+typedef struct CityUtilityTraversal {
+  u32 available, demand, transit;
+  int source_x, source_y;
+  u8 stage; // CityUtilityStage
+} CityUtilityTraversal;
+
 // Shared span-query result. Dry approaches are included in native water crossings.
 typedef struct CityInfrastructureSpan {
   TileIndex start, end; // Includes dry approaches for native water crossings.
   TileIndex error_tile; // Actual blocker, or INVALID_TILE for a failure without a specific cell.
   int direction, length, error, styles;
 } CityInfrastructureSpan;
+
+typedef enum CityInfrastructureKind {
+  CITY_INFRASTRUCTURE_ROAD, CITY_INFRASTRUCTURE_RAIL, CITY_INFRASTRUCTURE_POWER,
+  CITY_INFRASTRUCTURE_PIPE, CITY_INFRASTRUCTURE_SUBWAY, CITY_INFRASTRUCTURE_HIGHWAY,
+  CITY_INFRASTRUCTURE_COUNT,
+} CityInfrastructureKind;
 
 // Infrastructure line directions and step tables use west/south/east/north order.
 typedef enum CityInfrastructureDirection {
@@ -95,5 +137,11 @@ typedef enum CityRoadSpanSelection {
   CITY_ROAD_SPAN_DECORATED = 2, CITY_ROAD_SPAN_STYLE_COUNT = 3,
   CITY_ROAD_SPAN_CANCEL = 7,
 } CityRoadSpanSelection;
+
+typedef enum CityBorderConnectionKind {
+  CITY_BORDER_CONNECTION_ROAD = 0,
+  CITY_BORDER_CONNECTION_RAIL = 1,
+  CITY_BORDER_CONNECTION_HIGHWAY_OR_TUNNEL = 2,
+} CityBorderConnectionKind;
 
 #endif

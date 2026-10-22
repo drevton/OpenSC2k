@@ -2,6 +2,7 @@
 #define SC2K_CITY_INFRASTRUCTURE_SURFACE_LINES_H
 
 #include "city/maps/map.h"
+#include "city/maps/terrain.h"
 
 // Resolved transport surface, derived from TileInfo rather than retained drawing state.
 // shape is camera-relative for view queries; raised is a lift in map levels. layout names source artwork,
@@ -10,6 +11,16 @@ typedef struct CityMapSurface {
   int shape, raised, layout, foundation;
   bool bridge_approach;
 } CityMapSurface;
+
+// Recipe IDs shared by the artwork-derived road lanes and rail centrelines. Entry/exit use west/south/east/north.
+enum CitySurfaceLinePathKind {
+  CITY_LINE_PATH_CURVE = 0, CITY_LINE_PATH_DIAGONAL = 2, CITY_LINE_PATH_TRANSITION = 8,
+  CITY_LINE_PATH_APPROACH = 12, CITY_LINE_PATH_SHARED = 16, CITY_LINE_PATH_TURNAROUND = 32,
+  CITY_LINE_PATH_STRAIGHT = 33
+};
+typedef struct { u8 kind, rotation; } CitySurfaceLinePath;
+// Read-only world-space path selection, including prepared diagonal approaches. Rail selects the track centreline.
+CitySurfaceLinePath ResolveCitySurfaceLinePath(const City *city, TileIndex tile, int entry, int exit, bool rail);
 
 typedef struct Drawing Drawing;
 
@@ -54,5 +65,9 @@ void DrawCityMapTransportArtwork(City *city, TileIndex tile, int layout, int zoo
 // this paints terrain, the transport object, selection and power warning, without changing City.
 void DrawCityTransportTileFallback(City *city, TileIndex tile, int layout, int zoom, int screen_x, int ground_y,
     const CityTileGeometry *geometry);
+
+// Shared command admission is read-only in TEST mode; execution retains the family placement/payment order.
+i64 CmdPlaceSubwayRailConnection(City *city, u32 flags, TileIndex tile,
+    int reserved);
 
 #endif

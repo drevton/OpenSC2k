@@ -12,13 +12,6 @@ enum {
   CITY_TERRAIN_DEFAULT_TREES = 15
 };
 
-// RegradeCityTerrainCell can produce offsets beyond the sixteen-entry
-// shape nibble. Preserve these intermediate values before adding a bank.
-typedef enum CityTerrainRegradeShape {
-  CITY_REGRADE_SHAPE_16 = 16, CITY_REGRADE_SHAPE_17 = 17, CITY_REGRADE_SHAPE_18 = 18,
-  CITY_REGRADE_SHAPE_19 = 19, CITY_REGRADE_SHAPE_20 = 20, CITY_REGRADE_SHAPE_21 = 21,
-} CityTerrainRegradeShape;
-
 // OpenSC2K's original map size is the reference spacing for feature density.
 
 enum { kTerrainEdge = 128, kTerrainLast = kTerrainEdge - 1,
@@ -51,7 +44,7 @@ enum {
   CITY_TERRAIN_COAST_NORTH = 1, CITY_TERRAIN_COAST_EAST = 2,
   CITY_TERRAIN_COAST_SOUTH = 4, CITY_TERRAIN_COAST_WEST = 8, CITY_TERRAIN_COAST_ALL = 15
 };
-typedef struct {
+typedef struct CityTerrainSettings {
   u32 seed, features;
   int hills, water, trees;
   int width, height;

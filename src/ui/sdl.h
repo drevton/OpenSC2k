@@ -3,12 +3,12 @@
 
 #include <stddef.h>
 
-#include "drawing/drawing.h"
+#include "drawing/canvas.h"
 #include "city/types.h"
 #include "ui/input.h"
-#include "ui/dialogs/game_options.h"
 
 typedef struct CanvasSDL CanvasSDL;
+typedef struct DrawingOptions DrawingOptions;
 struct ScreenDamage;
 
 typedef enum CanvasSdlMouseButton {
@@ -59,7 +59,10 @@ _Static_assert(sizeof(CanvasSDLEvent) == 52, "SDL host event size matches ctypes
 _Static_assert(offsetof(CanvasSDLEvent, ctrl) == 15, "SDL host Ctrl offset matches ctypes");
 _Static_assert(offsetof(CanvasSDLEvent, key) == 16, "SDL host key offset matches ctypes");
 
+// Game, Assets, Drawing and any attached UI must outlive the display. Standalone canvases may omit UI.
+// Opening does not attach the display to UI; failed creation leaves existing UI attachments unchanged.
 CanvasSDL *Sc2kSDLOpen(Game *game, i32 width, i32 height, i32 scale, i32 hidden);
+// Detach matching UI display references before releasing cursors, gestures and host window resources.
 void Sc2kSDLClose(CanvasSDL *display);
 bool Sc2kSDLIsMinimized(CanvasSDL *display);
 const char *Sc2kSDLError(void);
@@ -84,7 +87,7 @@ i32 Sc2kSDLPresentFramebuffer(CanvasSDL *display, const Canvas *canvas,
 void Sc2kSDLCursorTool(CanvasSDL *display, i32 tool, i32 over_map);
 bool Sc2kSDLUIPointer(CanvasSDL *display, i32 *x, i32 *y);
 bool Sc2kSDLFramebufferPointer(CanvasSDL *display, i32 *x, i32 *y);
-void Sc2kSDLDisplayOptions(CanvasSDL *display, GameOptions *options);
+void Sc2kSDLDisplayOptions(CanvasSDL *display, DrawingOptions *options);
 i32 Sc2kSDLFullscreen(CanvasSDL *display, i32 enabled);
 i32 Sc2kSDLReadPixels(CanvasSDL *display, u32 *pixels, i32 stride);
 void Sc2kSDLResize(CanvasSDL *display, i32 width, i32 height);

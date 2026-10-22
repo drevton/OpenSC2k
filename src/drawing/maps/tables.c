@@ -205,63 +205,6 @@ const u16 kCityMapKindSprites[TK_COUNT] = {
   [TK_BRAUN_LLAMA_DOME] = CITY_MAP_TILE_SPRITE_BRAUN_LLAMA_DOME,
 };
 
-// Event Tables
-
-const u16 kCityMapEventBaseSprite[17] = {
-  0, 359, 364, 369, 390, 490, 387, 382, 383, 380, 374, 374, 374, 374, 384, 497, 495
-};
-
-const u8 kCityMapEventMinZoom[17] = {
-  0, 0, 2, 0, 0, 0, 1, 0, 0, 2, 2, 2, 2, 3, 0, 0, 2
-};
-
-const u8 kCityMapEventSpriteVerticalOffset[24] = {
-  0, 10, 6, 6, 4, 15, 2, 6, 6, 2, 4, 4, 0, 0, 6, 9, 12, 0, 0, 0, 0, 0, 0, 0
-};
-
-const u8 kCityMapEventSpriteHeight[24] = {
-  0, 0, 0, 1, 4, 0, 0, 2, 2, 2, 4, 4, 0, 0, 2, 0, 2, 0, 0, 0, 0, 0, 0, 0
-};
-
-const u8 kCityMapEventSpriteHalfWidth[24] = {
-  0, 2, 2, 5, 4, 8, 2, 2, 2, 2, 6, 6, 0, 0, 2, 5, 2, 0, 0, 0, 0, 0, 0, 0
-};
-
-const u8 kCityMapEventDirectionSprite[8] = {
-  1, 2, 3, 4, 3, 2, 1, 0
-};
-
-const u8 kCityMapEventDirectionFlip[8] = {
-  0, 0, 0, 0, 1, 1, 1, 0
-};
-
-const u8 kCityMapEventDefaultSprite[4] = {
-  0, 1, 1, 0
-};
-
-const u8 kCityMapEventDefaultFlip[4] = {
-  0, 0, 1, 1
-};
-
-const u8 kCityMapEventXDivisor[4] = {
-  4, 2, 1, 1
-};
-
-const u8 kCityMapEventYDivisor[4] = {
-  8, 4, 2, 2
-};
-
-const CityEventStructureOffsets kCityEventStructureOffsets = {
-  .upper_span_x = {-15, -3},
-  .upper_adjust_x = {-24, 14},
-  .upper_span_y = {6, 52},
-  .upper_adjust_y = {43, 33},
-  .lower_span_x = {-15, 2},
-  .lower_adjust_x = {-20, 18},
-  .lower_span_y = {6, 32},
-  .lower_adjust_y = {49, 46},
-};
-
 // Sprite Tables
 
 const u16 kTerrainSpriteByTerrainCode[CITY_TERRAIN_SPRITE_COUNT] = {

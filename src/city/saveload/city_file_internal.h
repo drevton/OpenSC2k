@@ -1,25 +1,8 @@
 #ifndef SC2K_CITY_FILE_INTERNAL_H
 #define SC2K_CITY_FILE_INTERNAL_H
 
-#include "city/maps/tile_storage.h"
-#include <assert.h>
-#include <errno.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <time.h>
-
-#include "audio/audio.h"
-#include "city/state.h"
+#include "city/maps/map_types.h"
 #include "city/saveload/file.h"
-#include "base/byte_order.h"
-#include "city/saveload/map_format.h"
-#include "game/errors.h"
-#include "game/state.h"
-#include "audio/state.h"
-#include "assets/state.h"
-#include "base/text.h"
 
 // Shared file schemas and private codec interfaces. Each implementation is compiled separately.
 // SCDH city file I/O. Chunk geometry and conversions are shared by load and save.
@@ -98,18 +81,6 @@ typedef struct {
   u8 native_width;
 } CityMiscArray;
 
-// MISC stores three current totals followed by alternating monthly amount/rate.
-static inline void *CityFileEconomyField(EconomySector *sector, int field) {
-  switch (field) {
-  case 0: return &sector->current_amount;
-  case 1: return &sector->current_rate;
-  case 2: return &sector->accumulated;
-  default:
-    if (field & 1) return &sector->monthly_amount[(field - 3) / 2];
-    return &sector->monthly_rate[(field - 3) / 2];
-  }
-}
-
 typedef struct {
   char tag[5];
   const CityFileChunkSpec *spec;
@@ -142,15 +113,10 @@ extern const CityMiscArray kCityMiscArrays[27];
 
 enum { CITY_FILE_STANDARD_CHUNKS = sizeof(kCityFileChunks) / sizeof(kCityFileChunks[0]) };
 
-void *CityFileOpenStream(CityFileRuntime *file, const char *path);
-void CityFileCloseStream(void *stream);
-u8 *CityFileReadTaggedStream(void *stream, const char *tag, int version, u8 *output, size_t capacity);
-
 u32 CityFileInputRead(CityFileInput *input, void *destination, u32 size);
 i32 CityFileInputSeek(CityFileInput *input, i32 offset, i32 origin);
 i32 CityFileInputPosition(CityFileInput *input);
 bool CityFileSkipCityChunk(CityFileRuntime *file, CityFileInput *input, u32 size);
-void ReportCityChunkError(CityFileRuntime *file, u32 resource, int load_string);
 bool ReadCityCompressedChunkStrided(CityFileRuntime *file, CityFileInput *input, u32 encoded_size,
     void *destination, u32 decoded_size, int stride);
 bool CityFileReadCompressedCityChunk(CityFileRuntime *file, CityFileInput *input, u32 encoded_size,

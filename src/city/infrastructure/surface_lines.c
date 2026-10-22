@@ -8,7 +8,12 @@
 // zone[5..7] has no line-topology payload. Heights, utility flags, overlays and other underground bits are shared
 // as described in tile_storage.h. Bridge and highway crossings use their own modules' payloads, not these masks.
 
+#include "city/engine/commands.h"
+#include "city/infrastructure/lines.h"
+#include "city/infrastructure/networks.h"
+#include "city/saveload/map_format.h"
 #include "city/infrastructure/surface_lines.h"
+#include "city/maps/terrain.h"
 
 #include <assert.h>
 
@@ -16,7 +21,6 @@
 #include "city/infrastructure/bridges.h"
 #include "city/infrastructure/highways.h"
 #include "city/infrastructure/tunnels.h"
-#include "city/infrastructure/infrastructure.h"
 #include "city/infrastructure/power_lines.h"
 #include "city/maps/layers.h"
 #include "city/maps/ground.h"
@@ -97,6 +101,18 @@ i64 PlaceCitySubwayRailConnection(City *city, TileIndex tile) {
   InvalidateTile(city, tile);
   UpdateRailConnections(city, connection.neighbor);
   return true;
+}
+
+// Join eligible surface rail to a subway connection at the resolved tile. Rejects unused parameters and unsuitable
+// terrain; TEST is read-only and a successful connection keeps its original zero-cost contract.
+i64 CmdPlaceSubwayRailConnection(City *city, u32 flags, TileIndex tile,
+    int reserved) {
+  int invalid = CITY_COMMAND_COST_INVALID;
+  if (!IsMapTileValid(city, tile) || reserved != 0)
+    return invalid;
+  if (flags & CITY_COMMAND_TEST)
+    return CanPlaceCitySubwayRailConnection(city, tile) ? 0 : CITY_COMMAND_COST_BLOCKED;
+  return PlaceCitySubwayRailConnection(city, tile);
 }
 
 // Shared bridge, terrain and border handling; each family retains its own crossing rules. The first adjoining rail
@@ -327,7 +343,7 @@ static TileIndex DiagonalSurfaceLineApproach(const City *city, TileIndex cell, i
 }
 
 int CitySurfaceLineSprite(const City *city, TileIndex tile, int layout, int zoom, int rotation) {
-  int original = layout + 500 * zoom;
+  int original = layout + CITY_MAP_SPRITES_PER_ZOOM * zoom;
   bool rail = layout >= CITY_MAP_TILE_SPRITE_RAIL_FIRST;
   int base = rail ? CITY_MAP_TILE_SPRITE_RAIL_FIRST : CITY_MAP_TILE_SPRITE_ROAD_FIRST;
   if (layout < base || layout > base + 9 ||
@@ -374,6 +390,48 @@ int CitySurfaceLineSprite(const City *city, TileIndex tile, int layout, int zoom
   if (mask != 3 && DiagonalSurfaceLineApproach(city, tile, base, curve, mask, rotation) != INVALID_TILE)
     return first + transition + curve * 4 + (mask - 1) * 2;
   return first + diagonal + curve * 3 + mask - 1;
+}
+
+CitySurfaceLinePath ResolveCitySurfaceLinePath(const City *city, TileIndex tile, int entry, int exit, bool rail) {
+  // Both vehicle families cache this descriptor on tile entry.
+  int sprite = ReadTile(city, tile) == (rail ? TK_RAIL : TK_ROAD)
+      ? CitySurfaceLineSprite(
+            city, tile, ResolveCitySurfaceLineGround(city, tile).layout, CITY_MAP_ZOOM_LARGE, 0)
+      : 0;
+  int first =
+      MAP_LANDSCAPE_SPRITE_FIRST + CITY_MAP_ZOOM_LARGE * MAP_LANDSCAPE_SPRITES_PER_ZOOM - CITY_LANDSCAPE_GROUND_FIRST;
+  int diagonal = sprite - first - (rail ? CITY_LANDSCAPE_DIAGONAL_RAIL_FIRST : CITY_LANDSCAPE_DIAGONAL_ROAD_FIRST);
+  int transition = sprite - first -
+      (rail ? CITY_LANDSCAPE_DIAGONAL_RAIL_TRANSITION_FIRST : CITY_LANDSCAPE_DIAGONAL_ROAD_TRANSITION_FIRST);
+  int shared = sprite - first -
+      (rail ? CITY_LANDSCAPE_DIAGONAL_RAIL_SHARED_FIRST : CITY_LANDSCAPE_DIAGONAL_ROAD_SHARED_FIRST);
+  int kind, rotation;
+  if (entry == exit) {
+    kind = CITY_LINE_PATH_TURNAROUND;
+    rotation = exit;
+  } else if (diagonal >= 0 && diagonal < 12) {
+    rotation = diagonal / 3;
+    int mask = diagonal % 3;
+    bool reverse = ((entry - rotation) & 3) != CITY_LINE_WEST;
+    kind = CITY_LINE_PATH_DIAGONAL + mask * 2 + reverse;
+  } else if (transition >= 0 && transition < 16) {
+    rotation = transition / 4;
+    int mask = transition / 2 & 1;
+    bool approach = transition & 1;
+    bool reverse = ((entry - rotation) & 3) != (approach && !mask ? CITY_LINE_NORTH : CITY_LINE_WEST);
+    kind = (approach ? CITY_LINE_PATH_APPROACH : CITY_LINE_PATH_TRANSITION) + mask * 2 + reverse;
+  } else if (shared >= 0 && shared < 8) {
+    rotation = 0;
+    bool reverse = entry != (shared / 4 ? CITY_LINE_NORTH : CITY_LINE_WEST);
+    kind = CITY_LINE_PATH_SHARED + shared * 2 + reverse;
+  } else if (exit == ((entry + 2) & 3)) {
+    kind = CITY_LINE_PATH_STRAIGHT;
+    rotation = (exit - CITY_LINE_EAST) & 3;
+  } else {
+    rotation = exit == ((entry + 1) & 3) ? entry : exit;
+    kind = CITY_LINE_PATH_CURVE + (entry != rotation);
+  }
+  return (CitySurfaceLinePath){kind, rotation};
 }
 
 // OpenTTD's W/S/E/N slope bits, converted from SC2's shape IDs.
@@ -613,7 +671,7 @@ void DrawCityMapTransportArtwork(City *city, TileIndex tile, int layout, int zoo
     return;
   }
   Drawing *drawing = city->game->drawing;
-  int sprite = layout + 500 * zoom;
+  int sprite = layout + CITY_MAP_SPRITES_PER_ZOOM * zoom;
   if (!IsCityMapGroundPass(drawing)) {
     bool surface = IsCityMapSurfaceLayout(layout) ||
         (layout >= CITY_MAP_TILE_SPRITE_ROAD_RAIL_CROSSING_FIRST &&
@@ -635,8 +693,8 @@ void DrawCityTransportTileFallback(City *city, TileIndex tile, int layout, int z
   const TileInfo *tp = &city->tile[tile];
   CityTileGeometry geometry = *tile_geometry;
   bool native = city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE);
-  int kind = tp->kind, terrain_code = CityMapViewTerrainCode(city, tile);
-  int sprite_base = 500 * zoom, half_width = 4 << zoom;
+  int kind = tp->kind, terrain_code = CityMapDryGroundShape(city, tile, tile_geometry);
+  int sprite_base = CITY_MAP_SPRITES_PER_ZOOM * zoom, half_width = 4 << zoom;
   int tile_sprite = MapSpriteZoomIndex(layout, zoom), terrain_sprite = -1;
   if (IsTileKindTunnel(kind)) {
     DrawCityRoadTunnelEntrance(city, tile, tile_sprite, zoom, screen_x, ground_y, &geometry);

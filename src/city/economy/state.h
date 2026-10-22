@@ -6,6 +6,18 @@
 #include "city/economy/facilities.h"
 #include "city/types.h"
 
+// The one active budget's command state; window presentation state belongs to UI.
+typedef struct CityBudgetState {
+  i32 id;
+  i32 helper_stage;
+  u32 timer_revision;
+  bool timer_running;
+  bool close_requested;
+  i32 advisor_question;
+  bool manual;
+  u32 saved_auto_budget;
+} CityBudgetState;
+
 // Accounts
 
 typedef struct {
@@ -82,9 +94,6 @@ typedef struct {
 typedef struct {
   EconomySector sector[CITY_ECONOMY_SECTOR_COUNT];
 } CityEconomyMonths;
-
-typedef struct City City;
-void RefreshBudgetDialogEstimates(City *city);
 
 typedef struct {
   u32 value[CITY_POPULATION_BUCKET_COUNT];

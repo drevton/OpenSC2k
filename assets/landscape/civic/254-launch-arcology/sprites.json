@@ -41,7 +41,7 @@
   "config": "approved-bake.json",
   "verification": "approved-bake-result.json",
   "status": "approved single view; other directions share it pending rotation artwork",
-  "art_notes": "Approved daytime single view. Alternate directions mirror the shared image using resource references.",
+  "art_notes": "Smaller habitat ponds and a subdued sparse bronze/graphite dome frame. Narrower body and longer legs retained, with stock-height offline scaling and separate concrete ground. Alternate views mirror the single view.",
   "legacy_height_reference": {
     "atlas": "LARGE.DAT",
     "sprite_id": 1254,
@@ -53,13 +53,12 @@
     "measured_guide_view0_height": 940
   },
   "occupied_heights": [
-    1010,
-    1010,
-    1010,
-    1010
+    817,
+    817,
+    817,
+    817
   ],
-  "ground": "painted",
-  "ground_separation": "ground-separation-result.json",
+  "ground": "concrete",
   "encoding": "indexed",
   "source_selection": "assets/landscape/building-studies/daylight-cleanup/selected-single-views.json",
   "construction": {}

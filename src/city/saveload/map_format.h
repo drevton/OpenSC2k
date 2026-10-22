@@ -1,9 +1,9 @@
 #ifndef SC2K_CITY_MAP_FORMAT_H
 #define SC2K_CITY_MAP_FORMAT_H
-#include "city/maps/tile_storage.h"
-#include "city/state.h"
-#include "city/maps/map.h"
 
+#include "city/maps/map.h"
+#include "city/maps/terrain.h"
+#include "city/maps/tile_storage.h"
 #include "city/saveload/terrain_format.h"
 
 // Stock XZON uses one-hot footprint corners. Native footprint links are
@@ -120,6 +120,9 @@ void DecodeCityLegacyTileCounts(const u8 *bytes, CityTileCounts *counts);
 // Source map must remain unchanged for the entire import pass; result must not alias it.
 bool TranslateCityTileFromLegacy(const City *city, TileIndex tile, TileInfo *result);
 void WriteLegacyCityTerrainCode(City *city, TileIndex tile, int value);
+// Read-only stock terrain projection for retained algorithms. Tile must be valid in the supplied City.
+int ReadLegacyTerrainCode(const City *city, TileIndex tile);
+// Project a supplied native shape or raw stock code using the tile's occupant/water metadata.
 int ProjectCityTerrainToLegacy(const City *city, TileIndex tile, int terrain);
 CityTileGeometry ReadLegacyCityTileGeometry(const City *city, TileIndex tile);
 void TranslateLegacyCityTerrain(const City *city, TileIndex tile, TileInfo *result);

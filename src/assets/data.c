@@ -1,14 +1,9 @@
 #include "city/economy/facilities.h"
 #include "assets/resource_types.h"
-#include "city/tools/types.h"
-#include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 
 #include "assets/resources.h"
 
-#include "city/state.h"
-#include "game/state.h"
 #include "assets/state.h"
 
 static const char *const kFacilityTemplates[] = {
@@ -167,25 +162,29 @@ static const i8 kFacilityInformationTemplates[CITY_FACILITY_INFO_COUNT][CITY_FAC
   {26, -1, -1, 14, 6},
 };
 
-// Choose localized facility information templates. Assets retains the strings;
-// these borrowed references require no separate allocation or release.
-void InitializeCityFacilityInformation(City *city) {
-  CityResourceState *assets = city->game->resources;
-  char *locale = (char *)city->country.character;
-  for (int index = 0; locale[index] != '\0'; ++index)
-    if (locale[index] >= 'A' && locale[index] <= 'Z')
-      locale[index] += 'a' - 'A';
+static bool IsFacilityLocale(const char *locale, const char *expected) {
+  while (*expected) {
+    int character = (u8)*locale++;
+    if (character >= 'A' && character <= 'Z') character += 'a' - 'A';
+    if (character != *expected++) return false;
+  }
+  return *locale == '\0';
+}
+
+// Choose localized facility information templates without changing the borrowed locale. Assets retains the strings;
+// these references require no separate allocation or release.
+void InitializeCityFacilityInformation(CityAssets *assets, const char *locale) {
   int ids[CITY_FACILITY_INFO_COUNT][CITY_FACILITY_INFO_LINE_COUNT];
   for (int facility = 0; facility < CITY_FACILITY_INFO_COUNT; ++facility)
     for (int line = 0; line < CITY_FACILITY_INFO_LINE_COUNT; ++line)
       ids[facility][line] = kFacilityInformationTemplates[facility][line];
-  if (strcmp(locale, "aus") == 0) {
+  if (IsFacilityLocale(locale, "aus")) {
     ids[CITY_FACILITY_INFO_LLAMA_DOME][0] = CITY_FACILITY_TEMPLATE_83;
     ids[CITY_FACILITY_INFO_LLAMA_DOME][1] = CITY_FACILITY_TEMPLATE_84;
     ids[CITY_FACILITY_INFO_LLAMA_DOME][2] = CITY_FACILITY_TEMPLATE_23;
     ids[CITY_FACILITY_INFO_LLAMA_DOME][3] = CITY_FACILITY_TEMPLATE_85;
     ids[CITY_FACILITY_INFO_LLAMA_DOME][4] = -1;
-  } else if (strcmp(locale, "fre") == 0) {
+  } else if (IsFacilityLocale(locale, "fre")) {
     ids[CITY_FACILITY_INFO_SCHOOL][3] = CITY_FACILITY_TEMPLATE_83;
     ids[CITY_FACILITY_INFO_COLLEGE][3] = CITY_FACILITY_TEMPLATE_83;
     ids[CITY_FACILITY_INFO_WIND_POWER][3] = CITY_FACILITY_TEMPLATE_12;
@@ -199,7 +198,7 @@ void InitializeCityFacilityInformation(City *city) {
       ids[facility_class][4] = facility_class == CITY_FACILITY_INFO_MARINA ? CITY_FACILITY_TEMPLATE_85 :
           CITY_FACILITY_TEMPLATE_84;
     }
-  } else if (strcmp(locale, "ger") == 0) {
+  } else if (IsFacilityLocale(locale, "ger")) {
     ids[CITY_FACILITY_INFO_COLLEGE][3] = CITY_FACILITY_TEMPLATE_84;
     ids[CITY_FACILITY_INFO_LIBRARY][0] = CITY_FACILITY_TEMPLATE_85;
     ids[CITY_FACILITY_INFO_COLLEGE][1] = CITY_FACILITY_TEMPLATE_83;

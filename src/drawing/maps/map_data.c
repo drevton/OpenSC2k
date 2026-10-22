@@ -1,13 +1,16 @@
-#include "city/maps/layers.h"
-#include "assets/graphics.h"
-#include "city/maps/tile_storage.h"
-#include "drawing/maps/map_view.h"
+#include "city/maps/terrain.h"
+#include "city/presentation.h"
 #include <math.h>
 
-#include "drawing/drawing_internal.h"
-#include "drawing/maps/map_render.h"
-#include "drawing/maps/tables.h"
+#include "assets/graphics.h"
 #include "assets/state.h"
+#include "city/maps/layers.h"
+#include "city/maps/tile_storage.h"
+#include "drawing/maps/map_render.h"
+#include "drawing/maps/map_view.h"
+#include "drawing/maps/tables.h"
+#include "drawing/state.h"
+#include "game/state.h"
 
 // Data overlays select artwork independently of the tile painter. Quantitative layers use eight intensity bands;
 // service and growth layers supply their explicit presence/absence artwork. A negative result leaves natural ground.
@@ -50,7 +53,7 @@ void DrawCityMapDataTile(City *city, int zoom, TileIndex tile, int screen_x, int
 
   CityMapDataMode mode = drawing->map_state.data_mode;
   int sprite = -1;
-  if (CityTerrainSprite(CityMapViewTerrainCode(city, tile)) == CITY_SPRITE_CATALOG_FLAT_TERRAIN) {
+  if (CityMapDryGroundShape(city, tile, &geometry) == CITY_TERRAIN_FLAT) {
     sprite = DataOverlaySprite(city, tile, mode);
     if (sprite >= 0) sprite = MapSpriteZoomIndex(sprite, zoom);
   }

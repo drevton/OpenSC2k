@@ -1,5 +1,5 @@
+#include "city/saveload/state.h"
 #include "city/saveload/types.h"
-#include "city/presentation.h"
 #include <errno.h>
 #include <setjmp.h>
 #include <stdlib.h>
@@ -8,17 +8,11 @@
 #include "city/saveload/runtime.h"
 #include "game/errors.h"
 #include "game/observation.h"
-#include "city/state.h"
-#include "city/engine/commands.h"
-#include "city/saveload/file.h"
 #include "game/state.h"
 #include "base/file.h"
-#include "base/text.h"
-#include "audio/state.h"
-#include "assets/state.h"
 #include "city/saveload/services.h"
 
-// CFile reading services for complete original Open/Load callers.
+// Host reads, scratch ownership and exception unwinding for complete Open/Load callers.
 
 // Also declares the privately renamed leaf when reused by comparison.
 void ReleaseCityMiscWorkspace(CityFileRuntime *file);
@@ -250,20 +244,4 @@ int ChangeCityLoadDirectory(CityFileRuntime *owner, const char *path) {
   // separate OS working-directory context for relative city paths.
   ObserveCityFileIO(owner, NATIVE_LOAD_DIRECTORY, 0, success ? 0 : 0xFFFFFFFFu, error, path, (u32)strlen(path));
   return success ? 0 : -1;
-}
-
-// Complete successful-load presentation, apply the requested debug command and show load warnings. Call only after
-// loading and rebuilding succeeded; this must not run on a partially failed load.
-void NotifyCityLoaded(City *city) {
-  ResetCityReplacementPresentation(city);
-  if (city->game->debug_city) DoCityCommand(city, CITY_COMMAND_ENABLE_DEBUG_CITY, 0, INVALID_TILE, 0, 0, 0);
-  InvalidateLoadedCityCanvas(city);
-  ShowCityLoadWarnings(city);
-}
-
-// Present the load command's resource notice through its presentation boundary. Requires attached presentation owners;
-// flags and help do not alter the native notice path and the function reports that it was shown.
-bool ShowCityLoadResourceMessage(City *city, u32 id, u32 flags, u32 help) {
-  ShowCityLoadCommandResource(city, id);
-  return true;
 }

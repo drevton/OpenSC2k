@@ -1,5 +1,8 @@
 # City commands and local functions
 
+`game/commands.h` declares player execution, local completion results and callbacks.
+`city/engine/commands.h` declares deterministic command IDs, execution and cost queries.
+
 `RunCityCommand(...)` runs a resolved player action that changes shared deterministic City state.
 Construction, demolition, finances, names, gameplay rules, pause and speed use this API. Its `Cmd...`
 implementation receives `City`, `u32 flags`, `TileIndex` and actual options. It must give the same
@@ -20,8 +23,9 @@ to their actual functions and cannot be supplied to the shared API. Terrain comm
 corner-editing and seawater-fill choices in `parameter2`, independent of each player's preferences.
 Their recorded form stores `(TileIndex, operation, terrain_options)` so replay preserves both choices.
 
-Execution currently begins immediately in single-player and returns whether the action succeeded.
-An optional completion callback has this shape:
+Execution begins immediately in single-player. The Boolean return reports synchronous success or
+acceptance of suspended work; a completion callback receives the final result. Invalid IDs return false
+without registering a callback. An optional completion callback has this shape:
 
 ```c
 void CcBuildBridge(Game *game, u32 id, const CityCommandResult *result,
@@ -32,7 +36,8 @@ The result separates the actual handler return (`value`), net treasury debit (`c
 host error, cancellation and success. The callback runs once after completion, including retained
 animation/notice continuations. Its result pointer is borrowed only for that call. Callback/context
 are local data and must never be serialized. A future transport may defer shared execution; callback
-lifetime must extend to synchronized completion. No network backend is introduced by these APIs.
+lifetime must extend to synchronized completion. Game teardown discards unfinished callback records
+without calling them or freeing their contexts. No network backend is introduced by these APIs.
 
 `DoCityCommand` executes or queries internally and preserves the handler's `i64` return contract.
 `CITY_COMMAND_TEST` queries admission/cost without City writes, RNG, presentation, I/O or observations.
@@ -63,6 +68,10 @@ remains affordable even when cash is negative. Quotes do not modify City or cons
 `ApplyCityCommandCostPolicy` gives previews that same policy while retaining the charge when
 funds are insufficient. Financial actions such as bond repayment keep their own debt rules.
 
+Single-cell preview admission also takes terrain options explicitly; it does not borrow the current
+command's choices. Quotes, execution and the bridge selector share the span module's price table,
+indexed by named `CitySpanStyle` values.
+
 `DoCityCommand` checks and pays for ordinary resolved commands: buildings, explicit bridges,
 compact highways, onramps, zoning, tree rectangles and native terrain edits. It obtains a raw
 TEST price, checks live affordability before execution and debits only after the real action
@@ -87,6 +96,20 @@ actual partial charges. `PayCityCommandCost` checks and pays these stages;
 `DebitCityCommandCost` commits an already accepted decision without repeating it after a notice.
 Legacy lowering retains its final negative-cash clamp. Nonfinancial editor restrictions, such
 as admitting Stretch Terrain only in edit mode, stay with the operation.
+
+### Retained drag previews
+
+The original drag adapters share live `City.construction` state with placement and retained
+questions. City owns their traversal, eligible-cell counts and terrain surcharge counts:
+`UpdateCityZoneRectanglePreview` belongs to zoning, `PrepareCityZonePreview` to infrastructure
+lines, and `UpdateCityHighwayPreview` to highways. They publish tile damage immediately without
+placing tiles, charging money or consuming RNG. Endpoints use `TileIndex`.
+
+UI owns pointer polling, cancellation and the temporary drawing target used by the retained
+highway preview. Drawing owns marker sprites, clipping and pixels. Removing a previous preview
+and preparing its replacement keep their original order. These retained updates can change
+construction working state; ordinary native preview quotes use the read-only domain cost
+functions instead. They are not command TEST operations.
 
 ## Information updates
 

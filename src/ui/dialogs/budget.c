@@ -1,10 +1,31 @@
-#include "city/economy/types.h"
-#include "ui/windows/state.h"
-#include "city/presentation.h"
-#include "city/economy/tables.h"
-#include "drawing/drawing_internal.h"
+#include "city/economy/budget.h"
+#include "ui/windows/window_internal.h"
+#include "ui/dialogs/budget.h"
 
-// Drawing subsystem: budget.
+#include <stdio.h>
+#include <string.h>
+
+#include "base/text.h"
+#include "city/economy/economy.h"
+#include "city/economy/tables.h"
+#include "city/economy/types.h"
+#include "city/engine/city_types.h"
+#include "city/fixes.h"
+#include "city/presentation.h"
+#include "city/state.h"
+#include "drawing/fonts/fonts.h"
+#include "drawing/raster/canvas_primitives.h"
+#include "drawing/raster/canvas_raster_internal.h"
+#include "game/state.h"
+#include "ui/dialogs/messages.h"
+#include "ui/sdl.h"
+#include "ui/state.h"
+#include "ui/text/text.h"
+#include "ui/windows/controls.h"
+#include "ui/windows/state.h"
+#include "ui/windows/windows.h"
+
+// Budget values, shared control geometry, painting, ordinances and the bond window.
 
 enum { CITY_BUDGET_FOOTER_TOP = 229, CITY_BUDGET_BUTTON_HEIGHT = 12,
     CITY_BUDGET_RATE_ARROW_WIDTH = 13, CITY_BUDGET_RATE_VALUE_WIDTH = 40 };
@@ -362,12 +383,12 @@ void InitializeCityOrdinancesDialog(City *city) {
   EconomySector *policy_budget = &city->economy.sector[CITY_ECONOMY_ORDINANCES];
   CityBudgetPolicyGroupTotals *group_totals = &ui->budget_policy_totals;
   int policy_total = 0;
-  i32 group_total[5] = {0};
+  i32 group_total[CITY_POLICY_GROUP_COUNT] = {0};
 
   for (int policy = 0; policy < CITY_ORDINANCE_COUNT; ++policy) {
     if ((city->unlocks.ordinance_flags & (1u << policy)) == 0)
       continue;
-    int cost = Phase0PolicyCost(city, policy);
+    int cost = CityPolicyMonthlyCost(city, policy);
     policy_total += cost;
     group_total[policy / 4] += cost;
   }
@@ -387,4 +408,341 @@ void UpdateCityPolicyControls(City *city, int policy, int cost) {
   int *total = &ui->budget_policy_totals.group[policy / 4];
   *total += city->unlocks.ordinance_flags & (1u << policy) ? cost : -cost;
   ui->policy_dialog_value = *total / 75;
+}
+
+void Sc2kCanvasDrawPolicies(Game *game, Canvas *canvas, const Window *window) {
+  static const char *const headings[CITY_POLICY_GROUP_COUNT] = {
+    "Finance", "Safety & Health", "Education", "Promotional", "Other"
+  };
+  static const char *const policies[CITY_ORDINANCE_COUNT] = {
+    "1% Sales Tax", "1% Income Tax", "Legalized Gambling", "Parking Fines",
+    "Volunteer Fire Dept.", "Public Smoking Ban", "Free Clinics", "Junior Sports",
+    "Pro-Reading Campaign", "Anti-Drug Campaign", "CPR Training", "Neighborhood Watch",
+    "Tourist Advertising", "Business Advertising", "City Beautification", "Annual Carnival",
+    "Energy Conservation", "Nuclear Free Zone", "Homeless Shelters", "Pollution Controls"
+  };
+  CityRect bounds = window->bounds;
+  CanvasBeveledBox(canvas, bounds.left, bounds.top + 14, bounds.right, bounds.bottom, canvas_face, 1);
+  DrawCityWindowCaption(canvas, bounds, window->title, 0xFF247CC9, 0xFF78B4E4, 0xFF124C83, 0);
+  char amount[CITY_CURRENCY_TEXT_CAPACITY];
+  i64 annual_total = 0;
+
+  for (i32 group = 0; group < CITY_POLICY_GROUP_COUNT; ++group) {
+    CityRect panel = CityPolicyPanelBounds(bounds, group);
+    i32 left = panel.left, top = panel.top, right = panel.right;
+    CanvasBeveledBox(canvas, left, top, right, panel.bottom, canvas_face, 0);
+    DrawCityInterfaceText(canvas->interface_font, canvas, left + 4, top + 3, headings[group], 0xFFFCFCFC, true);
+    i64 annual_cost = window->policy_group_cost[group] / 75;
+    annual_total += annual_cost;
+    FormatCityCurrency(game, amount, annual_cost);
+    CanvasTextRight(canvas, right - 4, top + 3, amount, canvas_text);
+    for (i32 item = 0; item < 4; ++item) {
+      i32 policy = group * CITY_POLICIES_PER_GROUP + item;
+      i32 row_top = top + CITY_POLICY_ROWS_TOP + item * CITY_POLICY_ROW_PITCH;
+      i32 row_height = CITY_POLICY_ROW_HEIGHT;
+      i32 check_left = left + 4;
+      i32 check_right = check_left + 16;
+      bool checked = (window->policy_flags & (1 << policy)) != 0;
+      DrawCityCheckbox(canvas, (CityRect){check_left, row_top + 1, check_right, row_top + 11},
+          checked, canvas_face, canvas_light, canvas_dark);
+      CanvasTextAt(canvas, check_right + 4, row_top + (row_height - 10) / 2,
+          policies[policy], canvas_text);
+      if (checked) {
+        FormatCityCurrency(game, amount, window->policy_cost[policy] / 75);
+        CanvasTextRight(canvas, right - 4, row_top + (row_height - 10) / 2, amount, canvas_text);
+      }
+    }
+  }
+
+  CityRect totals = CityPolicyPanelBounds(bounds, CITY_POLICY_GROUP_COUNT);
+  CanvasBeveledBox(canvas, totals.left, totals.top, totals.right, totals.bottom, canvas_face, 0);
+  DrawCityInterfaceText(canvas->interface_font, canvas, totals.left + 4, totals.top + 3,
+      "Ordinance Totals", 0xFFFCFCFC, true);
+  int cost_left = totals.left, cost_right = totals.right;
+  int total_y = totals.top + CITY_POLICY_ROWS_TOP + 4;
+  DrawCityInterfaceText(canvas->interface_font, canvas, cost_left + 8, total_y, "Total", 0xFFFCFCFC, true);
+  FormatCityCurrency(game, amount, annual_total);
+  DrawCityInterfaceText(canvas->interface_font, canvas,
+      cost_right - 4 - CityInterfaceTextWidth(canvas->interface_font, amount), total_y, amount, 0xFFFCFCFC, true);
+
+  DrawCityInterfaceText(canvas->interface_font, canvas, cost_left + 8, total_y + 12, "YTD", 0xFFFCFCFC, true);
+  FormatCityCurrency(game, amount, window->policy_ytd_total / 900);
+  CanvasTextRight(canvas, cost_right - 4, total_y + 12, amount, canvas_text);
+  DrawCityInterfaceText(canvas->interface_font, canvas, cost_left + 8, total_y + 24,
+      "Year-end estimate", 0xFFFCFCFC, true);
+  FormatCityCurrency(game, amount, window->policy_estimated_total / 900);
+  CanvasTextRight(canvas, cost_right - 4, total_y + 24, amount, canvas_text);
+}
+
+enum { kBondRowHeight = 12, kBondScrollbarWidth = 12, kBondScrollArrowHeight = 10, kBondHeaderRows = 4 };
+
+CityRect CityBondResizeGripBounds(const Window *window) {
+  CityRect b = window->bounds;
+  return (CityRect){b.right - kBondScrollbarWidth, b.bottom - kBondScrollbarWidth, b.right, b.bottom};
+}
+
+static CityRect CityBondContentBounds(const Window *window) {
+  CityRect b = window->bounds;
+  return (CityRect){b.left + 1, b.top + 15, b.right - kBondScrollbarWidth - 1, b.bottom - 1};
+}
+
+int CityBondContentRows(int count) {
+  // Summary, headings, bonds (or the empty message), a gap and the yearly total share one scroll range.
+  return kBondHeaderRows + IntMax(1, count) + 2;
+}
+
+int CityBondVisibleRows(const Window *window) {
+  CityRect list = CityBondContentBounds(window);
+  return (list.bottom - list.top) / kBondRowHeight;
+}
+
+static CityRect CityBondScrollTrack(const Window *window) {
+  CityRect b = window->bounds;
+  return (CityRect){b.right - kBondScrollbarWidth, b.top + 14 + kBondScrollArrowHeight,
+      b.right, b.bottom - kBondScrollbarWidth - kBondScrollArrowHeight};
+}
+
+static CityRect CityBondScrollThumb(const Window *window, int count) {
+  CityRect track = CityBondScrollTrack(window);
+  return ReadCityScrollbar(track, CityBondContentRows(count), CityBondVisibleRows(window),
+      window->bond_scroll, kBondScrollbarWidth).thumb;
+}
+
+static void ScrollCityBonds(Game *game, Window *window, int delta) {
+  CityCanvasDesktop *desktop = &game->ui->desktop;
+  int last = IntMax(0, CityBondContentRows(game->city->indicators.bond_count) - CityBondVisibleRows(window));
+  int first = IntClamp(IntClamp(window->bond_scroll, 0, last) + delta, 0, last);
+  if (first != window->bond_scroll) {
+    window->bond_scroll = first;
+    Sc2kDirtyMarkRect(&desktop->dirty, CanvasWindowPaintRect(window));
+  }
+}
+
+static CityRect CityBondControlBounds(const Window *window, int first, CityBondAction action) {
+  CityRect content = CityBondContentBounds(window);
+  int y = content.top + 1 + (2 - first) * kBondRowHeight;
+  switch (action) {
+  case CITY_BOND_ACTION_DECREASE_RATE:
+    return (CityRect){content.right - 90, y, content.right - 66, y + kBondRowHeight};
+  case CITY_BOND_ACTION_INCREASE_RATE:
+    return (CityRect){content.right - 32, y, content.right - 8, y + kBondRowHeight};
+  default: return (CityRect){0};
+  }
+}
+
+static void DrawCityBondScrollArrow(Canvas *canvas, CityRect b, bool up) {
+  DrawCanvasButtonFrame(canvas, b, canvas_face, canvas_light, canvas_dark, true);
+  int pressed = CityCanvasButtonPressed(canvas, b);
+  int center = (b.left + b.right) / 2 + pressed, top = (b.top + b.bottom - 4) / 2 + pressed;
+  for (int row = 0; row < 4; ++row) {
+    int half = up ? row : 3 - row;
+    CanvasFill(canvas, center - half, top + row, center + half + 1, top + row + 1, canvas_text);
+  }
+}
+
+void DrawCityBonds(const City *city, Canvas *canvas, const Window *window) {
+  CityRect b = window->bounds, content = CityBondContentBounds(window);
+  int count = city->indicators.bond_count, rows = CityBondContentRows(count);
+  int visible = CityBondVisibleRows(window);
+  int first = IntClamp(window->bond_scroll, 0, IntMax(0, rows - visible));
+  Canvas framed = *canvas;
+  framed.unscaled_bevels = false;
+  DrawCanvasFrame(&framed, (CityRect){b.left, b.top + 14, b.right - kBondScrollbarWidth, b.bottom},
+      canvas_face, canvas_light, canvas_dark, true);
+  DrawCityWindowCaption(canvas, b, "City Bonds", canvas_title, 0xFFD3BB93, 0xFF674F2B, 0);
+
+  Canvas text = framed;
+  text.clip = IntersectCityRects(canvas->clip, content);
+  bool rated = (city->fixes & (1 << CITY_FIX_BOND_RATING)) != 0;
+  int right = content.right - 6;
+  // Draw only visible content rows; the clip also handles a partially visible final row.
+  for (int row = first; row < IntMin(rows, first + visible + 1); ++row) {
+    int y = content.top + 1 + (row - first) * kBondRowHeight;
+    char line[128], amount[CITY_CURRENCY_TEXT_CAPACITY];
+    if (row == 0) {
+      u64 city_value = city->indicators.asset_value;
+      FormatCityCurrency(city->game, amount, city_value > INT64_MAX ? INT64_MAX : city_value);
+      snprintf(line, sizeof(line), "Credit: %s    City value: %s", CityBondCreditRating(city), amount);
+      CanvasTextAt(&text, content.left + 3, y, line, canvas_text);
+    } else if (row == 1) {
+      snprintf(line, sizeof(line), "Bonds: %d    Next bond: %d%%    Bank rate: %d%%", count,
+          rated ? CityBondInterestRate(city) : window->bond_issue_rate, city->indicators.federal_interest_rate);
+      CanvasTextAt(&text, content.left + 3, y, line, canvas_text);
+    } else if (row == 2 && !rated) {
+      CanvasTextAt(&text, content.left + 3, y, "Next bond rate:", canvas_text);
+      snprintf(line, sizeof(line), "%d%%", window->bond_issue_rate);
+      DrawCityInterfaceTextCentered(text.interface_font, &text,
+          (CityRect){content.right - 66, y, content.right - 32, y + kBondRowHeight},
+          line, canvas_text, false, 10);
+      DrawCityMessageButton(&text, CityBondControlBounds(window, first, CITY_BOND_ACTION_DECREASE_RATE), "-",
+          CITY_MESSAGE_INFORMATION);
+      DrawCityMessageButton(&text, CityBondControlBounds(window, first, CITY_BOND_ACTION_INCREASE_RATE), "+",
+          CITY_MESSAGE_INFORMATION);
+    } else if (row == kBondHeaderRows - 1) {
+      DrawCityInterfaceText(text.interface_font, &text, content.left + 4, y, "Bond", 0xFFFCFCFC, true);
+      DrawCityInterfaceText(text.interface_font, &text, right - 122, y, "Interest", 0xFFFCFCFC, true);
+      DrawCityInterfaceText(text.interface_font, &text, right - 47, y, "Per year", 0xFFFCFCFC, true);
+    } else if (row >= kBondHeaderRows && row < kBondHeaderRows + IntMax(1, count)) {
+      if (!count) {
+        CanvasTextAt(&text, content.left + 4, y, "No outstanding bonds.", canvas_text);
+        continue;
+      }
+      int index = row - kBondHeaderRows;
+      snprintf(line, sizeof(line), index == 0 ? "Bond %d (oldest)" : "Bond %d", index + 1);
+      CanvasTextAt(&text, content.left + 4, y, line, canvas_text);
+      int rate = city->economic_tables.bond_rates.rate[index];
+      snprintf(line, sizeof(line), "%d%%", rate);
+      CanvasTextRight(&text, right - 75, y, line, canvas_text);
+      FormatCityCurrency(city->game, line, (i64)rate * 100);
+      CanvasTextRight(&text, right, y, line, canvas_text);
+    } else if (row == rows - 1) {
+      i64 yearly_total = 0;
+      for (int index = 0; index < count; ++index)
+        yearly_total += (i64)city->economic_tables.bond_rates.rate[index] * 100;
+      FormatCityCurrency(city->game, amount, yearly_total);
+      snprintf(line, sizeof(line), "Yearly total: %s", amount);
+      CanvasTextAt(&text, content.left + 4, y, line, canvas_text);
+    }
+  }
+
+  CityRect track = CityBondScrollTrack(window);
+  DrawCanvasFrame(&framed, track, canvas_dark, canvas_light, canvas_dark, false);
+  DrawCanvasFrame(&framed, CityBondScrollThumb(window, count), canvas_face, canvas_light, canvas_dark, true);
+  DrawCityBondScrollArrow(&framed,
+      (CityRect){track.left, b.top + 14, track.right, track.top}, true);
+  DrawCityBondScrollArrow(&framed,
+      (CityRect){track.left, track.bottom, track.right, b.bottom - kBondScrollbarWidth}, false);
+  CityRect grip = CityBondResizeGripBounds(window);
+  DrawCanvasFrame(&framed, grip, canvas_face, canvas_light, canvas_dark, true);
+  for (int offset = 3; offset <= 9; offset += 3)
+    DrawCanvasLine(canvas, grip.right - offset, grip.bottom - 2,
+        grip.right - 2, grip.bottom - offset, canvas_text, 1);
+}
+
+// Bond scrolling, scrollbar capture and rate controls belong to this window.
+// Geometry is shared with painting; input changes only this window's presentation.
+bool BondsWindowProcedure(Game *game, const Window *window, const WindowEvent *event) {
+  if (event->kind == WINDOW_PAINT) {
+    DrawCityBonds(game->city, event->canvas, window);
+    return true;
+  }
+  if (event->kind != WINDOW_INPUT) return false;
+  const CanvasSDLEvent *input = event->input;
+  CityCanvasDesktop *desktop = &game->ui->desktop;
+  Window *target = FindCityCanvasWindow(desktop, window->window_id);
+  switch (input->kind) {
+  case CANVAS_SDL_POINTER_DOWN: {
+    if (input->button != CANVAS_SDL_BUTTON_LEFT) return false;
+    int x = event->x, y = event->y;
+    CityRect b = window->bounds;
+    CityRect scrollbar = {b.right - kBondScrollbarWidth, b.top + 14, b.right, b.bottom - kBondScrollbarWidth};
+    if (CanvasPointInRect(scrollbar, x, y)) {
+      CityRect track = CityBondScrollTrack(window);
+      CityRect thumb = CityBondScrollThumb(window, game->city->indicators.bond_count);
+      if (y < track.top) ScrollCityBonds(game, target, -1);
+      else if (y >= track.bottom) ScrollCityBonds(game, target, 1);
+      else if (y < thumb.top) ScrollCityBonds(game, target, -CityBondVisibleRows(window));
+      else if (y >= thumb.bottom) ScrollCityBonds(game, target, CityBondVisibleRows(window));
+      else {
+        target->bond_scroll_dragging = true;
+        target->bond_scroll_grab = y - thumb.top;
+      }
+      return true;
+    }
+    if ((game->city->fixes & (1 << CITY_FIX_BOND_RATING)) ||
+        !CanvasPointInRect(CityBondContentBounds(window), x, y)) return false;
+    int last = IntMax(0, CityBondContentRows(game->city->indicators.bond_count) - CityBondVisibleRows(window));
+    int first = IntClamp(window->bond_scroll, 0, last);
+    for (CityBondAction action = CITY_BOND_ACTION_DECREASE_RATE; action <= CITY_BOND_ACTION_INCREASE_RATE; ++action) {
+      if (!CanvasPointInRect(CityBondControlBounds(window, first, action), x, y)) continue;
+      BeginCityButtonRepeat(game, window, event);
+      if (action == CITY_BOND_ACTION_DECREASE_RATE && target->bond_issue_rate > -100) --target->bond_issue_rate;
+      if (action == CITY_BOND_ACTION_INCREASE_RATE && target->bond_issue_rate < 100) ++target->bond_issue_rate;
+      Sc2kDirtyMarkRect(&desktop->dirty, CanvasWindowPaintRect(target));
+      return true;
+    }
+    return false;
+  }
+  case CANVAS_SDL_POINTER_MOVE: {
+    if (!window->bond_scroll_dragging) return false;
+    CityScrollbar scrollbar = ReadCityScrollbar(CityBondScrollTrack(window),
+        CityBondContentRows(game->city->indicators.bond_count), CityBondVisibleRows(window),
+        window->bond_scroll, kBondScrollbarWidth);
+    int first = CityScrollbarPosition(&scrollbar, event->y, window->bond_scroll_grab, CITY_SCROLLBAR_DRAG_NEAREST);
+    ScrollCityBonds(game, target, first - IntClamp(window->bond_scroll, 0, scrollbar.maximum));
+    return true;
+  }
+  case CANVAS_SDL_POINTER_UP:
+  case CANVAS_SDL_FOCUS_LOST: {
+    bool dragging = window->bond_scroll_dragging;
+    target->bond_scroll_dragging = false;
+    return dragging;
+  }
+  case CANVAS_SDL_SCROLL:
+    ScrollCityBonds(game, target, input->y > 0 ? -3 : input->y < 0 ? 3 : 0);
+    return true;
+  case CANVAS_SDL_KEY_DOWN: {
+    int page = CityBondVisibleRows(window);
+    int delta = input->key == CITY_KEY_UP ? -1 : input->key == CITY_KEY_DOWN ? 1 :
+        input->key == CITY_KEY_PAGE_UP ? -page : input->key == CITY_KEY_PAGE_DOWN ? page : 0;
+    if (!delta) return false;
+    ScrollCityBonds(game, target, delta);
+    return true;
+  }
+  default: return false;
+  }
+}
+
+const char *CityBudgetTooltipAt(const Window *window, int x, int y) {
+  CityRect b = window->bounds;
+  switch (window->kind) {
+  case CITY_CANVAS_POLICIES: {
+    if (CanvasPointInRect(CityPolicyPanelBounds(b, CITY_POLICY_GROUP_COUNT), x, y))
+      return "Total is the annual cost of current ordinances. YTD is the amount recorded so far this year. "
+          "Year-end estimate includes the remaining months.";
+    if (Sc2kCanvasPolicyAt(window, x, y) >= 0)
+      return "Enable or disable this city ordinance. The amount shows its estimated annual income or cost.";
+    return "Each category heading shows its estimated annual income or cost. Changes take effect immediately.";
+  }
+  case CITY_CANVAS_BUDGET_RATE:
+    return "Enter a percentage, then press Enter or OK. Escape or Cancel keeps the previous value.";
+  case CITY_CANVAS_BUDGET: {
+    if (CanvasPointInRect(CityBudgetControlBounds(b, CITY_BUDGET_CONTROL_BORROW, 0), x, y))
+      return "Borrow $10,000. Review the offered annual interest rate before confirming.";
+    if (CanvasPointInRect(CityBudgetControlBounds(b, CITY_BUDGET_CONTROL_REPAY, 0), x, y))
+      return "Repay the oldest $10,000 bond. Review its interest rate before confirming.";
+    if (CanvasPointInRect(CityBudgetControlBounds(b, CITY_BUDGET_CONTROL_SHOW_BONDS, 0), x, y))
+      return "List every outstanding bond, oldest first, with its interest rate and annual payment.";
+    if (y >= b.top + 229) {
+      if (x < b.left + 232) return "Own funds plus loans equals the bank balance.";
+      if (y >= b.top + 253) return "Year-end balance equals the current bank balance plus estimated annual profit.";
+      return "The interest rate offered for a new bond and the city's debt-to-assets credit grade.";
+    }
+    for (int category = 0; category < CITY_BUDGET_ROW_COUNT; ++category) {
+      CityRect row = CityBudgetControlBounds(b, CITY_BUDGET_CONTROL_CATEGORY, category);
+      if (y < row.top || y >= row.bottom) continue;
+      if (CanvasPointInRect(CityBudgetControlBounds(b, CITY_BUDGET_CONTROL_ADVISOR, category), x, y))
+        return "Ask the advisor about this budget category.";
+      if (x >= b.right - 100) return "Estimated income or expense for the full year.";
+      if (x >= b.right - 214) return "Income or expense accumulated so far this year.";
+      if (category == CITY_BUDGET_ROW_ORDINANCES) {
+        if (CanvasPointInRect(CityBudgetControlBounds(b, CITY_BUDGET_CONTROL_OPEN_ORDINANCES, 0), x, y))
+          return "Open city ordinances.";
+        return "Ordinance income and expenses. Use Open to manage city ordinances.";
+      }
+      if (category == CITY_BUDGET_ROW_BONDS)
+        return "Bond interest payments. Use Show bonds to review the bond list.";
+      if (x >= b.left + 150) return category <= CITY_BUDGET_ROW_INDUSTRIAL ?
+          "Set this property tax rate. Click the value to type; arrows change by 1." :
+          "Set service funding. Click the value to type; arrows change by 5, or 1 with Shift.";
+      return "City budget category. Use the question mark to ask its advisor.";
+    }
+    return "Manage city taxes, service funding and financial forecasts.";
+  }
+  case CITY_CANVAS_BONDS:
+    if (CanvasPointInRect(CityBondResizeGripBounds(window), x, y))
+      return "Drag this corner to resize the bond list.";
+    return "Scroll all bond information using the bar, wheel or arrow keys. Bonds are listed oldest first.";
+  default: return NULL;
+  }
 }

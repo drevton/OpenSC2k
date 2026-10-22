@@ -34,6 +34,21 @@ and alignment. The historical page rectangles, typography tables and token map
 live only in `src/city/comparison/resource_storage.c`; comparison initialization
 installs them explicitly. Stock template installation also restores its token map.
 
+## Code ownership
+
+`city/events/news.c` owns the news records and initialization tail. After any opening notice is dismissed,
+`FinishCityNewspaperInitialization` fills the weather/editorial records and consumes the existing event-RNG draw
+for the music request. It runs once before the first paint.
+
+`ui/news/newspaper_presentation.c` owns opening/closing the dialog, its borrowed picture, wait timer, window damage
+and temporary pause reconciliation. Its UI declarations live in `ui/news/newspaper.h`. Drawing keeps page layout,
+article composition and painting, including the retained first-paint City/RNG effects described above.
+
+The shared window-stack, focus, pixel-coordinate and visibility interface is `ui/windows/windows.h`.
+Window pointers are borrowed until the stack changes; retain window IDs across callbacks and open/close/focus operations.
+Fixed-font decoding and measurement live in `drawing/fonts/fonts.c`, declared in `drawing/fonts/fonts.h`.
+Newspaper presentation uses those interfaces without importing Drawing's private implementation header.
+
 Build the font asset with `python3 tools/build_newspaper_font.py`; source fonts,
 versions and licenses are in assets/fonts/newspaper. SC2KNPF1 stores a 24-byte
 little-endian header (magic, face count, size count, raw length, compressed length),

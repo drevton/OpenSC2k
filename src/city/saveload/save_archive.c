@@ -1,9 +1,15 @@
+#include "city/saveload/services.h"
+#include "city/saveload/state.h"
 #include "city/saveload/types.h"
 #include "game/state.h"
 #include "city/saveload/legacy_text.h"
 #include "city/maps/map.h"
 #include "city/saveload/city_file_internal.h"
 #include "base/text.h"
+#include "base/byte_order.h"
+#include "city/state.h"
+#include "city/saveload/map_format.h"
+#include <stdlib.h>
 
 static bool SaveCityArchiveNameChunk(City *city, CityFile *archive);
 static bool EnsureSaveChunks(CityFile *archive);

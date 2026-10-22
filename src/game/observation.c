@@ -1,12 +1,8 @@
+#include "city/saveload/state.h"
 #include "game/observation.h"
 
 #include "city/saveload/runtime.h"
-#include "city/state.h"
 #include "game/state.h"
-#include "audio/state.h"
-#include "drawing/state.h"
-#include "assets/state.h"
-#include "ui/state.h"
 
 void ObserveCityPresentation(Game *game, CityPresentationEvent event, int token,
     int first, int second, int answer, const char *text) {

@@ -1,58 +1,42 @@
-#include "city/engine/command_types.h"
-#include "ui/state.h"
-#include "game/settings.h"
-#include "city/saveload/legacy_text.h"
-#include "ui/tools/tools.h"
-#include <string.h>
-
-#include "ui/input.h"
-
+#include "base/file.h"
+#include "base/text.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <strings.h>
 
-#include "game/state.h"
-#include "city/state.h"
 #include "assets/catalog.h"
-#include "ui/startup/services.h"
+#include "city/engine/command_types.h"
+#include "city/saveload/file.h"
+#include "city/saveload/legacy_text.h"
+#include "city/saveload/runtime.h"
+#include "city/saveload/services.h"
+#include "city/state.h"
+#include "drawing/raster/canvas_primitives.h"
+#include "drawing/raster/canvas_raster_internal.h"
+#include "drawing/state.h"
+#include "game/errors.h"
+#include "game/observation.h"
+#include "game/settings.h"
+#include "game/state.h"
+#include "ui/windows/window_internal.h"
 #include "ui/charts/charts.h"
 #include "ui/dialogs/dialogs.h"
+#include "ui/dialogs/messages.h"
 #include "ui/dialogs/file_dialog.h"
-#include "ui/text/text.h"
-
-#include "game/application_internal.h"
-#include "city/saveload/file.h"
-#include "game/errors.h"
-#include "city/saveload/services.h"
-#include "drawing/drawing_internal.h"
+#include "ui/dialogs/scenario.h"
 #include "ui/dialogs/scenario_internal.h"
+#include "ui/input.h"
+#include "ui/sdl.h"
 #include "ui/startup/startup.h"
-
-#include "game/observation.h"
+#include "ui/state.h"
+#include "ui/text/text.h"
+#include "ui/tools/tools.h"
+#include "ui/windows/windows.h"
 
 // Scenario Window
 // Scenario picker drawn and operated by the native canvas window system.
 
-i32 GetCityScenarioListTextLength(CityScenarioSelectionDialog *dialog, i32 index) {
-  City *city = dialog->city;
-  ScenarioListModel *model = city->game->ui->scenario_window;
-  if (model != NULL)
-    return index >= 0 && (size_t)index < model->count ? (i32)strlen(model->paths[index]) : -1;
-  return index == dialog->selected_index ? (i32)strlen(dialog->selected_path) : -1;
-}
-i32 GetCityScenarioListText(CityScenarioSelectionDialog *dialog, i32 index, char *text) {
-  City *city = dialog->city;
-  ScenarioListModel *model = city->game->ui->scenario_window;
-  if (model != NULL) {
-    if (index < 0 || (size_t)index >= model->count) return -1;
-    memmove(text, model->paths[index], strlen(model->paths[index]) + 1);
-    return (i32)strlen(text);
-  }
-  if (index != dialog->selected_index) return -1;
-  size_t length = strlen(dialog->selected_path);
-  memmove(text, dialog->selected_path, length + 1);
-  return (i32)length;
-}
 void CloseCityScenarioSelectionDialog(City *city, CityScenarioSelectionDialog *dialog, i32 result) {
   ScenarioListModel *model = city->game->ui->scenario_window;
   if (model != NULL) { model->answer = result; return; }
@@ -171,8 +155,9 @@ bool EditCityScenarioSelectionControl(City *city, i32 token, i32 control, i32 va
   if (window != NULL) Sc2kDirtyMarkRect(&city->game->ui->desktop.dirty, window->bounds);
   return GetGameError(city->game) == 0;
 }
-bool NativeScenarioDialogWaiting(City *city) {
-  return city->game->ui->scenario_window != NULL && city->game->ui->scenario_window->answer == 0;
+bool NativeScenarioDialogWaiting(const CityInterfaceState *ui) {
+  const ScenarioListModel *model = ui->scenario_window;
+  return model != NULL && model->answer == 0;
 }
 static bool ScenarioCommand(City *city, i32 control, i32 value) {
   return EditCityScenarioSelectionControl(city, city->game->ui->scenario_window->token, control, value);
@@ -355,11 +340,13 @@ void CancelCityScenarioSelection(City *city, CityScenarioSelectionDialog *dialog
 
 void AcceptCityScenarioSelection(City *city, CityScenarioSelectionDialog *dialog) {
   if (dialog->selected_index == CITY_SCENARIO_NO_SELECTION) {
-    ShowCityLoadResourceMessage(city, CITY_SCENARIO_SELECT_REQUIRED_RESOURCE, 0, -1);
+    ShowCityLoadCommandResource(city, CITY_SCENARIO_SELECT_REQUIRED_RESOURCE);
     return;
   }
-  if (!city->game->ui->scenario_window->callback)
-    GetCityScenarioListText(dialog, dialog->selected_index, dialog->selected_path);
+  ScenarioListModel *model = city->game->ui->scenario_window;
+  int index = dialog->selected_index;
+  if (!model->callback && index >= 0 && (size_t)index < model->count)
+    CopyText(dialog->selected_path, sizeof(dialog->selected_path), model->paths[index]);
   CloseCityScenarioSelectionDialog(city, dialog, CITY_DIALOG_OK);
 }
 
@@ -377,7 +364,7 @@ bool ScenarioWindowProcedure(Game *game, const Window *window, const WindowEvent
   }
   if (event->kind != WINDOW_INPUT) return false;
   City *city = game->city;
-  if (!NativeScenarioDialogWaiting(city) || game->ui->scenario_window->canvas_id != window->window_id) return false;
+  if (!NativeScenarioDialogWaiting(game->ui) || game->ui->scenario_window->canvas_id != window->window_id) return false;
   const CanvasSDLEvent *input = event->input;
   if (input->kind == CANVAS_SDL_POINTER_DOWN && input->button == CANVAS_SDL_BUTTON_LEFT) {
     int x = event->x, y = event->y;
@@ -447,4 +434,20 @@ bool ScenarioWindowProcedure(Game *game, const Window *window, const WindowEvent
     return true;
   }
   return false;
+}
+
+void ApplicationOpenScenarioInstructions(City *city, const char *path) {
+  CityInterfaceState *ui = city->game->ui;
+  ApplicationUpdateDialogPause(city);
+  for (i32 index = 0; index < ui->desktop.count; ++index)
+    if (ui->desktop.windows[index].window_id == ui->scenario_instructions_window)
+      return;
+  ui->scenario_instructions_window = 0;
+  if (!ReadCityScenarioInstructions(path, ui->scenario_instructions))
+    return;
+  i32 slot = Sc2kCanvasDesktopOpenNotice(&ui->desktop, (CityRect){70, 65, 530, 395},
+      "Scenario instructions", ui->scenario_instructions, CITY_MESSAGE_INFORMATION | CITY_MESSAGE_OK);
+  if (slot >= 0)
+    ui->scenario_instructions_window = ui->desktop.windows[slot].window_id;
+  ApplicationUpdateDialogPause(city);
 }

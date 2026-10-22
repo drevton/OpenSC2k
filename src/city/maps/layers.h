@@ -2,12 +2,11 @@
 #define SC2K_SIMULATION_MAP_LAYERS_H
 
 #include "city/infrastructure/types.h"
-#include "city/maps/tile_storage.h"
 #include "city/maps/module.h"
-#include <assert.h>
-
+#include "city/maps/terrain.h"
+#include "city/maps/tile_storage.h"
 #include "city/state.h"
-#include "city/saveload/map_format.h"
+#include <assert.h>
 
 // Replace a valid tile's occupant and update ordinary/military counters plus category-specific metadata.
 // Entering trees consumes one landscape RNG draw. Same-kind calls still perform category resets.
@@ -480,12 +479,6 @@ static SC2K_FORCE_INLINE bool IsFlatDryUnbuiltTile(const TileInfo *tp) {
       !HasTileWater(tp);
 }
 
-// Retained stock algorithms explicitly request their slope/bank/water codes.
-static SC2K_FORCE_INLINE int ReadLegacyTerrainCode(const City *city, TileIndex tile) {
-  return ProjectCityTerrainToLegacy(city, tile, city->native_map_storage ? ReadTerrainCode(&city->tile[tile]) :
-      city->tile[tile].terrain & CITY_TERRAIN_KIND_MASK);
-}
-
 enum {
   CITY_GROUND_GRASS = 0, CITY_GROUND_ROUGH = 5, CITY_GROUND_ROCKS = 6,
   CITY_TRANSPORT_GROUND_PAVED = CITY_GROUND_ROUGH,
@@ -631,24 +624,6 @@ static SC2K_FORCE_INLINE void WriteDensityHistory(City *city, TileIndex tile, in
   CityPoint point = MapTilePt(city, tile);
   WriteByte(&city->quarter[(point.y >> 2) * (city->map_width >> 2) + (point.x >> 2)].density_history, value);
 }
-
-void WriteOverlay(City *city, TileIndex tile, int value);
-int ReadCityBaseOverlay(const City *city, TileIndex tile);
-u8 ReadCityStockBaseOverlay(const City *city, TileIndex tile);
-int ReadCitySignOverlay(const City *city, TileIndex tile);
-int ReadCityFacilityOverlay(const City *city, TileIndex tile);
-CityOverlayName *CityOverlayNameAt(City *city, int overlay);
-const CityOverlayName *ReadCityOverlayName(const City *city, int overlay);
-CityAnnualFacilityRecord *CityFacilityRecordAt(City *city, int slot);
-const CityAnnualFacilityRecord *ReadCityFacilityRecord(const City *city, int slot);
-int CityFacilityRecordLimit(const City *city);
-bool CityHasExtendedAssociations(const City *city);
-bool ReserveCityFacilities(City *city, int capacity);
-bool ReserveCitySigns(City *city, int capacity);
-void RebuildCityAssociationHashes(City *city);
-void LinkCityFacility(City *city, int slot);
-void ReleaseCityAssociations(City *city);
-bool ImportStockCityAssociations(City *city);
 
 static SC2K_FORCE_INLINE u8 ReadUnderground(const City *city, TileIndex tile) {
   return city->tile[tile].underground & CITY_UNDERGROUND_KIND_MASK;

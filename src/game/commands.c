@@ -1,47 +1,30 @@
-#include "city/maps/trees.h"
-#include "audio/types.h"
+#include "game/timing.h"
+#include "game/commands.h"
+
+#include <stdlib.h>
+#include <string.h>
+
 #include "city/engine/city_types.h"
 #include "city/engine/command_types.h"
+#include "city/engine/simulation.h"
 #include "city/maps/tile_storage.h"
 #include "city/presentation.h"
+#include "city/state.h"
 #include "game/application.h"
-#include "base/time.h"
-#include "audio/audio.h"
-#include "ui/text/text.h"
-#include "ui/tools/tools.h"
-#include "ui/frontend.h"
-#include "game/application_internal.h"
-#include "city/engine/initialization.h"
-#include "city/engine/simulation.h"
-#include "city/saveload/file.h"
 #include "game/errors.h"
 #include "game/observation.h"
 #include "game/state.h"
-#include "audio/state.h"
-#include "city/state.h"
-#include "drawing/state.h"
-#include "assets/state.h"
-#include "ui/state.h"
-#include "drawing/maps/placement.h"
 #include "ui/commands.h"
+#include "ui/dialogs/budget.h"
 #include "ui/dialogs/dialogs.h"
-
-// Game owns the command-error marker; damage its old and new Drawing footprints before changing it.
-void SetCityErrorTile(Game *game, TileIndex tile) {
-  Drawing *drawing = game->drawing;
-  if (!IsMapTileValid(game->city, tile)) tile = INVALID_TILE;
-  if (game->error_tile == tile) return;
-  TileIndex changed[] = {game->error_tile, tile};
-  for (int i = 0; i < 2; ++i) {
-    if (!IsMapTileValid(game->city, changed[i]) || !drawing->default_map_view) continue;
-    CityRect b = CityMapPlacementBounds(game->city, changed[i], false);
-    int scale = drawing->map_pixel_scale;
-    MarkScreenDirty(&drawing->screen_damage,
-        (CityRect){b.left * scale + drawing->scroll_pixels.x, b.top * scale + drawing->scroll_pixels.y,
-            b.right * scale + drawing->scroll_pixels.x, b.bottom * scale + drawing->scroll_pixels.y});
-  }
-  game->error_tile = tile;
-}
+#include "ui/dialogs/information.h"
+#include "ui/dialogs/messages.h"
+#include "ui/dialogs/name_editor.h"
+#include "ui/dialogs/spans.h"
+#include "ui/map.h"
+#include "ui/state.h"
+#include "ui/text/text.h"
+#include "ui/tools/tools.h"
 
 static bool IsCityConstructionCommand(u32 command) {
   switch (command) {
@@ -77,86 +60,6 @@ static bool IsCityConstructionCommand(u32 command) {
   }
 }
 
-// UI action context is separate from simulation flags and legacy command admission results.
-const char *CityCommandFailureSummary(const CityCommand *command) {
-  switch (command->id) {
-  case CITY_COMMAND_PLANT_TREES_RECT:
-    return command->parameter3 & CITY_TREE_REMOVE ? "Can't remove trees here..." : "Can't plant trees here...";
-  case CITY_COMMAND_BULLDOZE_RECT: case CITY_COMMAND_BULLDOZE: case CITY_COMMAND_APPLY_BULLDOZER_TOOL:
-    return "Can't demolish here...";
-  case CITY_COMMAND_BUILD_CANALS_RECT:
-    return "Can't build canal here...";
-  case CITY_COMMAND_BUILD_BRIDGE:
-    return "Can't build bridge here...";
-  case CITY_COMMAND_PLACE_BUILDING: return "Can't build here...";
-  case CITY_COMMAND_RAISE_TERRAIN_TILE: return "Can't raise land here...";
-  case CITY_COMMAND_LOWER_TERRAIN_TILE: return "Can't lower land here...";
-  case CITY_COMMAND_ADJUST_TERRAIN_HEIGHT:
-  case CITY_COMMAND_STEP_TERRAIN_HEIGHT: return "Can't alter terrain here...";
-  case CITY_COMMAND_LEVEL_TERRAIN_TILE: return "Can't level terrain here...";
-  case CITY_COMMAND_STRETCH_TERRAIN_TILE: return "Can't stretch terrain here...";
-  case CITY_COMMAND_PLACE_STREAM: return "Can't place a stream here...";
-  case CITY_COMMAND_PLACE_ROAD_TERRAIN_SPAN:
-    return "Can't build tunnel here...";
-  case CITY_COMMAND_PLACE_ROAD: case CITY_COMMAND_PLACE_HIGHWAY_ONRAMP:
-  case CITY_COMMAND_PLACE_TRANSPORT_LINE:
-    return "Can't build road here...";
-  case CITY_COMMAND_PLACE_RAIL: case CITY_COMMAND_PLACE_SUBWAY: case CITY_COMMAND_PLACE_SUBWAY_RAIL_CONNECTION:
-    return "Can't build railway here...";
-  case CITY_COMMAND_PLACE_WATER_PIPE: return "Can't build water infrastructure here...";
-  case CITY_COMMAND_PLACE_POWER_LINE: return "Can't build power infrastructure here...";
-  case CITY_COMMAND_PLACE_ZONE_RECT: return "Can't zone land here...";
-  case CITY_COMMAND_DISPATCH_CITY_SERVICE:
-    return "Can't dispatch service here...";
-  case CITY_COMMAND_EDIT_MAP_LABEL: case CITY_COMMAND_EDIT_FACILITY_LABEL:
-  case CITY_COMMAND_RENAME_SIGN: case CITY_COMMAND_MOVE_SIGN:
-    return "Can't change sign here...";
-  case CITY_COMMAND_ASSIGN_STADIUM_TEAM: return "Can't select stadium team...";
-  case CITY_COMMAND_ISSUE_BOND: return "Can't issue bond...";
-  case CITY_COMMAND_REDEEM_BOND: return "Can't repay bond...";
-  case CITY_COMMAND_TOGGLE_CITY_POLICY: case CITY_COMMAND_BUDGET_RATE: case CITY_COMMAND_SET_BUDGET_RATE:
-  case CITY_COMMAND_SET_INDUSTRY_TAX_BASELINE:
-    return "Can't change city policy...";
-  case CITY_COMMAND_CHEAT: return "Can't apply cheat...";
-  default:
-    return IsCityConstructionCommand(command->id) ? "Can't build here..." : "Can't complete action...";
-  }
-}
-
-bool IsCityCommandFailureResource(u32 resource) {
-  return resource == CITY_NOTICE_PLACEMENT_AT_MAP_EDGE || resource == CITY_NOTICE_PLACEMENT_PROTEST ||
-      resource == CITY_NOTICE_MARINA_REQUIRES_SHORELINE || resource == CITY_NOTICE_HYDRO_REQUIRES_WATERFALL ||
-      (resource >= CITY_NOTICE_TUNNEL_CANNOT_CROSS_TUNNELS && resource <= CITY_NOTICE_TUNNEL_REQUIRES_HILLSIDE) ||
-      (resource >= CITY_NOTICE_NO_POLICE_TO_DISPATCH && resource <= CITY_NOTICE_CANNOT_DISPATCH_MILITARY_HERE) ||
-      (resource >= CITY_NOTICE_SHORELINE_NEEDS_CLEARING && resource <= CITY_NOTICE_SPAN_BLOCKED_BY_CROSSING) ||
-      resource == CITY_NOTICE_CANNOT_PLACE_LABEL_HERE || resource == CITY_NOTICE_SIGN_LIMIT_REACHED ||
-      resource == CITY_NOTICE_SELECT_VALID_STADIUM_SPORT || resource == CITY_NOTICE_BOND_LIMIT_REACHED ||
-      resource == CITY_NOTICE_BOND_REPAYMENT_REQUIRES_FUNDS || resource == CITY_NOTICE_INSUFFICIENT_OPERATING_FUNDS;
-}
-
-const char *CityCommandFailureReason(i64 error) {
-  switch (error) {
-  case CITY_COMMAND_COST_INVALID: return "... this action is not available here.";
-  case CITY_COMMAND_COST_BLOCKED: return "... the site is unsuitable or obstructed.";
-  case CITY_COMMAND_COST_TOO_EXPENSIVE: return "... not enough money.";
-  case CITY_COMMAND_COST_REJECTED: return "... the action was refused.";
-  case CITY_COMMAND_COST_WRONG_TREE_CLIMATE: return "... wrong terrain for tree type.";
-  case CITY_COMMAND_COST_TREE_LIMIT: return "... there is no room for another tree on this tile.";
-  case CITY_COMMAND_COST_NOTHING_TO_REMOVE: return "... there is nothing to remove here.";
-  case CITY_COMMAND_COST_ALREADY_BUILT: return "... this building already exists in the city.";
-  case CITY_COMMAND_COST_REMOVE_RAIL: return "... must remove railway track first.";
-  case CITY_COMMAND_COST_REMOVE_ROAD: return "... must remove road first.";
-  case CITY_COMMAND_COST_REMOVE_POWER_LINE: return "... must remove power line first.";
-  case CITY_COMMAND_COST_REMOVE_BUILDING: return "... must remove building first.";
-  case CITY_COMMAND_COST_REMOVE_UNDERGROUND: return "... must remove underground construction first.";
-  case CITY_COMMAND_COST_ALREADY_AT_SEA_LEVEL: return "... already at sea level.";
-  case CITY_COMMAND_COST_BRIDGE_SAME_SPOT: return "... a bridge can't start and end in the same spot.";
-  case CITY_COMMAND_COST_CLEAR_DEEP_WATER: return "... water too deep.";
-  default: return error < CITY_COMMAND_COST_CLEAR_DEEP_WATER && error >= -65535 ? CityNoticeText((int)-error) :
-      "... the action could not be completed.";
-  }
-}
-
 // Stack-owned completion survives nested UI work without reading its later errors.
 typedef struct {
   CityCommandResult result;
@@ -184,12 +87,24 @@ typedef struct CityTimedCommand {
   CityCommandFeedback feedback;
 } CityTimedCommand;
 
+// Retain the captured observation and UI feedback in Game-owned storage. Allocation failure leaves the caller's
+// scope, notices and failure handling untouched; later animation delivery or teardown consumes the retained record.
+bool RetainCityCommandObservation(Game *game, const CityCommandObservationScope *observation) {
+  CityTimedCommand *work = malloc(sizeof(*work));
+  if (!work) return false;
+  *work = (CityTimedCommand){.observer = observation->observer, .scope = observation->scope,
+      .before_tick = observation->before_tick, .packet = observation->packet, .feedback = *observation->feedback};
+  game->timed_command = work;
+  return true;
+}
+
 void ReleaseCityPostedCommands(Game *game) {
   if (game->timed_command) {
     CityTimedCommand *work = game->timed_command;
     if (work->observer->command_executed) work->observer->command_executed(work->scope);
     if (work->observer->end_command)
       work->observer->end_command(game, work->scope, 0, GetGameError(game), work->before_tick);
+    DiscardCityCommandNotices(work->feedback.notices);
     free(work);
     game->timed_command = NULL;
   }
@@ -200,7 +115,9 @@ void ReleaseCityPostedCommands(Game *game) {
   }
 }
 
-static void CompleteCityCommandCallback(Game *game, int token, CityCommandResult result) {
+// Keep a suspended callback attached to its live tick token. Final completion consumes the record before invoking
+// caller code, and merges the captured host/gameplay errors and cancellation with the final outcome.
+void CompletePendingCityCommand(Game *game, int token, CityCommandResult result) {
   CityPendingCommand **link = &game->pending_commands;
   while (*link && (*link)->token != token) link = &(*link)->next;
   if (!*link) return;
@@ -211,7 +128,6 @@ static void CompleteCityCommandCallback(Game *game, int token, CityCommandResult
   }
   *link = pending->next;
   result.cost = pending->cash_before - game->city->indicators.cash;
-  if (result.value < 0) result.error = result.value;
   if (!result.error) result.error = pending->result.error;
   if (!result.host_error) result.host_error = pending->result.host_error;
   result.cancelled |= pending->result.cancelled;
@@ -307,51 +223,8 @@ static i64 ExecuteCommandPayload(Game *game, CityCommand packet, const u8 *text,
   CityCommandResult result = {.value = value, .cost = cash_before - city->indicators.cash, .error = failure,
       .host_error = error, .cancelled = feedback.cancelled,
       .succeeded = !failure && !error && !feedback.cancelled};
-  if (admitted && !error && !feedback.cancelled && !game->execution_failed) {
-    int sound = CITY_SOUND_CONSTRUCTION;
-    bool present = true;
-    switch (packet.id) {
-    case CITY_COMMAND_PLACE_POWER_LINE:
-      sound = CITY_SOUND_POWER_LINES;
-      break;
-    case CITY_COMMAND_PLACE_BUILDING:
-      switch (args.parameter1) {
-      case TK_MAYORS_HOUSE: case TK_CITY_HALL: case TK_STATUE: case TK_BRAUN_LLAMA_DOME:
-        sound = CITY_SOUND_CIVIC_PLACEMENT; break;
-      case TK_SCHOOL: case TK_COLLEGE: case TK_LIBRARY: case TK_MUSEUM:
-        sound = CITY_SOUND_EDUCATION; break;
-      case TK_FIRE_STATION: sound = CITY_SOUND_FIRE_DISPATCH; break;
-      case TK_PRISON: sound = CITY_SOUND_PRISON; break;
-      case TK_POLICE_STATION: case TK_HOSPITAL: sound = CITY_SOUND_POLICE_OR_HOSPITAL; break;
-      case TK_PARK: case TK_LARGE_PARK: case TK_STADIUM: case TK_MARINA: case TK_ZOO:
-        sound = args.parameter1 == TK_ZOO ? CITY_SOUND_SAILBOAT_OR_ZOO : CITY_SOUND_CIVIC_PLACEMENT;
-        if (result.succeeded) PlayCityEventMusicById(game, CITY_MUSIC_TRACK_10);
-        break;
-      default: break;
-      }
-      break;
-    case CITY_COMMAND_PLACE_ZONE_RECT:
-      present = args.parameter1 != ZONE_NONE;
-      if (args.parameter1 != ZONE_SEAPORT && args.parameter1 != ZONE_AIRPORT) sound = CITY_SOUND_TREE_OR_ZONE_PLACEMENT;
-      break;
-    case CITY_COMMAND_PLACE_TRANSPORT_LINE:
-      present = !result.succeeded || result.cost > 0;
-      break;
-    case CITY_COMMAND_PLACE_ROAD:
-    case CITY_COMMAND_PLACE_RAIL:
-    case CITY_COMMAND_PLACE_SUBWAY:
-    case CITY_COMMAND_PLACE_HIGHWAY_ONRAMP:
-    case CITY_COMMAND_PLACE_ROAD_TERRAIN_SPAN:
-    case CITY_COMMAND_PLACE_SUBWAY_RAIL_CONNECTION:
-      break;
-    case CITY_COMMAND_PLACE_WATER_PIPE:
-      break;
-    default:
-      present = false;
-      break;
-    }
-    if (present) PlayCitySound(city, args.tile, result.succeeded ? sound : CITY_SOUND_PLACEMENT_REJECTED);
-  }
+  if (admitted && !error && !feedback.cancelled && !game->execution_failed)
+    PresentCityCommandAudio(city, packet.id, &args, result.succeeded, result.cost);
   if (completion) *completion = (CityRunCompletion){result, true};
   if (admitted && observer && observer->end_command) observer->end_command(game, scope, value, error, before_tick);
   --game->command_depth;
@@ -375,7 +248,7 @@ static i64 ExecuteCommandPayload(Game *game, CityCommand packet, const u8 *text,
     PresentCityTileInformationDialog(city, feedback.inspection_tile);
   PresentCityCommandNotices(city, feedback.notices);
   if (packet.id == CITY_COMMAND_ANSWER_MILITARY_OFFER)
-    CompleteCityCommandCallback(game, packet.parameter1, result);
+    CompletePendingCityCommand(game, packet.parameter1, result);
   return value;
 }
 
@@ -448,150 +321,11 @@ bool RunCityCommand(Game *game, CityCommandId id, TileIndex tile, int a, int b,
   return RunCityCommandWithPayload(game, id, tile, a, b, c, NULL, callback, context);
 }
 
-void ApplicationSyncDialogPause(City *city) {
-  CityInterfaceState *ui = city->game->ui;
-  if (!ui->dialog_pause_sync_enabled || ui->dialog_pause_syncing || city->game->command_depth ||
-      ui->dialog_pause_active == !!ui->dialog_pause_requested)
-    return;
-  ui->dialog_pause_syncing = 1;
-  if (ui->dialog_pause_requested ? BeginCityDialogPause(city, 1) : EndCityDialogPause(city, 1))
-    ui->dialog_pause_active = !!ui->dialog_pause_requested;
-  ui->dialog_pause_syncing = 0;
-}
-
-void ApplicationUpdateDialogPause(City *city) {
-  CityInterfaceState *ui = city->game->ui;
-  ApplicationBudgetSync(city);
-  if (city->game->command_depth == 0) {
-    CityChartState *charts = &ui->charts;
-    static const i16 codes[4] = {
-        CITY_PANEL_HISTORY, CITY_PANEL_DEMOGRAPHICS, CITY_PANEL_NEIGHBORS, CITY_PANEL_INDUSTRY};
-    for (i32 slot = 0; slot < 4; ++slot) {
-      if (!charts->visible[slot])
-        continue;
-      i32 open = 0;
-      for (i32 index = 0; index < ui->desktop.count; ++index)
-        open |= Sc2kCanvasChartCode(ui->desktop.windows[index].kind) == codes[slot];
-      if (!open)
-        SetCityPanelVisibilityByCode(city, codes[slot]);
-    }
-  }
-  if (city->game->command_depth == 0 && ui->map_data.visible) {
-    i32 open = 0;
-    for (i32 index = 0; index < ui->desktop.count; ++index)
-      open |= ui->desktop.windows[index].kind == CITY_CANVAS_MAP_DATA;
-    if (!open)
-      SetCityPanelVisibilityByCode(city, CITY_PANEL_MAP_DATA);
-  }
-  ui->dialog_pause_requested = 0;
-  CityCommand cancelled_labels[16];
-  i32 cancelled_label_count = 0;
-  CityCommand cancelled_stadiums[16];
-  int cancelled_stadium_count = 0;
-  i32 annual_open = 0;
-  for (i32 index = 0; index < ui->desktop.count; ++index) {
-    annual_open |= ui->desktop.windows[index].window_id == ui->annual_budget_window;
-    i32 kind = ui->desktop.windows[index].kind;
-    ui->dialog_pause_requested |= kind == CITY_CANVAS_BUDGET || kind == CITY_CANVAS_POLICIES ||
-        kind == CITY_CANVAS_NOTICE || kind == CITY_CANVAS_EXIT || kind == CITY_CANVAS_ABANDON ||
-        kind == CITY_CANVAS_ADVISOR || kind == CITY_CANVAS_CONFIRM || kind == CITY_CANVAS_NEWSPAPER;
-  }
-  if (!annual_open)
-    ui->annual_budget_window = 0;
-  ui->dialog_pause_requested |= annual_open;
-  for (i32 index = 0; index < 16; ++index) {
-    NativeStadiumDialog *pending = &ui->stadium_dialogs[index];
-    if (!pending->window_id)
-      continue;
-    i32 open = 0;
-    for (i32 window = 0; window < ui->desktop.count; ++window)
-      open |= ui->desktop.windows[window].window_id == pending->window_id;
-    if (!open) {
-      CityCommand cancel = pending->command;
-      cancel.parameter2 = CITY_DIALOG_CANCEL;
-      if (cancel.id == CITY_COMMAND_REPLY_TO_QUESTION)
-        cancelled_stadiums[cancelled_stadium_count++] = cancel;
-      pending->window_id = 0;
-      pending->answer = CITY_DIALOG_CANCEL;
-    }
-    ui->dialog_pause_requested |= open;
-  }
-  for (i32 index = 0; index < 16; ++index) {
-    NativeLabelDialog *pending = &ui->label_dialogs[index];
-    if (!pending->window_id)
-      continue;
-    i32 open = 0;
-    for (i32 window = 0; window < ui->desktop.count; ++window)
-      open |= ui->desktop.windows[window].window_id == pending->window_id;
-    if (!open && !pending->opening && !pending->continuation && pending->command.id == CITY_COMMAND_REPLY_TO_QUESTION) {
-      CityCommand cancel = pending->command;
-      cancel.parameter2 = 2;
-      cancelled_labels[cancelled_label_count++] = cancel;
-    }
-    if (!open)
-      pending->window_id = 0;
-    ui->dialog_pause_requested |= open;
-  }
-  if (ui->information_window.window_id) {
-    CityTileInformationSnapshot *pending = &ui->information_window;
-    i32 open = 0;
-    for (i32 window = 0; window < ui->desktop.count; ++window)
-      open |= ui->desktop.windows[window].window_id == pending->window_id;
-    if (!open) {
-      *pending = (CityTileInformationSnapshot){0};
-    }
-    ui->dialog_pause_requested |= open;
-  }
-  ui->dialog_pause_requested |= NativeSpanDialogWaiting(ui) || CityConnectionQuestionWaiting(ui) ||
-      CityMissionNoticeWaiting(ui) || ui->startup_waiting || CityFileDialogWaiting(city) ||
-      NativeScenarioDialogWaiting(city);
-  ApplicationSyncDialogPause(city);
-  for (int index = 0; index < cancelled_stadium_count; ++index)
-    RunCityCommand(city->game, CITY_COMMAND_REPLY_TO_QUESTION,
-        INVALID_TILE, cancelled_stadiums[index].parameter1, CITY_DIALOG_CANCEL, cancelled_stadiums[index].parameter3, NULL, NULL);
-  for (i32 index = 0; index < cancelled_label_count; ++index)
-    ExecuteRecordedCityCommandWithPayload(city->game, cancelled_labels[index], NULL, 0, (const u8 *)"", 0);
-}
-
-// Defer teardown until the retained original Quit/Save caller has returned.
-void RequestCityApplicationExit(Game *game) {
-  game->close_requested = 1;
-}
-
-// Host time controls delivery count, never the deterministic work inside a batch.
-// Always finish one batch, even if preparing/presenting the frame used its budget.
-void RunCitySimulationFrame(Game *game, double deadline) {
-  City *city = game->city;
-  do {
-    RunGameIdle(game, (CityIdleInputs){true, true, true});
-    if (game->execution_failed) break;
-    if (game->close_requested || game->execution_failed || game->idle_blocked || game->delay_blocked ||
-        game->idle_state != (u32)CITY_IDLE_PLAY || city->settings.speed == CITY_SPEED_PAUSED ||
-        city->settings.timer_mode != CITY_TIMER_RUNNING || !city->cadence_counter.tick_due ||
-        (!city->simulation_work.phase && city->settings.speed != CITY_SPEED_UNLIMITED)) break;
-  } while (MonotonicSeconds() < deadline);
-}
-
 // Pending notices and decisions stay as events; completion keeps the original caller token.
 void DeliverCitySimulationEvents(Game *game, int token, i64 result, bool cancelled) {
-  CompleteCityCommandCallback(game, token, (CityCommandResult){.value = result,
-      .host_error = GetGameError(game), .cancelled = cancelled});
+  CompletePendingCityCommand(game, token, (CityCommandResult){.value = result,
+      .error = result < 0 ? result : 0, .host_error = GetGameError(game), .cancelled = cancelled});
   if (GetGameError(game)) game->execution_failed = true;
   if (!game->execution_failed && !game->close_requested && result >= 2 &&
       FindCityTickContinuation(game->city, (int)result)) OpenCityTickContinuation(game->city, (int)result);
-}
-
-void RunGameIdle(Game *game, CityIdleInputs inputs) {
-  CityIdleInputs previous = game->idle_inputs;
-  game->idle_inputs = inputs;
-  ClearGameError(game);
-  UpdateGame(game);
-  game->idle_inputs = previous;
-  DeliverCitySimulationEvents(game, 0, 1, false);
-  if (!game->observation && game->ui->newspaper_month != game->city->clock.month) {
-    game->ui->newspaper_month = game->city->clock.month;
-    if (!game->city->newspaper.enabled && !game->ui->newspaper_delivery_disabled &&
-        (game->ui->newspaper_month == CITY_MONTH_APRIL || game->ui->newspaper_month == CITY_MONTH_AUGUST))
-      OpenCityManualNewspaper(game->city, game->city->newspaper.edition_index);
-  }
 }

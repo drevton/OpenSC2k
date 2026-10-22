@@ -74,7 +74,7 @@ enum {
 };
 
 // XMIC records: tracked widths retain aging and service-metric wrap behavior.
-typedef struct {
+typedef struct CityAnnualFacilityRecord {
   u8 type;
   u8 age;
   u16 value_02;
@@ -112,9 +112,16 @@ _Static_assert(offsetof(CityAnnualFacilities, record) == 0 && sizeof(CityAnnualF
 
 // Unlisted tile kinds have no specialized information template.
 extern const u8 kFacilityClassByTile[TK_COUNT];
+// New-city facility defaults after ResetCityMapAssociations releases old instances. Native records are zeroed;
+// shared records preserve unused payloads. Restore stadium names and clear the annual facility counters.
+void ResetCityFacilityState(City *city);
 // Allocate/aggregate the facility record and copy its asset name into City label storage. Some kinds consume RNG.
 // Returns an overlay association, or zero when no record is needed/available. Full arcology allocation may reuse a slot.
 int CreateFacilityInstance(City *city, TileIndex anchor, u8 kind);
+// Select per-facility records or shared records. TEST validates options without conversion or allocation.
+// Execution preserves any partial conversion if allocation fails and returns CITY_COMMAND_COST_BLOCKED.
+i64 CmdSetIndividualFacilities(City *city, u32 flags, int enabled, int reserved1, int reserved2);
+
 bool SetCityIndividualFacilities(City *city, bool individual);
 
 // Before replacing a footprint, restore reward availability or release its live stadium team association.

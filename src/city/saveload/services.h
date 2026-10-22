@@ -2,11 +2,11 @@
 #define SC2K_FILE_SERVICES_H
 
 #include <stddef.h>
-#include <stdio.h>
 
-#include "city/saveload/state.h"
-#include "base/file.h"
+#include "city/saveload/types.h"
 #include "city/types.h"
+
+typedef struct CityFileRuntime CityFileRuntime;
 
 // File Dialog Answers
 
@@ -27,15 +27,16 @@ void *AllocateCityFileScratch(CityFileRuntime *file, size_t size);
 void FreeCityFileScratch(CityFileRuntime *file, void *pointer);
 bool PrepareCityMiscWorkspace(CityFileRuntime *file);
 void ReleaseCityMiscWorkspace(CityFileRuntime *file);
-void RunCityFileCommand(CityFileRuntime *file, CityFileAction action, void *context);
 
+// Presentation consumes borrowed paths/exception values synchronously. The UI formats native host error reasons;
+// failed decoding keeps its actual partial City writes and does not rebuild successful-load state.
+void ShowCityFileException(City *city, u32 resource, const CityFileExceptionState *exception, const char *path);
 void ReportCityLoadError(City *city, u32 resource, const char *message);
+void ReportCityChunkError(CityFileRuntime *file, u32 resource, int load_string);
 void ReportCityFileCommandFailure(City *city);
 void ShowCityLoadCommandResource(City *city, u32 resource);
 
 // File Save Services
-
-typedef struct CityFileRuntime CityFileRuntime;
 
 // Operation-local streams and ordered serialization writes.
 void *OpenCitySaveStream(CityFileRuntime *file, const char *path);
@@ -52,8 +53,6 @@ i32 ChooseCitySaveFile(City *city, const char *name, const char *filter, const c
 const char *ReadCitySaveSelectedPath(City *city);
 
 // Replacement Services
-
-typedef struct City City;
 
 i32 PresentCityReplacementQuestion(City *city, const char *text, u32 flags);
 

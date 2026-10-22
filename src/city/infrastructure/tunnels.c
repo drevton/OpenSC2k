@@ -8,14 +8,17 @@
 // portal zone[5..7] has no tunnel payload. Flags, signs/effects and the independent underground layer are shared
 // as described in tile_storage.h. Removing the tunnel clears its depth field, not the surface occupant above it.
 
+#include "city/infrastructure/lines.h"
+#include "city/saveload/map_format.h"
+#include "city/engine/random.h"
 #include "city/infrastructure/tunnels.h"
+#include "city/maps/terrain.h"
 
 #include <assert.h>
 
 #include "assets/graphics.h"
-#include "audio/audio.h"
+#include "game/audio.h"
 #include "city/engine/commands.h"
-#include "city/infrastructure/infrastructure.h"
 #include "city/infrastructure/power_lines.h"
 #include "city/infrastructure/surface_lines.h"
 #include "city/maps/layers.h"
@@ -163,6 +166,18 @@ i64 PlaceCityRoadTunnel(City *city, TileIndex tile, bool accept) {
       ReadCityLandHeight(&city->tile[tile]));
 }
 
+// Place a road tunnel from its valid starting tile using the resolved confirmation bit. TEST returns the tunnel charge
+// without editing terrain; execution retains the tunnel routine's negative-error or completion result.
+i64 CmdPlaceRoadTerrainSpan(City *city, u32 flags, TileIndex tile, int options) {
+  if (!IsMapTileValid(city, tile) || (options & ~CITY_TUNNEL_CONFIRMED)) return CITY_COMMAND_COST_INVALID;
+  if (flags & CITY_COMMAND_TEST) {
+    CityInfrastructureSpan tunnel = FindCityRoadTunnel(city, tile);
+    if (tunnel.end == INVALID_TILE) return tunnel.error ? -tunnel.error : CITY_COMMAND_COST_BLOCKED;
+    return (i64)tunnel.length * CITY_ROAD_TUNNEL_COST;
+  }
+  return PlaceCityRoadTunnel(city, tile, (options & CITY_TUNNEL_CONFIRMED) != 0);
+}
+
 // Retained placement keeps its opening geometry across the question, then charges the live construction cost.
 bool PlaceCityRoadTerrainSpan(City *city, TileIndex origin_tile) {
   assert(IsMapTileValid(city, origin_tile));
@@ -231,7 +246,7 @@ void DrawCityRoadTunnelEntrance(City *city, TileIndex tile, int sprite, int zoom
     const CityTileGeometry *geometry) {
   Drawing *drawing = city->game->drawing;
   const TileInfo *tp = &city->tile[tile];
-  int terrain = CityMapViewTerrainCode(city, tile);
+  int terrain = CityMapDryGroundShape(city, tile, geometry);
   bool native = city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE);
   int ground = -1;
   if (zoom == CITY_MAP_ZOOM_SMALL && terrain == CITY_TERRAIN_FLAT) {

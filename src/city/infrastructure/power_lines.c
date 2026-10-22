@@ -11,6 +11,8 @@
 // as documented in tile_storage.h. Reconnecting changes topology without borrowing the region or overlay bits.
 
 #include "city/infrastructure/power_lines.h"
+#include "city/infrastructure/lines.h"
+#include "city/maps/terrain.h"
 
 #include <assert.h>
 
@@ -18,8 +20,7 @@
 #include "city/infrastructure/highways.h"
 #include "city/infrastructure/surface_lines.h"
 #include "assets/state.h"
-#include "audio/audio.h"
-#include "city/infrastructure/infrastructure.h"
+#include "game/audio.h"
 #include "city/maps/layers.h"
 #include "city/maps/module.h"
 #include "city/maps/water.h"

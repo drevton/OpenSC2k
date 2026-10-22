@@ -1,7 +1,6 @@
 #ifndef SC2K_COMMAND_TYPES_H
 #define SC2K_COMMAND_TYPES_H
 
-#include "city/maps/map_types.h"
 #include "city/types.h"
 
 // Resolved question answers carried by shared commands. Values match stock dialog replies.
@@ -9,8 +8,6 @@ enum {
   CITY_DIALOG_UNANSWERED = -1, CITY_DIALOG_NONE = 0, CITY_DIALOG_OK = 1, CITY_DIALOG_CANCEL = 2,
   CITY_DIALOG_YES = 6, CITY_DIALOG_NO = 7,
 };
-
-typedef struct Game Game;
 
 // Resolved deterministic City actions.
 enum { COMMAND_TEST = 1 << 0 };
@@ -29,15 +26,11 @@ typedef struct {
   int parameter3;
 } CommandArguments;
 
-typedef struct {
-  i64 value; // Negative gameplay error on failure; nonnegative command value on success.
-  i64 cost, error; // Net treasury debit over the call, and gameplay failure, separately from admission.
-  i32 host_error;
-  bool succeeded, cancelled;
-} CommandResult;
-
-typedef void CommandCallback(Game *game, u32 id, const CommandResult *result,
-    TileIndex tile, int parameter1, int parameter2, int parameter3, void *context);
+// Tile-valued record parameters carry TileIndex directly. The command stream has
+// no backwards compatibility requirement.
+typedef CommandRecord CityCommand;
+typedef CommandArguments CityCommandArguments;
+_Static_assert(sizeof(CityCommand) == 16, "city commands have four 32-bit fields");
 
 typedef enum CityCommandCostError {
   CITY_COMMAND_COST_OK = 0,

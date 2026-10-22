@@ -1,15 +1,23 @@
-#include "drawing/canvas.h"
-#include "city/saveload/legacy_text.h"
-#include "drawing/drawing_internal.h"
+#include "drawing/raster/canvas_primitives.h"
 
-// Canvas Primitives
-// Drawing subsystem: canvas primitives.
+#include <stdlib.h>
 
+#include "drawing/fonts/fonts.h"
+#include "drawing/raster/canvas_raster_internal.h"
+
+const u32 canvas_text = 0xFF101010u;
 const u32 canvas_title = 0xFF97835Bu;
 const u32 canvas_face = 0xFF838583;
 const u32 canvas_light = 0xFFA8A8A8;
 const u32 canvas_dark = 0xFF636562;
 const u32 canvas_edge = 0xFF636562;
+
+bool CanvasPointInRect(CityRect rect, i32 x, i32 y) {
+  return x >= rect.left && x < rect.right && y >= rect.top && y < rect.bottom;
+}
+
+static bool CanvasBlitIndexedBlocks(Canvas *canvas, const u8 *indices,
+    i32 source_stride, const u32 *palette, CityRect area);
 
 // Half-pixel artwork preserves the diagonal pin and shade silhouette at larger UI sizes.
 // These small monochrome masks draw directly into the final framebuffer, like the close glyph.
@@ -66,121 +74,6 @@ void Sc2kCanvasBlitIndexed(Canvas *canvas, const u8 *indices, i32 source_stride,
       CanvasStore(canvas, x, y, palette[indices[y * source_stride + x]]);
 }
 
-// The baked atlas uses Windows-1252 glyph indices; native strings remain UTF-8.
-u8 ReadCityFontCharacter(const char **text) {
-  return EncodeCityWindows1252Character(ReadUtf8Character(text));
-}
-
-static const CityCanvasGlyph *CanvasNextGlyph(const char **text) {
-  return &kCanvasFont[ReadCityFontCharacter(text)];
-}
-
-i32 CanvasFontTextWidth(const char *text, const CityCanvasGlyph *font) {
-  i32 width = 0;
-  while (*text != '\0')
-    width += font[ReadCityFontCharacter(&text)].advance;
-  return width;
-}
-
-i32 CanvasTextWidth(const char *text) {
-  return CanvasFontTextWidth(text, kCanvasFont);
-}
-
-void CanvasTextFont(Canvas *canvas, i32 x, i32 y, const char *text, u32 color, i32 scale,
-    const CityCanvasGlyph *font) {
-  if (font == kCanvasFont && scale == 1 && canvas->interface_font && canvas->interface_font->ready) {
-    DrawCityInterfaceText(canvas->interface_font, canvas, x, y, text, color, false);
-    return;
-  }
-  while (*text != '\0') {
-    const CityCanvasGlyph *glyph = &font[ReadCityFontCharacter(&text)];
-    for (i32 row = 0; row < glyph->height; ++row)
-      for (i32 bit = 0; bit < glyph->width; ++bit)
-        if ((glyph->rows[row] & (1u << bit)) != 0) {
-          i32 left = x + (glyph->offset_x + bit) * scale;
-          i32 top = y + (glyph->offset_y + row) * scale;
-          CanvasFill(canvas, left, top, left + scale, top + scale, color);
-        }
-    x += glyph->advance * scale;
-  }
-}
-
-static void CanvasTextScaled(Canvas *canvas, i32 x, i32 y, const char *text, u32 color, i32 scale) {
-  CanvasTextFont(canvas, x, y, text, color, scale, kCanvasFont);
-}
-
-void CanvasTextAt(Canvas *canvas, i32 x, i32 y, const char *text, u32 color) {
-  CanvasTextScaled(canvas, x, y, text, color, 1);
-}
-
-i32 CanvasTextWrappedScaled(Canvas *canvas, i32 x, i32 y, i32 right, i32 bottom,
-    const char *text, u32 color, i32 scale, i32 line_height, i32 alignment) {
-  i32 available = (right - x) / scale;
-  if (available < 1)
-    return 0;
-  i32 start_y = y;
-  CityRect previous_clip = {0};
-  if (canvas != NULL) {
-    previous_clip = canvas->clip;
-    canvas->clip = IntersectCityRects(canvas->clip, (CityRect){x, y, right, bottom});
-  }
-  // Leave room for accents above the font's ordinary eight-pixel ascender.
-  y += 2 * scale;
-  line_height = IntMax(line_height, 12 * scale);
-  while (*text != '\0' && y + 10 * scale <= bottom) {
-    char line[256];
-    i32 length = 0;
-    i32 width = 0;
-    const char *last_space = NULL;
-    i32 last_space_length = 0;
-    while (*text == ' ') ++text;
-    while (*text != '\0' && *text != '\n' && *text != '\r') {
-      const char *next = text;
-      const CityCanvasGlyph *glyph = CanvasNextGlyph(&next);
-      i32 bytes = (i32)(next - text);
-      if (width + glyph->advance > available || length + bytes >= (i32)sizeof(line)) {
-        if (last_space != NULL) {
-          text = last_space + 1;
-          length = last_space_length;
-        } else if (length == 0) {
-          text = next;
-        }
-        break;
-      }
-      if (*text == ' ') {
-        last_space = text;
-        last_space_length = length;
-      }
-      memcpy(line + length, text, (size_t)bytes);
-      length += bytes;
-      width += glyph->advance;
-      text = next;
-    }
-    line[length] = '\0';
-    i32 line_x = x;
-    i32 line_width = CanvasTextWidth(line) * scale;
-    if (alignment == CITY_CANVAS_TEXT_CENTER) line_x += (right - x - line_width) / 2;
-    else if (alignment == CITY_CANVAS_TEXT_RIGHT) line_x = right - line_width;
-    if (canvas != NULL)
-      CanvasTextScaled(canvas, line_x, y, line, color, scale);
-    y += line_height;
-    if (*text == '\r') {
-      ++text;
-      if (*text == '\n') ++text;
-    } else if (*text == '\n') {
-      ++text;
-    }
-  }
-  if (canvas != NULL)
-    canvas->clip = previous_clip;
-  return y - start_y;
-}
-
-void CanvasTextWrapped(Canvas *canvas, i32 x, i32 y, i32 right, i32 bottom,
-    const char *text, u32 color) {
-  CanvasTextWrappedScaled(canvas, x, y, right, bottom, text, color, 1, 11, 0);
-}
-
 static CityRect CanvasCloseRect(CityRect bounds) {
   return (CityRect){bounds.left, bounds.top, bounds.left + 11, bounds.top + 14};
 }
@@ -215,10 +108,6 @@ void CanvasPanelFrame(Canvas *canvas, CityRect bounds, const char *title) {
   DrawCityWindowCaption(canvas, bounds, title ? title : "", canvas_title, 0xFFD3BB93, 0xFF674F2B, 0);
 }
 
-void CanvasTextRight(Canvas *canvas, i32 right, i32 y, const char *value, u32 color) {
-  CanvasTextAt(canvas, right - CityInterfaceTextWidth(canvas->interface_font, value), y, value, color);
-}
-
 void CanvasBeveledBox(Canvas *canvas, i32 left, i32 top, i32 right, i32 bottom,
     u32 fill, i32 raised) {
   u32 light = fill == canvas_title ? 0xFFD3BB93u : canvas_light;
@@ -229,10 +118,9 @@ void CanvasBeveledBox(Canvas *canvas, i32 left, i32 top, i32 right, i32 bottom,
 }
 
 bool CityCanvasButtonPressed(const Canvas *canvas, CityRect b) {
-  const CityButtonFeedback *press = canvas->button_feedback;
-  return press && press->active && press->window_id == canvas->button_window_id &&
-      b.left == press->bounds.left && b.top == press->bounds.top &&
-      b.right == press->bounds.right && b.bottom == press->bounds.bottom;
+  const CityRect *press = canvas->pressed_button;
+  return press && b.left == press->left && b.top == press->top &&
+      b.right == press->right && b.bottom == press->bottom;
 }
 
 bool RegisterCityCanvasButton(Canvas *canvas, CityRect b) {
@@ -295,32 +183,12 @@ void DrawCityCheckbox(Canvas *canvas, CityRect bounds, bool checked, u32 face, u
   DrawCanvasFrame(canvas, bounds, 0xFFE8B810, 0xFFFCF880, 0xFFB87818, !pressed);
 }
 
-void Sc2kCanvasChartFill(Canvas *canvas, CityRect rect, u32 color) {
-  CanvasFill(canvas, rect.left, rect.top, rect.right, rect.bottom, color);
-}
-
-void Sc2kCanvasChartText(Canvas *canvas, i32 x, i32 y, const char *text, u32 color) {
-  CanvasTextAt(canvas, x, y, text != NULL ? text : "", color);
-}
-
-i32 Sc2kCanvasChartTextWidth(const char *text) {
-  return CanvasTextWidth(text != NULL ? text : "");
-}
-
-void Sc2kCanvasChartFrame(Canvas *canvas, CityRect rect, const char *title) {
-  CanvasPanelFrame(canvas, rect, title != NULL ? title : "");
-}
-
-void Sc2kCanvasChartBox(Canvas *canvas, CityRect rect, u32 color, i32 raised) {
-  CanvasBeveledBox(canvas, rect.left, rect.top, rect.right, rect.bottom, color, raised);
-}
-
 // Canvas Raster
 // Drawing subsystem: canvas raster.
 
 // Indexed opaque runs at integer 2x/4x avoid per-pixel coordinate division and
 // clipping. A run with a partial physical edge falls back to CanvasStore.
-bool CanvasBlitIndexedBlocks(Canvas *canvas, const u8 *indices,
+static bool CanvasBlitIndexedBlocks(Canvas *canvas, const u8 *indices,
     i32 source_stride, const u32 *palette, CityRect area) {
   const CanvasRaster *r = &canvas->raster;
   if (r->pixels != canvas->pixels || r->numerator % r->denominator) return false;

@@ -42,11 +42,19 @@
     {
       "id": 504,
       "role": "explosion",
-      "source": "opensfx/effects/osfx_18.wav",
+      "source": "edited/explosion.wav",
       "match": "match",
-      "note": "Explosion",
-      "frames": 71218,
-      "sha256": "27368044f8989223f46b18715e5b5bd7e2eccab8b7891611d08604ed76bf93a2"
+      "note": "OpenSFX explosion shortened to 0.4 seconds at 25% amplitude with softened edges",
+      "frames": 17640,
+      "sha256": "98fb6a21ee50d05d3c31e4f64aa3624821efa015f3a177245555b540d1a14883",
+      "original_source": "opensfx/effects/osfx_18.wav",
+      "original_sha256": "27368044f8989223f46b18715e5b5bd7e2eccab8b7891611d08604ed76bf93a2",
+      "edits": {
+        "maximum_duration_ms": 400,
+        "amplitude_percent": 25,
+        "fade_in_ms": 10,
+        "fade_out_ms": 80
+      }
     },
     {
       "id": 505,
@@ -141,11 +149,19 @@
     {
       "id": 515,
       "role": "aircraft crash",
-      "source": "opensfx/effects/osfx_19.wav",
+      "source": "edited/aircraft-crash.wav",
       "match": "approximation",
-      "note": "Big crash; not an aircraft-specific recording",
-      "frames": 76625,
-      "sha256": "eed4f5c6dbd4e7a5105781a9a5a745f6a850388124ff9260f6eca2e2c08ef707"
+      "note": "OpenSFX big crash shortened to 0.5 seconds at 20% amplitude; not aircraft-specific",
+      "frames": 22050,
+      "sha256": "614b42f5b5a749616ab635b2d149f677056ddddd1419b967b8609bf5dc74b4b9",
+      "original_source": "opensfx/effects/osfx_19.wav",
+      "original_sha256": "eed4f5c6dbd4e7a5105781a9a5a745f6a850388124ff9260f6eca2e2c08ef707",
+      "edits": {
+        "maximum_duration_ms": 500,
+        "amplitude_percent": 20,
+        "fade_in_ms": 10,
+        "fade_out_ms": 100
+      }
     },
     {
       "id": 516,
@@ -159,29 +175,53 @@
     {
       "id": 517,
       "role": "ship",
-      "source": "opensfx/effects/osfx_06.wav",
+      "source": "edited/ship-horn.wav",
       "match": "match",
-      "note": "Ship horn",
-      "frames": 105966,
-      "sha256": "84a0d70af4ec25981ef645e94773bde5f0b49b14da3eb25849d1576e2d21b664"
+      "note": "OpenSFX ship horn shortened to 0.65 seconds at 30% amplitude",
+      "frames": 28665,
+      "sha256": "d0d2cb36217b3570b868a2d2d19ac54265a20f8366b6ca59e9b17cd7aa469592",
+      "original_source": "opensfx/effects/osfx_06.wav",
+      "original_sha256": "84a0d70af4ec25981ef645e94773bde5f0b49b14da3eb25849d1576e2d21b664",
+      "edits": {
+        "maximum_duration_ms": 650,
+        "amplitude_percent": 30,
+        "fade_in_ms": 40,
+        "fade_out_ms": 150
+      }
     },
     {
       "id": 518,
       "role": "airplane takeoff",
-      "source": "opensfx/effects/osfx_09.wav",
+      "source": "edited/airplane-takeoff.wav",
       "match": "match",
-      "note": "Jet takeoff",
-      "frames": 146991,
-      "sha256": "2eb53b41a3e2dc3682b7d80047833395f10876b705f99419d136b7c173e5f855"
+      "note": "OpenSFX jet takeoff shortened to one second at 30% amplitude",
+      "frames": 44100,
+      "sha256": "cae09136daff4b1b29bd7c995858fb5d99845c4f99b044efd0e290edc6873644",
+      "original_source": "opensfx/effects/osfx_09.wav",
+      "original_sha256": "2eb53b41a3e2dc3682b7d80047833395f10876b705f99419d136b7c173e5f855",
+      "edits": {
+        "maximum_duration_ms": 1000,
+        "amplitude_percent": 30,
+        "fade_in_ms": 40,
+        "fade_out_ms": 200
+      }
     },
     {
       "id": 519,
       "role": "airplane landing",
-      "source": "opensfx/effects/osfx_23.wav",
+      "source": "edited/airplane-landing.wav",
       "match": "match",
-      "note": "Plane wheels touching ground",
+      "note": "OpenSFX plane wheels touching ground at 25% amplitude with softened edges",
       "frames": 7128,
-      "sha256": "7a2f614830987285a8fe39c887024c466fed3e8eed9475faf41bf3475a22ac68"
+      "sha256": "801b94b00a2453636f37c3840ac02ffbbf34e94e0fdb772c1b28dbe1e10a0602",
+      "original_source": "opensfx/effects/osfx_23.wav",
+      "original_sha256": "7a2f614830987285a8fe39c887024c466fed3e8eed9475faf41bf3475a22ac68",
+      "edits": {
+        "maximum_duration_ms": 200,
+        "amplitude_percent": 25,
+        "fade_in_ms": 10,
+        "fade_out_ms": 40
+      }
     },
     {
       "id": 520,

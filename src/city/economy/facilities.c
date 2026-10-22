@@ -1,13 +1,16 @@
+#include "city/maps/labels.h"
+#include "city/engine/random.h"
 #include "city/economy/facilities.h"
 
 #include <string.h>
 
 #include "assets/state.h"
+#include "assets/resources.h"
 #include "base/text.h"
 #include "game/state.h"
 #include "city/military.h"
 #include "city/economy/types.h"
-#include "city/engine/command_types.h"
+#include "city/engine/commands.h"
 #include "city/events/events.h"
 #include "city/events/news.h"
 #include "city/maps/tile_storage.h"
@@ -15,13 +18,10 @@
 #include "city/tools/types.h"
 #include "city/presentation.h"
 #include "city/economy/economy.h"
-#include "city/engine/simulation.h"
-#include "city/infrastructure/infrastructure.h"
 #include "city/maps/layers.h"
 #include "city/saveload/map_format.h"
 #include "city/state.h"
 #include "city/tools/tools.h"
-
 
 // Unlisted kinds have no specialized facility information template.
 const u8 kFacilityClassByTile[TK_COUNT] = {
@@ -60,6 +60,35 @@ const u8 kFacilityClassByTile[TK_COUNT] = {
   [TK_LAUNCH_ARCOLOGY] = CITY_FACILITY_INFO_ARCOLOGY,
   [TK_BRAUN_LLAMA_DOME] = CITY_FACILITY_INFO_LLAMA_DOME,
 };
+
+void ResetCityFacilityState(City *city) {
+  for (int index = 0; index < CITY_TEAM_NAME_COUNT; ++index) {
+    CityOverlayName *name = &city->overlay_names.entry[index + CITY_TEAM_NAME_FIRST];
+    const char *text = kCityTeamNames[index];
+    CopyText((char *)name->character, sizeof(name->character), text ? text : "");
+  }
+
+  CityAnnualFacilities *facilities = &city->annual_facilities;
+  if (city->individual_facilities) {
+    memset(facilities->record, 0, sizeof(facilities->record));
+  } else {
+    // Shared records retain unused payloads, including slot zero. Reserved slots 1..9 reset their metrics and names.
+    static const u8 kReservedTypes[CITY_FACILITY_RECORD_RESERVED_COUNT] = {
+      TK_BUS_STATION, TK_BUS_STATION, TK_RAIL_STATION, TK_SUBWAY_STATION, TK_WIND_POWER,
+      TK_HYDRO_POWER, TK_LARGE_PARK, TK_MUSEUM, TK_LIBRARY, TK_MARINA
+    };
+    for (int index = 0; index < CITY_FACILITY_RECORD_COUNT; ++index)
+      facilities->record[index].type = TK_CLEAR;
+    facilities->record[0].type = kReservedTypes[0];
+    for (int index = 1; index < CITY_FACILITY_RECORD_RESERVED_COUNT; ++index) {
+      facilities->record[index] = (CityAnnualFacilityRecord){.type = kReservedTypes[index]};
+      city->overlay_names.entry[index + CITY_OVERLAY_FACILITY_FIRST] = (CityOverlayName){0};
+    }
+  }
+  city->infrastructure.counter_a = 0;
+  city->infrastructure.counter_b = 0;
+  city->infrastructure.counter_c = 0;
+}
 
 // Initialize a facility record or increment a special kind's counters. Index and kind must select an allocated
 // facility record; some categories consume deterministic initialization draws or aggregate shared records.
@@ -234,6 +263,16 @@ void PrepareCityFacilityRemoval(City *city, TileIndex anchor, int kind) {
   }
 }
 
+// Switch live facility record policy only during execution; TEST does not allocate or convert records.
+i64 CmdSetIndividualFacilities(City *city, u32 flags, int enabled, int reserved1, int reserved2) {
+  if ((enabled != 0 && enabled != 1) || reserved1 || reserved2)
+    return CITY_COMMAND_COST_INVALID;
+  if (flags & CITY_COMMAND_TEST) return 0;
+  return SetCityIndividualFacilities(city, enabled != 0) ? 1 : CITY_COMMAND_COST_BLOCKED;
+}
+
+// Convert live facility records and overlays to the selected sharing policy. Allocation failure may retain earlier
+// conversion writes; success rebuilds association hashes and invalidates the map. Does not charge or advance time.
 bool SetCityIndividualFacilities(City *city, bool individual) {
   if (city->individual_facilities == individual) return true;
   if (individual) {
@@ -304,7 +343,6 @@ bool SetCityIndividualFacilities(City *city, bool individual) {
   InvalidateMap(city);
   return true;
 }
-
 
 // Bounds annual facility metrics by population, funding, and city statistics. Preserves stock signed-word inputs and
 // unsigned-word output; zero divisor selects its defined fallback and no record is written.
@@ -683,7 +721,7 @@ void SetSpecialFacilityAvailability(City *city, int facility, i32 enabled) {
   u32 previous = city->unlocks.tools.shared.special_facility_mask;
   u32 next = enabled != 0 ? previous | bit : previous & ~bit;
   if (enabled == 0) {
-    SelectCityBulldozerFromToolbar(city, CITY_TOOLBAR_BUTTON_CENTER);
+    ResetCityRewardSelection(city);
     RebuildCityToolbar(city);
   }
   if ((previous == 0) != (next == 0))

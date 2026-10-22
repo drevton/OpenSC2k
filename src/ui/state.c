@@ -4,69 +4,15 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "city/engine/commands.h"
 #include "game/state.h"
-#include "audio/state.h"
 #include "city/state.h"
 #include "drawing/state.h"
-#include "assets/state.h"
-#include "game/errors.h"
-#include "ui/commands.h"
-
-void ReportCityCommandFailure(City *city, i64 error, TileIndex blocker) {
-  if (!city->game->ui) return;
-  CityCommandFeedback *feedback = city->game->ui->command_feedback;
-  if (!feedback) return;
-  feedback->reported = true;
-  // Preserve the first refusal, but prioritize running out of money during a drag.
-  if (!feedback->error || error == CITY_COMMAND_COST_TOO_EXPENSIVE) {
-    feedback->error = error;
-    if (error) feedback->blocker = blocker;
-  }
-}
-
-void ReportCityStadiumPlacement(City *city, TileIndex tile) {
-  if (!city->game->ui) return;
-  CityCommandFeedback *feedback = city->game->ui->command_feedback;
-  if (feedback) feedback->stadium_tile = tile;
-}
-
-void ReportCityTileInspection(City *city, TileIndex tile) {
-  if (!city->game->ui) return;
-  CityCommandFeedback *feedback = city->game->ui->command_feedback;
-  if (feedback) feedback->inspection_tile = tile;
-}
-
-void ReportCityCommandResult(City *city, i64 error) {
-  ReportCityCommandFailure(city, error, INVALID_TILE);
-}
-
-void ReportCityResourceNotice(City *city, int bitmap, int text) {
-  CityCommandFeedback *feedback = city->game->ui ? city->game->ui->command_feedback : NULL;
-  if (!feedback) return;
-  CityResourceNotice *notice = malloc(sizeof(*notice));
-  if (!notice) {
-    SetGameError(city->game, SC2K_ERROR_HOST_ALLOCATION_FAILURE);
-    return;
-  }
-  *notice = (CityResourceNotice){.next = feedback->notices, .bitmap = bitmap, .text = text};
-  feedback->notices = notice;
-  feedback->notice_shown = true;
-}
-
-void ReportCityCommandBlocker(City *city, TileIndex blocker) {
-  CityCommandFeedback *feedback = city->game->ui ? city->game->ui->command_feedback : NULL;
-  if (feedback && feedback->blocker == INVALID_TILE) feedback->blocker = blocker;
-}
-
-void CancelCityCommandFeedback(City *city) {
-  if (!city->game->ui) return;
-  CityCommandFeedback *feedback = city->game->ui->command_feedback;
-  if (feedback) feedback->cancelled = true;
-}
+#include "ui/console.h"
 
 void InitializeCityInteractionState(CityInterfaceState *ui) {
   ui->resume_speed = CITY_SPEED_NORMAL;
+  ui->settings.tab = GAME_OPTIONS_TAB_GRAPHICS;
+  ui->settings.preview_scale = 400;
   ui->floating_status = true;
   ui->scrollwheel_mode = CITY_SCROLLWHEEL_ZOOM;
   ui->panning_view = NULL;
@@ -101,10 +47,6 @@ void InitializeCityInteractionState(CityInterfaceState *ui) {
   ui->startup_choice = 0;
 }
 
-bool CanPresentCityFileDialogs(const CityInterfaceState *ui) {
-  return ui->file_dialog.desktop != NULL;
-}
-
 void EnableCityDeveloperTools(City *city) {
   if (city->game->ui) city->game->ui->developer_enabled = true;
 }
@@ -124,19 +66,17 @@ bool SetCityDemolitionSuppressed(City *city, bool suppressed) {
   return previous;
 }
 
-void RefreshCityLoadedMusicPreference(City *city) {
-  CityAudioState *audio = city->game->audio;
-  if (audio->live_open) audio->music_enabled = city->game->ui->jukebox.playing != 0;
-}
-
 void SetCitySavePromptActive(City *city, bool active) {
   if (city->game->ui) city->game->ui->save_prompt_active = active;
 }
 
-bool Sc2kMainWindowIsIconic(const CityInterfaceState *ui) {
-  return ui->main_window_iconic;
+bool IsCityPresentationMinimized(const City *city) {
+  return city->game->ui && city->game->ui->main_window_iconic;
 }
 
-bool IsCityPresentationMinimized(const City *city) {
-  return city->game->ui && Sc2kMainWindowIsIconic(city->game->ui);
+void ReleaseCityInteractionState(CityInterfaceState *ui) {
+  free(ui->signs.entries); free(ui->signs.order);
+  free(ui->desktop.placement.cells);
+  ReleaseCityConsole(ui);
+  ui->pointer_stroke_count = 0;
 }

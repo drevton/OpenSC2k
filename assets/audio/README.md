@@ -7,7 +7,10 @@ runtime synthesis. The six active authored cues were synthesized offline, saved 
 ordinary source WAVs in `generated/`, and baked into the pack. The remaining
 recordings are curated OpenSFX samples and six Freesound excerpts. OpenSFX authors
 and licenses are in `opensfx/credits.json`; their PCM waveforms are copied without
-modification. Freesound authors, titles, source/preview URLs, licenses, input hashes
+modification as retained authoring sources. Quieter flight, ship horn and impact edits live in `edited/`;
+`effects.json` records their original paths/hashes, gain, trimming and fades. Recreate those WAVs explicitly
+with `python3 tools/bake_sound_effects.py --edit-recordings`. Normal builds only pack the saved WAVs.
+OpenSFX attribution and licenses also apply to these edits. Freesound authors, titles, source/preview URLs, licenses, input hashes
 and editing recipes are in `freesound/sources.json` and `freesound/CREDITS.md`.
 Those excerpts are trimmed, downmixed, resampled, normalized and faded offline.
 The public HQ MP3 previews are used; authenticated originals were not downloaded.
@@ -98,6 +101,18 @@ The startup loader resolves effect IDs into the retained decoded pack, without a
 a second PCM bank. The player does not read OpenTTD CAT/OBS formats.
 
 ## Overlapping playback
+
+Game Options → Sound → **Ambient sounds** disables routine aircraft, ship, train, bird, traffic and distant siren
+cues, including aircraft/helicopter crashes and animated event explosions. The preference is local and persists
+between launches.
+Changing it stops current effects so ambient recordings cannot linger; new construction and warning cues still play.
+Airplane cues start only while the plane sprite intersects an unobscured map view, including extra map windows.
+Tile-local effects pan toward the source's horizontal position in the visible view; city-wide and UI cues stay centered.
+Takeoff is one second at 30% source amplitude; the ship horn is 0.65 seconds at 30%. Landing is 25% amplitude,
+explosions are 0.4 seconds at 25% amplitude, and crashes are 0.5 seconds at 20%. These edits have short fades.
+Automatic impacts play only when their source is visible in an unobscured map view. They share a ten-second
+cooldown in unpaused presentation time, so a crash and its following explosion cannot produce repeated bangs.
+Tool demolition feedback and explicit disaster warnings do not use this ambient cooldown.
 
 The Advanced setting **SimCity 2000 fixes → Overlapping sound effects** is on by
 default in native play. Headless comparison keeps the original single-effect

@@ -1,22 +1,28 @@
-#include "city/maps/layers.h"
-#include "city/maps/buildings.h"
-#include "city/infrastructure/surface_lines.h"
+#include "drawing/maps/map_terrain.h"
+#include "city/maps/terrain.h"
+#include "city/presentation.h"
+
+#include "assets/graphics.h"
+#include "assets/state.h"
 #include "city/infrastructure/bridges.h"
 #include "city/infrastructure/highways.h"
-#include "city/maps/water.h"
+#include "city/infrastructure/surface_lines.h"
+#include "city/maps/buildings.h"
 #include "city/maps/ground.h"
+#include "city/maps/layers.h"
 #include "city/maps/module.h"
-#include "drawing/maps/map_terrain.h"
-#include "city/maps/trees.h"
-#include "assets/graphics.h"
 #include "city/maps/tile_storage.h"
-#include "drawing/maps/map_view.h"
+#include "city/maps/trees.h"
+#include "city/maps/water.h"
 #include "city/saveload/map_format.h"
-#include "city/infrastructure/infrastructure.h"
 #include "city/tools/tools.h"
-#include "drawing/drawing_internal.h"
+#include "drawing/maps/map_animation.h"
+#include "drawing/maps/map_events.h"
 #include "drawing/maps/map_render.h"
+#include "drawing/maps/map_view.h"
 #include "drawing/maps/tables.h"
+#include "drawing/state.h"
+#include "game/state.h"
 
 bool IsCityMapGroundPass(const Drawing *drawing) {
   return drawing->map_depth.phase != MAP_DEPTH_OBJECTS;
@@ -100,7 +106,7 @@ void DrawCityMapTerrainSkirt(City *city, TileIndex tile, int zoom, int screen_x,
 static int TerrainTileSprite(const City *city, TileIndex tile, int zoom,
     const CityTileGeometry *geometry) {
   if (!NativeMapArtworkEnabled(city)) return CityTerrainSprite(
-      CityMapViewTerrainCode(city, tile)) + 500 * zoom;
+      CityMapViewTerrainCode(city, tile)) + CITY_MAP_SPRITES_PER_ZOOM * zoom;
   if (geometry->water == CITY_WATER_NONE) return CityGroundSpriteForShape(city, tile, zoom, geometry->land_shape);
   return CityWaterSprite(city, tile, zoom, geometry);
 }
@@ -126,11 +132,12 @@ void DrawCityMapTerrainTile(City *city, TileIndex tile, int zoom, int sprite, in
   }
   // Zone sprites carry only the colored wash, dots and grid. Always use the
   // real ground underneath, including snow, desert, rough and recovering dirt.
-  int layout = sprite % 500;
+  int layout = sprite % CITY_MAP_SPRITES_PER_ZOOM;
   if (geometry->water == CITY_WATER_NONE && !geometry->land_shape &&
-      sprite < CITY_MAP_SPRITE_COUNT && layout >= 291 && layout <= 304) {
+      sprite < CITY_MAP_SPRITE_COUNT && layout >= CITY_SPRITE_CATALOG_GROUND_OVERLAY_FIRST &&
+      layout <= CITY_SPRITE_CATALOG_GROUND_OVERLAY_LAST) {
     int ground = TerrainTileSprite(city, tile, zoom, geometry);
-    if (layout == 303) sprite = ground;
+    if (layout == CITY_SPRITE_CATALOG_SERVICE_MISSING) sprite = ground;
     else DrawCityMapSpriteAtBaseline(drawing, ground, screen_x, ground_y, 0);
   }
   if (DrawCityWaterBank(city, tile, zoom, screen_x, ground_y, geometry)) return;
@@ -210,20 +217,20 @@ void DrawCityMapTile(City *city, int zoom, TileIndex cell, int screen_x, int scr
     drawing->map_depth.preparing = false;
   }
   if (!NativeMapArtworkEnabled(city)) {
-    int sprite_base = 500 * zoom;
-    CityMapSprite *catalog = CityDrawingSpriteCatalog(drawing);
+    int sprite_base = CITY_MAP_SPRITES_PER_ZOOM * zoom;
+    const MapSpriteMetrics *catalog = drawing->map_state.sprite_metrics;
     CityPoint camera = CityMapViewTilePoint(city, cell);
     CityPoint size = CityMapCameraSize(city, CityMapCameraRotation(drawing));
     if (camera.x == size.x - 1 || camera.y == size.y - 1) {
       int edge_elevation = tp->altitude;
-      int edge_y = screen_y - catalog[(sprite_base + CITY_SPRITE_CATALOG_SMALL_LAND_EDGE)].height;
+      int edge_y = screen_y - catalog[(sprite_base + CITY_SPRITE_CATALOG_SMALL_LAND_EDGE)].baseline;
       int wall_height = edge_elevation & CITY_ALTITUDE_LAND_MASK;
       while (wall_height-- > 0) {
         if (drawing->map_state.scan_clip.top > edge_y)
           return;
         if (drawing->map_state.scan_clip.bottom > edge_y)
           DrawCityMapSpriteAtBaseline(drawing, (sprite_base + CITY_SPRITE_CATALOG_SMALL_LAND_EDGE), screen_x,
-              edge_y + catalog[(sprite_base + CITY_SPRITE_CATALOG_SMALL_LAND_EDGE)].height, 0);
+              edge_y + catalog[(sprite_base + CITY_SPRITE_CATALOG_SMALL_LAND_EDGE)].baseline, 0);
         edge_y -= CityMapHeightStep(zoom);
       }
       if (drawing->map_state.water_enabled && HasTileWater(tp)) {
@@ -234,7 +241,7 @@ void DrawCityMapTile(City *city, int zoom, TileIndex cell, int screen_x, int scr
             return;
           if (drawing->map_state.scan_clip.bottom > edge_y)
             DrawCityMapSpriteAtBaseline(drawing, (sprite_base + CITY_SPRITE_CATALOG_SMALL_WATER_EDGE), screen_x,
-              edge_y + catalog[(sprite_base + CITY_SPRITE_CATALOG_SMALL_WATER_EDGE)].height, 0);
+              edge_y + catalog[(sprite_base + CITY_SPRITE_CATALOG_SMALL_WATER_EDGE)].baseline, 0);
           edge_y -= CityMapHeightStep(zoom);
         }
       }

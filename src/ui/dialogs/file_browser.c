@@ -1,4 +1,6 @@
+#include "base/file.h"
 #include "ui/dialogs/file_browser.h"
+#include "city/saveload/summary.h"
 
 #include <limits.h>
 #include <stdio.h>
@@ -7,8 +9,15 @@
 #include <strings.h>
 #include <time.h>
 
+#include "base/text.h"
 #include "city/saveload/services.h"
-#include "drawing/drawing_internal.h"
+#include "drawing/canvas.h"
+#include "drawing/fonts/fonts.h"
+#include "drawing/raster/canvas_primitives.h"
+#include "drawing/raster/canvas_raster_internal.h"
+#include "ui/text/text.h"
+#include "ui/windows/controls.h"
+#include "ui/windows/state.h"
 
 CityRect CityFileBrowserBounds(const Window *window, CityFileBrowserControl control) {
   CityRect b = window->bounds;

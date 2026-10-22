@@ -1,4 +1,3 @@
-#include "audio/types.h"
 #include "audio/backend.h"
 
 #include <errno.h>
@@ -20,11 +19,9 @@
 #include <CoreServices/CoreServices.h>
 #endif
 
-#include "audio/audio.h"
+#include "audio/state.h"
 #include "base/byte_order.h"
 #include "assets/assets.h"
-#include "ui/state.h"
-#include "city/saveload/services.h"
 
 // Native MIDI synthesis and independently mixed game effects.
 
@@ -48,12 +45,18 @@ static inline int ReadCityEffectVoice(CityEffectVoice *voice) {
 static inline CityMixedFrame MixCityAudioFrame(CityAudioState *audio, int click_volume) {
   int single = ReadCityEffectVoice(&audio->effect) * audio->effect_volume / 100;
   if (audio->effect.samples && !audio->effect.repetitions) atomic_store(&audio->effect_finished, 1);
-  int effects = 0;
-  for (int index = 0; index < CITY_EFFECT_VOICES; ++index)
-    effects += ReadCityEffectVoice(&audio->effect_voices[index]);
-  int mixed = single + effects * audio->effect_volume / 100 +
-      ((ReadCityEffectVoice(&audio->click) * click_volume) >> 16);
-  return (CityMixedFrame){mixed, mixed};
+  int left = single * (audio->effect.pan > 128 ? 255 - audio->effect.pan : 128) / 128;
+  int right = single * (audio->effect.pan < 128 ? audio->effect.pan : 128) / 128;
+  int effects_left = 0, effects_right = 0;
+  for (int index = 0; index < CITY_EFFECT_VOICES; ++index) {
+    CityEffectVoice *voice = &audio->effect_voices[index];
+    int sample = ReadCityEffectVoice(voice);
+    effects_left += sample * (voice->pan > 128 ? 255 - voice->pan : 128) / 128;
+    effects_right += sample * (voice->pan < 128 ? voice->pan : 128) / 128;
+  }
+  int click = (ReadCityEffectVoice(&audio->click) * click_volume) >> 16;
+  return (CityMixedFrame){left + effects_left * audio->effect_volume / 100 + click,
+      right + effects_right * audio->effect_volume / 100 + click};
 }
 
 // A single source bypasses the voice scan and limiter without changing its cursor contract.
@@ -75,15 +78,25 @@ static bool MixSingleCityAudioSource(CityAudioState *audio, u8 *stream, int byte
   if (count != 1 || !unity_gain) return false;
   bool click = voice == &audio->click;
   int volume = click ? 7183 * audio->effect_volume / 100 : audio->effect_volume;
+  int left_gain = voice->pan > 128 ? 255 - voice->pan : 128;
+  int right_gain = voice->pan < 128 ? voice->pan : 128;
   int frames = bytes / (2 * sizeof(i16)), written = 0;
   i16 *output = (i16 *)stream;
   while (written < frames && voice->repetitions) {
     int amount = IntMin(frames - written, voice->frames - voice->position);
     const u8 *source = voice->samples + voice->position * sizeof(i16);
-    for (int frame = 0; frame < amount; ++frame) {
-      int sample = (i16)ReadLE16(source + frame * sizeof(i16));
-      int tone = click ? (sample * volume) >> 16 : sample * volume / 100;
-      output[(written + frame) * 2] = output[(written + frame) * 2 + 1] = tone;
+    if (voice->pan == 128) {
+      for (int frame = 0; frame < amount; ++frame) {
+        int sample = (i16)ReadLE16(source + frame * sizeof(i16));
+        int tone = click ? (sample * volume) >> 16 : sample * volume / 100;
+        output[(written + frame) * 2] = output[(written + frame) * 2 + 1] = tone;
+      }
+    } else {
+      for (int frame = 0; frame < amount; ++frame) {
+        int sample = (i16)ReadLE16(source + frame * sizeof(i16)) * volume / 100;
+        output[(written + frame) * 2] = sample * left_gain / 128;
+        output[(written + frame) * 2 + 1] = sample * right_gain / 128;
+      }
     }
     AdvanceCityEffectVoice(voice, amount);
     written += amount;
@@ -152,7 +165,8 @@ static CityEffectVoice CityAssetEffectVoice(CityAudioState *audio, int sound_id,
   if (!audio->assets || !IsCitySoundEffectId(sound_id)) return (CityEffectVoice){0};
   ByteSpan source = GetAsset(audio->assets, CITY_ASSET_SOUND_FIRST + sound_id - CITY_SOUND_FIRST);
   return (CityEffectVoice){.samples = source.data, .frames = source.size / sizeof(i16),
-      .repetitions = repetitions <= 0 ? -1 : repetitions, .sound_id = sound_id, .looping = repetitions != 1};
+      .repetitions = repetitions <= 0 ? -1 : repetitions, .sound_id = sound_id, .looping = repetitions != 1,
+      .pan = 128};
 }
 
 static void LoadCitySelectionSound(CityAudioState *audio) {
@@ -194,9 +208,10 @@ void StopCityMixedEffect(CityAudioState *audio, int sound_id) {
   SDL_UnlockAudioDevice(audio->effects_device);
 }
 
-bool PlayCityMixedEffect(CityAudioState *audio, int sound_id, int repetitions) {
+bool PlayCityMixedEffect(CityAudioState *audio, int sound_id, int repetitions, u8 pan) {
   if (!audio->effects_device) return false;
   CityEffectVoice resource = CityAssetEffectVoice(audio, sound_id, repetitions);
+  resource.pan = pan;
   if (!resource.samples) return false;
   int same = 0;
   SDL_LockAudioDevice(audio->effects_device);
@@ -243,10 +258,12 @@ static void StopEffect(CityAudioState *audio) {
   for (int index = 0; index < CITY_EFFECT_VOICES; ++index) ReleaseCityEffectVoice(audio, index);
   SDL_UnlockAudioDevice(audio->effects_device);
 }
-static bool PlayCityAudioResource(CityAudioState *audio, int id, bool loop) {
+
+bool NativeAudioPlayEffect(CityAudioState *audio, int id, bool loop, u8 pan) {
   if (!audio->effects_device) return false;
   if (id == CITY_SOUND_NONE) { StopEffect(audio); return true; }
   CityEffectVoice resource = CityAssetEffectVoice(audio, id, loop ? -1 : 1);
+  resource.pan = pan;
   if (!resource.samples) return false;
   SDL_LockAudioDevice(audio->effects_device);
   audio->effect = resource;
@@ -254,12 +271,7 @@ static bool PlayCityAudioResource(CityAudioState *audio, int id, bool loop) {
   SDL_UnlockAudioDevice(audio->effects_device);
   return true;
 }
-bool PlayCityEffect(Game *game, int sound_id, CityEffectPlayback playback) {
-  bool result = PlayCityAudioResource(game->audio, playback == CITY_EFFECT_STOP ? CITY_SOUND_NONE : sound_id,
-      playback == CITY_EFFECT_LOOP || playback == CITY_EFFECT_REPLAY_LOOP);
-  if (game->sound_played) game->sound_played(game, sound_id, playback, result);
-  return result;
-}
+
 bool NativeAudioSoundFinished(CityAudioState *audio) {
   if (audio->effects_device) {
     SDL_LockAudioDevice(audio->effects_device);
@@ -303,7 +315,8 @@ static OSStatus MakeGraph(CityAudioState *audio) {
 }
 #endif
 
-bool NativeAudioOpen(CityAudioState *audio, Jukebox *p) {
+bool NativeAudioOpen(CityAudioState *audio) {
+  Jukebox *p = &audio->jukebox;
   audio->live_open = 1;
   audio->overlapping_effects = true;
   audio->mix_gain = 1;
@@ -337,7 +350,7 @@ bool NativeAudioOpen(CityAudioState *audio, Jukebox *p) {
   snprintf(p->error, sizeof(p->error), "No MIDI backend for this platform");
 #endif
   audio->music_enabled = p->playing != 0;
-  NativeAudioVolume(audio, p);
+  NativeAudioVolume(audio);
   return audio->midi_available;
 }
 void NativeAudioStop(CityAudioState *audio) {
@@ -357,7 +370,8 @@ void NativeAudioStop(CityAudioState *audio) {
   if (!StopWindowsMidi(audio->windows_midi)) audio->midi_available = 0;
 #endif
 }
-void NativeAudioVolume(CityAudioState *audio, const Jukebox *p) {
+void NativeAudioVolume(CityAudioState *audio) {
+  const Jukebox *p = &audio->jukebox;
   if (audio->effects_device) SDL_LockAudioDevice(audio->effects_device);
   audio->effect_volume = p->effects_volume * audio->master_volume / 100;
   audio->music_volume = p->volume * audio->master_volume / 100;
@@ -381,7 +395,22 @@ void SetCityAudioFocus(CityAudioState *audio, bool focused) {
 #endif
 }
 
-static bool PlayMusicTrack(CityAudioState *audio, Jukebox *p, int current, double seconds) {
+bool NativeAudioMusicPosition(CityAudioState *audio, double *seconds) {
+  *seconds = 0;
+#ifdef __APPLE__
+  if (audio->music_sequence) {
+    MusicTimeStamp beat;
+    if (MusicPlayerGetTime(audio->music_player, &beat) ||
+        MusicSequenceGetSecondsForBeats(audio->music_sequence, beat, seconds)) return false;
+  }
+#elif defined(_WIN32)
+  if (!ReadWindowsMidiPosition(audio->windows_midi, seconds)) return false;
+#endif
+  return true;
+}
+
+bool NativeAudioPlayTrack(CityAudioState *audio, int current, double seconds) {
+  Jukebox *p = &audio->jukebox;
   NativeAudioStop(audio);
   if (current < 0) return true;
   if (!p->playing) return true;
@@ -415,7 +444,7 @@ static bool PlayMusicTrack(CityAudioState *audio, Jukebox *p, int current, doubl
   if (status) {
     NativeAudioStop(audio);
     snprintf(p->error, sizeof(p->error), "MIDI error %d", (int)status);
-    fprintf(stderr, "%s: %s\n", jukebox_tracks[current].file, p->error);
+    fprintf(stderr, "%s: %s\n", kJukeboxTracks[current].file, p->error);
     return false;
   }
 #elif defined(_WIN32)
@@ -432,11 +461,12 @@ static bool PlayMusicTrack(CityAudioState *audio, Jukebox *p, int current, doubl
   return true;
 }
 
-bool NativeAudioPlay(CityAudioState *audio, Jukebox *p) {
+bool NativeAudioPlay(CityAudioState *audio) {
+  Jukebox *p = &audio->jukebox;
   audio->interrupt_device = CITY_MUSIC_NO_TOKEN;
   audio->resume_music_track = p->interrupt_track = -1;
   if (JukeboxCurrent(p) < 0) p->playing = 0;
-  bool played = PlayMusicTrack(audio, p, JukeboxCurrent(p), 0);
+  bool played = NativeAudioPlayTrack(audio, JukeboxCurrent(p), 0);
   if (!played) p->playing = 0;
   audio->music_enabled = p->playing != 0;
   return played;
@@ -486,72 +516,6 @@ void NativeAudioClose(CityAudioState *audio) {
   audio->click = (CityEffectVoice){0};
   audio->live_open = 0;
   SDL_QuitSubSystem(SDL_INIT_AUDIO);
-}
-
-void StopCityPlatformSound(Game *game) { PlayCityEffect(game, CITY_SOUND_NONE, CITY_EFFECT_STOP); }
-
-void SetJukeboxPlaying(Game *game, bool playing) {
-  game->ui->jukebox.playing = playing;
-  NativeAudioPlay(game->audio, &game->ui->jukebox);
-  DirtyCityMusicWindows(game);
-}
-
-// A short interruption stores a cursor, never a second player or decoded audio buffer.
-static bool ResumeJukebox(Game *game) {
-  CityAudioState *audio = game->audio;
-  Jukebox *player = &game->ui->jukebox;
-  int track = audio->resume_music_track;
-  double seconds = audio->resume_music_seconds;
-  audio->interrupt_device = CITY_MUSIC_NO_TOKEN;
-  audio->resume_music_track = player->interrupt_track = -1;
-  bool played = PlayMusicTrack(audio, player, track, seconds);
-  if (!played) player->playing = 0;
-  return played;
-}
-
-u32 InterruptJukebox(Game *game, int track) {
-  CityAudioState *audio = game->audio;
-  if (!audio->live_open) return 1;
-  Jukebox *player = &game->ui->jukebox;
-  if (!player->playing) return 1;
-  if (track < 0 || track >= JUKEBOX_TRACKS) return 1;
-  if (audio->interrupt_device == CITY_MUSIC_NO_TOKEN) {
-    double seconds = 0;
-#ifdef __APPLE__
-    if (audio->music_sequence) {
-      MusicTimeStamp beat;
-      if (MusicPlayerGetTime(audio->music_player, &beat) ||
-          MusicSequenceGetSecondsForBeats(audio->music_sequence, beat, &seconds)) return 1;
-    }
-#elif defined(_WIN32)
-    if (!ReadWindowsMidiPosition(audio->windows_midi, &seconds)) return 1;
-#endif
-    audio->resume_music_track = JukeboxCurrent(player);
-    audio->resume_music_seconds = seconds;
-  }
-  bool played = PlayMusicTrack(audio, player, track, 0);
-  if (played) {
-    audio->interrupt_device = audio->music_device;
-    player->interrupt_track = track;
-  } else {
-    ResumeJukebox(game);
-  }
-  DirtyCityMusicWindows(game);
-  return played ? 0 : 1;
-}
-
-void CompleteJukeboxTrack(Game *game, int notification, u16 device) {
-  CityAudioState *audio = game->audio;
-  if (device == CITY_MUSIC_NO_TOKEN || device != audio->music_device ||
-      (notification != CITY_MUSIC_FINISHED && notification != CITY_MUSIC_FAILED)) return;
-  Jukebox *player = &game->ui->jukebox;
-  if (audio->interrupt_device == device) ResumeJukebox(game);
-  else {
-    if (notification == CITY_MUSIC_FINISHED) JukeboxStep(player, 1);
-    else player->playing = 0;
-    NativeAudioPlay(audio, player);
-  }
-  DirtyCityMusicWindows(game);
 }
 
 // Soundtrack and interruption completions share the same generation-token guard.

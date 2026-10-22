@@ -1,3 +1,6 @@
+#include "city/maps/labels.h"
+#include "city/economy/budget.h"
+#include "city/events/news.h"
 #include "city/economy/facilities.h"
 #include "city/economy/types.h"
 #include "city/engine/command_types.h"
@@ -14,24 +17,23 @@
 #include "city/maps/layers.h"
 #include "city/state.h"
 #include "game/state.h"
-#include "audio/state.h"
 #include "assets/state.h"
 #include "base/text.h"
 
 
 // Return the number of pending shared decisions owned by City. The value includes reserved opening slots; it does not
 // imply that every slot is ready for replies.
-int CityQuestionCount(City *city) { return city->question_count; }
+int CityQuestionCount(const City *city) { return city->question_count; }
 
 // Return a borrowed pending-question entry at the requested position. Out-of-range positions return NULL; callers must
 // not retain the pointer across question insertion, removal or callbacks.
-const CityQuestion *CityQuestionAt(City *city, int index) {
+const CityQuestion *CityQuestionAt(const City *city, int index) {
   return index >= 0 && index < city->question_count ? &city->questions[index] : NULL;
 }
 
 // Find a pending question by its identity and return a borrowed pointer. Missing identities return NULL; the pointer
 // may be invalidated by any operation that changes the question array.
-const CityQuestion *FindCityQuestion(City *city, int id) {
+const CityQuestion *FindCityQuestion(const City *city, int id) {
   for (int index = 0; index < city->question_count; ++index)
     if (city->questions[index].id == id)
       return &city->questions[index];
@@ -255,4 +257,13 @@ i64 ReplyToCityQuestion(City *city, int id, CityQuestionReply reply) {
 // ApplyCityQuestionReply unchanged; its input and side-effect contract applies.
 bool ReplyToQuestion(City *city, int id, CityQuestionReply reply) {
   return ApplyCityQuestionReply(city, id, reply, AcceptCityStadiumTeamDialog);
+}
+
+// Apply a shared reply to the matching pending question identity. Rejects unsupported reply fields or stale/unready
+// questions; TEST preserves the slot and execution resumes its real continuation.
+i64 CmdReplyToQuestion(City *city, u32 flags, int id, int answer, int selection) {
+  CityQuestionReply reply = {answer, NULL, 0, selection};
+  if (flags & CITY_COMMAND_TEST)
+    return CanReplyToCityQuestion(city, id, reply) ? 0 : CITY_COMMAND_COST_INVALID;
+  return ReplyToCityQuestion(city, id, reply);
 }

@@ -60,15 +60,6 @@ typedef enum CitySimulationPhase {
   CITY_TICKS_PER_YEAR = CITY_PHASE_COUNT * CITY_MONTH_COUNT
 } CitySimulationPhase;
 
-// Exact original weather status resources33200..33211.
-typedef enum CityWeather {
-  CITY_WEATHER_COLD = 0, CITY_WEATHER_CLEAR = 1, CITY_WEATHER_HOT = 2,
-  CITY_WEATHER_FOGGY = 3, CITY_WEATHER_CHILLY = 4, CITY_WEATHER_OVERCAST = 5,
-  CITY_WEATHER_SNOW = 6, CITY_WEATHER_RAIN = 7, CITY_WEATHER_WINDY = 8,
-  CITY_WEATHER_BLIZZARD = 9, CITY_WEATHER_HURRICANE = 10, CITY_WEATHER_TORNADO = 11,
-  CITY_WEATHER_COUNT = 12
-} CityWeather;
-
 // Result selection: bankruptcy differs from a failed active mission.
 typedef enum CitySimulationOutcome {
   CITY_OUTCOME_MISSION_FAILED = 0,
@@ -98,14 +89,17 @@ static inline const char *CityNameText(const CityName *name) {
   return name->overflow != NULL ? name->overflow : name->text;
 }
 
-bool SetCityNameText(Game *game, CityName *name, int length, const u8 *text);
-void FreeCityNameStorage(CityName *name);
-void AssignCityName(City *city, int length, const u8 *text);
-void EmptyCityName(City *city);
-void GenerateCityNeighborName(City *city, int slot);
-void RefreshCityNeighborNames(City *city);
-
 // Clock
+
+// Provenance reported by City's logical-clock observer.
+typedef enum CityClockChange {
+  CITY_CLOCK_INITIAL = 0,
+  CITY_CLOCK_EXTERNAL_TIME = 1,
+  CITY_CLOCK_CADENCE = 2,
+  CITY_CLOCK_DELAY = 3,
+  CITY_CLOCK_SCREEN_SHAKE = 4,
+  CITY_CLOCK_EXPLICIT_ADVANCE = 5,
+} CityClockChange;
 
 // Compact native state. The upper month word is read by the original monthly
 // bookkeeping routine; keep it without retaining the surrounding global span.
@@ -121,12 +115,6 @@ typedef struct {
   u16 year;
   u16 quarter;
 } SimulationClock;
-
-typedef struct {
-  u32 map;
-  u32 event;
-  u32 crt;
-} SimulationRandomState;
 
 // Settings
 
@@ -167,20 +155,5 @@ typedef struct {
   u32 active;
   CityScenarioMetadata metadata;
 } CityMissionState;
-
-void FailRadio(City *city, i32 outcome);
-
-// Newspaper State
-
-typedef struct {
-  u8 title_kind;
-  u8 layout_style;
-  u8 era_kind;
-  u8 report_kind;
-  u8 subtitle_kind;
-} CityNewspaperEdition;
-typedef struct {
-  CityNewspaperEdition edition[6];
-} CityNewspaperEditions;
 
 #endif

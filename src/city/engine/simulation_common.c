@@ -1,38 +1,20 @@
-#include "city/infrastructure/infrastructure.h"
-#include "audio/types.h"
-#include "city/engine/command_types.h"
-#include "city/presentation.h"
 #include "city/engine/simulation.h"
 
-#include <string.h>
+#include <assert.h>
 
-#include "audio/audio.h"
-#include "city/engine/city_types.h"
-#include "game/state.h"
-#include "city/engine/initialization.h"
+#include "city/economy/budget.h"
+#include "city/engine/commands.h"
+#include "city/engine/simulation_state.h"
+#include "city/growth/growth.h"
+#include "city/infrastructure/transport.h"
+#include "city/infrastructure/utilities.h"
+#include "city/maps/map.h"
+#include "city/presentation.h"
 #include "city/state.h"
-#include "city/saveload/file.h"
-#include "game/errors.h"
-#include "game/observation.h"
 #include "game/state.h"
-#include "audio/state.h"
-#include "assets/state.h"
+#include "game/update.h"
 
-// Scheduling, pending work and City effects shared by native and comparison dispatch.
-
-// Prepare cursor and music for a due manual annual budget. Retained comparison callers preserve their minimized
-// gate; normal City execution consumes the selection draw independently of local window state.
-bool PrepareCityAnnualBudget(City *city) {
-  if (city->indicators.auto_budget_enabled || (city->game->observation && IsCityPresentationMinimized(city)))
-    return false;
-  SetCityCursor(city, CITY_CURSOR_REWARDS, 0);
-  StopAllCitySound(city->game);
-  static const u16 kMusicTracks[] = {
-    CITY_MUSIC_TRACK_16, CITY_MUSIC_TRACK_05, CITY_MUSIC_TRACK_02, CITY_MUSIC_TRACK_10,
-  };
-  PlayCityEventMusicById(city->game, kMusicTracks[NextCityMapRandomModulo(city, 4)]);
-  return true;
-}
+// Scheduling and bounded City work shared by native and comparison dispatch.
 
 // Run one bounded batch of the currently scheduled simulation pass. Returns true when no work remains and false when
 // suspended or already running; the cursor and scratch state remain owned by City between calls.
@@ -47,7 +29,7 @@ bool StepCitySimulationWork(City *city) {
   if (work->phase == CITY_PHASE_POWER) {
     complete = StepCityPowerGrid(city, work, kMapBatch);
   } else if (work->phase == CITY_PHASE_WATER_NETWORK) {
-    complete = StepCityWaterNetwork(city, kMapBatch);
+    complete = StepCityWaterNetwork(city, work, kMapBatch);
   } else if (work->phase == CITY_PHASE_ENVIRONMENT) {
     complete = StepCityEnvironment(city, &work->environment, 4 * kMapBatch / city->map_width);
   } else if (work->phase == CITY_PHASE_TRAFFIC_DECAY) {
@@ -112,11 +94,38 @@ i16 UpdateCityCadence(City *city) {
   return (i16)result;
 }
 
-// Invoke the retained blocking caller through an installed comparison observation adapter. Callback/context are
-// borrowed; without that adapter returns CITY_DIALOG_UNANSWERED instead of inventing a native modal reply.
-int RunPausedCityAction(City *city, int (*action)(City *city, void *context), void *context) {
-  const GameObservation *observer = city->game->observation;
-  if (observer && observer->run_paused_action) return observer->run_paused_action(city, action, context);
-  // Original blocking callers require an explicit diagnostic adapter.
-  return CITY_DIALOG_UNANSWERED;
+// Store an agreed simulation speed and refresh its status presentation. The caller validates the speed enum; this does
+// not advance simulation or persist a local preference.
+void SelectCitySimulationSpeed(City *city, int speed) {
+  assert(speed >= CITY_SPEED_PAUSED && speed <= CITY_SPEED_UNLIMITED);
+  city->settings.speed = speed;
+  RefreshCitySpeedStatus(city, 0);
+}
+
+// Set an agreed valid City speed independently of local dialog pauses. Rejects unsupported speed/reserved values; TEST
+// validates only and execution refreshes speed presentation after the shared change.
+i64 CmdSetSimulationSpeed(City *city, u32 flags, int speed, int reserved1, int reserved2) {
+  if (speed < CITY_SPEED_PAUSED || speed > CITY_SPEED_UNLIMITED ||
+      reserved1 != 0 || reserved2 != 0)
+    return CITY_COMMAND_COST_INVALID;
+  if (flags & CITY_COMMAND_TEST) return 0;
+  SelectCitySimulationSpeed(city, speed);
+  return 1;
+}
+
+// Enable or disable one gameplay-affecting runtime fix. Rejects presentation-only fixes, invalid indices and reserved
+// arguments; TEST has no effects and execution updates City deterministically.
+i64 CmdSetCityFix(City *city, u32 flags, int fix, int enabled, int reserved) {
+  if ((u32)fix >= CITY_FIX_COUNT ||
+      !(CITY_FIX_SIMULATION_MASK & (1ull << fix)) || (u32)enabled > 1 || reserved)
+    return CITY_COMMAND_COST_INVALID;
+  if (flags & CITY_COMMAND_TEST) return 0;
+  if (enabled) city->fixes |= 1ull << fix;
+  else city->fixes &= ~(1ull << fix);
+  if (fix == CITY_FIX_ASSET_VALUES || fix == CITY_FIX_TREATMENT_VALUE ||
+      fix == CITY_FIX_DAILY_VALUATION)
+    RecalculateCityAssetValue(city);
+  if (fix == CITY_FIX_LOADED_CONNECTIONS && enabled)
+    RecountCityIndustryConnections(city);
+  return 1;
 }

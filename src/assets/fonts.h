@@ -65,7 +65,6 @@ typedef struct {
   CityOverlayGlyph glyphs[CITY_OVERLAY_FONT_COUNT * CITY_OVERLAY_GLYPH_COUNT];
 } CityOverlayFont;
 
-void InitializeCityOverlayFont(CityOverlayFont *font);
 bool LoadCityOverlayFont(CityOverlayFont *font, CityAssets *assets, const char *graphics_root);
 
 enum { kPublicationSizeCount = 22, kPublicationGlyphBytes = 12,

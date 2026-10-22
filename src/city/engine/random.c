@@ -1,6 +1,5 @@
 #include "city/engine/random.h"
 
-#include "city/engine/simulation.h"
 #include "city/state.h"
 
 // Advance the City-owned CRT generator using the MSVC recurrence and return its 15-bit result. This changes only
@@ -8,6 +7,10 @@
 u32 Sc2kCrtRand(City *city) {
   return NextCrtRandom(&city->random.crt);
 }
+
+// Replace the City's CRT random seed with the supplied deterministic value. This seeds only that generator and does
+// not draw a random number.
+void Sc2kSeedCrtRandom(City *city, u32 seed) { city->random.crt = seed; }
 
 // Seed the City-owned map generator independently of the event and CRT streams. The supplied seed is stored directly;
 // this does not draw or distribute a random value.
@@ -24,8 +27,8 @@ int AdvanceCityMapSeed(u32 seed) {
   return (next ^ ((seed & 0x8000) != 0 ? 0x1BF5 : 0)) & 0xFFFF;
 }
 
-// Advance the City event-orientation LCG and return its high 15 bits modulo modulus. Modulus must be positive; only
-// the event stream changes and callers preserve the deterministic draw order.
+// Advance the City event-orientation LCG and return its high 15 bits modulo a nonnegative modulus. Zero still
+// consumes a draw and returns zero; only the event stream changes.
 int NextEventOrientationRandom(City *city, int modulus) {
   city->random.event = city->random.event * 1103515245 + 12345;
   int random = ((city->random.event >> 16) & 0x7FFF);

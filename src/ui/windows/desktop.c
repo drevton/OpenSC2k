@@ -1,64 +1,46 @@
-#include "game/errors.h"
-#include "drawing/bitmaps.h"
-#include "ui/tools/types.h"
-#include "ui/windows/state.h"
-#include "game/application_internal.h"
-#include "base/time.h"
-#include "drawing/drawing_internal.h"
+#include <stdlib.h>
 
-#include "ui/frontend.h"
-#include "ui/charts/charts.h"
-#include "ui/dialogs/dialog_state.h"
+#include "assets/state.h"
+#include "base/time.h"
+#include "city/state.h"
+#include "drawing/bitmaps.h"
+#include "drawing/maps/map_view.h"
+#include "drawing/raster/canvas_primitives.h"
+#include "drawing/raster/canvas_raster_internal.h"
+#include "drawing/state.h"
+#include "game/errors.h"
+#include "ui/map_views.h"
+#include "ui/dialogs/dialogs.h"
 #include "ui/dialogs/file_browser.h"
 #include "ui/dialogs/game_options.h"
-#include "ui/text/text.h"
+#include "ui/dialogs/messages.h"
+#include "ui/news/newspaper.h"
+#include "ui/state.h"
+#include "ui/tools/types.h"
+#include "ui/windows/controls.h"
+#include "ui/windows/tooltips.h"
+#include "ui/windows/window_internal.h"
+#include "ui/windows/windows.h"
 
-// Drawing subsystem: desktop.
+// Window stack, composition and logical dragging.
 
-void InvalidateCityInformation(Game *game, u32 categories) {
-  if (game && game->ui) game->ui->desktop.information_updates |= categories;
-}
+typedef struct {
+  Canvas *canvas;
+  const u8 *indices;
+  i32 stride;
+  const u32 *palette;
+  const Window *window;
+  const CityCanvasDesktop *desktop;
+  Game *game;
+} CityCanvasPaintContext;
 
-void PrepareCityInformation(Game *game) {
-  if (!game->ui || !game->city_active) return;
-  CityCanvasDesktop *desktop = &game->ui->desktop;
-  u32 updates = desktop->information_updates;
-  if (!updates) return;
-  desktop->information_updates = 0;
-  City *city = game->city;
-  bool budget = false, policies = false, map_data = false, land_use = false;
-  for (int index = 0; index < desktop->count; ++index) {
-    Window *window = &desktop->windows[index];
-    if (!(window->update_categories & updates)) continue;
-    if (window->visible) Sc2kDirtyMarkRect(&desktop->dirty, CanvasWindowPaintRect(window));
-    // Only windows with retained presentation data need preparation. Ordinary
-    // painters read City directly; no window procedure runs during notification.
-    switch (window->kind) {
-    case CITY_CANVAS_BUDGET: case CITY_CANVAS_BONDS: budget = true; break;
-    case CITY_CANVAS_POLICIES: policies = true; break;
-    case CITY_CANVAS_MAP_DATA: map_data = true; break;
-    case CITY_CANVAS_LAND_USE: land_use = true; break;
-    case CITY_CANVAS_INDUSTRY:
-      PrepareCityChartPaintState(city, CITY_PANEL_INDUSTRY);
-      break;
-    default: break;
-    }
-  }
-  if (budget) {
-    CityBudgetPanel panel;
-    Sc2kCanvasBudgetFromCity(city, &panel);
-    Sc2kCanvasDesktopUpdateBudget(desktop, &panel);
-  }
-  if (policies) UpdateCityPolicyWindows(city, desktop, city->unlocks.ordinance_flags);
-  if (map_data) ApplicationRefreshMapData(city);
-  if (land_use) Sc2kCanvasDesktopUpdateLandUse(desktop, (const i16 *)city->statistics.count);
-  if (updates & CITY_UPDATE_STATUS) {
-    UpdateCityStatus(city);
-    RefreshCityStatusPanel(city, &game->ui->status, city->settings.speed, 0);
-    // Date, population and treasury are drawn directly, without legend strings.
-    InvalidateCityStatus(&game->ui->status);
-  }
-}
+typedef struct {
+  const CityCanvasDesktop *desktop;
+  const u8 *indices;
+  i32 stride;
+  const u32 *palette;
+  Game *game;
+} CanvasFramebufferPaint;
 
 // Drawing notification boundary. UI queues window damage separately from tile
 // damage; the application feeds these pixels into the shared screen grid.
@@ -366,10 +348,6 @@ void Sc2kCanvasDesktopVisitViewport(const CityCanvasDesktop *desktop, u32 window
   }
 }
 
-bool CanvasPointInRect(CityRect rect, i32 x, i32 y) {
-  return x >= rect.left && x < rect.right && y >= rect.top && y < rect.bottom;
-}
-
 void Sc2kCanvasDesktopInit(CityCanvasDesktop *desktop) {
   desktop->game = NULL;
   desktop->input_capture_window = desktop->hover_window = 0;
@@ -395,17 +373,8 @@ void Sc2kCanvasDesktopInit(CityCanvasDesktop *desktop) {
   desktop->tooltip = (CityTooltip){0};
 }
 
-void HideCityTooltip(Game *game) {
-  CityCanvasDesktop *desktop = &game->ui->desktop;
-  CityTooltip *tip = &desktop->tooltip;
-  if (tip->visible) Sc2kDirtyMarkRect(&desktop->dirty, tip->bounds);
-  tip->visible = tip->pointer_valid = false;
-  tip->shown_for_target = false;
-  tip->window_id = 0;
-  tip->text[0] = 0;
-}
-
-static void CloseCityWindowState(CityCanvasDesktop *desktop, Window *window) {
+// The record has left the stack. Its owned data stays alive through WINDOW_DESTROY.
+static void ReleaseClosedCityWindow(CityCanvasDesktop *desktop, Window *window) {
   if (desktop->game && desktop->interface->button_feedback.window_id == window->window_id)
     CancelCityButtonRepeat(desktop->game);
   if (desktop->input_capture_window == window->window_id) desktop->input_capture_window = 0;
@@ -430,7 +399,8 @@ static void CloseCityWindowState(CityCanvasDesktop *desktop, Window *window) {
     free(window->newspaper);
     window->newspaper = NULL;
   }
-  if (window->confirmation) window->confirmation->window_id = 0;
+  if (window->confirmation && window->confirmation->window_id == window->window_id)
+    window->confirmation->window_id = 0;
   if (window->advisor_question) {
     CityInterfaceState *ui = desktop->interface;
     window->advisor_question->next = ui->closed_advisor_questions;
@@ -439,31 +409,24 @@ static void CloseCityWindowState(CityCanvasDesktop *desktop, Window *window) {
 }
 
 bool Sc2kCanvasDesktopDismissTop(CityCanvasDesktop *desktop) {
-  if (desktop->count == 0)
-    return false;
-  Sc2kDirtyMarkRect(&desktop->window_damage,
-      CityCanvasDirtyPixelBounds(desktop, CanvasWindowPaintRect(&desktop->windows[desktop->count - 1])));
-  if (desktop->dropdown.window_id == desktop->windows[desktop->count - 1].window_id) CloseCityDropdown(desktop);
-  CloseCityWindowState(desktop, &desktop->windows[desktop->count - 1]);
-  Sc2kDirtyMarkRect(&desktop->dirty, CanvasWindowPaintRect(&desktop->windows[desktop->count - 1]));
-  --desktop->count;
-  desktop->dragging = CITY_CANVAS_DRAG_NONE;
-  return true;
+  if (!desktop->count) return false;
+  return Sc2kCanvasDesktopDismissWindow(desktop, desktop->windows[desktop->count - 1].window_id);
 }
 
 bool Sc2kCanvasDesktopDismissWindow(CityCanvasDesktop *desktop, u32 window_id) {
   if (desktop->dropdown.window_id == window_id) CloseCityDropdown(desktop);
-  for (i32 index = 0; index < desktop->count; ++index) {
-    if (desktop->windows[index].window_id != window_id)
-      continue;
-    Sc2kDirtyMarkRect(&desktop->window_damage,
-        CityCanvasDirtyPixelBounds(desktop, CanvasWindowPaintRect(&desktop->windows[index])));
-    CloseCityWindowState(desktop, &desktop->windows[index]);
-    Sc2kDirtyMarkRect(&desktop->dirty, CanvasWindowPaintRect(&desktop->windows[index]));
-    for (i32 next = index; next < desktop->count - 1; ++next)
+  for (int index = 0; index < desktop->count; ++index) {
+    if (desktop->windows[index].window_id != window_id) continue;
+    Window closing = desktop->windows[index];
+    CityRect paint = CanvasWindowPaintRect(&closing);
+    Sc2kDirtyMarkRect(&desktop->window_damage, CityCanvasDirtyPixelBounds(desktop, paint));
+    Sc2kDirtyMarkRect(&desktop->dirty, paint);
+    for (int next = index; next < desktop->count - 1; ++next)
       desktop->windows[next] = desktop->windows[next + 1];
     --desktop->count;
     desktop->dragging = CITY_CANVAS_DRAG_NONE;
+    // The procedure may open or close other windows. No stack entry is borrowed across it.
+    ReleaseClosedCityWindow(desktop, &closing);
     return true;
   }
   return false;
@@ -499,13 +462,19 @@ bool PollCityWindowHighlights(CityCanvasDesktop *desktop, u32 milliseconds) {
   return dirty;
 }
 
+WindowIds SnapshotCityWindowIds(const CityCanvasDesktop *desktop) {
+  WindowIds windows = {.count = desktop->count};
+  for (int index = 0; index < windows.count; ++index) windows.ids[index] = desktop->windows[index].window_id;
+  return windows;
+}
+
 Window *FindCityCanvasWindow(CityCanvasDesktop *desktop, u32 id) {
   for (int index = 0; index < desktop->count; ++index)
     if (desktop->windows[index].window_id == id) return &desktop->windows[index];
   return NULL;
 }
 
-static int FocusCanvasWindow(CityCanvasDesktop *desktop, u32 id, bool highlight) {
+int FocusCanvasWindow(CityCanvasDesktop *desktop, u32 id, bool highlight) {
   for (int index = desktop->count - 1; index >= 0; --index) {
     Window window = desktop->windows[index];
     if (!window.visible || window.window_id != id) continue;
@@ -538,18 +507,13 @@ int FocusCityCanvasWindowKind(CityCanvasDesktop *desktop, WindowKind kind) {
   return -1;
 }
 
-u32 Sc2kCanvasDesktopFocusAt(CityCanvasDesktop *desktop, i32 x, i32 y) {
-  for (i32 index = desktop->count - 1; index >= 0; --index) {
-    Window window = desktop->windows[index];
-    if (!CanvasPointInRect(window.bounds, x, y))
-      continue;
-    if (index == desktop->count - 1)
-      return window.window_id;
-    for (i32 next = index; next < desktop->count - 1; ++next)
-      desktop->windows[next] = desktop->windows[next + 1];
-    desktop->windows[desktop->count - 1] = window;
-    Sc2kDirtyMarkRect(&desktop->dirty, CanvasWindowPaintRect(&window));
-    return window.window_id;
+static u32 FocusCanvasAt(CityCanvasDesktop *desktop, i32 x, i32 y) {
+  for (int index = desktop->count - 1; index >= 0; --index) {
+    const Window *window = &desktop->windows[index];
+    if (!window->visible || !CanvasPointInRect(window->bounds, x, y)) continue;
+    u32 id = window->window_id;
+    FocusCanvasWindow(desktop, id, false);
+    return id;
   }
   return 0;
 }
@@ -557,7 +521,7 @@ u32 Sc2kCanvasDesktopFocusAt(CityCanvasDesktop *desktop, i32 x, i32 y) {
 bool Sc2kCanvasDesktopPointerDown(CityCanvasDesktop *desktop, i32 x, i32 y) {
   desktop->resizing = false;
   desktop->dragging = CITY_CANVAS_DRAG_NONE;
-  if (Sc2kCanvasDesktopFocusAt(desktop, x, y) != 0) {
+  if (FocusCanvasAt(desktop, x, y) != 0) {
     Window window = desktop->windows[desktop->count - 1];
     CityRect bounds = window.bounds;
     if (CityWindowCloseAt(&window, x, y)) {
@@ -689,22 +653,6 @@ static void CanvasPaintVisibleWindow(CityRect area, void *context) {
   DrawCityCanvasWindow(paint->game, paint->canvas, paint->window);
 }
 
-static void DrawDesktopTooltip(const CityCanvasDesktop *desktop, Canvas *canvas) {
-  const CityTooltip *tip = &desktop->tooltip;
-  if (!tip->visible) return;
-  CityRect b = tip->bounds;
-  Canvas local = *canvas;
-  local.raster.origin_x = local.raster.origin_y = 0;
-  local.raster.offset_x = local.raster.offset_y = 0;
-  CanvasFill(&local, b.left, b.top, b.right, b.bottom, 0xFF101010);
-  CanvasFill(&local, b.left + 1, b.top + 1, b.right - 1, b.bottom - 1, 0xFFFFFF80);
-  local.clip = IntersectCityRects(local.clip, (CityRect){b.left + 2, b.top + 2, b.right - 2, b.bottom - 2});
-  for (int i = 0; i < tip->line_count; ++i)
-    DrawCityInterfaceTextCentered(local.interface_font, &local,
-        (CityRect){b.left + 4, b.top + 4 + i * 12, b.right - 4, b.top + 16 + i * 12},
-        tip->lines[i], 0xFF101010, false, 10);
-}
-
 void DrawCityDesktop(Game *game, CityCanvasDesktop *desktop, Canvas *canvas,
     const u8 *map_indices, i32 map_stride, const u32 *palette) {
   desktop->canvas_width = canvas->width;
@@ -726,7 +674,7 @@ void DrawCityDesktop(Game *game, CityCanvasDesktop *desktop, Canvas *canvas,
     canvas->clip = dirty;
     DrawCityMenu(game, canvas, desktop);
     DrawCityDropdown(desktop, canvas);
-    DrawDesktopTooltip(desktop, canvas);
+    DrawCityTooltip(desktop, canvas);
   }
   canvas->clip = original_clip;
   Sc2kDirtyClear(&desktop->dirty);
@@ -779,7 +727,7 @@ void DrawCityDesktopUI(Game *game, const CityCanvasDesktop *desktop, Canvas *can
     for (i32 i = 0; i < desktop->count; ++i) DrawCityCanvasWindow(game, canvas, &desktop->windows[i]);
     DrawCityMenu(game, canvas, desktop);
     DrawCityDropdown(desktop, canvas);
-    DrawDesktopTooltip(desktop, canvas);
+    DrawCityTooltip(desktop, canvas);
     return;
   }
   CanvasRaster saved = canvas->raster;
@@ -795,7 +743,7 @@ void DrawCityDesktopUI(Game *game, const CityCanvasDesktop *desktop, Canvas *can
 
   DrawCityMenu(game, canvas, desktop);
   DrawCityDropdown(desktop, canvas);
-  DrawDesktopTooltip(desktop, canvas);
+  DrawCityTooltip(desktop, canvas);
 }
 
 void Sc2kCanvasPaintScaled(Canvas *framebuffer, i32 numerator, i32 denominator,
@@ -827,128 +775,4 @@ void DrawCityDesktopFramebuffer(Game *game, const CityCanvasDesktop *desktop, Ca
   CanvasFramebufferPaint paint = {desktop, map_indices, map_stride, palette, game};
   Sc2kCanvasPaintScaled(framebuffer, map_scale, 1, CanvasFramebufferMap, &paint);
   Sc2kCanvasPaintScaled(framebuffer, ui_scale, 100, CanvasFramebufferWindows, &paint);
-}
-
-// Common window chrome and unclaimed Escape keys use the same policy for every window.
-// Domain procedures run first and may consume or replace that behavior.
-bool DefaultWindowProcedure(Game *game, const Window *window, const WindowEvent *event) {
-  if (event->kind != WINDOW_INPUT) return false;
-  const CanvasSDLEvent *input = event->input;
-  CityCanvasDesktop *desktop = &game->ui->desktop;
-  if (input->kind == CANVAS_SDL_POINTER_DOWN && input->button == CANVAS_SDL_BUTTON_LEFT) {
-    Sc2kCanvasDesktopPointerDown(desktop, event->x, event->y);
-    ApplicationUpdateDialogPause(game->city);
-    return true;
-  }
-  if (input->kind == CANVAS_SDL_KEY_DOWN && input->key == CITY_KEY_ESCAPE) {
-    if (!window->sticky) Sc2kCanvasDesktopDismissWindow(desktop, window->window_id);
-    ApplicationUpdateDialogPause(game->city);
-    return true;
-  }
-  return false;
-}
-
-// A procedure may change the window stack. Reacquire its identity before default handling.
-bool SendWindowEvent(Game *game, const Window *window, const WindowEvent *event) {
-  u32 id = window->window_id;
-  WindowProcedure *procedure = window->procedure ? window->procedure : ReadCityWindowTraits(window->kind)->procedure;
-  if (procedure(game, window, event)) return true;
-  if (procedure == DefaultWindowProcedure || event->kind != WINDOW_INPUT) return false;
-  Window *live = FindCityCanvasWindow(&game->ui->desktop, id);
-  return !live || DefaultWindowProcedure(game, live, event);
-}
-
-// Search front to back in physical pixels; callers decide whether to move focus.
-Window *FindCityWindowAtPixels(CityCanvasDesktop *desktop, int x, int y) {
-  for (int i = desktop->count - 1; i >= 0; --i) {
-    Window *window = &desktop->windows[i];
-    if (window->visible && CanvasPointInRect(Sc2kCanvasDesktopPixelBounds(desktop, window->window_id), x, y))
-      return window;
-  }
-  return NULL;
-}
-
-// Select one pointer target or the keyboard-focused window. Pointer capture survives
-// leaving its bounds; loss of host focus is delivered to all surviving windows.
-bool DispatchCityWindowInput(Game *game, const CanvasSDLEvent *input) {
-  HandleCityButtonRepeatInput(game, input);
-  CityCanvasDesktop *desktop = &game->ui->desktop;
-  WindowEvent event = {.kind = WINDOW_INPUT, .input = input};
-  if (input->kind == CANVAS_SDL_FOCUS_LOST) {
-    u32 ids[16];
-    int count = desktop->count;
-    for (int i = 0; i < count; ++i) ids[i] = desktop->windows[i].window_id;
-    for (int i = count - 1; i >= 0; --i) {
-      Window *window = FindCityCanvasWindow(desktop, ids[i]);
-      if (window) SendWindowEvent(game, window, &event);
-    }
-    desktop->input_capture_window = desktop->hover_window = 0;
-    Sc2kCanvasDesktopPointerUp(desktop);
-    return false;
-  }
-  bool pointer = input->kind == CANVAS_SDL_POINTER_DOWN || input->kind == CANVAS_SDL_POINTER_UP ||
-      input->kind == CANVAS_SDL_POINTER_MOVE;
-  u32 id = 0;
-  if (pointer || input->kind == CANVAS_SDL_SCROLL) {
-    int x, y;
-    if (pointer) CityInterfacePixels(game, input, &x, &y);
-    else {
-      x = desktop->tooltip.pointer_x; y = desktop->tooltip.pointer_y;
-      if (game->drawing->ui_display) Sc2kSDLFramebufferPointer(game->drawing->ui_display, &x, &y);
-    }
-    if (pointer && desktop->dragging != CITY_CANVAS_DRAG_NONE && input->kind != CANVAS_SDL_POINTER_DOWN) {
-      if (!Sc2kCanvasDesktopMovePixelDrag(desktop, x, y)) {
-        CanvasSDLEvent point = TransformCityInterfaceEvent(game, input);
-        Sc2kCanvasDesktopPointerMove(desktop, point.x, point.y);
-      }
-      if (input->kind == CANVAS_SDL_POINTER_UP && input->button == desktop->input_capture_button) {
-        Sc2kCanvasDesktopPointerUp(desktop);
-        desktop->input_capture_window = 0;
-      }
-      return true;
-    }
-    if (pointer && input->kind == CANVAS_SDL_POINTER_UP && desktop->input_capture_window &&
-        input->button != desktop->input_capture_button) return true;
-    if (pointer) id = desktop->input_capture_window;
-    if (!FindCityCanvasWindow(desktop, id)) {
-      Window *hit = FindCityWindowAtPixels(desktop, x, y);
-      id = hit ? hit->window_id : 0;
-    }
-    if (input->kind == CANVAS_SDL_POINTER_MOVE && desktop->hover_window != id) {
-      Window *previous = FindCityCanvasWindow(desktop, desktop->hover_window);
-      desktop->hover_window = id;
-      if (previous) {
-        CanvasSDLEvent leave = {.kind = CANVAS_SDL_POINTER_LEAVE};
-        SendWindowEvent(game, previous, &(WindowEvent){.kind = WINDOW_INPUT, .input = &leave, .x = -1, .y = -1});
-      }
-    }
-    if (!FindCityCanvasWindow(desktop, id)) return false;
-    if (input->kind == CANVAS_SDL_POINTER_DOWN && !desktop->input_capture_window) {
-      FocusCanvasWindow(desktop, id, false);
-      desktop->input_capture_window = id;
-      desktop->input_capture_button = input->button;
-    }
-    Sc2kCanvasDesktopPixelPointer(desktop, id, x, y, &event.x, &event.y);
-    Window *window = FindCityCanvasWindow(desktop, id);
-    SendWindowEvent(game, window, &event);
-    if (input->kind == CANVAS_SDL_POINTER_DOWN) Sc2kCanvasDesktopBeginPixelDrag(desktop, x, y);
-    if (input->kind == CANVAS_SDL_POINTER_UP && input->button == desktop->input_capture_button) {
-      desktop->input_capture_window = 0;
-      Sc2kCanvasDesktopPointerUp(desktop);
-    }
-    return true;
-  }
-  if (input->kind == CANVAS_SDL_POINTER_LEAVE) {
-    id = desktop->input_capture_window ? desktop->input_capture_window : desktop->hover_window;
-    desktop->hover_window = 0;
-    Window *window = FindCityCanvasWindow(desktop, id);
-    event.x = event.y = -1;
-    return window && SendWindowEvent(game, window, &event);
-  }
-  for (int i = desktop->count - 1; i >= 0; --i) {
-    Window *window = &desktop->windows[i];
-    if (window->visible && !(ReadCityWindowTraits(window->kind)->flags & CITY_WINDOW_NO_KEYBOARD))
-      return SendWindowEvent(game, window, &event);
-  }
-  return false;
 }

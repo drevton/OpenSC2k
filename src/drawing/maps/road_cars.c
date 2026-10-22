@@ -1,20 +1,25 @@
-#include "city/maps/layers.h"
 #include <limits.h>
-#include "city/infrastructure/surface_lines.h"
-#include "city/infrastructure/bridges.h"
-#include "city/engine/city_types.h"
-#include "city/infrastructure/types.h"
-#include "city/maps/tile_storage.h"
-#include "drawing/maps/map_view.h"
-#include "city/presentation.h"
-#include "city/engine/simulation.h"
-#include "city/infrastructure/infrastructure.h"
-#include "ui/state.h"
-#include "ui/frontend.h"
-#include "drawing/drawing_internal.h"
-#include "drawing/maps/tables.h"
+#include <stdlib.h>
+#include <string.h>
 
+#include "city/engine/city_types.h"
+#include "city/engine/simulation.h"
+#include "city/infrastructure/bridges.h"
+#include "city/infrastructure/surface_lines.h"
+#include "city/infrastructure/types.h"
+#include "city/maps/layers.h"
+#include "city/maps/tile_storage.h"
+#include "city/presentation.h"
+#include "drawing/maps/map_camera.h"
+#include "drawing/maps/map_render.h"
+#include "drawing/maps/map_view.h"
+#include "drawing/maps/tables.h"
+#include "drawing/sprites/sprites.h"
+#include "drawing/state.h"
+#include "game/state.h"
 #include "road-car-paths.inc"
+#include "ui/map_visibility.h"
+#include "ui/map_views.h"
 
 // Decorative cars share the map vehicle renderer and host animation clock.
 // Their bounded pool and random stream belong to Drawing, never saved City events.
@@ -88,43 +93,14 @@ static int ChooseRoadCarExit(DrawingRoadTraffic *traffic, int exits, int entry) 
   return -1;
 }
 
-static void RoadCarVisibleFragment(CityRect rect, void *context) {
-  if (rect.right > rect.left && rect.bottom > rect.top) *(bool *)context = true;
-}
-
 static int RoadCarHeight(const RoadCar *car);
-
-static bool RoadCarInView(const City *city, TileIndex tile, int height, CityMapCamera view, int view_index) {
-  if (view.zoom < CITY_MAP_ZOOM_LARGE || view.width <= 0 || view.height <= 0) return false;
-  const Drawing *drawing = city->game->drawing;
-  u32 window_id = view_index ? drawing->views[view_index - 1].window_id : 0;
-  if (view_index) {
-    const Window *window = FindCityCanvasWindow(&city->game->ui->desktop, window_id);
-    if (!window || !window->visible || window->shaded) return false;
-  }
-  CityPoint p = CityMapCameraPoint(city, view.rotation, MapTileX(city, tile), MapTileY(city, tile));
-  int scale = 1 << view.zoom, margin = 64 * scale;
-  int x = view.origin_x + (p.y - p.x + 1) * 4 * scale;
-  int y = view.origin_y + (p.x + p.y) * 2 * scale -
-      height * CityMapHeightStep(view.zoom) / 256;
-  if (x < -margin || y < -margin || x >= view.width + margin || y >= view.height + margin) return false;
-  int magnification = view_index                        ? 1 << IntMax(0, drawing->views[view_index - 1].zoom - 2)
-      : drawing->default_map_view->magnified_large_zoom ? 2
-                                                        : 1;
-  CityRect vicinity = {(x - margin) * magnification, (y - margin) * magnification, (x + margin + 1) * magnification,
-      (y + margin + 1) * magnification};
-  bool visible = false;
-  NativeMapCacheVisitView(
-      &city->game->ui->desktop, window_id, vicinity, magnification, RoadCarVisibleFragment, &visible);
-  return visible;
-}
 
 static bool RoadCarWatched(const City *city, const RoadCar *car) {
   const Drawing *drawing = city->game->drawing;
   int height = RoadCarHeight(car);
   for (int i = 0; i <= CITY_EXTRA_MAP_VIEW_COUNT; ++i) {
     if (i && !drawing->views[i - 1].window_id) continue;
-    if (RoadCarInView(city, car->tile, height, drawing->map_snapshot.regions[i], i)) return true;
+    if (IsCityRoadCarInView(city, car->tile, height, drawing->map_snapshot.regions[i], i)) return true;
   }
   return false;
 }
@@ -179,14 +155,7 @@ enum {
   ROAD_CAR_PROGRESS_ONE = 2048,
   ROAD_CAR_PROGRESS_MAX = ROAD_CAR_PROGRESS_ONE - 1,
   ROAD_CAR_AGE_SCALE = 256,
-  ROAD_CAR_AGE_MAX = 32767,
-  ROAD_CAR_LANE_CURVE = 0,
-  ROAD_CAR_LANE_DIAGONAL = 2,
-  ROAD_CAR_LANE_TRANSITION = 8,
-  ROAD_CAR_LANE_APPROACH = 12,
-  ROAD_CAR_LANE_SHARED = 16,
-  ROAD_CAR_LANE_TURNAROUND = 32,
-  ROAD_CAR_LANE_STRAIGHT = 33
+  ROAD_CAR_AGE_MAX = 32767
 };
 
 typedef struct {
@@ -233,47 +202,11 @@ static RoadCarPath SampleRoadCarPath(const RoadCar *car) {
 }
 
 static void PrepareRoadCarPath(const City *city, RoadCar *car, int entry, int exit) {
-  TileIndex tile = car->tile;
-  // Contextual artwork is resolved once on entry, not while advancing or painting.
-  int sprite = ReadTile(city, tile) == TK_ROAD
-      ? CitySurfaceLineSprite(
-            city, tile, ResolveCitySurfaceLineGround(city, tile).layout, CITY_MAP_ZOOM_LARGE, 0)
-      : 0;
-  int first =
-      MAP_LANDSCAPE_SPRITE_FIRST + CITY_MAP_ZOOM_LARGE * MAP_LANDSCAPE_SPRITES_PER_ZOOM - CITY_LANDSCAPE_GROUND_FIRST;
-  int diagonal = sprite - first - CITY_LANDSCAPE_DIAGONAL_ROAD_FIRST;
-  int transition = sprite - first - CITY_LANDSCAPE_DIAGONAL_ROAD_TRANSITION_FIRST;
-  int shared = sprite - first - CITY_LANDSCAPE_DIAGONAL_ROAD_SHARED_FIRST;
-  int kind, rotation;
-  if (entry == exit) {
-    kind = ROAD_CAR_LANE_TURNAROUND;
-    rotation = exit;
-  } else if (diagonal >= 0 && diagonal < 12) {
-    rotation = diagonal / 3;
-    int mask = diagonal % 3;
-    bool reverse = ((entry - rotation) & 3) != CITY_LINE_WEST;
-    kind = ROAD_CAR_LANE_DIAGONAL + mask * 2 + reverse;
-  } else if (transition >= 0 && transition < 16) {
-    rotation = transition / 4;
-    int mask = transition / 2 & 1;
-    bool approach = transition & 1;
-    bool reverse = ((entry - rotation) & 3) != (approach && !mask ? CITY_LINE_NORTH : CITY_LINE_WEST);
-    kind = (approach ? ROAD_CAR_LANE_APPROACH : ROAD_CAR_LANE_TRANSITION) + mask * 2 + reverse;
-  } else if (shared >= 0 && shared < 8) {
-    rotation = 0;
-    bool reverse = entry != (shared / 4 ? CITY_LINE_NORTH : CITY_LINE_WEST);
-    kind = ROAD_CAR_LANE_SHARED + shared * 2 + reverse;
-  } else if (exit == ((entry + 2) & 3)) {
-    kind = ROAD_CAR_LANE_STRAIGHT;
-    rotation = (exit - CITY_LINE_EAST) & 3;
-  } else {
-    rotation = exit == ((entry + 1) & 3) ? entry : exit;
-    kind = ROAD_CAR_LANE_CURVE + (entry != rotation);
-  }
-  int descriptor = kRoadCarPathKinds[kind];
+  CitySurfaceLinePath path = ResolveCitySurfaceLinePath(city, car->tile, entry, exit, false);
+  int descriptor = kRoadCarPathKinds[path.kind];
   car->path = descriptor & 31;
-  car->rotation = (rotation + (descriptor >> 5)) & 3;
-  car->straight = kind == ROAD_CAR_LANE_STRAIGHT;
+  car->rotation = (path.rotation + (descriptor >> 5)) & 3;
+  car->straight = path.kind == CITY_LINE_PATH_STRAIGHT;
 }
 
 static CityPoint RoadCarDirection(u16 heading) {
@@ -730,7 +663,7 @@ static bool RoadCarWatchedCurrent(const City *city, const RoadCar *car) {
   const Drawing *drawing = city->game->drawing;
   for (int i = 0; i <= CITY_EXTRA_MAP_VIEW_COUNT; ++i) {
     if (i && !drawing->views[i - 1].window_id) continue;
-    if (RoadCarInView(city, car->tile, RoadCarHeight(car), RoadCarCurrentCamera(drawing, i), i)) return true;
+    if (IsCityRoadCarInView(city, car->tile, RoadCarHeight(car), RoadCarCurrentCamera(drawing, i), i)) return true;
   }
   return false;
 }
@@ -741,7 +674,7 @@ static bool RoadCarVisibleCurrent(const City *city, const RoadCar *car) {
   for (int i = 0; i <= CITY_EXTRA_MAP_VIEW_COUNT; ++i) {
     if (i && !drawing->views[i - 1].window_id) continue;
     CityMapCamera view = RoadCarCurrentCamera(drawing, i);
-    if (!RoadCarInView(city, car->tile, height, view, i)) continue;
+    if (!IsCityRoadCarInView(city, car->tile, height, view, i)) continue;
     CityPoint tile = CityMapCameraPoint(city, view.rotation, MapTileX(city, car->tile), MapTileY(city, car->tile));
     CityPoint body = RoadCarDrawingPoint(car, view.rotation, RoadCarSpriteView(car, view.rotation));
     CityPoint point = CityMapCameraVector(view.rotation, body.x, body.y);
@@ -770,7 +703,7 @@ static void SeedRoadCarRect(City *city, CityMapCamera view, int index, CityRect 
       int surface_height = ReadCitySurfaceHeight(&city->tile[tile]);
       int py = view.origin_y + (point.x + point.y) * 2 * scale - surface_height * CityMapHeightStep(view.zoom);
       if (px < rect.left || px >= rect.right || py < rect.top || py >= rect.bottom ||
-          !RoadCarInView(city, tile, surface_height * 256, view, index))
+          !IsCityRoadCarInView(city, tile, surface_height * 256, view, index))
         continue;
       int exits = RoadCarExits(city, tile);
       for (int entry = 0; entry < 4; ++entry) {
@@ -892,7 +825,7 @@ bool UpdateCityRoadTraffic(City *city, u32 now) {
       if (view.zoom < CITY_MAP_ZOOM_LARGE || view.width <= 0 || view.height <= 0) continue;
       TileIndex tile = SampleRoadCarTile(city, view);
       int surface_height = ReadCitySurfaceHeight(&city->tile[tile]);
-      if (!RoadCarInView(city, tile, surface_height * 256, view, view_index)) continue;
+      if (!IsCityRoadCarInView(city, tile, surface_height * 256, view, view_index)) continue;
       int density = ReadTrafficDensity(city, tile);
       if (!density || (int)(RoadTrafficRandom(traffic) % ROAD_CAR_DENSITY_SCALE) >= density) continue;
       // The initial visible population is seeded when a camera changes.

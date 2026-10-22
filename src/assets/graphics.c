@@ -1,6 +1,5 @@
-#include "assets/resource_types.h"
-#include "city/infrastructure/types.h"
-#include "base/byte_order.h"
+#include "assets/catalog.h"
+
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,18 +7,13 @@
 
 #include "assets/asset_file.h"
 #include "assets/assets.h"
-
-#include "assets/catalog.h"
-#include "assets/resources.h"
+#include "assets/cursors.h"
+#include "assets/fonts.h"
+#include "assets/graphics.h"
+#include "assets/resource_types.h"
 #include "assets/state.h"
-#include "game/state.h"
-#include "base/file.h"
-#include "base/text.h"
-
-#include "drawing/bitmaps.h"
+#include "base/byte_order.h"
 #include "drawing/sprites/sprites.h"
-#include "drawing/state.h"
-#include "ui/menus/menu.h"
 
 // Graphics Assets
 
@@ -44,36 +38,17 @@ static bool LoadIntroArtwork(CityResourceState *assets) {
   return valid;
 }
 
-static bool PreloadApplicationAssets(CityAssets *assets, bool intro_only) {
-  char *directory = ReadExecutableDirectory();
-  if (directory) {
-    char *root = NULL;
-#ifdef __APPLE__
-    FormatText(&root, "%s/../Resources", directory);
-#else
-    SetText(&root, directory);
-#endif
-    free(directory);
-    bool loaded = intro_only ? LoadCityIntroAsset(assets, root) : LoadCityAssets(assets, root);
-    free(root);
-    return loaded;
-  }
-  return intro_only ? LoadCityIntroAsset(assets, NULL) : LoadCityAssets(assets, NULL);
-}
-
 bool LoadApplicationIntroAssets(CityResourceState *assets) {
-  return assets->intro.images[0] || (PreloadApplicationAssets(assets, true) && LoadIntroArtwork(assets));
+  return assets->intro.images[0] || (PreloadCityAssetPacks(assets, true) && LoadIntroArtwork(assets));
 }
 
-static bool LoadCityPictureAssets(CityAssets *assets, u32 asset_id);
-
-static void ReleaseInterfaceIcons(CityInterfaceIcons *icons) {
+void ReleaseCityInterfaceIcons(CityInterfaceIcons *icons) {
   for (int i = 0; i < icons->header_count; ++i) FreeRunSprite(icons->images[i]);
   free(icons->images);
   *icons = (CityInterfaceIcons){0};
 }
 
-static bool LoadInterfaceIcons(CityAssets *assets, CityInterfaceIcons *destination, u32 id, u32 count) {
+bool LoadCityInterfaceIcons(CityAssets *assets, CityInterfaceIcons *destination, u32 id, u32 count) {
   ByteSpan span = GetAsset(assets, id);
   const u8 *data = span.data;
   if (span.size < 24 || memcmp(data, "SC2KICO3", 8) || ReadLE32(data + 8) != count) return false;
@@ -121,35 +96,9 @@ static bool LoadInterfaceIcons(CityAssets *assets, CityInterfaceIcons *destinati
     end += length;
   }
   valid = valid && end == span.size;
-  if (!valid) { ReleaseInterfaceIcons(&icons); return false; }
-  ReleaseInterfaceIcons(destination);
+  if (!valid) { ReleaseCityInterfaceIcons(&icons); return false; }
+  ReleaseCityInterfaceIcons(destination);
   *destination = icons;
-  return true;
-}
-
-static bool GraphicsAssetLoadFailure(const char *name) {
-  fprintf(stderr, "Unable to load graphics asset: %s\n", name);
-  return false;
-}
-
-bool LoadApplicationGraphicsAssets(Game *game) {
-  CityAssets *assets = game->resources;
-  if (!PreloadApplicationAssets(assets, false)) return false;
-  if (!LoadCityLandscapeAssets(assets)) return GraphicsAssetLoadFailure("landscape");
-  if (!LoadCityDemolitionAssets(assets)) return GraphicsAssetLoadFailure("demolition");
-  if (!LoadCityCursorAssets(game, NULL)) return GraphicsAssetLoadFailure("cursors");
-  if (!LoadCityMusicAssets(assets, NULL)) return GraphicsAssetLoadFailure("music controls");
-  if (!LoadCityOverlayFont(&game->drawing->overlay_font, assets, NULL)) return GraphicsAssetLoadFailure("overlay font");
-  if (!LoadCityInterfaceFont(assets, NULL)) return GraphicsAssetLoadFailure("interface fonts");
-  if (!LoadCityPictureAssets(assets, CITY_ASSET_ILLUSTRATIONS)) return GraphicsAssetLoadFailure("illustrations");
-  if (!LoadCityPictureAssets(assets, CITY_ASSET_ADVISORS)) return GraphicsAssetLoadFailure("advisors");
-  if (!LoadCityPictureAssets(assets, CITY_ASSET_NEIGHBORS)) return GraphicsAssetLoadFailure("neighbors");
-  if (!LoadInterfaceIcons(assets, &assets->map_category_icons, CITY_ASSET_MAP_ICONS, CITY_MAP_ICON_COUNT))
-    return GraphicsAssetLoadFailure("map icons");
-  if (!LoadInterfaceIcons(assets, &assets->bridge_choice_icons, CITY_ASSET_BRIDGES, CITY_BRIDGE_CHOICE_ICON_COUNT))
-    return GraphicsAssetLoadFailure("bridge icons");
-  if (!LoadInterfaceIcons(assets, &assets->main_toolbar_icons, CITY_ASSET_TOOLBAR, CITY_TOOLBAR_ICON_COUNT))
-    return GraphicsAssetLoadFailure("toolbar icons");
   return true;
 }
 
@@ -158,7 +107,7 @@ bool LoadApplicationGraphicsAssets(Game *game) {
 
 // Picture packs store native run images and individual palettes. Assets owns their
 // references; windows borrow them and the normal sprite drawer handles painting.
-static bool LoadCityPictureAssets(CityAssets *assets, u32 asset_id) {
+bool LoadCityPictureAssets(CityAssets *assets, u32 asset_id) {
   assert(asset_id == CITY_ASSET_ILLUSTRATIONS || asset_id == CITY_ASSET_ADVISORS || asset_id == CITY_ASSET_NEIGHBORS);
   bool advisors = asset_id == CITY_ASSET_ADVISORS, neighbors = asset_id == CITY_ASSET_NEIGHBORS;
   int count = neighbors ? CITY_NEIGHBOR_ART_COUNT :
@@ -226,38 +175,9 @@ const RunSprite *ReadCityPicture(const CityAssets *assets, int id) {
   return NULL;
 }
 
-void ReleaseCityAssets(CityAssets *assets) {
-  for (int i = 0; i < CITY_INTRO_IMAGE_COUNT; ++i) FreeRunSprite(assets->intro.images[i]);
-  assets->intro = (CityIntroArt){0};
-  ReleaseCityInterfaceFont(&assets->interface_font);
-  ReleaseCityNewspaperResources(&assets->newspaper);
-  ReleaseCitySpriteAssets(assets);
-  free(assets->cursors.pixels);
-  assets->cursors = (CityCursorAssets){0};
-  for (int stage = 0; stage < CITY_NEIGHBOR_ART_COUNT; ++stage) {
-    FreeRunSprite(assets->neighbors[stage]);
-    assets->neighbors[stage] = NULL;
-  }
-  memset(assets->facility_information, 0, sizeof(assets->facility_information));
-  ReleaseInterfaceIcons(&assets->main_toolbar_icons);
-  ReleaseInterfaceIcons(&assets->map_category_icons);
-  ReleaseInterfaceIcons(&assets->bridge_choice_icons);
-  for (int i = 0; i < CITY_ADVISOR_PORTRAIT_COUNT; ++i) {
-    FreeRunSprite(assets->advisors[i]);
-    assets->advisors[i] = NULL;
-  }
-  for (int i = 0; i <= CITY_NEWSPAPER_PICTURE_COUNT; ++i) {
-    FreeRunSprite(assets->illustrations[i]);
-    assets->illustrations[i] = NULL;
-  }
-  for (int i = 0; i < CITY_MUSIC_SPRITE_COUNT; ++i) FreeRunSprite(assets->music_buttons.images[i]);
-  assets->music_buttons = (CityMusicAssets){0};
-  ReleaseDecodedCityAssets(assets);
-}
-
-bool LoadCityCursorAssets(Game *game, const char *graphics_root) {
+bool LoadCityCursorArtwork(CityAssets *assets, const char *graphics_root) {
   AssetFile file;
-  int opened = OpenAssetSource(&file, game->resources, CITY_ASSET_CURSORS, graphics_root);
+  int opened = OpenAssetSource(&file, assets, CITY_ASSET_CURSORS, graphics_root);
   if (opened != 1) return false;
   u8 header[SC2K_CURSOR_ASSET_HEADER_SIZE];
   i32 valid = ReadAssetFile(&file, header, sizeof(header)) == sizeof(header) &&
@@ -275,15 +195,36 @@ bool LoadCityCursorAssets(Game *game, const char *graphics_root) {
   if (!valid) { free(pixels); return false; }
   for (i32 index = 0; index < SC2K_CURSOR_ASSET_PIXEL_COUNT; ++index)
     pixels[index] = ReadLE32((const u8 *)&pixels[index]);
-  free(game->resources->cursors.pixels);
-  game->resources->cursors.pixels = pixels;
-  game->drawing->cursors.initialized = 0;
+  free(assets->cursors.pixels);
+  assets->cursors.pixels = pixels;
   return true;
 }
 
 
-void ReleaseCityCursorAssets(Game *game) {
-  free(game->resources->cursors.pixels);
-  game->resources->cursors = (CityCursorAssets){0};
-  game->drawing->cursors.initialized = false;
+void ReleaseCityCursorArtwork(CityAssets *assets) {
+  free(assets->cursors.pixels);
+  assets->cursors = (CityCursorAssets){0};
+}
+
+// Music Assets
+
+bool LoadCityMusicButtonAssets(CityAssets *resources, const char *root) {
+  AssetFile file;
+  if (OpenAssetSource(&file, resources, CITY_ASSET_MUSIC_BUTTONS, root) != 1) return false;
+  u8 header[12];
+  bool valid = ReadAssetFile(&file, header, sizeof(header)) == sizeof(header) &&
+      !memcmp(header, "SC2KPIC1", 8) && ReadLE32(header + 8) == CITY_MUSIC_SPRITE_COUNT;
+  CityMusicAssets images = {0};
+  for (int i = 0; valid && i < CITY_MUSIC_SPRITE_COUNT; ++i) {
+    images.images[i] = ReadAssetPicture(&file, i, CITY_MUSIC_SPRITE_SIZE, CITY_MUSIC_SPRITE_SIZE);
+    valid = images.images[i] != NULL;
+  }
+  if (valid) valid = ReadAssetByte(&file) == EOF && !file.failed;
+  if (!CloseAssetFile(&file)) valid = false;
+  for (int i = 0; i < CITY_MUSIC_SPRITE_COUNT; ++i) {
+    if (valid) FreeRunSprite(resources->music_buttons.images[i]);
+    else FreeRunSprite(images.images[i]);
+  }
+  if (valid) resources->music_buttons = images;
+  return valid;
 }

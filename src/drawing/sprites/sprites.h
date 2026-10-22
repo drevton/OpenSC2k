@@ -19,7 +19,7 @@ _Static_assert(MAP_PALETTE_BRIDGE_FIRST + CITY_LANDSCAPE_BRIDGE_STYLES <= MAP_PA
     MAP_PALETTE_CAR_FIRST + CITY_ROAD_VEHICLE_PALETTES <= MAP_PALETTE_SELECTION_FIRST,
     "Prepared palette ranges must not overlap");
 
-// Catalog extent of an already zoomed cache slot, before target/display scaling.
+// Logical width and top-to-ground-anchor distance of an already zoomed cache slot, before target/display scaling.
 CityPoint CityMapSpriteExtent(const Drawing *drawing, int sprite);
 
 // Cached map-sprite drawing uses the active Drawing clip and depth pass.
@@ -155,10 +155,7 @@ bool AnimateSpriteSurfaceChanges(SpriteSurface *surface, u32 changed_buckets);
 bool AnimateSpriteSurfaceWater(SpriteSurface *surface, u32 changed_buckets);
 
 
-// Packed references are private to sprite loading and cache preparation.
-enum { CITY_SPRITE_HEADER_MASK = 0x7FFF, CITY_SPRITE_HEADER_FLIPPED = 0x8000 };
-bool ValidateSpriteVariants(SpriteVariants variants, int sprite_count, int header_count);
-u16 ResolveSpriteVariant(SpriteVariants variants, int sprite, int level, u16 fallback);
+// Select interface or prepared map sources; tile selection never interprets packed image references.
 int InterfaceSpriteLevel(int scale);
 const RunSprite *GetInterfaceSprite(const CityInterfaceIcons *icons, int sprite, int level, bool *flipped);
 const CityLandscapeSprite *GetResourceSprite(const CityResourceState *assets, int index);
@@ -170,7 +167,7 @@ const CityLandscapeSprite *GetTileSpriteSource(const CityResourceState *assets, 
 // Map Sprite Cache
 
 // Legacy cache banks are private prepared resolutions, not public sprite identities.
-static inline int MapSpriteZoomIndex(int sprite, int zoom) { return sprite + 500 * zoom; }
+static inline int MapSpriteZoomIndex(int sprite, int zoom) { return sprite + CITY_MAP_SPRITES_PER_ZOOM * zoom; }
 
 enum {
   MAP_SELECTION_SPRITE_FIRST = 1500,
@@ -192,7 +189,7 @@ typedef struct {
 
 typedef struct {
   const CityResourceState *assets;
-  int pixel_scale;
+  int pixel_scale; // Framebuffer pixel density in percent; immutable until preparation workers join.
   RunSprite *base[MAP_SPRITE_COUNT];
   RunSprite *sprites[MAP_SPRITE_SCALE_COUNT][MAP_SPRITE_COUNT];
   int baselines[MAP_SPRITE_SCALE_COUNT][MAP_SPRITE_COUNT];
@@ -217,12 +214,16 @@ int PrepareMapSpriteScaleRange(MapSpriteCache *cache, int scale, const u32 *pale
 bool PrepareMapBuildingPreviews(MapSpriteCache *cache, int width, int height, const u32 *palette);
 bool PrepareMapBuildingPreviewRange(MapSpriteCache *cache, int width, int height, const u32 *palette,
     int first, int count);
-// Startup only: immutable sources, disjoint outputs, and worker-local scratch.
-// Main thread polls progress, then joins before using the prepared sprites.
+// Startup only, with no active preparation. Copies scales/palette and installs the base pixel density before launch.
+// Until Finish joins every worker, cache sources, Assets and pixel_scale must remain unchanged and alive;
+// no other code may read or replace output images/previews. Workers use disjoint outputs and private row scratch.
 bool StartMapSpritePreparation(MapSpriteCache *cache, const int *scales, int count,
     int preview_width, int preview_height, const u32 *palette);
-// Completed and total estimated work, rather than an equal count per sprite.
+// Polls weighted work without reading in-flight images. Returns -1 for no active run or worker failure;
+// total is written only on success. No worker is joined here.
 int MapSpritePreparationProgress(const MapSpriteCache *cache, int *total);
+// Join every worker before freeing its shared preparation record. Active cancellation returns false;
+// success (or an already idle cache) returns true. Only a completed, uncancelled run publishes scale/preview readiness.
 bool FinishMapSpritePreparation(MapSpriteCache *cache, bool cancel);
 void FreeMapSpriteScales(MapSpriteCache *cache);
 void FreeMapSpriteCache(MapSpriteCache *cache);

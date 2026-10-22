@@ -1,19 +1,10 @@
-// State
 #ifndef SC2K_FILE_STATE_H
 #define SC2K_FILE_STATE_H
 
 #include "city/saveload/types.h"
-#include "city/saveload/path.h"
 #include "city/types.h"
 
-typedef void (*CityFileAction)(void *context);
-
-// I/O errors and serialization scratch are operation state, not saved City state.
-typedef struct CityFileExceptionState {
-  i32 cause;
-  i32 os_error; // Native errno; comparison adapters retain stock Win32 error values.
-} CityFileExceptionState;
-
+// Serialization scratch and transient I/O state belong to the file operation, not saved City state.
 typedef struct {
   u32 words[CITY_MISC_WORD_COUNT];
 } CityMiscBuffer;

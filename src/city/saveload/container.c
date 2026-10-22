@@ -1,14 +1,10 @@
-#include "game/state.h"
-#include "city/presentation.h"
 #include "city/saveload/city_file_internal.h"
-
-#include "assets/catalog.h"
-#include "base/text.h"
+#include "base/byte_order.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 // Container
-
-static CityFileChunk *AppendCityFileChunk(CityFile *city);
-static CityFile *CityFileReadOpened(const char *path, FILE *input);
 
 // Release an in-memory stock archive and all owned chunk payloads. NULL is accepted; no pointers into the archive
 // remain valid after release.
@@ -224,53 +220,4 @@ bool CityFileWrite(const CityFile *city, const char *path) {
   if (fclose(output) != 0) success = 0;
   free(generated);
   return success;
-}
-
-// Errors
-
-// Resolve a file error's resource text into a borrowed string or caller-provided fallback buffer. Truncated must
-// provide 256 bytes; the returned pointer must not outlive the resource owner or that buffer.
-static const char *ReadFileErrorText(u32 resource, char truncated[256]) {
-  const char *message = CityNoticeText(resource);
-  if (message == NULL)
-    return "";
-  if (strlen(message) <= 255)
-    return message; // Immutable literals outlive every dialog.
-  CopyText(truncated, 256, message);
-  return truncated;
-}
-
-// Native file errors use the host's description rather than stock MFC resource text. Requires attached presentation
-// owners; temporary formatted text is released by this function after the notice call returns.
-void ShowCityFileException(City *city, u32 resource, const CityFileExceptionState *exception, const char *path) {
-  char prefix_storage[256];
-  const char *prefix = ReadFileErrorText(resource, prefix_storage);
-  char *cause = exception && exception->os_error ? FormatCityErrorReason(strerror(exception->os_error)) : NULL;
-  const char *cause_text = cause ? cause : "";
-  const char *filename = path != NULL ? path : "";
-  size_t size = strlen(prefix) + strlen(filename) + strlen(cause_text) + 3;
-  char *message = malloc(size);
-  if (message == NULL) {
-    free(cause);
-    if (city->game->reconstruction_error == 0)
-      city->game->reconstruction_error = SC2K_ERROR_HOST_ALLOCATION_FAILURE;
-    return;
-  }
-  snprintf(message, size, "%s%s%s%s%s", prefix, *filename ? "\n" : "", filename,
-      *cause_text ? "\n" : "", cause_text);
-  ReportCityLoadError(city, resource, message);
-  free(cause);
-  free(message);
-}
-
-// Report a chunk-format error through the active file runtime and presentation boundary. File must belong to the
-// current operation; this records failure rather than repairing or reloading partial City data.
-void ReportCityChunkError(CityFileRuntime *file, u32 resource, int load_string) {
-  City *city = file->game->city;
-  if (!load_string) {
-    ShowCityFileException(city, resource, &file->error, NULL);
-  } else {
-    char text[256];
-    ReportCityLoadError(city, resource, ReadFileErrorText(resource, text));
-  }
 }

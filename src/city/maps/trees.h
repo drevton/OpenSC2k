@@ -15,6 +15,9 @@ typedef enum CityTreeProbeDirection {
 
 enum { CITY_TREE_PLANT_COST = 3 };
 
+// Enable or disable aging, death and reseeding. Validate Boolean/zero reserved values; TEST has no effects.
+i64 CmdSetTreeLifecycle(City *city, u32 flags, int enabled, int reserved1, int reserved2);
+
 // Species are stored relative to the tile's base climate; only RandomCityTreeSpecies advances the landscape RNG.
 int CityTreeSpeciesCount(int climate);
 int CityTreeGlobalSpecies(int climate, int species);

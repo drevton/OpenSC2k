@@ -51,12 +51,14 @@ typedef struct Canvas {
   CanvasDrawStats *draw_stats; // Borrowed frame counters; disabled outside preparation.
   const struct CityInterfaceFont *interface_font; // Borrowed UI glyph assets; NULL for map rasters.
   bool unscaled_bevels, scalable_font, font_antialias;
-  const struct CityButtonFeedback *button_feedback; // Borrowed UI presentation state.
+  const CityRect *pressed_button; // Borrowed bounds in this canvas's coordinates; NULL when no press applies.
   CityCanvasButtonProbe *button_probe; // Optional input-time hit collection with an empty paint clip.
-  u32 button_window_id;
   u32 *palette_composite_rows; // Palette dependencies requiring repaint after alpha compositing.
   u32 *palette_composite_bounds; // Packed left/right u16 bounds, valid when the corresponding mask is nonzero.
 } Canvas;
+
+// UI resolves the active window before painting. Drawing only matches its borrowed press bounds.
+bool CityCanvasButtonPressed(const Canvas *canvas, CityRect bounds);
 
 // Index zero is fixed RGB. Collisions between indices modulo 32 are conservative.
 static inline u32 CanvasPaletteIndexMask(int index) {

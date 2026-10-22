@@ -1,7 +1,6 @@
 #ifndef SC2K_CITY_PRESENTATION_H
 #define SC2K_CITY_PRESENTATION_H
 
-#include "city/engine/commands.h"
 #include "city/types.h"
 
 // Button sets requested by presentation callers.
@@ -90,21 +89,9 @@ typedef enum CityCursorId {
   CITY_CURSOR_HANDLE_COUNT = 30,
 } CityCursorId;
 
-// City toolbar indices diverge from persistent tool groups after Query.
-enum {
-  CITY_TOOLBAR_BUTTON_ROTATE_CLOCKWISE = 17,
-  CITY_TOOLBAR_BUTTON_ROTATE_COUNTERCLOCKWISE = 18,
-  CITY_TOOLBAR_BUTTON_ZOOM_OUT = 19, CITY_TOOLBAR_BUTTON_ZOOM_IN = 20,
-  CITY_TOOLBAR_BUTTON_CENTER = 21, CITY_TOOLBAR_BUTTON_MAP = 22,
-  CITY_TOOLBAR_BUTTON_POPULATION = 23, CITY_TOOLBAR_BUTTON_NEIGHBORS = 24,
-  CITY_TOOLBAR_BUTTON_GRAPHS = 25, CITY_TOOLBAR_BUTTON_INDUSTRY = 26,
-  CITY_TOOLBAR_BUTTON_BUDGET = 27, CITY_TOOLBAR_BUTTON_SHOW_BUILDINGS = 28,
-  CITY_TOOLBAR_BUTTON_SHOW_SIGNS = 29, CITY_TOOLBAR_BUTTON_SHOW_TILE_DETAILS = 30,
-  CITY_TOOLBAR_BUTTON_ZONE_GROUND = 31, CITY_TOOLBAR_BUTTON_UNDERGROUND = 32,
-  CITY_TOOLBAR_BUTTON_HELP = 33, CITY_TOOLBAR_BUTTON_COUNT = 34,
-};
-
 typedef struct Game Game;
+typedef struct CityNameCommandInput CityNameCommandInput;
+typedef struct CityMapViewConfig CityMapViewConfig;
 
 // Direct presentation hooks are implemented by UI. They must not choose shared command options.
 // Semantic changes to City information, independent of window kinds and widgets.
@@ -130,7 +117,6 @@ typedef enum CityUpdateCategory {
 void InvalidateCityInformation(Game *game, u32 categories);
 
 // Command feedback is collected locally; the numerical execution result remains City-owned.
-void ReportCityCommandResult(City *city, i64 error);
 void ReportCityResourceNotice(City *city, int bitmap, int text);
 void ReportCityStadiumPlacement(City *city, TileIndex tile);
 void ReportCityTileInspection(City *city, TileIndex tile);
@@ -142,17 +128,16 @@ void CancelCityCommandFeedback(City *city);
 // Tool and window presentation. Resolved command options never come from these notifications.
 void RebuildCityToolbar(City *city);
 void DisableCityToolbarItem(City *city, int index);
-void SelectCityBulldozerFromToolbar(City *city, int group);
+// Reset local reward-tool selection when a facility is withdrawn; UI chooses its fallback tool.
+void ResetCityRewardSelection(City *city);
 void SetCityToolsVisible(Game *game, bool visible);
 void RefreshCityRewardToolbar(City *city);
 void RestoreCityCursorAfterDialog(City *city);
 
 // Retained pointer callers collect their local input here; shared commands supply explicit endpoints.
-TileIndex TrackCityZoneDrag(Game *game, TileIndex start, int unit_cost);
 TileIndex TrackInfrastructureLinePlacement(Game *game, TileIndex start, int unit_cost);
 TileIndex TrackCityMapZonePlacementDrag(Game *game, TileIndex start, int unit_cost);
 u32 BeginCityVolcanoPresentation(Game *game, TileIndex location);
-i64 ExecuteEndpointLineCommand(Game *game, CityCommandId id, TileIndex tile, TileIndex end);
 
 // Nonmodal presentation retains each caller until its own completion boundary.
 void PresentCityCheatNotice(City *city, const char *text);
@@ -163,23 +148,16 @@ int SelectInfrastructureSpan(City *city, int distance, int enabled_styles);
 void ShowCityResourceAlertDialog(City *city, i32 bitmap_id, i32 text_id);
 void ShowRankedCityEventModal(City *city, u32 event_code, u32 event_data);
 void PresentCityDisasterUnlockOffer(City *city);
-void ShowCityMissionOutcome(City *city, int outcome);
 void ShowCityLoadWarnings(City *city);
 const char *CityNoticeText(int notice);
-char *FormatCityErrorReason(const char *reason);
 void RefreshCitySpeedStatus(City *city, i32 mode);
 void ShowCityMessage(City *city, u32 resource_id);
 i32 QueryCityOverlayNameDialog(City *city, int slot, CityNameCommandInput *state);
 void ShowCityTileInformationDialog(City *city, TileIndex tile);
-int RunPausedCityAction(City *city, int (*action)(City *city, void *context), void *context);
-i32 RunPausedCityModalDialog(City *city, void *dialog);
 void RefreshCityDrawing(City *city);
 void RefreshCityMapTiles(City *city);
 void RefreshCityMapViews(Game *game);
 u32 SetCityCursor(City *city, int cursor_id, int restore);
-void HideCityChartPanel(City *city, int code);
-bool OpenInitializedCityNewspaper(City *city, int edition, bool ended);
-void FinishCityNewspaperInitialization(City *city, int edition);
 void ApplyCityNewspaperPageEffects(City *city, int edition);
 
 // Local presentation state never supplies shared command choices.
@@ -188,6 +166,7 @@ void SelectCityDispatchTool(City *city, int tool);
 TileIndex TrackCitySelectedInfrastructureLine(Game *game, TileIndex start, int group);
 void ShowCityMapControls(City *city, bool visible);
 void RestoreCityMapControls(City *city);
+void InitializeCityOrdinancesDialog(City *city);
 void UpdateCityPolicyControls(City *city, int policy, int cost);
 void EnableCityDeveloperTools(City *city);
 bool SetCityDemolitionSuppressed(City *city, bool suppressed);
@@ -204,10 +183,10 @@ void ApplyCitySavedViewPosition(City *city, int position);
 void ApplyCitySavedViewMode(City *city, int mode);
 void SetCityLoadedViewCenter(City *city, int x, int y);
 void RestoreCityLoadedView(City *city);
-// Borrow the magnified view only for this save caller; no allocation or ownership transfer.
-void *BeginCitySaveView(City *city);
-void EndCitySaveView(City *city, void *saved_view);
-void RefreshCityLoadedMusicPreference(City *city);
+// Zoom out a magnified view and return its borrowed pointer, or NULL if no adjustment is needed. End zooms that
+// same view back in after serialization. Neither call allocates or transfers view ownership.
+CityMapViewConfig *BeginCitySaveView(City *city);
+void EndCitySaveView(City *city, CityMapViewConfig *view);
 void SetCitySavePromptActive(City *city, bool active);
 
 typedef enum CityNewspaperInitialization {
@@ -218,7 +197,11 @@ typedef enum CityNewspaperInitialization {
 CityNewspaperInitialization BeginCityNewspaperOpeningPresentation(City *city, int edition);
 
 i32 CenterCityMapViewAndResetOverlays(City *city, int x, int y, int zoom);
-// Publish drawing-only damage without marking deterministic map state as changed.
+// The tile painter selects the layer; UI resolves the local placement/error selection and asks Drawing to paint it.
+// Requires a valid tile and the bound map target. Leaves City and selection state unchanged.
+void DrawCityMapPlacementTile(City *city, TileIndex tile);
+// Synchronously project one valid tile into every visible map view, without changing City map-change flags.
+// Missing Game/Drawing/UI or disabled tile-damage presentation has no drawing effect. City owns batch bookkeeping.
 void PublishCityMapTileDamage(City *city, TileIndex tile);
 
 void ResetCityReplacementPresentation(City *city);

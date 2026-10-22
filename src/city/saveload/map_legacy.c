@@ -1,3 +1,5 @@
+#include "city/infrastructure/lines.h"
+#include "city/maps/terrain.h"
 #include "city/economy/facilities.h"
 #include "city/maps/buildings.h"
 #include "city/infrastructure/bridges.h"
@@ -11,7 +13,6 @@
 #include "city/terrain/terrain.h"
 #include "city/tools/types.h"
 #include "game/state.h"
-#include "audio/state.h"
 #include "city/state.h"
 #include "assets/state.h"
 #include "game/errors.h"
@@ -22,8 +23,10 @@
 #include "city/tools/tools.h"
 #include "city/saveload/city_file_internal.h"
 #include "city/saveload/map_format.h"
-#include "city/infrastructure/infrastructure.h"
 #include <assert.h>
+#include <stdlib.h>
+#include <string.h>
+#include "base/byte_order.h"
 
 // Compact native highway kinds and paired stock artwork IDs are separate namespaces. Input is a stock kind; returns
 // the legacy family base used by projection and does not decode a native footprint.
@@ -450,9 +453,9 @@ int RepairLegacyCityRiverBanks(City *city) {
   return changed;
 }
 
-// Stock channel artwork has twenty bank patterns. This projection is used only by codecs/comparison/stock-art paths,
-// never by native water geometry.
-int ProjectCityTerrainToLegacy(const City *city, TileIndex tile, int terrain) {
+// Stock channel artwork distinguishes twenty bank patterns. Retained algorithms and codecs request this combined
+// slope/bank/water code explicitly; native surface geometry stays in ReadCityTileGeometry.
+static SC2K_FORCE_INLINE int ProjectLegacyTerrainCode(const City *city, TileIndex tile, int terrain) {
   assert(IsMapTileValid(city, tile));
   if (!city->native_map_storage)
     return terrain;
@@ -467,6 +470,16 @@ int ProjectCityTerrainToLegacy(const City *city, TileIndex tile, int terrain) {
     return LegacyRiverBankFromNeighbors(city, tile);
   }
   return (ground == TK_WATER_BANK ? CITY_TERRAIN_BANK_32 : CITY_TERRAIN_WATER_FIRST) + shape;
+}
+
+int ProjectCityTerrainToLegacy(const City *city, TileIndex tile, int terrain) {
+  return ProjectLegacyTerrainCode(city, tile, terrain);
+}
+
+int ReadLegacyTerrainCode(const City *city, TileIndex tile) {
+  const TileInfo *tp = &city->tile[tile];
+  int terrain = city->native_map_storage ? ReadTerrainCode(tp) : tp->terrain & CITY_TERRAIN_KIND_MASK;
+  return ProjectLegacyTerrainCode(city, tile, terrain);
 }
 
 // Ordinary native kinds select structural stock pieces. Drawbridges additionally project their moving centre leaf.
@@ -1129,6 +1142,9 @@ bool ConvertCityMapToNative(City *city) {
     cleared += ReadTile(city, tile) >= TK_RESIDENTIAL_FIRST && converted[tile].kind == TK_CLEAR;
     submerged += ReadTile(city, tile) != TK_CLEAR && IsTileKindExposedWater(converted[tile].kind);
   }
+  // Stock coastlines can have dry, flat land at the waterline. Preserve that layout
+  // while still allowing water to reclaim neighboring shore slopes.
+  city->fixes &= ~(1ull << CITY_FIX_WATER_SPREADING);
   city->load_sloped_zone_tiles = sloped_zones;
   city->load_cleared_building_tiles = cleared;
   city->load_submerged_occupant_tiles = submerged;

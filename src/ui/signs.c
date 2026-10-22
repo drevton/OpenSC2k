@@ -1,25 +1,38 @@
-#include "game/errors.h"
-#include "city/maps/map_types.h"
-#include "city/maps/tile_storage.h"
-#include "drawing/maps/map_view.h"
-#include "ui/tools/types.h"
-#include "base/time.h"
+#include "ui/windows/window_internal.h"
+#include "ui/map_views.h"
+#include "ui/map.h"
+#include "city/maps/labels.h"
 #include "ui/signs.h"
+
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+#include "assets/state.h"
+#include "audio/state.h"
+#include "base/time.h"
 #include "city/maps/layers.h"
 #include "city/maps/map.h"
-#include "game/state.h"
-#include "audio/state.h"
+#include "city/maps/map_types.h"
+#include "city/maps/tile_storage.h"
 #include "city/state.h"
-#include "drawing/state.h"
-#include "assets/state.h"
-#include "ui/state.h"
-#include "drawing/drawing_internal.h"
-#include "ui/text/text.h"
-#include "game/application_internal.h"
 #include "drawing/fonts/fonts.h"
+#include "drawing/maps/map_view.h"
+#include "drawing/raster/canvas_primitives.h"
+#include "drawing/raster/canvas_raster_internal.h"
+#include "drawing/state.h"
+#include "game/commands.h"
+#include "game/errors.h"
+#include "game/state.h"
+#include "ui/dialogs/scenario.h"
+#include "ui/dialogs/spans.h"
+#include "ui/input.h"
+#include "ui/sdl.h"
+#include "ui/state.h"
+#include "ui/text/text.h"
+#include "ui/tools/types.h"
+#include "ui/windows/controls.h"
+#include "ui/windows/windows.h"
 
 static bool ReserveSignEntries(CitySignState *signs, int capacity) {
   if (capacity <= signs->capacity) return true;
@@ -338,7 +351,6 @@ void DrawCitySignWindow(Game *game, Canvas *canvas, const Window *window) {
   }
 }
 
-
 static void DirtySignWindow(CityInterfaceState *ui, u32 id) {
   Window *window = FindCityCanvasWindow(&ui->desktop, id);
   if (window) Sc2kDirtyMarkRect(&ui->desktop.dirty, window->bounds);
@@ -380,7 +392,7 @@ void OpenCitySignList(City *city) {
   DirtySignWindow(ui, signs->list_window);
 }
 
-void OpenCitySignEditor(City *city, TileIndex tile) {
+static void OpenCitySignEditor(City *city, TileIndex tile) {
   CityInterfaceState *ui = city->game->ui;
   CitySignState *signs = &ui->signs;
   if (!CanEditCityMapSign(city, tile)) return;
@@ -593,7 +605,7 @@ bool HandleCityMapSignInput(City *city, CityExtraMapView *view, const CanvasSDLE
   int pixel_x, pixel_y;
   CityInterfacePixels(city->game, event, &pixel_x, &pixel_y);
   if (NativeSpanDialogWaiting(ui) || CityConnectionQuestionWaiting(ui) || CityMissionNoticeWaiting(ui) ||
-      ui->startup_waiting || NativeScenarioDialogWaiting(city)) return false;
+      ui->startup_waiting || NativeScenarioDialogWaiting(ui)) return false;
   SignCamera camera = SignMapCamera(city, view);
   bool visible = false;
   VisitCanvasMapPixels(&ui->desktop, camera.window, (CityRect){pixel_x, pixel_y, pixel_x + 1, pixel_y + 1},
@@ -803,15 +815,23 @@ bool SignWindowProcedure(Game *game, const Window *window, const WindowEvent *ev
 
 // Clear stale editors, error locations and transient map effects after City replacement. Requires the attached UI and
 // Drawing owners; refreshes charts and rebuilds the existing sign index when enabled.
-void ResetCityReplacementPresentation(City *city) {
-  Game *game = city->game;
-  ResetCitySignEditor(city);
-  if (game->ui->signs.indexed) RebuildCitySigns(city);
-  SetCityErrorTile(game, INVALID_TILE);
-  game->ui->error_tile_window = 0;
-  memset(game->drawing->cost_texts, 0, sizeof(game->drawing->cost_texts));
-  game->drawing->cost_texts_active = false;
-  memset(game->drawing->demolition_effects, 0, sizeof(game->drawing->demolition_effects));
-  game->drawing->demolition_active = false;
-  InvalidateCityInformation(game, CITY_UPDATE_ALL);
+
+const char *CitySignTooltipAt(Game *game, const Window *window, int x, int y) {
+  switch (window->kind) {
+  case CITY_CANVAS_SIGN_EDIT: {
+    CitySignControl control = CitySignControlAt(window, x, y);
+    if (control >= CITY_SIGN_COLOR_FIRST && control <= CITY_SIGN_COLOR_LAST) {
+      if (control == CITY_SIGN_COLOR_FIRST) return "Default green. Leaves more room for the sign name.";
+      if (strlen(game->ui->signs.name.text) >= CITY_OVERLAY_NAME_MAX_LENGTH)
+        return "Shorten the sign to 22 characters before choosing a color.";
+      return "Choose the sign's color. Press OK to apply it, or Cancel to keep the current color.";
+    }
+    if (control == CITY_SIGN_TEXT) return "Click to place the caret, or move it with Left and Right.";
+    if (control == CITY_SIGN_MOVE) return "Choose a new map location for this sign.";
+    if (control == CITY_SIGN_DELETE) return "Delete this sign.";
+    return "Edit this sign's text and color, then confirm or cancel the changes.";
+  }
+  case CITY_CANVAS_SIGN_LIST: return "Find signs by name. Click a sign to center the map; Ctrl-click to edit it.";
+  default: return NULL;
+  }
 }

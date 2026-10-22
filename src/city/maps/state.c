@@ -1,3 +1,4 @@
+#include "city/engine/clock.h"
 // TileInfo landscape state and rebuilding (zero-based bits):
 // flags[1..2] is a permanent region interpreted by City's terrain_climate: mixed preset 0 temperate, 1 arctic,
 // 2 tropical, 3 desert; desert preset 0/3 tropical, 1 desert, 2 rainforest. Uniform presets ignore these bits.
@@ -7,32 +8,76 @@
 // Family terrain[4..7], shared heights/slope, utility flags, overlays and underground follow their module contracts
 // and tile_storage.h. Recounting reads them without introducing another per-tile encoding.
 
+#include "city/infrastructure/utilities.h"
+#include "city/maps/terrain.h"
+#include "city/saveload/map_format.h"
+#include "city/maps/map.h"
 #include "city/infrastructure/bridges.h"
-#include "city/infrastructure/highways.h"
 #include "city/maps/ground.h"
 #include "city/maps/trees.h"
 #include "city/maps/water.h"
-#include "city/maps/tile_storage.h"
+#include "city/maps/layers.h"
+#include "city/maps/module.h"
+#include "city/maps/tables.h"
+#include "city/state.h"
+#include "city/presentation.h"
+#include "city/terrain/terrain.h"
 #include <assert.h>
-#include <stdlib.h>
 #include <string.h>
 
-#include "city/state.h"
-#include "city/engine/simulation.h"
-#include "city/growth/growth.h"
-#include "city/infrastructure/infrastructure.h"
-#include "city/maps/layers.h"
-#include "city/maps/tables.h"
-#include "city/maps/map.h"
-#include "city/tools/tools.h"
-#include "city/saveload/file.h"
-#include "city/saveload/map_format.h"
-#include "game/state.h"
-#include "audio/state.h"
-#include "assets/state.h"
-#include "city/terrain/terrain.h"
-#include "city/maps/map_types.h"
+// Map changes
 
+// Mark a changed tile and notify Drawing so each viewport can damage its old or new extent. Tile must be valid or
+// INVALID_TILE, which is ignored; other indices assert, and disabled/full-map tracking needs no extra notification.
+void InvalidateTile(City *city, TileIndex tile) {
+  if (tile == INVALID_TILE) return;
+  assert(tile < city->map_cell_count);
+  SimulationMapChanges *changes = &city->map_changes;
+  if (!changes->enabled || changes->full) return;
+  InvalidateCityInformation(city->game, CITY_UPDATE_MAP);
+  changes->tiles_changed = true;
+  PublishCityMapTileDamage(city, tile);
+}
+
+// Invalidate a rectangle beginning at a valid tile, clipping its right and bottom edges to the map. INVALID_TILE is
+// ignored; dimensions must describe the intended nonnegative area, and each included tile uses InvalidateTile.
+void InvalidateTileRange(City *city, TileIndex start, int width, int height) {
+  if (start == INVALID_TILE) return;
+  assert(start < city->map_cell_count);
+  if (!city->map_changes.enabled || city->map_changes.full) return;
+  width = IntMin(width, city->map_width - MapTileX(city, start));
+  height = IntMin(height, city->map_height - MapTileY(city, start));
+  for (int y = 0; y < height; ++y) {
+    TileIndex row = start + y * city->map_width;
+    for (int x = 0; x < width; ++x) InvalidateTile(city, row + x);
+  }
+}
+
+// Record one coarse-layer change for viewport-specific redraw. Layer must be a supported CityMapChangeLayer; disabled
+// tracking leaves damage state unchanged.
+void InvalidateMapLayer(City *city, CityMapChangeLayer layer) {
+  if (city->map_changes.enabled) {
+    city->map_changes.invalidated_layers |= 1 << layer;
+    InvalidateCityInformation(city->game, CITY_UPDATE_MAP | CITY_UPDATE_UTILITIES);
+  }
+}
+
+// Mark the whole map dirty when damage tracking is enabled. This supersedes later per-tile work; use it only for
+// changes whose drawing impact is actually map-wide.
+void InvalidateMap(City *city) {
+  if (city->map_changes.enabled) {
+    city->map_changes.full = true;
+    InvalidateCityInformation(city->game, CITY_UPDATE_MAP);
+  }
+}
+
+// Clear accumulated tile, layer and full-map changes, preserving the enabled policy. Presentation acknowledges
+// a published batch after every view; City also uses this reset when replacing map storage.
+void ClearSimulationMapChanges(SimulationMapChanges *changes) {
+  changes->tiles_changed = false;
+  changes->invalidated_layers = 0;
+  changes->full = false;
+}
 
 // State
 
@@ -55,138 +100,6 @@ void RecountCityTileStatistics(City *city) {
   }
   for (int kind = 0; kind < TK_COUNT; ++kind)
     statistics->count[kind] = counts[0][kind] + counts[1][kind] + counts[2][kind] + counts[3][kind];
-}
-
-// Compare two u32 source-order keys for sorting in ascending traversal order. Both arguments must point to readable
-// keys; returns negative, zero or positive without subtracting unsigned values.
-static int CompareWaterSourceOrder(const void *left, const void *right) {
-  u32 a = *(const u32 *)left, b = *(const u32 *)right;
-  return (a > b) - (a < b);
-}
-
-// Decode a linear traversal position into coordinates for the selected map rotation. Position must fit the map and
-// direction must be a supported rotation; no map or cursor state changes.
-static CityPoint WaterSourceAtPosition(const City *city, int position, int direction) {
-  int width = city->map_width, height = city->map_height;
-  int x = direction & 1 ? position % width : position / height;
-  int y = direction & 1 ? position / width : position % height;
-  if (direction == CITY_MAP_ROTATION_90 || direction == CITY_MAP_ROTATION_180) x = width - 1 - x;
-  if (direction == CITY_MAP_ROTATION_180 || direction == CITY_MAP_ROTATION_270) y = height - 1 - y;
-  return (CityPoint){x, y};
-}
-
-// Convert the completed water scan totals to percentage coverage and treatment capacity. Call only after
-// source/component traversal; zero demand produces full percentage coverage.
-static void FinishWaterNetwork(City *city) {
-  u32 total = city->infrastructure.water_total;
-  int statistic = city->statistics.count[TK_WATER_TREATMENT_PLANT];
-  city->infrastructure.capacity = (u32)(2000 * (statistic / 4)) >= city->infrastructure.water_percent;
-  city->infrastructure.water_percent = total ? 100 * city->infrastructure.water_percent / total : 100;
-}
-
-// Advance the section clearing, ordered source scan and connected-component water distribution. Budget controls
-// incremental progress and may be consumed by a whole section; false retains the City's cursor and true finalizes
-// coverage.
-bool StepCityWaterNetwork(City *city, int budget) {
-  CitySimulationWork *work = &city->simulation_work;
-  const int cells = city->map_cell_count, width = city->map_width;
-  if (work->stage == 0) {
-    if (!work->cursor) {
-      InvalidateMapLayer(city, CITY_MAP_CHANGE_FLAGS);
-      InvalidateMapLayer(city, CITY_MAP_CHANGE_POLICE_COVERAGE);
-      city->infrastructure.water_percent = city->infrastructure.water_total = 0;
-    }
-    const int sections = cells / CITY_MAP_SECTION_CELL_COUNT;
-    while (budget > 0 && work->cursor < sections) {
-      ClearCityUtilitySection(city, work->cursor++, true);
-      budget -= CITY_MAP_SECTION_CELL_COUNT;
-    }
-    if (work->cursor != sections) return false;
-    work->stage = 1;
-    work->cursor = 0;
-  }
-  int direction = city->geography.rotation;
-  while (budget > 0) {
-    if (work->stage == 2) {
-      if (!StepCityWaterComponent(city, &work->network, &budget)) return false;
-      work->stage = 1;
-    } else if (work->cursor < cells && direction < CITY_MAP_ROTATION_COUNT) {
-      int position = work->cursor++;
-      --budget;
-      CityPoint point = WaterSourceAtPosition(city, position, direction);
-      int x = point.x, y = point.y;
-      TileIndex cell = y * width + x;
-      const TileInfo *tp = &city->tile[cell];
-      int tile = tp->kind;
-      if ((tile == TK_WATER_PUMP || tile == TK_DESALINATION_PLANT) &&
-          (tp->flags & TF_POWERED) && !(tp->flags & TF_WATERED)) {
-        BeginCityUtilityTraversal(city, &work->network, x, y);
-        work->stage = 2;
-      }
-    } else {
-      FinishWaterNetwork(city);
-      return true;
-    }
-  }
-  return false;
-}
-
-// Use existing bounded workspace to visit sparse water sources in stock traversal order. Returns false when that
-// workspace cannot represent the scan, allowing the ordinary traversal path; it does not allocate another map plane.
-static bool ScanWaterSourcesInOrder(City *city, int direction) {
-  if (!city->water_source_order) return false;
-  // Bounded source-order workspace is disjoint from the route FIFO. Find
-  // sparse sources contiguously, then retain the stored simulation order.
-  u32 *sources = city->water_source_order;
-  int count = 0, capacity = IntMin(city->map_cell_count / 2, CITY_WATER_SOURCE_SORT_LIMIT);
-  for (TileIndex tile = 0; tile < city->map_cell_count; ++tile) {
-    const TileInfo *tp = &city->tile[tile];
-    if (tp->kind != TK_WATER_PUMP && tp->kind != TK_DESALINATION_PLANT) continue;
-    if (!(tp->flags & TF_POWERED)) continue;
-    // An unusually source-dense map uses the original scan without allocation.
-    if (count == capacity) return false;
-    CityPoint tile_point = MapTilePt(city, tile);
-    if (direction == CITY_MAP_ROTATION_90 || direction == CITY_MAP_ROTATION_180)
-      tile_point.x = city->map_width - 1 - tile_point.x;
-    if (direction == CITY_MAP_ROTATION_180 || direction == CITY_MAP_ROTATION_270)
-      tile_point.y = city->map_height - 1 - tile_point.y;
-    sources[count++] = direction & 1 ? tile_point.y * city->map_width + tile_point.x :
-        tile_point.x * city->map_height + tile_point.y;
-  }
-  if (count > 1) qsort(sources, count, sizeof(*sources), CompareWaterSourceOrder);
-  for (int i = 0; i < count; ++i) {
-    CityPoint point = WaterSourceAtPosition(city, sources[i], direction);
-    int x = point.x, y = point.y;
-    if (!(city->tile[y * city->map_width + x].flags & TF_WATERED))
-      ScanCityWaterComponent(city, x, y);
-  }
-  return true;
-}
-
-// Scan the map and traverse transport networks during phase 20. Requires initialized water layers and exclusive route
-// workspace; completes water distribution and stores final coverage metrics.
-void ScanCityMapPhase20(City *city) {
-  InvalidateMapLayer(city, CITY_MAP_CHANGE_FLAGS);
-  InvalidateMapLayer(city, CITY_MAP_CHANGE_POLICE_COVERAGE);
-  city->infrastructure.water_percent = 0;
-  city->infrastructure.water_total = 0;
-  for (int section = 0; section < city->map_cell_count / CITY_MAP_SECTION_CELL_COUNT; ++section)
-    ClearCityUtilitySection(city, section, true);
-  // Keep the stock source order: limited water is assigned in traversal order.
-  int direction = city->geography.rotation;
-  if (direction < CITY_MAP_ROTATION_COUNT && !ScanWaterSourcesInOrder(city, direction)) {
-    for (int position = 0; position < city->map_cell_count; ++position) {
-      CityPoint point = WaterSourceAtPosition(city, position, direction);
-      int x = point.x, y = point.y;
-      const TileInfo *tp = &city->tile[y * city->map_width + x];
-      int tile = tp->kind;
-      if ((tile == TK_WATER_PUMP || tile == TK_DESALINATION_PLANT) &&
-          (tp->flags & TF_POWERED) &&
-          !(tp->flags & TF_WATERED))
-        ScanCityWaterComponent(city, x, y);
-    }
-  }
-  FinishWaterNetwork(city);
 }
 
 // Recount industry border connections from the current surface and underground tiles. Requires normalized native
@@ -225,7 +138,7 @@ void RebuildLoadedCityMapState(City *city) {
   city->infrastructure.counter_b = 0;
   city->infrastructure.counter_c = 0;
   ScanPowerGridPhase(city);
-  ScanCityMapPhase20(city);
+  ScanCityWaterNetwork(city);
   city->indicators.zone_count = 0;
   for (int y = 0; y < city->map_height; ++y)
     for (int x = 0; x < city->map_width; ++x) {

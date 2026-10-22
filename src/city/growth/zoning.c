@@ -7,6 +7,17 @@
 // No extra growth-counter field is assigned here: tree/clear timing in zone[5..7] stays with those families,
 // and retained growth work stays in City. See tile_storage.h and buildings.c for the full shared/building layouts.
 
+#include "city/maps/labels.h"
+#include "city/infrastructure/lines.h"
+#include "city/infrastructure/networks.h"
+#include "city/infrastructure/transport.h"
+#include "city/saveload/map_format.h"
+#include "city/engine/random.h"
+#include "city/growth/growth.h"
+
+#include "city/economy/facilities.h"
+#include "city/events/news.h"
+#include "city/presentation.h"
 #include "city/maps/buildings.h"
 #include "city/infrastructure/power_lines.h"
 #include "city/military.h"
@@ -17,13 +28,156 @@
 #include <assert.h>
 
 #include "city/state.h"
-#include "city/engine/simulation.h"
-#include "city/growth/growth.h"
-#include "city/infrastructure/infrastructure.h"
 #include "city/maps/layers.h"
 #include "city/maps/map.h"
 #include "city/tools/tools.h"
 #include "city/maps/map_types.h"
+
+// Scheduled growth and maintenance
+
+// Read the low 16 bits of an initialized sector's funding rate for maintenance compatibility. Sector must index the
+// economy table; the read does not clamp or change its stored rate.
+static int ReadCityMaintenancePercent(const City *city, int sector) {
+  // Stock reads only the low word of the current funding rate.
+  return (u16)city->economy.sector[sector].current_rate;
+}
+
+// Process one scheduled row of every-fourth-tile growth candidates within a section. Coordinates must fit the
+// scheduled section; may consume RNG and mutate zoning, buildings and local effects in simulation order.
+static void ScanCityTileSectionRow(City *city, int first_x, int y,
+    bool large_city_effect_enabled) {
+  const int width = city->map_width;
+  TileIndex row = y * width;
+  for (int column = 0; column < CITY_MAP_SECTION_SIZE / 4; ++column) {
+    int x = first_x + column * 4;
+    const TileIndex cell_index = row + x;
+    TileInfo *tp = &city->tile[cell_index];
+    int zone = ReadCityZoneKind(tp);
+    if (zone) {
+      if (zone >= ZONE_RESERVED_FIRST) {
+        if (NextCityMapRandomModulo(city, 128) == 0) {
+          int underground = ReadUnderground(city, cell_index);
+          if (IsSubwayTile(underground)) {
+            int maintenance = ReadCityMaintenancePercent(city, CITY_ECONOMY_SUBWAY);
+            if (maintenance != 100 && Sc2kCrtRandRange(city, 100) >= maintenance) {
+              if (underground == TUK_SUBWAY_ACCESS) {
+                BulldozeCityTile(city, cell_index, false);
+              } else {
+                SetUndergroundTile(city, cell_index, TUK_CLEAR);
+              }
+            }
+          }
+        }
+        continue;
+      }
+      GrowCityZonedTile(city, cell_index, large_city_effect_enabled);
+    } else if (CityTileStatisticAt(city, cell_index) >= TKL_ROAD_EAST_WEST) {
+      // Water pylons also take a maintenance draw, despite sharing land-line kinds.
+      u32 seed = city->random.map;
+      int next = AdvanceCityMapSeed(seed);
+      city->random.map = next;
+      int tile = tp->kind;
+      int decay_sector = -1;
+      if (IsTileKindRoadRoute(tile))
+        decay_sector = CITY_ECONOMY_ROADS;
+      else if (IsTileKindRailRoute(tile))
+        decay_sector = CITY_ECONOMY_RAIL;
+      if (!IsTileKindBuilding(tile) && (next & 0x7F) == 0 &&
+          (IsTileKindBridge(tile) ||
+              IsCityWaterPowerLine(tp))) {
+        int maintenance = ReadCityMaintenancePercent(city, CITY_ECONOMY_BRIDGES);
+        if (maintenance != 100 && (u32)city->weather.wind + Sc2kCrtRandRange(city, 50) >= maintenance) {
+          CenterCityMapOnEvent(city, x, y);
+          BulldozeCityTile(city, cell_index, true);
+          InsertRankedCityEvent(city, CITY_NEWS_BRIDGE_COLLAPSE, 0);
+        }
+      } else if (!IsTileKindBuilding(tile) && (next & 0x7F) == 0 && decay_sector != -1) {
+        int percentage = ReadCityMaintenancePercent(city, decay_sector);
+        if (percentage == 100 || Sc2kCrtRandRange(city, 100) < percentage)
+          continue;
+        ReplaceCityTileVariant(city, cell_index, TK_RUBBLE, Sc2kCrtRand(city) & 3);
+        tp->flags &= ~TF_POWERABLE;
+        RefreshCityPowerConnections(city, cell_index);
+      } else if (!IsTileKindBuilding(tile) && (next & 0x7F) == 0 &&
+          (tile == TK_HIGHWAY || tile == TK_HIGHWAY_POWER ||
+              IsTileKindMultiHighway(tile)) &&
+          !(y & 1) && !(x & 1)) {
+        int percentage = ReadCityMaintenancePercent(city, CITY_ECONOMY_HIGHWAYS);
+        if (percentage == 100 || Sc2kCrtRandRange(city, 100) < percentage)
+          continue;
+        static const u8 cell_y_offsets[4] = {0, 1, 0, 1};
+        static const u8 cell_x_offsets[4] = {0, 0, 1, 1};
+        for (int cell = 0; cell < 4; ++cell) {
+          int cell_x = x + cell_x_offsets[cell];
+          int cell_y = y + cell_y_offsets[cell];
+          TileIndex cell_tile = cell_y * width + cell_x;
+          if (HasTileWater(&city->tile[cell_tile]))
+            ReplaceCityTileAndStatistics(city, cell_tile, ReadCityWaterGroundKind(&city->tile[cell_tile]));
+          else ReplaceCityTileVariant(city, cell_tile, TK_RUBBLE, Sc2kCrtRand(city) & 3);
+          RefreshCityPowerConnections(city, cell_tile);
+        }
+      }
+      if ((tile == TK_RAIL_STATION || tile == TK_MARINA) &&
+          (tp->flags & TF_POWERED)) {
+        if (NextCityMapRandomModulo(city, 4) == 0 &&
+            city->statistics.count[tile] / (tile == TK_RAIL_STATION ? 4 : 9) >
+                (tile == TK_RAIL_STATION ? city->disasters.tile237_count : city->disasters.tile248_count)) {
+          if (tile == TK_RAIL_STATION)
+            TrySpawnCityStationTrains(city, cell_index);
+          else
+            TrySpawnCityMarinaSailboats(city, cell_index);
+        }
+      } else if (IsTileKindArcology(tile) && tile != TK_BRAUN_LLAMA_DOME &&
+          ReadFootprintCorners(city, cell_index) == CITY_ZONE_CORNER_3) {
+        int overlay = ReadCityFacilityOverlay(city, cell_index);
+        if (IsCityFacilityOverlay(overlay)) {
+          CityAnnualFacilityRecord *facility = CityFacilityRecordAt(city, CityFacilityOverlaySlot(overlay));
+          if (IsTileKindArcology(facility->type) && facility->type != TK_BRAUN_LLAMA_DOME) {
+            int sx = x / 2;
+            int sy = y / 2;
+            int score = (city->half[sy * width / 2 + sx].land_value >> 5) -
+                (city->half[sy * width / 2 + sx].crime >> 5) -
+                (city->half[sy * width / 2 + sx].pollution >> 5) + 12;
+            if (!(tp->flags & TF_POWERED))
+              score /= 2;
+            if (!(tp->flags & TF_WATERED))
+              score /= 2;
+            score = IntClamp(score, 0, 12);
+            facility->age = (u8)score;
+          }
+        }
+      }
+    }
+  }
+}
+
+// Quarter-grid scan, growth, tile decay, and special-zone underlay decay. Batch offsets/count must fit the scheduled
+// quarter; growth effects and random draws follow its stable traversal order.
+void ScanCityTileBatch(City *city, int quarter_x, int quarter_y,
+    int first, int count, bool large_city_effect_enabled) {
+  InvalidateMapLayer(city, CITY_MAP_CHANGE_TILE);
+  InvalidateMapLayer(city, CITY_MAP_CHANGE_ZONE);
+  InvalidateMapLayer(city, CITY_MAP_CHANGE_FLAGS);
+  InvalidateMapLayer(city, CITY_MAP_CHANGE_TRAFFIC_DENSITY);
+  int direction_mask = kTileScanMaskTable[city->geography.rotation];
+  SetCityTileScanPresentation(city, direction_mask);
+  const int width = city->map_width;
+  const int columns = width / 4;
+  enum { kSectionColumns = CITY_MAP_SECTION_SIZE / 4 };
+  for (int position = first; position < first + count; position += kSectionColumns) {
+    int first_x = position % columns * 4 + quarter_x;
+    int y = position / columns * 4 + quarter_y;
+    ScanCityTileSectionRow(city, first_x, y, large_city_effect_enabled);
+  }
+}
+
+// Scan the selected interleaved quarter of City tiles for growth and decline. Quarter offsets must be supported; this
+// executes simulation effects and cannot be substituted for a read-only map query.
+void ScanQuarterCityTiles(City *city, int quarter_x, int quarter_y) {
+  bool large_city_effect = ((city->fixes & (1 << CITY_FIX_RESTORED_CHEATS)) && city->cheats.church == 2) ||
+      (u32)(2500 * city->statistics.count[TK_CHURCH]) < city->indicators.population;
+  ScanCityTileBatch(city, quarter_x, quarter_y, 0, city->map_cell_count / 16, large_city_effect);
+}
 
 // Zoning
 
@@ -61,10 +215,10 @@ void GrowCityZonedTile(City *city, TileIndex tile, bool large_city_effect_enable
         (tp->flags & TF_POWERED)) {
       int event_draw = Sc2kCrtRandRange(city, 10);
       if (event_draw < 4) {
-        TrySpawnCityEventType2(city, tile);
+        TrySpawnCityHelicopter(city, tile);
       } else {
         int axis = 2 * (ReadBuildingOrientation(city, tile) & 1);
-        TrySpawnCityEventType1(city, tile, axis);
+        TrySpawnCityAirplane(city, tile, axis);
       }
     }
     return;
@@ -627,8 +781,6 @@ const TransportNeighborOffsets kTransportNeighborOffsets = {{
   {2, 1}, {2, -1}, {-2, 1}, {-2, -1}
 }};
 
-
-
 const u8 kGrowthBaseTable[21] = {
   TK_CLEAR, TK_LOWER_CLASS_HOMES_FIRST,
   TK_CHEAP_APARTMENTS, TK_NICE_APARTMENTS_2X2_2,
@@ -655,8 +807,6 @@ const u8 kGrowthCornerPatterns[16] = {
 const u16 kZoneCompatibilityMask[16] = {
   65535, 65528, 65528, 65510, 65510, 65438, 65438, 0, 1, 1, 3, 6, 12, 0, 1803, 3342
 };
-
-
 
 const u8 kTileScanMaskTable[4] = {
   128, 16, 32, 64

@@ -1,16 +1,32 @@
+#include "city/economy/budget.h"
+#include "city/engine/random.h"
 #include "city/economy/types.h"
 #include "city/engine/city_types.h"
 #include "city/maps/tile_storage.h"
 #include "city/presentation.h"
-#include "audio/audio.h"
+#include "game/audio.h"
 #include "city/economy/economy.h"
 #include "city/engine/questions.h"
-#include "city/engine/simulation.h"
+#include "game/state.h"
 #include "city/maps/layers.h"
 #include "city/state.h"
 
-// Select value-only budget advice from current funding and population metrics. Category must be supported; the result
-// borrows no text or UI storage and loading resources or opening a dialog belongs to presentation.
+// Prepare cursor and music for a due manual annual budget. Retained comparison callers preserve their minimized
+// gate; normal City execution consumes the selection draw independently of local window state.
+bool PrepareCityAnnualBudget(City *city) {
+  if (city->indicators.auto_budget_enabled || (city->game->observation && IsCityPresentationMinimized(city)))
+    return false;
+  SetCityCursor(city, CITY_CURSOR_REWARDS, 0);
+  StopAllCitySound(city->game);
+  static const u16 kMusicTracks[] = {
+    CITY_MUSIC_TRACK_16, CITY_MUSIC_TRACK_05, CITY_MUSIC_TRACK_02, CITY_MUSIC_TRACK_10,
+  };
+  PlayCityEventMusicById(city->game, kMusicTracks[NextCityMapRandomModulo(city, 4)]);
+  return true;
+}
+
+// Select advice from current funding and population metrics. Adequate health funding consumes one CRT draw to choose
+// a suggested policy; other branches leave RNG unchanged. Presentation owns loading text and opening the advisor.
 CityBudgetAdvice SelectCityBudgetAdvisorMessage(City *city, CityBudgetCategory category) {
   CityEconomyMonths *economy = &city->economy;
   u32 population = city->indicators.population;

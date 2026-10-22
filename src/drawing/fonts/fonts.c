@@ -1,11 +1,131 @@
 #include "base/byte_order.h"
 #include "drawing/fonts/fonts.h"
+#include "base/text.h"
 
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "drawing/drawing_internal.h"
+#include "drawing/raster/canvas_raster_internal.h"
+
+// The baked canvas atlas uses Windows-1252 glyph indices; native strings remain UTF-8.
+u8 ReadCityFontCharacter(const char **text) {
+  return EncodeWindows1252Character(ReadUtf8Character(text));
+}
+
+// Measure the fixed canvas font in logical pixels; scaling and wrapping belong to the caller.
+i32 CanvasFontTextWidth(const char *text, const CityCanvasGlyph *font) {
+  i32 width = 0;
+  while (*text != '\0')
+    width += font[ReadCityFontCharacter(&text)].advance;
+  return width;
+}
+
+i32 CanvasTextWidth(const char *text) {
+  return CanvasFontTextWidth(text, kCanvasFont);
+}
+
+static const CityCanvasGlyph *CanvasNextGlyph(const char **text) {
+  return &kCanvasFont[ReadCityFontCharacter(text)];
+}
+
+void CanvasTextFont(Canvas *canvas, i32 x, i32 y, const char *text, u32 color, i32 scale,
+    const CityCanvasGlyph *font) {
+  if (font == kCanvasFont && scale == 1 && canvas->interface_font && canvas->interface_font->ready) {
+    DrawCityInterfaceText(canvas->interface_font, canvas, x, y, text, color, false);
+    return;
+  }
+  while (*text != '\0') {
+    const CityCanvasGlyph *glyph = &font[ReadCityFontCharacter(&text)];
+    for (i32 row = 0; row < glyph->height; ++row)
+      for (i32 bit = 0; bit < glyph->width; ++bit)
+        if ((glyph->rows[row] & (1u << bit)) != 0) {
+          i32 left = x + (glyph->offset_x + bit) * scale;
+          i32 top = y + (glyph->offset_y + row) * scale;
+          CanvasFill(canvas, left, top, left + scale, top + scale, color);
+        }
+    x += glyph->advance * scale;
+  }
+}
+
+static void CanvasTextScaled(Canvas *canvas, i32 x, i32 y, const char *text, u32 color, i32 scale) {
+  CanvasTextFont(canvas, x, y, text, color, scale, kCanvasFont);
+}
+
+void CanvasTextAt(Canvas *canvas, i32 x, i32 y, const char *text, u32 color) {
+  CanvasTextScaled(canvas, x, y, text, color, 1);
+}
+
+i32 CanvasTextWrappedScaled(Canvas *canvas, i32 x, i32 y, i32 right, i32 bottom,
+    const char *text, u32 color, i32 scale, i32 line_height, i32 alignment) {
+  i32 available = (right - x) / scale;
+  if (available < 1)
+    return 0;
+  i32 start_y = y;
+  CityRect previous_clip = {0};
+  if (canvas != NULL) {
+    previous_clip = canvas->clip;
+    canvas->clip = IntersectCityRects(canvas->clip, (CityRect){x, y, right, bottom});
+  }
+  // Leave room for accents above the font's ordinary eight-pixel ascender.
+  y += 2 * scale;
+  line_height = IntMax(line_height, 12 * scale);
+  while (*text != '\0' && y + 10 * scale <= bottom) {
+    char line[256];
+    i32 length = 0;
+    i32 width = 0;
+    const char *last_space = NULL;
+    i32 last_space_length = 0;
+    while (*text == ' ') ++text;
+    while (*text != '\0' && *text != '\n' && *text != '\r') {
+      const char *next = text;
+      const CityCanvasGlyph *glyph = CanvasNextGlyph(&next);
+      i32 bytes = (i32)(next - text);
+      if (width + glyph->advance > available || length + bytes >= (i32)sizeof(line)) {
+        if (last_space != NULL) {
+          text = last_space + 1;
+          length = last_space_length;
+        } else if (length == 0) {
+          text = next;
+        }
+        break;
+      }
+      if (*text == ' ') {
+        last_space = text;
+        last_space_length = length;
+      }
+      memcpy(line + length, text, (size_t)bytes);
+      length += bytes;
+      width += glyph->advance;
+      text = next;
+    }
+    line[length] = '\0';
+    i32 line_x = x;
+    i32 line_width = CanvasTextWidth(line) * scale;
+    if (alignment == CITY_CANVAS_TEXT_CENTER) line_x += (right - x - line_width) / 2;
+    else if (alignment == CITY_CANVAS_TEXT_RIGHT) line_x = right - line_width;
+    if (canvas != NULL)
+      CanvasTextScaled(canvas, line_x, y, line, color, scale);
+    y += line_height;
+    if (*text == '\r') {
+      ++text;
+      if (*text == '\n') ++text;
+    } else if (*text == '\n') {
+      ++text;
+    }
+  }
+  if (canvas != NULL)
+    canvas->clip = previous_clip;
+  return y - start_y;
+}
+
+void CanvasTextWrapped(Canvas *canvas, i32 x, i32 y, i32 right, i32 bottom,
+    const char *text, u32 color) {
+  CanvasTextWrappedScaled(canvas, x, y, right, bottom, text, color, 1, 11, 0);
+}
+
+void CanvasTextRight(Canvas *canvas, i32 right, i32 y, const char *value, u32 color) {
+  CanvasTextAt(canvas, right - CityInterfaceTextWidth(canvas->interface_font, value), y, value, color);
+}
 
 // Interface Font
 
@@ -18,8 +138,8 @@ int CityInterfaceTextWidth(const CityInterfaceFont *font, const char *text) {
 
 static int CityInterfaceCharacterWidth(const CityInterfaceFont *font, int character) {
   if (font && font->ready) return font->glyphs[0][character].advance;
-  char text[2] = {(char)character, 0};
-  return CanvasTextWidth(text);
+  // ReadCityFontCharacter already resolved the Windows-1252 glyph index.
+  return kCanvasFont[character].advance;
 }
 
 int CityInterfaceTextPrefixWidth(const CityInterfaceFont *font, const char *text, int bytes) {
@@ -228,6 +348,23 @@ void DrawCityInterfaceClose(const CityInterfaceFont *font, Canvas *canvas, CityR
 
 // Overlay Font
 
+// Draw an empty box for unavailable characters, without embedding a second
+// pixel font. The packaged OpenTTD Sans rasters supply actual labels and metrics.
+void InitializeCityOverlayFont(CityOverlayFont *font) {
+  memset(font, 0, sizeof(*font));
+  for (int size = 0; size < CITY_OVERLAY_FONT_COUNT; ++size) {
+    for (int index = 0; index < CITY_OVERLAY_GLYPH_COUNT; ++index) {
+      CityOverlayGlyph *glyph = &font->glyphs[size * CITY_OVERLAY_GLYPH_COUNT + index];
+      glyph->advance = glyph->paint_advance = 6 + size;
+      if (index == 0) continue; // Space has no ink.
+      int width = 4 + size, height = 8 + size * 2;
+      for (int row = 2; row < height + 2; ++row)
+        glyph->rows[row] = row == 2 || row == height + 1 ?
+            (1 << width) - 1 : 1 | (1 << (width - 1));
+    }
+  }
+}
+
 const CityOverlayGlyph *CityOverlayFontGlyphs(const CityOverlayFont *font, int zoom) {
   if (zoom < 0 || zoom >= CITY_OVERLAY_FONT_COUNT) zoom = 0;
   return font->glyphs + zoom * CITY_OVERLAY_GLYPH_COUNT;
@@ -247,6 +384,7 @@ int CityPublicationTextWidth(const CityInterfaceFont *font, const char *text, in
   int width = 0;
   while (*text && (bytes < 0 || text - start < bytes)) {
     int code = ReadCityFontCharacter(&text);
+    if (bytes >= 0 && text - start > bytes) break;
     const u8 *glyph = PublicationGlyph(font, face, 10, code);
     width += glyph[10] | glyph[11] << 8;
   }
@@ -257,11 +395,21 @@ void DrawCityPublicationText(const CityInterfaceFont *font, Canvas *canvas, int 
     const char *text, int bytes, CityPublicationFace face, int size, u32 color) {
   if (!font || !font->newspaper_atlas) {
     char line[2048];
-    int length = bytes < 0 ? (int)strlen(text) : bytes;
-    length = IntMin(length, sizeof(line) - 1);
-    memcpy(line, text, length);
-    line[length] = 0;
-    DrawCityInterfaceText(font, canvas, x, y, line, color, false);
+    int remaining = bytes;
+    // CanvasTextAt selects the canvas font when the supplied interface font is unavailable.
+    const CityInterfaceFont *fallback = font && font->ready ? font : canvas->interface_font;
+    while (*text && remaining != 0) {
+      int limit = sizeof(line) - 1;
+      if (remaining > 0) limit = IntMin(limit, remaining);
+      int length = Utf8PrefixBytes(text, limit);
+      if (!length) break;
+      memcpy(line, text, length);
+      line[length] = 0;
+      DrawCityInterfaceText(font, canvas, x, y, line, color, false);
+      text += length;
+      if (remaining > 0) remaining -= length;
+      if (*text && remaining != 0) x += CityInterfaceTextWidth(fallback, line);
+    }
     return;
   }
   CanvasRaster r = CanvasRasterView(canvas);
@@ -276,6 +424,7 @@ void DrawCityPublicationText(const CityInterfaceFont *font, Canvas *canvas, int 
   const char *start = text;
   while (*text && (bytes < 0 || text - start < bytes)) {
     int code = ReadCityFontCharacter(&text);
+    if (bytes >= 0 && text - start > bytes) break;
     const u8 *glyph = PublicationGlyph(font, face, variant, code);
     int left = CanvasRasterEdge(x * 2048 + position * size, r.origin_x * 2048,
         r.numerator, r.denominator * 2048) + r.offset_x + (i16)(glyph[6] | glyph[7] << 8) * pixels / source_size;

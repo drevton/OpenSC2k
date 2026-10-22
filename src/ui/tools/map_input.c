@@ -1,47 +1,111 @@
-#include "city/infrastructure/bridges.h"
-#include "city/infrastructure/highways.h"
-#include "city/maps/trees.h"
-#include "audio/types.h"
-#include "city/engine/city_types.h"
-#include "city/infrastructure/types.h"
-#include "city/maps/tile_storage.h"
-#include "city/presentation.h"
-#include "city/tools/types.h"
-#include "drawing/maps/map_view.h"
-#include "ui/tools/types.h"
-#include "ui/tools/tools.h"
+#include "game/audio.h"
+#include "city/infrastructure/lines.h"
+#include "city/infrastructure/spans.h"
+#include "city/maps/terrain.h"
 #include <stdlib.h>
 #include <string.h>
 
-#include "audio/audio.h"
+#include "assets/state.h"
+#include "audio/backend.h"
+#include "audio/state.h"
+#include "audio/types.h"
 #include "city/economy/economy.h"
+#include "city/engine/city_types.h"
 #include "city/engine/commands.h"
-#include "city/engine/initialization.h"
 #include "city/engine/simulation.h"
 #include "city/events/events.h"
-#include "city/infrastructure/infrastructure.h"
+#include "city/infrastructure/bridges.h"
+#include "city/infrastructure/highways.h"
+#include "city/infrastructure/types.h"
 #include "city/maps/layers.h"
 #include "city/maps/map.h"
 #include "city/maps/tables.h"
+#include "city/maps/tile_storage.h"
+#include "city/maps/trees.h"
+#include "city/presentation.h"
 #include "city/state.h"
 #include "city/tools/tools.h"
-#include "game/errors.h"
-#include "game/state.h"
-#include "audio/state.h"
-#include "drawing/state.h"
-#include "assets/state.h"
-#include "ui/state.h"
-#include "audio/backend.h"
-#include "ui/input.h"
-#include "ui/map.h"
-#include "drawing/drawing.h"
+#include "city/tools/types.h"
+#include "drawing/bitmaps.h"
+#include "drawing/maps/cost_labels.h"
 #include "drawing/maps/map_render.h"
-#include "drawing/maps/tables.h"
+#include "drawing/maps/map_view.h"
 #include "drawing/maps/placement.h"
+#include "drawing/maps/tables.h"
+#include "drawing/palette.h"
+#include "drawing/state.h"
+#include "game/commands.h"
+#include "game/errors.h"
+#include "game/palette.h"
+#include "game/state.h"
+#include "ui/cursor/cursor.h"
 #include "ui/charts/charts.h"
 #include "ui/commands.h"
 #include "ui/dialogs/dialogs.h"
+#include "ui/dialogs/information.h"
+#include "ui/dialogs/name_editor.h"
+#include "ui/input.h"
+#include "ui/map.h"
+#include "ui/state.h"
 #include "ui/text/text.h"
+#include "ui/tools/cost_labels.h"
+#include "ui/tools/tools.h"
+#include "ui/tools/types.h"
+#include "ui/windows/windows.h"
+
+// The tile renderer chooses this marker's layer; later tiles still occlude it in painter order.
+void DrawCityMapPlacementTile(City *city, TileIndex tile) {
+  Drawing *drawing = city->game->drawing;
+  if (!drawing->paint_placement || drawing->sprite_damage_bounds) return;
+  const CityCanvasPlacementSelection *placement = &city->game->ui->desktop.placement;
+  int first = 0, end = placement->count;
+  while (first < end) {
+    int middle = first + (end - first) / 2;
+    if (placement->cells[middle].tile < tile) first = middle + 1;
+    else end = middle;
+  }
+  bool selected = first < placement->count && placement->cells[first].tile == tile;
+  if (city->game->ui->error_tile_window && city->game->ui->error_tile == tile && (!selected || placement->point))
+    DrawCityMapPlacementMarker(city, tile, false, true);
+  if (selected)
+    DrawCityMapPlacementMarker(city, tile, placement->point, false);
+}
+
+static void InvalidateCityMapSelectionTile(City *city, int x, int y) {
+  TileIndex tile = MapTileXYOrInvalid(city, x, y);
+  InvalidateTile(city, tile);
+}
+
+// Invalidate an inclusive, normalized selection footprint.
+static void InvalidateCityMapSelectionRectangle(City *city, int first_x, int first_y,
+    int last_x, int last_y) {
+  if (!IsMapCoordinateValid(city, first_x, first_y) || !IsMapCoordinateValid(city, last_x, last_y))
+    return;
+  if (last_y < first_y) {
+    int swap = first_y;
+    first_y = last_y;
+    last_y = swap;
+  }
+  if (last_x < first_x) {
+    int swap = first_x;
+    first_x = last_x;
+    last_x = swap;
+  }
+  for (int y = first_y; y <= last_y; ++y) {
+    for (int x = first_x; x <= last_x; ++x)
+      InvalidateCityMapSelectionTile(city, x, y);
+  }
+}
+
+// Schedule erasure of the previous selection footprint.
+void FlushCityMapSelectionRedraw(City *city) {
+  Drawing *drawing = city->game->drawing;
+  if (drawing->map_state.redraw_state == 0)
+    return;
+  CityMapSelectionBounds *bounds = &drawing->map_state.selection_bounds;
+  InvalidateCityMapSelectionRectangle(city, bounds->min_x, bounds->min_y, bounds->max_x, bounds->max_y);
+  drawing->map_state.redraw_state = 0;
+}
 
 // UI owns the retained selection and scratch array; Drawing supplies exact marker bounds.
 bool ReserveCityPlacementCells(CityCanvasDesktop *desktop, int count) {
@@ -61,9 +125,28 @@ bool ReserveCityPlacementCells(CityCanvasDesktop *desktop, int count) {
   return true;
 }
 
-static int ComparePlacementTiles(const void *left, const void *right) {
-  const CityCanvasPlacementCell *a = left, *b = right;
-  return (a->tile > b->tile) - (a->tile < b->tile);
+// Children already satisfy the heap order. Move this parent down until it is at least as large as both children.
+static void SiftCityPlacementCells(CityCanvasPlacementCell *cells, int root, int count) {
+  CityCanvasPlacementCell value = cells[root];
+  for (int child = 2 * root + 1; child < count; child = 2 * root + 1) {
+    if (child + 1 < count && cells[child].tile < cells[child + 1].tile) ++child;
+    if (value.tile >= cells[child].tile) break;
+    cells[root] = cells[child];
+    root = child;
+  }
+  cells[root] = value;
+}
+
+// Placement records contain only tile keys. A max heap produces ascending order without a comparator callback,
+// recursion or extra storage; duplicate keys remain in the selection.
+static void SortCityPlacementCells(CityCanvasPlacementCell *cells, int count) {
+  for (int root = count / 2 - 1; root >= 0; --root) SiftCityPlacementCells(cells, root, count);
+  for (int end = count - 1; end > 0; --end) {
+    CityCanvasPlacementCell value = cells[0];
+    cells[0] = cells[end];
+    cells[end] = value;
+    SiftCityPlacementCells(cells, 0, end);
+  }
 }
 
 // Returns whether the visible selection changed. Cells use the City TileIndex layout.
@@ -74,8 +157,10 @@ bool SetCityCanvasPlacementCells(const City *city, CityCanvasDesktop *desktop, c
   if (!ReserveCityPlacementCells(desktop, count)) return false;
   const Drawing *drawing = city->game->drawing;
   CityRect bounds = {0};
+  bool ordered = true;
   for (int i = 0; i < count; ++i) {
     if (!IsMapTileValid(city, cells[i].tile)) return false;
+    if (i && cells[i - 1].tile > cells[i].tile) ordered = false;
     CityRect cell = CityMapPlacementBounds(city, cells[i].tile, point);
     if (!i) bounds = cell;
     else {
@@ -87,7 +172,7 @@ bool SetCityCanvasPlacementCells(const City *city, CityCanvasDesktop *desktop, c
     if (cells != desktop->placement.scratch)
       memcpy(desktop->placement.scratch, cells, (size_t)count * sizeof(*cells));
     cells = desktop->placement.scratch;
-    qsort(desktop->placement.scratch, count, sizeof(*cells), ComparePlacementTiles);
+    if (!ordered) SortCityPlacementCells(desktop->placement.scratch, count);
   }
   bool same_cells = count == desktop->placement.count;
   for (int i = 0; same_cells && i < count; ++i)
@@ -117,66 +202,19 @@ bool SetCityCanvasPlacementCells(const City *city, CityCanvasDesktop *desktop, c
 
 // Retained drag presentation owns the temporary drawing target. City owns the counters and traversal;
 // prepare the clip before publishing damage and clear it after the complete City update.
-void UpdateInfrastructureLinePlacementPreview(City *city, CityMapViewConfig *view, int x,
-    int y, int end_x, int end_y) {
+void UpdateInfrastructureLinePlacementPreview(City *city, CityMapViewConfig *view, TileIndex start, TileIndex end) {
   Drawing *drawing = city->game->drawing;
-  CityPaintBuffer pixels = BorrowCityMapViewPixels(drawing, view);
   CityCompactHighwayPlan compact;
-  TileIndex start = MapTileXY(city, x, y), end = MapTileXY(city, end_x, end_y);
   bool compact_preview = PlanCityCompactHighway(city, start, end, -1, &compact);
   if (!compact_preview && GetTransportSpanCompatibilityMask(city, start) == CITY_SPAN_COMPATIBILITY_INVALID)
     return;
-  PrepareCityMapClippedPaint(drawing, pixels, view->paint_pixel_stride, view->paint_mode_word, &view->view_rect);
+  PrepareCityMapPaintClip(drawing, view->view_rect);
   UpdateCityHighwayPreview(city, start, end, compact_preview ? &compact : NULL);
   ResetCityMapPaintClip(drawing);
 }
 
 // Pointer gestures belong to UI. City operations receive world locations/options;
 // this boundary alone selects the main camera for the retained input adapters.
-
-// Choose the pointer cursor from the mode, tool, and modifier keys.
-u32 UpdateCityMapCursor(Game *game) {
-  City *city = game->city;
-  CityInterfaceState *ui = game->ui;
-  static const u8 kCityToolCursors[20] = {
-      CITY_CURSOR_DEMOLISH, CITY_CURSOR_TREE, CITY_CURSOR_DISPATCH, CITY_CURSOR_POWER, CITY_CURSOR_WATER_UTILITY,
-      CITY_CURSOR_REWARDS, CITY_CURSOR_ROAD, CITY_CURSOR_RAIL, CITY_CURSOR_PORT, CITY_CURSOR_RESIDENTIAL,
-      CITY_CURSOR_COMMERCIAL, CITY_CURSOR_INDUSTRIAL, CITY_CURSOR_EDUCATION, CITY_CURSOR_CIVIC,
-      CITY_CURSOR_RECREATION, CITY_CURSOR_SIGN, CITY_CURSOR_QUERY, CITY_CURSOR_CENTER, CITY_CURSOR_ARROW,
-      CITY_CURSOR_ARROW};
-  static const u8 kCityTerrainToolCursors[11] = {
-      CITY_CURSOR_ARROW, CITY_CURSOR_RAISE_TERRAIN, CITY_CURSOR_LOWER_TERRAIN, CITY_CURSOR_STRETCH_TERRAIN,
-      CITY_CURSOR_LEVEL_TERRAIN, CITY_CURSOR_WATER, CITY_CURSOR_RIVER, CITY_CURSOR_TREE, CITY_CURSOR_FOREST,
-      CITY_CURSOR_CENTER, CITY_CURSOR_PORT};
-
-  int cursor_id = CITY_CURSOR_ARROW;
-  if (ui->pointer_mode == CITY_MAP_POINTER_HOVER) {
-    if (city->settings.timer_mode == CITY_TIMER_STOPPED) {
-      cursor_id = IsCtrlKeyPressed(ui) ? CITY_CURSOR_CENTER : kCityTerrainToolCursors[ui->terrain_tool];
-    } else if (city->settings.timer_mode >= CITY_TIMER_RUNNING &&
-        city->settings.timer_mode <= CITY_TIMER_EVENT) {
-      if (IsCtrlKeyPressed(ui))
-        cursor_id = CITY_CURSOR_DEMOLISH;
-      else if (IsShiftKeyPressed(ui))
-        cursor_id = CITY_CURSOR_QUERY;
-      else if (ui->tool_group == CITY_TOOL_GROUP_TREE_WATER &&
-          (i16)ui->selection.value[CITY_TOOL_GROUP_TREE_WATER] == CITY_TREE_WATER_WATER)
-        cursor_id = CITY_CURSOR_WATER;
-      else
-        cursor_id = kCityToolCursors[ui->tool_group];
-    }
-  }
-  CityRect window_rect = {0};
-  int pointer_x = 0;
-  int pointer_y = 0;
-  ReadCityMapCursorRect(city->game, &window_rect);
-
-  ReadCityMapCursorPosition(city->game, &pointer_x, &pointer_y);
-  if (pointer_x < window_rect.left || pointer_x >= window_rect.right ||
-      pointer_y < window_rect.top || pointer_y >= window_rect.bottom)
-    return 0;
-  return SetCityCursor(city, cursor_id, 0);
-}
 
 // Update the tool footprint at the view's saved pointer position.
 void UpdateCityMapToolPreview(Game *game) {
@@ -279,10 +317,9 @@ TileIndex TrackCityPlacementDrag(Game *game, CityMapViewConfig *view, TileIndex 
   CityInterfaceState *ui = game->ui;
   int x = MapTileX(city, start), y = MapTileY(city, start);
   bool zone = kind == CITY_DRAG_ZONE, transport = kind == CITY_DRAG_TRANSPORT;
-  int end_x = x, end_y = y;
+  TileIndex end = start;
   if (zone) {
-    TileIndex tile = MapTileXYOrInvalid(city, x, y);
-    if (tile != INVALID_TILE && HasTileWater(&city->tile[tile]))
+    if (IsMapTileValid(city, start) && HasTileWater(&city->tile[start]))
       return INVALID_TILE;
   } else {
     view->pointer_command_stage = 0;
@@ -291,7 +328,7 @@ TileIndex TrackCityPlacementDrag(Game *game, CityMapViewConfig *view, TileIndex 
   }
   FlushCityMapSelectionRedraw(city);
   if (transport) {
-    UpdateInfrastructureLinePlacementPreview(city, view, x, y, x, y);
+    UpdateInfrastructureLinePlacementPreview(city, view, start, start);
   } else if (!PrepareCityZonePreview(city, start, start)) {
     if (!zone) {
       ReportCityCommandResult(city, CITY_COMMAND_COST_BLOCKED);
@@ -305,9 +342,8 @@ TileIndex TrackCityPlacementDrag(Game *game, CityMapViewConfig *view, TileIndex 
     view->pointer_command_stage = 0;
     ui->input_loop_active = 1;
   }
-  int screen_x, screen_y;
-  CityMapTileToScreen(city, map_view, x, y, &screen_x, &screen_y);
-  PresentCityPlacementDragCost(city, view, unit_cost, screen_x, screen_y);
+  CityPoint screen = CityMapTileToScreen(city, map_view, (CityPoint){x, y});
+  PresentCityPlacementDragCost(city, view, unit_cost, screen.x, screen.y);
   if (!zone && !transport) ui->input_loop_active = 1;
   CityZoneDragInput input;
   do {
@@ -321,29 +357,24 @@ TileIndex TrackCityPlacementDrag(Game *game, CityMapViewConfig *view, TileIndex 
       return INVALID_TILE;
     }
     TileIndex tile = PickCityMapTile(city, map_view, input.point.x, input.point.y);
-    if (IsMapTileValid(city, tile)) {
-      int next_x = MapTileX(city, tile), next_y = MapTileY(city, tile);
-      if (end_x != next_x || end_y != next_y) {
-        if (!transport) ClearCityZoneCostLabel(drawing, view);
-        if (zone) {
-          UpdateCityZoneRectanglePreview(city, start, MapTileXY(city, end_x, end_y), tile);
-        } else if (transport) {
-          UpdateInfrastructureLinePlacementPreview(city, view, x, y, end_x, end_y);
-        } else PrepareCityZonePreview(city, start, MapTileXY(city, end_x, end_y));
-        end_x = next_x; end_y = next_y;
-        if (transport) UpdateInfrastructureLinePlacementPreview(city, view, x, y, end_x, end_y);
-        else if (!zone) PrepareCityZonePreview(city, start, MapTileXY(city, end_x, end_y));
-        PresentCityPlacementDragCost(city, view, unit_cost, screen_x, screen_y);
-      }
+    if (IsMapTileValid(city, tile) && tile != end) {
+      if (!transport) ClearCityZoneCostLabel(drawing, view);
+      if (zone) UpdateCityZoneRectanglePreview(city, start, end, tile);
+      else if (transport) UpdateInfrastructureLinePlacementPreview(city, view, start, end);
+      else PrepareCityZonePreview(city, start, end);
+      end = tile;
+      if (transport) UpdateInfrastructureLinePlacementPreview(city, view, start, end);
+      else if (!zone) PrepareCityZonePreview(city, start, end);
+      PresentCityPlacementDragCost(city, view, unit_cost, screen.x, screen.y);
     }
   } while (!(input.flags & CITY_DRAG_INPUT_RELEASE));
-  if (zone) UpdateCityZoneRectanglePreview(city, start, MapTileXY(city, end_x, end_y), start);
-  if (transport) UpdateInfrastructureLinePlacementPreview(city, view, x, y, end_x, end_y);
-  else PrepareCityZonePreview(city, start, zone ? start : MapTileXY(city, end_x, end_y));
+  if (zone) UpdateCityZoneRectanglePreview(city, start, end, start);
+  if (transport) UpdateInfrastructureLinePlacementPreview(city, view, start, end);
+  else PrepareCityZonePreview(city, start, zone ? start : end);
   ClearCityZoneCostLabel(drawing, view);
   view->pointer_command_stage = 1;
   ui->input_loop_active = 0;
-  return MapTileXY(city, end_x, end_y);
+  return end;
 }
 
 // Original game drag loop; client inputs replace OS message polling at the host boundary.
@@ -354,6 +385,12 @@ TileIndex TrackCityZoneDrag(Game *game, TileIndex start, int unit_cost) {
 // Track an infrastructure endpoint, updating its cost and placement footprint.
 TileIndex TrackInfrastructureLinePlacement(Game *game, TileIndex start, int unit_cost) {
   return TrackCityPlacementDrag(game, NULL, start, unit_cost, CITY_DRAG_LINE);
+}
+
+// Retained pointer callers use the selected tool cost; shared commands already supply their endpoint and cost.
+TileIndex TrackCitySelectedInfrastructureLine(Game *game, TileIndex start, int group) {
+  int cost = kCityToolCosts[group * CITY_TOOL_VARIANT_CAPACITY + game->ui->selection.value[group]];
+  return TrackInfrastructureLinePlacement(game, start, cost);
 }
 
 // Transport dragging reads the map view's pointer after the host dispatches each message.
@@ -377,52 +414,6 @@ u32 BeginCityVolcanoPresentation(Game *game, TileIndex location) {
   CenterCityMapViewAtTile(city, NULL, MapTileX(city, location), MapTileY(city, location));
   if (view->zoom == CITY_MAP_ZOOM_SMALL) ZoomCityMapViewIn(city, view);
   return label;
-}
-
-// Canvas endpoint commands become one recorded release; game placement keeps its original interface.
-i64 ExecuteEndpointLineCommand(Game *game, CityCommandId id, TileIndex tile, TileIndex end) {
-  City *city = game->city;
-  Drawing *drawing = game->drawing;
-  CityMapViewConfig *view = drawing->default_map_view;
-  CityZoneDragInput endpoint_input;
-  bool adapted = !city->command_choices.endpoint_supplied && city->zone_drag_input == NULL;
-  if (adapted) {
-    endpoint_input = Sc2kZoneDragEndpointInput(game, end);
-    city->zone_drag_input = &endpoint_input;
-    city->zone_drag_index = 0;
-  }
-  CityLinePreviewPaint paint = BeginCityLinePreviewPaint(drawing, view);
-  i64 result;
-  switch (id) {
-  case CITY_COMMAND_PLACE_TRANSPORT_LINE:
-    result = IsCityCompactHighwayLine(city, tile, end) ? PlaceCityTransportLine(city, tile) :
-        PlaceCityLegacyTransportLine(city, tile);
-    break;
-  case CITY_COMMAND_PLACE_WATER_PIPE:
-    result = PlaceCityWaterPipe(city, tile);
-    break;
-  case CITY_COMMAND_PLACE_SUBWAY:
-    result = PlaceCitySubway(city, tile);
-    break;
-  case CITY_COMMAND_PLACE_ROAD:
-    result = PlaceCityRoad(city, tile);
-    break;
-  case CITY_COMMAND_PLACE_RAIL:
-    result = PlaceCityRail(city, tile);
-    break;
-  case CITY_COMMAND_PLACE_POWER_LINE:
-    result = PlaceCityPowerLine(city, tile);
-    break;
-  default:
-    result = CITY_COMMAND_COST_INVALID;
-    break;
-  }
-  EndCityLinePreviewPaint(view, &paint);
-  if (adapted) {
-    city->zone_drag_input = NULL;
-    city->zone_drag_index = 0;
-  }
-  return result;
 }
 
 CityPlacementIntent ResolveCityPlacementIntent(Game *game, int tools, TileIndex start, TileIndex end, u32 options) {
@@ -605,11 +596,6 @@ bool RunCityMapToolAction(Game *game, const CityPlacementIntent *intent) {
   return RunCityCommand(game, CITY_COMMAND_PLACE_BUILDING, end, building, facing, 0, NULL, NULL);
 }
 
-
-
-
-
-
 // Read-only frontend translation; original handlers remain the only map-edit entry.
 int Sc2kCanvasMapPointerTools(int tool, int road_variant) {
   if (tool >= CITY_CANVAS_TOOL_RESIDENTIAL && tool <= CITY_CANVAS_TOOL_DENSE_INDUSTRIAL)
@@ -656,6 +642,18 @@ int Sc2kCanvasMapPointerTools(int tool, int road_variant) {
   return tool >= 0 && tool < CITY_CANVAS_TOOL_COUNT ? kPointerTools[tool] - 1 : -1;
 }
 
+// Resolve only building/facility tools. Line, dispatch and terrain tools have separate cursor/toolbar artwork.
+TileKind CityToolBuildingKind(int tool) {
+  if ((tool >= CITY_CANVAS_TOOL_POLICE && tool <= CITY_CANVAS_TOOL_NUCLEAR) ||
+      (tool >= CITY_CANVAS_TOOL_SUBWAY_STATION && tool <= CITY_CANVAS_TOOL_WATER_PUMP)) {
+    int facility = Sc2kCanvasMapPointerTools(tool, 0);
+    return GetCityFacilityTile(facility & 255, (facility >> 8) & 255);
+  }
+  if (tool == CITY_CANVAS_TOOL_HYDRO) return TK_HYDRO_POWER;
+  if (tool == CITY_CANVAS_TOOL_MARINA) return TK_MARINA;
+  return TK_CLEAR;
+}
+
 u32 Sc2kCurrentCityMapPointerTools(CityInterfaceState *ui) {
   int group = (ui->tool_group);
   u32 variant = group >= CITY_TOOL_GROUP_DEMOLISH && group < CITY_TOOL_GROUP_BUILD_COUNT
@@ -664,32 +662,28 @@ u32 Sc2kCurrentCityMapPointerTools(CityInterfaceState *ui) {
   return (u16)group | (variant << 8) | ((u32)(ui->selection.value[0]) << 16);
 }
 
-
-
 CityZoneDragInput Sc2kZoneDragEndpointInput(Game *game, TileIndex tile) {
   City *city = game->city;
   Drawing *drawing = game->drawing;
   CityMapViewConfig *view = drawing->default_map_view;
   int x = MapTileX(city, tile), y = MapTileY(city, tile);
-  int screen_x;
-  int screen_y;
-  CityMapTileToScreen(city, view, x, y, &screen_x, &screen_y);
+  CityPoint screen = CityMapTileToScreen(city, view, (CityPoint){x, y});
   u32 zoom = view->zoom;
   int scale = view->magnified_large_zoom != 0 ? 2 : 1;
-  screen_x += (4 << zoom) * scale;
-  screen_y += (2 << zoom) * scale;
+  screen.x += (4 << zoom) * scale;
+  screen.y += (2 << zoom) * scale;
   // Projection anchors can pick a neighboring tile. Confirm the endpoint before releasing the drag.
   static const i8 kEndpointXOffsets[] = {0, -2, 2, -4, 4, -8, 8};
   for (int dy = 0; dy >= -32 * scale; dy -= 2 * scale) {
     for (int index = 0; index < sizeof(kEndpointXOffsets) / sizeof(kEndpointXOffsets[0]); ++index) {
-      int point_x = screen_x + kEndpointXOffsets[index] * scale;
-      int point_y = screen_y + dy;
+      int point_x = screen.x + kEndpointXOffsets[index] * scale;
+      int point_y = screen.y + dy;
       if (PickCityMapTile(city, view, point_x, point_y) == MapTileXY(city, x, y))
         return (CityZoneDragInput){{point_x, point_y}, CITY_DRAG_INPUT_RELEASE};
     }
   }
   // Cancel instead of placing at a different endpoint when no nearby point picks this tile.
-  return (CityZoneDragInput){{screen_x, screen_y}, CITY_DRAG_INPUT_SHIFT_CANCEL};
+  return (CityZoneDragInput){{screen.x, screen.y}, CITY_DRAG_INPUT_SHIFT_CANCEL};
 }
 
 // Reset to the small zoom and initialize the map center from its client rectangle.
@@ -715,7 +709,6 @@ void RecalculateCityMapClientOrigins(Game *game) {
   drawing->map_state.origin_y = drawing->map_state.save_y - 216;
   UpdateCityMapViewScrollPosition(city, view);
 }
-
 
 void ReleaseCityMapMouseCapture(Game *game) {
   Drawing *drawing = game->drawing;
@@ -759,7 +752,7 @@ void HandleApplicationActivation(Game *game, int active) {
     drawing->palette.background_enabled = 1;
     if (!ui->main_window_iconic) {
       if (drawing->palette.refresh_deferred == 0)
-        RefreshActiveCityPalette(city);
+        RefreshActiveCityPalette(game);
       Sc2kDirtyMarkRect(&ui->desktop.dirty, drawing->client_rect);
       SetCityToolsVisible(game, true);
       if (audio->music_active == 0)
@@ -775,7 +768,6 @@ void HandleApplicationActivation(Game *game, int active) {
     InvalidateCityMap(game, NULL);
   }
 }
-
 
 CityPoint ReadCityCommandPointer(City *city, u32 index) {
   return city->pointer_command.samples != NULL ? city->pointer_command.samples[index].point

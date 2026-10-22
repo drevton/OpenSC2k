@@ -1,14 +1,17 @@
 #ifndef SC2K_DOMAIN_SRC_ASSETS_RESOURCES_H
 #define SC2K_DOMAIN_SRC_ASSETS_RESOURCES_H
 
-#include "assets/state.h"
+#include "city/types.h"
+
+typedef struct CityNewspaperResources CityNewspaperResources;
 
 // Data
 
 void InitializeCityNewsResources(CityAssets *assets);
 
 // Facility Information
-void InitializeCityFacilityInformation(City *city);
+// ASCII locale text is borrowed. Case-insensitive selection writes only the Assets-owned template references.
+void InitializeCityFacilityInformation(CityAssets *assets, const char *locale);
 
 // Names
 
@@ -17,7 +20,7 @@ extern const char *const kCityTeamNames[5];
 
 // Borrowed static text; unknown categories and indices return an empty string.
 const char *ReadCityNameResource(int category, int index);
-bool InitializeCityResourceNames(CityResourceState *resources);
+bool InitializeCityResourceNames(CityAssets *resources);
 bool GenerateCityName(u32 *random, const char *previous, char *name, size_t capacity);
 
 // Newspaper

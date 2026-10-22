@@ -27,7 +27,7 @@ cells = [(3,9),(5,14),(3,2),(1,2),(2,2),(5,2),(4,6),(4,15),(7,7),(6,7),
          (5,13),(8,8),(8,0),(0,2)]
 icons = [sheet.crop((int((x*21+1)*2), (y*21+1)*2,
                      int((x*21+1)*2)+40, (y*21+1)*2+40)) for x,y in cells]
-# Data layout is documented in src/ui/cursor/cursor.h.
+# Data layout is documented in src/assets/cursors.h.
 images = [badge, arrow, default, *icons]
 pixels = [(a << 24) | (r << 16) | (g << 8) | b
           for image in images for r, g, b, a in image.get_flattened_data()]

@@ -1,36 +1,44 @@
-#include "assets/resource_types.h"
-#include "base/version.h"
-#include "city/engine/command_types.h"
-#include "city/maps/map_types.h"
-#include "ui/startup/startup.h"
-#include "drawing/drawing_internal.h"
-#include "base/byte_order.h"
-#include "ui/input.h"
-#include "ui/sdl.h"
+#include "city/engine/city_name.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
-#include "ui/startup/services.h"
+
+#include "assets/catalog.h"
+#include "assets/resource_types.h"
+#include "assets/resources.h"
+#include "assets/state.h"
+#include "audio/state.h"
+#include "base/byte_order.h"
+#include "base/version.h"
+#include "city/engine/command_types.h"
 #include "city/engine/commands.h"
-#include "game/state.h"
-#include "city/engine/initialization.h"
+#include "city/maps/map_types.h"
+#include "city/saveload/runtime.h"
+#include "city/saveload/summary.h"
 #include "city/state.h"
+#include "drawing/raster/canvas_primitives.h"
+#include "drawing/state.h"
+#include "game/city_lifecycle.h"
 #include "game/errors.h"
 #include "game/observation.h"
-#include "audio/state.h"
-#include "drawing/state.h"
-#include "assets/state.h"
-#include "assets/catalog.h"
-#include "assets/resources.h"
-#include "city/saveload/summary.h"
-#include "ui/dialogs/file_dialog.h"
+#include "game/state.h"
+#include "ui/windows/window_internal.h"
+#include "ui/charts/charts.h"
 #include "ui/commands.h"
+#include "ui/dialogs/dialogs.h"
+#include "ui/dialogs/file_dialog.h"
+#include "ui/dialogs/game_options.h"
+#include "ui/dialogs/messages.h"
+#include "ui/input.h"
+#include "ui/music/jukebox.h"
+#include "ui/sdl.h"
+#include "ui/startup/startup.h"
 #include "ui/startup/startup_internal.h"
 #include "ui/state.h"
 #include "ui/text/text.h"
 #include "ui/tools/tools.h"
-#include "game/application_internal.h"
-#include "ui/charts/charts.h"
+#include "ui/windows/controls.h"
+#include "ui/windows/windows.h"
 
 // Startup Host
 // Native resource windows return choices to the main loop; diagnostic callers may retain their stacks.
@@ -581,7 +589,7 @@ static bool RefreshTerrainSetup(City *city) {
       pending->preserve_terrain ? "New City - Edited Terrain" : "New City");
   if (!window->layout.drawing) {
     window->layout.drawing = (CityTerrainPreviewDrawing *)CreateCityWindowDrawing(city->game->drawing,
-        CITY_WINDOW_DRAWING_TERRAIN_PREVIEW);
+        CITY_WINDOW_DRAWING_TERRAIN_PREVIEW, 0);
     if (!window->layout.drawing) {
       SetGameError(city->game, SC2K_ERROR_HOST_ALLOCATION_FAILURE);
       return false;
@@ -712,7 +720,7 @@ static bool BuildNativeStartupLayout(u32 resource, CityCanvasStartupWindow *layo
   return false;
 }
 
-static u32 RegisterCityResourceOwner(City *city, void *dialog, u32 resource) {
+static u32 RegisterCityResourceOwner(City *city, CityStartupWindow *dialog, u32 resource) {
   CityInterfaceState *ui = city->game->ui;
   if (ui->startup_desktop == NULL || dialog == NULL) return false;
   for (int i = 0; i < CITY_STARTUP_WINDOW_LIMIT; ++i) {
@@ -1047,7 +1055,7 @@ bool BeginCitySetupWindow(City *city, CitySetupWindowState *pending, CityNewCity
   if (ui->setup_window != NULL || !CityStartupMenuServiceAvailable(city)) {
     return false;
   }
-  dialog->base.window_id = RegisterCityResourceOwner(city, dialog, CITY_DIALOG_RESOURCE_NEW_CITY);
+  dialog->base.window_id = RegisterCityResourceOwner(city, &dialog->base, CITY_DIALOG_RESOURCE_NEW_CITY);
   if (!dialog->base.window_id) return false;
   if (ui->startup_token == INT32_MAX) ui->startup_token = 0;
   pending->dialog = dialog;
@@ -1165,7 +1173,7 @@ static void ActivateCitySetupControl(City *city, CityStartupResourceWindow *wind
 static void ActivateCitySetupControl(City *city, CityStartupResourceWindow *window, int control, bool shift) {
   CityInterfaceState *ui = city->game->ui;
   if (!window) return;
-  ApplicationStartupMenuBeep(city->game);
+  PlayCityButtonBeep(city->game);
   if (window->layout.year_query) {
     switch (control) {
       case CITY_DIALOG_OK: CloseCityYearQuery(city, true); break;
@@ -1208,7 +1216,8 @@ static void ActivateCitySetupControl(City *city, CityStartupResourceWindow *wind
   }
   if (control == CITY_SETUP_YEAR) {
     if (ui->setup_window->year_window) CloseCityYearQuery(city, false);
-    ui->setup_window->year_window = RegisterCityResourceOwner(city, ui->setup_window->dialog, CITY_SETUP_YEAR_QUERY_RESOURCE);
+    ui->setup_window->year_window = RegisterCityResourceOwner(city,
+        &ui->setup_window->dialog->base, CITY_SETUP_YEAR_QUERY_RESOURCE);
     if (ui->setup_window->year_window) CenterCityStartupWindow(city, ui->setup_window->year_window);
     return;
   }
@@ -1269,7 +1278,7 @@ bool NativeStartupMenuWaiting(City *city) {
 }
 static void SubmitStartupChoice(City *city, int choice) {
   CityInterfaceState *ui = city->game->ui;
-  ApplicationStartupMenuBeep(city->game);
+  PlayCityButtonBeep(city->game);
   AnswerCityStartupMenuDialog(city, ui->startup_menu->token, choice);
 }
 static int ChoiceForControl(int control) {
@@ -1284,7 +1293,7 @@ static int ChoiceForControl(int control) {
 }
 
 static void OpenCityWebsite(Game *game) {
-  ApplicationStartupMenuBeep(game);
+  PlayCityButtonBeep(game);
   if (!Sc2kSDLOpenURL("https://www.opensc2k.com"))
     Sc2kCanvasDesktopOpenNotice(&game->ui->desktop, (CityRect){40, 45, 540, 180}, "OpenSC2k Website",
         "Could not open your web browser. Visit https://www.opensc2k.com.", CITY_MESSAGE_ERROR | CITY_MESSAGE_OK);
@@ -1711,4 +1720,29 @@ bool StartupMenuNewCity(City *city, CityStartupMenuDialog *dialog) {
 // caller's decision after the dialog closes.
 bool StartupMenuQuit(City *city, CityStartupMenuDialog *dialog) {
   return EndCityStartupDialog(city, dialog->window_id, CITY_STARTUP_QUIT);
+}
+
+const char *CityStartupTooltipAt(const Window *window, int x, int y, char *text, size_t size) {
+  const CityCanvasStartupWindow *layout = window->startup_layout;
+  if (!layout) return NULL;
+  for (int i = layout->control_count - 1; i >= 0; --i) {
+    const CityCanvasStartupControl *control = &layout->controls[i];
+    CityRect b = control->bounds;
+    b.left += window->bounds.left + 2; b.right += window->bounds.left + 2;
+    b.top += window->bounds.top + 16; b.bottom += window->bounds.top + 16;
+    if (!control->visible || !CanvasPointInRect(b, x, y)) continue;
+    const char *help = control->tooltip ? control->tooltip : control->text;
+    if (control->style & CITY_RESOURCE_STYLE_DISABLED) {
+      snprintf(text, size, "%s %s", help,
+          control->id == CITY_SETUP_MAP_WIDTH || control->id == CITY_SETUP_MAP_HEIGHT ?
+          "Turn off SimCity 2000 compatibility to unlock larger map sizes." :
+          control->id == CITY_SETUP_SNOW_COVERAGE ? "Choose Snowy or Mixed terrain to enable this control." :
+          control->id == CITY_SETUP_DESERT_COVERAGE ? "Choose Desert or Mixed terrain to enable this control." :
+          "Unavailable with the current selections; clear the conflicting option first.");
+      return text;
+    }
+    return help;
+  }
+  return layout->terrain_setup ?
+      "Terrain preview. Large maps use a reduced-size preview; Start City creates the full-size terrain." : NULL;
 }

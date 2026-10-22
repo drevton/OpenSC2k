@@ -1,8 +1,10 @@
-#include "city/maps/layers.h"
-#include "drawing/drawing_internal.h"
-#include "drawing/maps/map_render.h"
 #include "drawing/maps/placement.h"
+
 #include "assets/graphics.h"
+#include "city/maps/layers.h"
+#include "drawing/maps/map_render.h"
+#include "drawing/state.h"
+#include "game/state.h"
 
 // Tool placement markers, footprints and map damage.
 
@@ -46,6 +48,17 @@ CityRect CityMapPlacementBounds(const City *city, TileIndex tile, bool point) {
   return CanvasPreviewBounds(points);
 }
 
+// Damage a main-map marker's existing footprint. Invalid tiles or an unprepared view have no screen footprint.
+void InvalidateCityMapPlacement(const City *city, TileIndex tile) {
+  Drawing *drawing = city->game->drawing;
+  if (!IsMapTileValid(city, tile) || !drawing->default_map_view) return;
+  CityRect bounds = CityMapPlacementBounds(city, tile, false);
+  int scale = drawing->map_pixel_scale;
+  MarkScreenDirty(&drawing->screen_damage,
+      (CityRect){bounds.left * scale + drawing->scroll_pixels.x, bounds.top * scale + drawing->scroll_pixels.y,
+          bounds.right * scale + drawing->scroll_pixels.x, bounds.bottom * scale + drawing->scroll_pixels.y});
+}
+
 void ApplyCityMapSelectionPalette(SpriteSurface *surface, int style) {
   // OpenGFX2 point markers use the OpenTTD grayscale ramp and palette 772 for red.
   // Diamonds use the same offline-projected shapes as the map ground.
@@ -87,7 +100,7 @@ void ApplyCityMapSelectionPalette(SpriteSurface *surface, int style) {
   surface->remap = style == 1 ? kSelectionRedRemap : NULL;
 }
 
-static void DrawCityMapPlacementMarker(City *city, TileIndex tile, bool point, bool blocked) {
+void DrawCityMapPlacementMarker(const City *city, TileIndex tile, bool point, bool blocked) {
   Drawing *drawing = city->game->drawing;
   int zoom = drawing->default_map_view->zoom, tile_scale = 1 << zoom;
   int points[8];
@@ -130,59 +143,4 @@ static void DrawCityMapPlacementMarker(City *city, TileIndex tile, bool point, b
   if (drawing->map_depth.preparing)
     PrepareCityMapSprite(drawing, id, px, py, SPRITE_FIXED_PALETTE, MAP_PALETTE_SELECTION_FIRST + style);
   else DrawRunSprite(&surface, sprite, px, py, SPRITE_FIXED_PALETTE, NULL);
-}
-
-// The tile renderer chooses this marker's layer; later tiles still occlude it in painter order.
-void DrawCityMapPlacementTile(City *city, TileIndex tile) {
-  Drawing *drawing = city->game->drawing;
-  if (!drawing->paint_placement || drawing->sprite_damage_bounds) return;
-  const CityCanvasPlacementSelection *placement = &city->game->ui->desktop.placement;
-  int first = 0, end = placement->count;
-  while (first < end) {
-    int middle = first + (end - first) / 2;
-    if (placement->cells[middle].tile < tile) first = middle + 1;
-    else end = middle;
-  }
-  bool selected = first < placement->count && placement->cells[first].tile == tile;
-  if (city->game->ui->error_tile_window && city->game->error_tile == tile && (!selected || placement->point))
-    DrawCityMapPlacementMarker(city, tile, false, true);
-  if (selected)
-    DrawCityMapPlacementMarker(city, tile, placement->point, false);
-}
-
-void Sc2kSetCityLinePreviewSurface(Drawing *drawing, CityPaintBuffer pixels, u32 stride, CityRect clip) {
-  drawing->line_preview_surface = (CityMapImmediatePaintState){0};
-  drawing->line_preview_surface.pixels = pixels;
-  drawing->line_preview_surface.pixel_stride = stride;
-  drawing->line_preview_surface.clip = clip;
-  drawing->line_preview_surface_bound = true;
-}
-
-void Sc2kClearCityLinePreviewSurface(Drawing *drawing) {
-  drawing->line_preview_surface_bound = false;
-}
-
-CityMapImmediatePaintState *Sc2kCityLinePreviewView(Drawing *drawing) {
-  return drawing->line_preview_surface_bound ? &drawing->line_preview_surface : NULL;
-}
-
-CityLinePreviewPaint BeginCityLinePreviewPaint(Drawing *drawing, CityMapViewConfig *view) {
-  CityMapImmediatePaintState *surface = Sc2kCityLinePreviewView(drawing);
-  CityLinePreviewPaint scope = {0};
-  if (!surface) return scope;
-  scope.bound = true;
-  scope.saved = ReadCityMapImmediatePaint(view);
-  view->pixels = surface->pixels;
-  view->paint_pixel_stride = surface->pixel_stride;
-  view->paint_mode_word = surface->mode_word;
-  view->view_rect = surface->clip;
-  return scope;
-}
-
-void EndCityLinePreviewPaint(CityMapViewConfig *view, const CityLinePreviewPaint *scope) {
-  if (!scope->bound) return;
-  view->pixels = scope->saved.pixels;
-  view->paint_pixel_stride = scope->saved.pixel_stride;
-  view->paint_mode_word = scope->saved.mode_word;
-  view->view_rect = scope->saved.clip;
 }

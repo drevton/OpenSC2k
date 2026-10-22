@@ -4,29 +4,6 @@
 #include "city/engine/input.h"
 #include "city/types.h"
 #include "city/engine/command_types.h"
-#include "city/terrain/terrain.h"
-
-typedef struct Game Game;
-
-// Accepted creation options are values, independent of any window or preview buffer.
-typedef struct CityCreationOptions {
-  char city_name[33], mayor_name[33];
-  int start_year, difficulty;
-  CityTerrainSettings terrain;
-  bool edit_terrain;
-} CityCreationOptions;
-
-typedef enum CityCheat {
-  CITY_CHEAT_FUND, CITY_CHEAT_CASS, CITY_CHEAT_THE_WORKS, CITY_CHEAT_NOAH, CITY_CHEAT_MOSES,
-  CITY_CHEAT_FIRE_STORM, CITY_CHEAT_DEBUG, CITY_CHEAT_MILITARY, CITY_CHEAT_JOKE, CITY_CHEAT_WEBB,
-  CITY_CHEAT_OOPS, CITY_CHEAT_REPENT, CITY_CHEAT_COUNT
-} CityCheat;
-
-enum {
-  CITY_CHEAT_CONFIRM_DEMOLITION = 1,
-  CITY_CHEAT_ACCEPT_MILITARY = 2,
-  CITY_CHEAT_DECLINE_MILITARY = 4,
-};
 
 // Shared deterministic player actions. UI and scheduling call their domain functions directly.
 typedef enum CityCommandId {
@@ -94,23 +71,12 @@ typedef enum CityCommandId {
 
 bool IsCityCommandId(u32 id);
 
-typedef CommandRecord CityCommand;
-
-// Tile-valued record parameters carry TileIndex directly. The command stream has
-// no backwards compatibility requirement.
-typedef CommandArguments CityCommandArguments;
-
 CityCommandArguments DecodeCityCommand(const City *city, CityCommand command);
-CityCommand EncodeCityCommand(City *city, CityCommandId id, TileIndex tile, int parameter1, int parameter2,
+CityCommand EncodeCityCommand(const City *city, CityCommandId id, TileIndex tile, int parameter1, int parameter2,
     int parameter3);
-
-_Static_assert(sizeof(CityCommand) == 16, "city commands have four 32-bit fields");
 
 enum { CITY_TUNNEL_CONFIRMED = 1 << 8 };
 enum { CITY_HIGHWAY_FACING_SHIFT = 9, CITY_HIGHWAY_COMMAND_MASK = 0xFFF };
-
-void Add500000ToCityCash(City *city);
-void SelectCitySimulationSpeed(City *city, int speed);
 
 // Line options describe resolved crossing/neighbor choices; no selected tool or price class is transmitted.
 enum { CITY_LINE_ACCEPT_BORDER = 1 << 16, CITY_LINE_CANCEL_SPAN = 1 << 17 };
@@ -140,28 +106,6 @@ enum { CITY_COMMAND_NEEDS_CONFIRMATION = INT32_MIN };
 enum { CITY_TERRAIN_POINT_EDIT = 1, CITY_TERRAIN_NO_SEAWATER = 2, CITY_TERRAIN_OPTIONS_MASK = 3 };
 // Domain quote functions below return raw work prices and gameplay admission errors.
 // DoCityCommand(TEST) and preview pricing apply the shared monetary policy.
-CityCommandCost GetCityTerrainCost(const City *city, TileIndex tile, bool raise, int tool, int options);
-CityCommandCost GetCityBulldozeRectangleCost(City *city, TileIndex start, TileIndex end, int options);
-// RunCityCommand is a player/UI action and displays returned errors by default.
-// DoCityCommand executes or queries internally without opening an error window.
-// Single-player execution starts immediately. Timed work and dialogs
-// retain completion until their final return; network transport may also defer it.
-typedef CommandResult CityCommandResult;
-
-typedef CommandCallback CityCommandCallback;
-
-// Immutable data borrowed for the synchronous call; a queued transport must own
-// its copy. Callback/context are local presentation state, never wire payload.
-typedef struct {
-  const u8 *text;
-  u32 length;
-} CityCommandPayload;
-
-bool RunCityCommand(Game *game, CityCommandId id, TileIndex tile, int parameter1, int parameter2,
-    int parameter3, CityCommandCallback *callback, void *context);
-bool RunCityCommandWithPayload(Game *game, CityCommandId id, TileIndex tile, int parameter1, int parameter2,
-    int parameter3, const CityCommandPayload *payload, CityCommandCallback *callback, void *context);
-
 i64 DoCityCommand(City *city, CityCommandId id, u32 flags, TileIndex tile, int parameter1, int parameter2,
     int parameter3);
 // EDIT_MAP_LABEL: tile is the location; parameter1 is dialog result1/2 (accept/cancel).
@@ -174,12 +118,6 @@ i64 DoCityCommandWithText(City *city, CityCommandId id, u32 flags, TileIndex til
 // Immutable Windows-1252 team name is limited to24 bytes; no selection preserves game state.
 // A command's immutable text payload takes priority over interactive controls.
 bool ReadCityNameCommandAnswer(City *city, CityNameCommandInput *state, int *answer);
-void ApplyCityStadiumTeamChoice(City *city, TileIndex tile, int team, const char *name);
-void AcceptCityStadiumTeamDialog(City *city, TileIndex tile, int team, const char *name);
-
-void InitializeCityOrdinancesDialog(City *city);
-void RebuildCityPolicyAvailability(City *city);
-void GrantAllSpecialFacilitiesAndCash(City *city);
 
 i64 CityCommandPriceResult(CityCommandCost quote);
 // Raw construction costs never inspect editor mode or treasury. These shared entry

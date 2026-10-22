@@ -1,20 +1,46 @@
 #ifndef SC2K_CITY_EVENTS_NEWS_H
 #define SC2K_CITY_EVENTS_NEWS_H
 
+#include "city/types.h"
+#include <stddef.h>
+
 // Newspaper titles vary by city; these IDs preserve menu-slot order.
 typedef enum CityNewspaperEditionId {
   CITY_NEWSPAPER_EDITION_FIRST = 0, CITY_NEWSPAPER_EDITION_SECOND = 1,
   CITY_NEWSPAPER_EDITION_THIRD = 2, CITY_NEWSPAPER_EDITION_FOURTH = 3,
   CITY_NEWSPAPER_EDITION_FIFTH = 4, CITY_NEWSPAPER_EDITION_SIXTH = 5,
-  CITY_NEWSPAPER_EDITION_SEVENTH = 6,
+  CITY_NEWSPAPER_EDITION_COUNT = 6,
 } CityNewspaperEditionId;
+
+// Edition values index the six stored configurations directly.
+static inline bool IsCityNewspaperEditionValid(int edition) {
+  return (unsigned)edition < CITY_NEWSPAPER_EDITION_COUNT;
+}
+
+typedef struct CityNewspaperEdition {
+  u8 title_kind;
+  u8 layout_style;
+  u8 era_kind;
+  u8 report_kind;
+  u8 subtitle_kind;
+} CityNewspaperEdition;
+typedef struct CityNewspaperEditions {
+  CityNewspaperEdition edition[CITY_NEWSPAPER_EDITION_COUNT];
+} CityNewspaperEditions;
+
+_Static_assert(sizeof(CityNewspaperEdition) == 5 && sizeof(CityNewspaperEditions) == 30,
+    "stored newspaper edition layout");
+
+// Initialize startup news flags, seed the CRT stream from the signed low 16 bits of logical time, initialize
+// article records and shuffle edition choices. The shuffle consumes 122 CRT draws and selects the first edition.
+void InitializeCityNews(City *city);
 
 // News
 
 // Original ranked newspaper event/article-group IDs. Names come from the
 // DATA_USA 1000/1001 group tables and 1002/1003 article templates, corroborated
-// by callers of RecordRankedCityEvent. The seven ranked records retain their u16 ID, u16
-// severity, u8 event data and three cache bytes. Weather/report groups share
+// by callers of RecordRankedCityEvent. The seven ranked records retain their u16 ID, signed i16
+// score, u8 event data and three cache bytes. Weather/report groups share
 // this domain but are composed in the two extra records rather than ranked.
 typedef enum CityNewsEvent {
   CITY_NEWS_WEATHER = 0,
@@ -104,5 +130,52 @@ typedef enum CityProblem {
   CITY_PROBLEM_COMMERCIAL_CONNECTION = 14,
   CITY_PROBLEM_COUNT = 15,
 } CityProblem;
+
+// Seven retained ranked articles plus the weather and report composition slots.
+enum { CITY_NEWS_RANKED_COUNT = 7, CITY_NEWS_RECORD_COUNT = 9 };
+
+typedef struct {
+  u16 id;
+  i16 score;
+  u8 event_data;
+  u8 article_cache[3];
+} CityNewsRecord;
+
+typedef struct {
+  CityNewsRecord record[CITY_NEWS_RECORD_COUNT];
+} CityNewsRecords;
+
+_Static_assert(sizeof(CityNewsRecord) == 8 && offsetof(CityNewsRecord, score) == 2 &&
+    offsetof(CityNewsRecord, event_data) == 4 && offsetof(CityNewsRecord, article_cache) == 5,
+    "news record layout");
+_Static_assert(sizeof(CityNewsRecords) == 72, "nine retained news records");
+
+typedef struct {
+  u16 scores[8];
+  u16 category_order[8];
+} CityNewspaperProblemRankings;
+
+typedef struct {
+  u32 enabled;
+  i16 random_base_seed;
+  u16 edition_index;
+  CityNewspaperProblemRankings problems;
+} CityNewspaperState;
+
+// Populate weather/editorial records and choose music using City RNG. Edition must be valid; run once after any
+// opening notice is dismissed, before the first paint. Window state belongs to the caller.
+void FinishCityNewspaperInitialization(City *city, int edition);
+
+// Rankings
+
+void UpdateCityNewspaperProblemRankings(City *city);
+bool BeginCityNewspaperProblemRankings(City *city);
+void UpdateCityNewspaperRanksAndF3Records(City *city);
+void FinishCityNewspaperRanksAndF3Records(City *city);
+void DecayCityNewsRankings(City *city);
+bool RecordRankedCityEvent(City *city, int event_code, u8 event_data);
+// Records the event and returns whether its caller must present a newspaper.
+bool PrepareRankedCityEvent(City *city, int event_code, u8 event_data);
+void InsertRankedCityEvent(City *city, int event_code, u8 event_data);
 
 #endif

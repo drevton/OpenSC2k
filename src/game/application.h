@@ -44,5 +44,10 @@ typedef struct {
   void (*release)(Game *game, void *context);
 } GameApplicationHooks;
 
+// Defer teardown until any retained Quit/Save caller has returned.
+void RequestCityApplicationExit(Game *game);
+
 int RunGameApplication(int argc, char **argv, const GameApplicationHooks *hooks, void *context);
+bool ApplicationNextScriptAction(Game *game);
+
 #endif

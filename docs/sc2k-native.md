@@ -143,8 +143,10 @@ Malformed or missing resume state rejects the native save. Loading preserves the
 existing partial-write/error behavior. Saving finishes pending simulation work;
 active question continuations and borrowed command input cannot be saved.
 
-Jukebox programmes, playlists, shuffle, volume, current track and playback position
-are not City data. Preferences store programme, playlists, shuffle and volume.
+Audio owns jukebox programmes, playlists, shuffle, volume, current track and playback
+position. UI owns the music windows, collapse/pin flags, pointer feedback and title
+animation, and borrows the displayed player. These are not City data. Preferences
+store programme, playlists, shuffle, volume and the window flags.
 Host paths, window layouts, cursor/tool selections, loaded artwork/fonts/audio and
 render caches are not serialized.
 

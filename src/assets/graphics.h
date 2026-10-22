@@ -5,7 +5,10 @@
 
 #include "city/types.h"
 
-// Base Drawing cache slots for tile sprites. Add 500 per zoom level.
+// Internal Drawing catalog stride. Resource image indexes and native tile kinds are independent.
+enum { CITY_MAP_SPRITES_PER_ZOOM = 500 };
+
+// Base Drawing cache slots for tile sprites. Each zoom uses a separate catalog bank.
 // Resources bind these slots to shared images; these are not native tile kinds.
 typedef enum CityMapTileSpriteId {
   CITY_MAP_TILE_SPRITE_CLEAR = 0,
@@ -220,16 +223,18 @@ typedef enum CityMapTileSpriteId {
   CITY_MAP_TILE_SPRITE_RAIL_LAST = 58,
 } CityMapTileSpriteId;
 
-// Zoom catalogs share the same 500-member layout.
+// Zoom catalogs share the same per-level layout.
 typedef enum CitySpriteCatalogId {
   CITY_SPRITE_CATALOG_SMALL_BASE = 0,
-  CITY_SPRITE_CATALOG_MEDIUM_BASE = 500,
-  CITY_SPRITE_CATALOG_LARGE_BASE = 1000,
+  CITY_SPRITE_CATALOG_MEDIUM_BASE = CITY_MAP_SPRITES_PER_ZOOM,
+  CITY_SPRITE_CATALOG_LARGE_BASE = 2 * CITY_MAP_SPRITES_PER_ZOOM,
   CITY_SPRITE_CATALOG_FLAT_TERRAIN = 256,
   CITY_SPRITE_CATALOG_FLAT_WATER = 270,
   CITY_SPRITE_CATALOG_GROUND_LAST = 318,
   CITY_SPRITE_CATALOG_SMALL_LAND_EDGE = 269,
   CITY_SPRITE_CATALOG_SMALL_WATER_EDGE = 284,
+  CITY_SPRITE_CATALOG_GROUND_OVERLAY_FIRST = 291,
+  CITY_SPRITE_CATALOG_GROUND_OVERLAY_LAST = 304,
   CITY_SPRITE_CATALOG_SERVICE_PRESENT = 300,
   CITY_SPRITE_CATALOG_SERVICE_MISSING = 303,
   CITY_SPRITE_CATALOG_UNDERGROUND_FIRST = 305,
@@ -280,6 +285,9 @@ enum { CITY_INTRO_IMAGE_COUNT = 16, CITY_INTRO_DIGIT_FIRST = 4, CITY_INTRO_CITY_
 typedef struct RunSprite RunSprite;
 typedef struct { RunSprite *images[CITY_INTRO_IMAGE_COUNT]; } CityIntroArt;
 
+// Native toolbar atlas entries, in assets/ui/toolbar/icons.txt order.
+enum { CITY_TOOLBAR_ICON_COUNT = 108 };
+
 // Music Buttons
 
 // OpenGFX2 transport sprites, loaded once for the asset owner's lifetime.
@@ -290,34 +298,33 @@ typedef struct {
 } CityMusicAssets;
 
 // Sprites
-enum { CITY_MAP_SPRITE_COUNT = 1500 };
+enum { CITY_MAP_SPRITE_COUNT = 3 * CITY_MAP_SPRITES_PER_ZOOM };
 enum {
   CITY_DEMOLITION_LARGE_FRAMES = 16,
   CITY_DEMOLITION_SMALL_FRAMES = 12,
   CITY_DEMOLITION_FRAME_COUNT = CITY_DEMOLITION_LARGE_FRAMES + CITY_DEMOLITION_SMALL_FRAMES,
 };
 
+// Logical metrics for an already zoomed map-cache slot, before target/display scaling.
+// baseline is the distance from the image top to its ground anchor, not the full bitmap height.
 typedef struct {
-  u16 height, width;
-} CityMapSprite;
-typedef CityMapSprite *CitySpriteCatalog;
-typedef u8 *CityPaintBuffer;
-typedef struct {
-  CityRect rect;
-  u16 mode_word;
-  u32 pixel_stride;
-  CityPaintBuffer pixels;
-  CitySpriteCatalog catalog;
-} CityMapPaintParameters;
-typedef struct City City;
+  u16 baseline, width;
+} MapSpriteMetrics;
 typedef struct CityResourceState CityResourceState;
-typedef struct Drawing Drawing;
-CityMapSprite *CityDrawingSpriteCatalog(const Drawing *drawing);
 // Sparse resolution overrides shared by map and interface sprites. Each record is
 // u16 sprite ID, u8 level mask, u8 zero, then u16 references in ascending level order.
 // Levels describe image sizes; the caller supplies either map zoom or UI detail.
 typedef struct { const u8 *data; u32 size; } SpriteVariants;
-typedef struct {
+// References contain a one-based header index and a mirror bit. Loading validates them;
+// Drawing applies the mirror when preparing/selecting images, independently of tile appearance.
+enum { CITY_SPRITE_HEADER_MASK = 0x7FFF, CITY_SPRITE_HEADER_FLIPPED = 0x8000 };
+// Check complete sorted records, reserved bytes, level masks and header/index bounds. Empty data is valid.
+bool ValidateSpriteVariants(SpriteVariants variants, int sprite_count, int header_count);
+// Read validated immutable records; return the supplied reference when no sprite/level override exists.
+// This performs no I/O, allocation, image preparation or flip interpretation.
+u16 ResolveSpriteVariant(SpriteVariants variants, int sprite, int level, u16 fallback);
+
+typedef struct CityInterfaceIcons {
   ByteSpan data;
   SpriteVariants variants;
   const u16 *lookup;
@@ -507,16 +514,18 @@ typedef struct {
 enum {
   CITY_UNDERWORLD_SOIL, CITY_UNDERWORLD_DRY_SERVICE, CITY_UNDERWORLD_WATER_SERVICE, CITY_UNDERWORLD_SUBMERGED,
 };
+typedef struct AssetFile AssetFile;
+// Dimensions are already validated; the returned native run image owns one reference.
+RunSprite *ReadAssetRunSprite(AssetFile *file, int width, int height, u32 size);
+// Static picture record: ID, dimensions, optional RGB palette, then native runs.
+// Zero expected dimensions accept the bounded dimensions stored in the record.
+RunSprite *ReadAssetPicture(AssetFile *file, int id, int width, int height);
+
 // Decode retained graphics bytes; missing or invalid data fails.
 bool LoadCityLandscapeAssets(CityResourceState *assets);
 // Catalog lookup accepts geometric layouts, never gameplay kinds.
 int CityBuildingArtworkSourceFirst(int layout);
 bool LoadCityDemolitionAssets(CityResourceState *assets);
 void ReleaseCitySpriteAssets(CityResourceState *assets);
-
-// Music Assets
-
-// OpenGFX2 music transport artwork; GPL-2.0, assets/ui/opengfx2/LICENSE.
-bool LoadCityMusicAssets(CityAssets *assets, const char *graphics_root);
 
 #endif

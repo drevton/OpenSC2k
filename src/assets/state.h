@@ -55,7 +55,7 @@ typedef struct CityResourceState {
   ByteSpan asset_spans[CITY_ASSET_COUNT];
   u8 *asset_blocks[CITY_ASSET_COUNT + 2];
   u8 asset_block_count;
-  bool assets_loaded;
+  bool asset_packs_loaded; // Required byte spans are ready; image/font decoding follows.
   struct RunSprite *advisors[CITY_ADVISOR_PORTRAIT_COUNT];
   struct RunSprite *illustrations[CITY_NEWSPAPER_PICTURE_COUNT + 1];
   CityInterfaceIcons bridge_choice_icons, main_toolbar_icons, map_category_icons;
@@ -70,7 +70,7 @@ typedef struct CityResourceState {
   CityToolNames tool_names;
   const char *facility_information[CITY_FACILITY_INFO_COUNT][CITY_FACILITY_INFO_LINE_COUNT];
   struct RunSprite *neighbors[CITY_NEIGHBOR_ART_COUNT];
-  CityMapSprite sprites[CITY_MAP_SPRITE_COUNT];
+  MapSpriteMetrics map_sprite_metrics[CITY_MAP_SPRITE_COUNT];
   CityLandscapeSprite *landscape;
   u16 landscape_count;
   // Borrowed from the decoded graphics pack for the Assets lifetime.

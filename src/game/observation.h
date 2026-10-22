@@ -1,7 +1,13 @@
 #ifndef SC2K_GAME_OBSERVATION_H
 #define SC2K_GAME_OBSERVATION_H
 
-#include "city/engine/commands.h"
+#include "city/engine/command_types.h"
+#include "city/infrastructure/types.h"
+
+typedef struct Game Game;
+typedef struct CityPointerInput CityPointerInput;
+typedef struct CityCommandResult CityCommandResult;
+typedef struct CityCreationOptions CityCreationOptions;
 
 typedef struct CityFileRuntime CityFileRuntime;
 typedef struct CityFilePickerOptions CityFilePickerOptions;
@@ -118,6 +124,8 @@ typedef struct GameObservation {
   void (*open_new_city_setup)(City *city);
   void (*open_scenario_dialog)(City *city);
   void (*open_bond_confirmation)(City *city, u32 command, int rate);
+  // Diagnostic endpoint adaptation only. Native shared line commands already supply resolved endpoints.
+  i64 (*line_endpoint_input)(City *city, CityInfrastructureKind kind, TileIndex tile, TileIndex end);
 } GameObservation;
 
 void ObserveCityPresentation(Game *game, CityPresentationEvent event, int token,

@@ -1,20 +1,20 @@
-#include "city/disasters/types.h"
-#include "city/engine/city_types.h"
+#include "city/saveload/services.h"
 #include <stdio.h>
 #include <string.h>
 
-#include "city/state.h"
+#include "assets/catalog.h"
+#include "assets/state.h"
+#include "audio/state.h"
+#include "city/disasters/types.h"
+#include "city/engine/city_types.h"
 #include "city/saveload/file.h"
+#include "city/state.h"
+#include "drawing/state.h"
 #include "game/errors.h"
 #include "game/state.h"
-#include "audio/state.h"
-#include "drawing/state.h"
-#include "assets/state.h"
 #include "ui/state.h"
-#include "assets/catalog.h"
 #include "ui/text/text.h"
-
-#include "drawing/drawing.h"
+#include "ui/windows/windows.h"
 
 const char *const kCityWeatherText[] = {
   "Cold",

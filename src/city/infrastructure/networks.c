@@ -7,7 +7,10 @@
 // Buried shape selection reads the shared zone slope and altitude heights; road-tunnel depth in altitude[10..14]
 // is a separate system. TF_PIPED is pipe capability, not an underground kind. Other fields follow tile_storage.h.
 
-#include "city/infrastructure/infrastructure.h"
+#include "city/infrastructure/networks.h"
+
+#include "city/infrastructure/lines.h"
+#include "city/saveload/map_format.h"
 
 #include <assert.h>
 

@@ -1,3 +1,9 @@
+#include "city/maps/labels.h"
+#include "game/errors.h"
+#include "city/infrastructure/networks.h"
+#include "city/maps/terrain.h"
+#include "city/saveload/map_format.h"
+#include "city/engine/random.h"
 #include "city/economy/facilities.h"
 #include "city/infrastructure/tunnels.h"
 #include "city/maps/buildings.h"
@@ -11,12 +17,11 @@
 #include "city/events/news.h"
 #include "city/engine/city_types.h"
 #include "city/infrastructure/types.h"
-#include "audio/audio.h"
+#include "game/audio.h"
 #include "city/presentation.h"
 
 #include "city/state.h"
 #include "city/economy/economy.h"
-#include "city/infrastructure/infrastructure.h"
 #include "city/maps/layers.h"
 #include "city/maps/map.h"
 #include "city/tools/tools.h"
@@ -311,4 +316,101 @@ i64 ApplyCityBulldozerAtTile(City *city, TileIndex tile, int options) {
   i64 applied = ApplyBulldozerTile(city, tile, options, CITY_DEMOLISH_CLEAR);
   SetCityDemolitionSuppressed(city, previous_suppression);
   return applied;
+}
+
+// Quote the currently admitted cells in an inclusive rectangle, in row order. This sums their per-cell prices;
+// execution can change later cells by removing a footprint. Quoting does not remove tiles, charge cash or consume RNG.
+CityCommandCost GetCityBulldozeRectangleCost(const City *city, TileIndex start, TileIndex end, int options) {
+  CityCommandCost quote = {.error = CITY_COMMAND_COST_INVALID, .error_tile = INVALID_TILE};
+  if (!IsMapTileValid(city, start) || !IsMapTileValid(city, end) ||
+      (options & ~CITY_BULLDOZER_FLAGS_MASK)) return quote;
+  CityRect bounds = MapTileRectangle(city, start, end);
+  bool underground = (options & CITY_BULLDOZER_UNDERGROUND) != 0;
+  bool alt = (options & CITY_BULLDOZER_ALT) != 0;
+  bool eligible = false;
+  int last_error = CITY_COMMAND_COST_NOTHING_TO_REMOVE;
+  for (int y = bounds.top; y < bounds.bottom; ++y)
+    for (int x = bounds.left; x < bounds.right; ++x) {
+      TileIndex tile = MapTileXY(city, x, y);
+      int error = GetCityBulldozeTileError(city, tile, underground, alt);
+      if (!error) {
+        eligible = true;
+        quote.cost += GetCityBulldozeTileCost(city, tile, underground);
+      } else if (error != CITY_COMMAND_COST_NOTHING_TO_REMOVE) last_error = error;
+    }
+  quote.error = !eligible ? last_error : CITY_COMMAND_COST_OK;
+  return quote;
+}
+
+// Demolish the structure at a valid resolved tile, optionally queuing its visual animation. Animation must be zero or
+// one; TEST only checks admission, and execution reports Game error status while Drawing owns the queued pixels.
+i64 CmdBulldoze(City *city, u32 flags, TileIndex location, int animate) {
+  int invalid = CITY_COMMAND_COST_INVALID;
+  if (!IsMapTileValid(city, location) || (animate != 0 && animate != 1))
+    return invalid;
+  if (flags & CITY_COMMAND_TEST) return 0;
+  ClearGameError(city->game);
+  BulldozeCityTile(city, location, animate != 0);
+  return GetGameError(city->game) == 0;
+}
+
+// Execute the retained single-cell demolition action with resolved layer/options. Validates tile and allowed bits;
+// TEST uses read-only error/cost probes rather than performing effects or consuming RNG.
+i64 CmdApplyBulldozerTool(City *city, u32 flags, TileIndex location,
+    int options) {
+  int invalid = CITY_COMMAND_COST_INVALID;
+  if (!IsMapTileValid(city, location) || (options & ~CITY_BULLDOZER_FLAGS_MASK) != 0)
+    return invalid;
+  if (flags & CITY_COMMAND_TEST) {
+    bool underground = options & CITY_BULLDOZER_UNDERGROUND;
+    int error = GetCityBulldozeTileError(city, location, underground, options & CITY_BULLDOZER_ALT);
+    if (error) return error == CITY_COMMAND_COST_CLEAR_DEEP_WATER ? error : CITY_COMMAND_COST_BLOCKED;
+    return GetCityBulldozeTileCost(city, location, underground);
+  }
+  ClearGameError(city->game);
+  return ApplyCityBulldozerAtTile(city, location, options);
+}
+
+// Demolish admitted cells in a resolved inclusive rectangle, in row order. Each edit checks and pays its live
+// charge; footprint edits can change later cells. TEST quotes the current rectangle without performing those edits.
+i64 CmdBulldozeRect(City *city, u32 flags, TileIndex location, TileIndex end, int options) {
+  CityCommandCost quote = GetCityBulldozeRectangleCost(city, location, end, options);
+  if (flags & CITY_COMMAND_TEST) return CityCommandPriceResult(quote);
+  if (quote.error) return quote.error;
+  i64 affordable = AffordableCityCommandCost(city, quote.cost);
+  if (affordable < 0) return affordable;
+  CityRect bounds = MapTileRectangle(city, location, end);
+  bool underground = (options & CITY_BULLDOZER_UNDERGROUND) != 0;
+  bool alt = (options & CITY_BULLDOZER_ALT) != 0;
+  TileIndex endpoints[2] = {location, end};
+  int endpoint_count = location == end ? 1 : 2;
+  bool large[2];
+  for (int i = 0; i < endpoint_count; ++i) {
+    CityTileArea footprint = ResolveBulldozeFootprint(city, endpoints[i]);
+    large[i] = footprint.width > 1 || footprint.height > 1;
+  }
+  bool demolished = false;
+  i64 failure = 0;
+  ClearGameError(city->game);
+  PlayCitySoundWithDelay(city->game, CITY_SOUND_BULLDOZER_WORK, -1);
+  for (int y = bounds.top; y < bounds.bottom && !GetGameError(city->game); ++y)
+    for (int x = bounds.left; x < bounds.right && !GetGameError(city->game); ++x) {
+      TileIndex tile = MapTileXY(city, x, y);
+      if (IsCityBulldozeGroundNoop(&city->tile[tile], underground)) continue;
+      if (CanBulldozeCityTile(city, tile, underground, alt)) {
+        i64 result = ApplyCityBulldozerAtTile(city, tile, options | CITY_BULLDOZER_NO_EFFECT);
+        if (result < 0) failure = result;
+        else demolished |= result > 0;
+      }
+    }
+  StopCitySound(city->game, CITY_SOUND_BULLDOZER_WORK);
+  // Bare ground is admitted without changing tiles. Its loop otherwise starts
+  // and stops within this call, so acknowledge the successful tool action once.
+  if (!demolished && !failure && !GetGameError(city->game) && !(options & CITY_BULLDOZER_NO_EFFECT))
+    PlayCitySound(city, location, CITY_SOUND_EXPLOSION);
+  if ((demolished || (!failure && !GetGameError(city->game))) && !(options & CITY_BULLDOZER_NO_EFFECT))
+    for (int i = 0; i < endpoint_count; ++i)
+      ShowCityDemolitionEffect(city, endpoints[i], large[i]);
+  InvalidateCityInformation(city->game, CITY_UPDATE_STATUS);
+  return failure ? failure : 1;
 }

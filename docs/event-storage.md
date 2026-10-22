@@ -72,7 +72,13 @@ records; repeated native save/load does not shift events or repeat the legacy
 offset adjustment.
 
 Stock XTHG and comparison transport remain 40 records of 12 bytes. Shared codecs
-translate complete records explicitly. Native `XTHG.bin` stores consecutive
+translate complete records explicitly. Their declarations and stock record size
+live in `city/saveload/events_format.h`, independent of the runtime event API.
+`codec.c` privately normalizes stock coordinates and reconstructs base overlays
+after the complete stock record set is decoded. Runtime movement owns native
+hash membership without importing stock overlay stacks.
+
+Native `XTHG.bin` stores consecutive
 little-endian 22-byte records, including reserved slot zero; its byte length
 determines the saved capacity. C assertions freeze the layout. Native saves clear
 the hash membership bit and omit the next word, then rebuild both bucket heads
@@ -80,6 +86,113 @@ and links after loading. The train-chain `next_slot` is separate and is saved.
 Native records are not duplicated in NRTS. Invalid native tile indexes, train
 links and Maxis Man event targets are rejected. Previous project save layouts
 are not migrated.
+
+## Runtime modules
+
+`movement.c` owns event-pool admission, hash membership, record coordinates,
+the common fixed-point step and stable slot-order updates.
+It calls family handlers directly. Family handlers use the same pool and move
+records through its membership operations; they do not allocate a second index
+or keep another representation of the City event record.
+
+| Module | Responsibility |
+| --- | --- |
+| `aircraft.c` | Airplane/helicopter spawning, approaches, collisions and flight stages. |
+| `trains.c` | Train/subway spawning, linked-coach movement, route choice and reversal. |
+| `boats.c` | Ship/sailboat spawning, water admission, travel, arrival and departure. |
+| `disaster_actors.c` | Explosion, monster, tornado and Maxis Man creation and updates. |
+| `emergency.c` | Available police/fire/military units, warning gates, marker placement and recall. |
+
+`emergency.h` defines resolved service IDs and `CityEmergencyDispatchState`.
+City retains that state in `event_runtime.dispatch`; the nested state and event
+cadence still occupy 308 bytes together. Counts, field widths and one-based unit
+marker arrays are unchanged. Commands validate their payload and TEST admission;
+the emergency module performs dispatch and recall. Native resume serialization
+keeps its field order and widths. Comparison maps the nested members to the same
+named checkpoint fields and stock addresses.
+
+Each family keeps its own behavior helpers and lookup tables private. The shared
+event interface exposes the operations used by other modules, including the
+read-only approach decoder used by file codecs. Train compatibility tables stay
+private to `trains.c`; Drawing uses the ordinary four-way infrastructure vectors.
+Simulation movement does not import Drawing or UI state. Damage and sound
+requests use the existing direct presentation/Audio interfaces.
+
+Spawner names identify their families (`TrySpawnCityAirplane`,
+`TrySpawnCityHelicopter`, `TrySpawnCityStationTrains` and
+`TrySpawnCityMarinaSailboats`) rather than event or tile numbers. The comparison
+address map retains the former names and source locations as historical aliases.
+
+The module reorganization preserves function behavior, table values, RNG calls,
+dispatcher order and event-record layout. It does not establish runtime
+comparison coverage.
+
+## Movement contracts
+
+`AdvanceCityMapEventPosition` takes an explicit event-kind speed and eight-way
+heading. `AdvanceCityShipPosition` and `AdvanceCitySailboatPosition` use their own
+step tables and sub-tile periods. At an edge, ship movement unlinks but retains
+the event; sailboat movement releases it and excludes the last row and column.
+The caller must account for that difference.
+
+`CityEventHeadingTowardPoint` uses half-axis thresholds in world coordinates;
+waypoints may be off-map. Aircraft approach has a private sign-only selector,
+and aircraft distance checks also stay private to that module. A direct
+`TurnCityEventHeadingToward` call always takes one heading step, even when
+already aligned; `SteerCityEventTowardPoint` preserves an aligned heading.
+These names and boundaries preserve the existing arithmetic, edge behavior,
+table values and RNG consumption.
+
+## Event artwork
+
+`drawing/maps/map_events.c` owns sprite selection, zoom limits and heading-to-view
+lookups. Event-kind tables use named event initializers. UI asks Drawing for
+airplane bounds in an explicit camera; an unsupported zoom returns empty bounds.
+It does not read sprite tables to decide whether a sound source is visible.
+
+`map_events.h` owns the renderer's event histories and public drawing/bounds
+operations. Family sprite painters are private to the implementation. Unused
+comparison component-paint adapters and the obsolete crawler-piece painter have
+been removed; the native crawler uses one registered sprite.
+
+Random sprite painting advances the supplied paint City's RNG; native frames use
+a City paint copy. `CityMapEventSpriteBounds` is for live nonrandom sprites and
+does not advance RNG on that path. Explosions, monsters and tornadoes use captured
+animation footprints instead, preserving the same frame choices for damage and
+painting.
+
+Aircraft and ships use eight-way headings. Sailboats use four cardinal directions,
+so Drawing rotates their view modulo four before selecting a sprite and flip.
+Explosion direction stores an animation stage and is independent of the camera.
+These distinctions prevent rotated sailboats from reading past a four-entry
+table and keep explosions on the same animation frame when the view turns.
+
+## Train presentation
+
+Drawing samples an engine and its linked coaches at one shared motion phase and
+spaces coaches by distance along the prepared rail paths. A stationary or reset
+engine uses the midpoint phase for the whole train. After reversal, the current
+linked tile positions provide the reversed entry/exit edges while City's copied
+targets catch up. Drawing retains the corrected paths across those tile moves
+and keeps the simulation records and RNG unchanged. Missing or non-adjacent
+history still discards the unproved path.
+
+Coaches sharing their initial spawn tile stay hidden until their route separates
+from it. The reversal cache flag fits existing `VehicleMotion` padding; the
+record remains 56 bytes on the supported 64-bit hosts, with no new allocation.
+
+## Boat water surfaces
+
+With **Native landscape behavior** enabled, sailboat spawning and movement use
+`ReadCityTileGeometry` to require a level water surface. Water-class shore banks
+and rapids cannot admit a boat. An imported sailing record or a terrain edit
+that leaves a boat on such a surface removes it before its next movement step.
+Fully submerged slopes still have a level water surface and remain navigable.
+
+Small boats retain their separate pier and marina behavior and can pass beneath
+water infrastructure. They do not inherit large ships' drawbridge-clearance
+requirements. Disabling native landscape behavior retains the original sailboat
+water-presence check and RNG sequence for stock comparison.
 
 ## Pool and tile index
 

@@ -1,10 +1,11 @@
 #ifndef SC2K_UI_MENU_H
 #define SC2K_UI_MENU_H
 
-#include "ui/tools/types.h"
-#include "ui/input.h"
-#include "drawing/canvas.h"
+#include "assets/graphics.h"
 #include "city/types.h"
+#include "drawing/canvas.h"
+#include "ui/input.h"
+#include "ui/tools/types.h"
 
 // Original menu positions, command IDs and enabled/check states.
 enum {
@@ -97,8 +98,9 @@ enum {
   CITY_TOOLBAR_STRETCH_TERRAIN_ICON = CITY_TOOLBAR_UNDERWORLD_ICON + 1,
   CITY_TOOLBAR_WEBSITE_ICON = CITY_TOOLBAR_STRETCH_TERRAIN_ICON + 1,
   CITY_TOOLBAR_JUKEBOX_ICON = CITY_TOOLBAR_WEBSITE_ICON + 1,
-  CITY_TOOLBAR_ICON_COUNT = CITY_TOOLBAR_JUKEBOX_ICON + 1,
 };
+_Static_assert(CITY_TOOLBAR_JUKEBOX_ICON + 1 == CITY_TOOLBAR_ICON_COUNT,
+    "Toolbar UI mappings must cover the native icon atlas");
 enum { CITY_EMERGENCY_RECALL = 1 << 3, CITY_EMERGENCY_GOTO = 1 << 4 };
 
 typedef struct {
@@ -160,6 +162,10 @@ bool HandleCityToolbarShortcut(Game *game, CityHotkey key);
 const CityMenuItem *CityMenuKey(CityCanvasDesktop *desktop, CityHotkey key);
 void CityMenuTooltipAt(const Game *game, int x, int y, char *text, size_t capacity);
 bool IsCityMenuItemChecked(const Game *game, const CityMenuItem *item);
+// UI resolves toolbar aspect, pressed/disabled styling and application errors; Drawing owns prepared pixels.
+int CityToolbarIconColumns(int icon);
+bool PrepareCityToolbarIconSize(Game *game, int icon, int size);
+void DrawCityToolbarIcon(Game *game, Canvas *canvas, CityRect bounds, int icon, bool disabled, bool flipped);
 void DrawCityMenu(Game *game, Canvas *canvas, const CityCanvasDesktop *desktop);
 void UpdateCityToolbar(Game *game);
 bool PollCityToolbar(Game *game, u32 milliseconds);
@@ -170,5 +176,8 @@ bool CityToolSupportsPlacementRotation(int tool);
 bool HandleCityPlacementRotationKey(Game *game, CityHotkey key);
 void CityConstructionTooltipAt(const Game *game, const Window *window, int x, int y,
     char *text, size_t capacity);
+
+bool HandleCityMainMenuPointer(Game *game, const CanvasSDLEvent *event);
+void ExecuteCityMenuItem(Game *game, const CityMenuItem *item);
 
 #endif

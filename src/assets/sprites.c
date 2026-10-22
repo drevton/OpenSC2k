@@ -15,6 +15,43 @@
 #include "drawing/maps/tables.h"
 #include "drawing/sprites/sprites.h"
 
+bool ValidateSpriteVariants(SpriteVariants variants, int sprite_count, int header_count) {
+  int previous = -1;
+  for (u32 at = 0; at < variants.size;) {
+    if (variants.size - at < 4) return false;
+    const u8 *record = variants.data + at;
+    int sprite = ReadLE16(record), mask = record[2];
+    if (sprite <= previous || sprite >= sprite_count || !mask || (mask & ~15) || record[3]) return false;
+    previous = sprite;
+    at += 4;
+    for (int level = 0; level < 4; ++level) {
+      if (!(mask & (1 << level))) continue;
+      if (variants.size - at < 2) return false;
+      int header = ReadLE16(variants.data + at) & CITY_SPRITE_HEADER_MASK;
+      if (!header || header > header_count) return false;
+      at += 2;
+    }
+  }
+  return true;
+}
+
+u16 ResolveSpriteVariant(SpriteVariants variants, int sprite, int level, u16 fallback) {
+  // Preparation only. Painting uses the selected, prescaled image directly.
+  for (u32 at = 0; at < variants.size;) {
+    const u8 *record = variants.data + at;
+    int id = ReadLE16(record), mask = record[2];
+    if (id > sprite) break;
+    at += 4;
+    for (int bit = 0; bit < 4; ++bit) {
+      if (!(mask & (1 << bit))) continue;
+      if (id == sprite && bit == level) return ReadLE16(variants.data + at);
+      at += 2;
+    }
+    if (id == sprite) break;
+  }
+  return fallback;
+}
+
 const u16 kCityConstructionHeights[CITY_CONSTRUCTION_HEIGHTS] = {32, 64, 128, 192, 320, 512};
 
 int CityBuildingArtworkSourceFirst(int sprite) {
@@ -583,7 +620,7 @@ static bool LoadCityMapGraphics(CityResourceState *assets) {
   u32 layouts = valid ? ReadLE32(data + 8) : 0;
   u32 first = valid ? ReadLE32(data + 12) : 0;
   u32 count = valid ? ReadLE32(data + 16) : 0;
-  valid = valid && layouts > 0 && layouts <= 500 && first >= CITY_LANDSCAPE_SPRITE_COUNT &&
+  valid = valid && layouts > 0 && layouts <= CITY_MAP_SPRITES_PER_ZOOM && first >= CITY_LANDSCAPE_SPRITE_COUNT &&
       first <= CITY_SPRITE_HEADER_MASK && count > 0 && count <= 65536 && first + count <= 65536 && !(first & 3) && !(count & 3) &&
       span.size == 20 + 10 * layouts;
   const u16 *bindings = valid ? (const u16 *)(data + 20) : NULL;
@@ -603,17 +640,18 @@ static bool LoadCityMapGraphics(CityResourceState *assets) {
   return true;
 }
 
-static void InitializeNativeSpriteCatalog(CityResourceState *assets) {
+static void InitializeMapSpriteMetrics(CityResourceState *assets) {
   for (int id = 0; id < CITY_MAP_SPRITE_COUNT; ++id) {
-    int zoom = id / 500;
-    int sprite = id % 500;
+    int zoom = id / CITY_MAP_SPRITES_PER_ZOOM;
+    int sprite = id % CITY_MAP_SPRITES_PER_ZOOM;
     int index = sprite < assets->map_tile_sprite_count ? TileSpriteResourceIndex(assets, sprite, 0) : sprite;
     u16 reference = ResolveSpriteVariant(assets->sprite_variants, index, zoom, assets->sprite_index_lookup[index]);
     int header = reference & CITY_SPRITE_HEADER_MASK;
     const CityLandscapeSprite *art = header ? &assets->landscape[header - 1] : NULL;
     int divisor = art ? art->scale << (2 - zoom) : 1;
-    assets->sprites[id] = (CityMapSprite){.width = art ? (art->sprite->width + divisor - 1) / divisor : 8 << zoom,
-        .height = art ? (art->baseline + divisor - 1) / divisor : 4 << zoom};
+    assets->map_sprite_metrics[id] = (MapSpriteMetrics){
+        .width = art ? (art->sprite->width + divisor - 1) / divisor : 8 << zoom,
+        .baseline = art ? (art->baseline + divisor - 1) / divisor : 4 << zoom};
   }
 }
 
@@ -623,7 +661,7 @@ bool LoadCityLandscapeAssets(CityResourceState *assets) {
     return false;
   }
   if (!LoadCityLandscapeSpriteSet(assets)) return false;
-  InitializeNativeSpriteCatalog(assets);
+  InitializeMapSpriteMetrics(assets);
   static const u8 kColors[CITY_UNDERWORLD_GROUND_STYLES][3] = {
     {113, 115, 106}, {120, 122, 120}, {65, 87, 153}, {116, 103, 84}
   };
@@ -657,29 +695,6 @@ void ReleaseCitySpriteAssets(CityResourceState *assets) {
     FreeRunSprite(assets->demolition[id].sprite);
     assets->demolition[id] = (CityLandscapeSprite){0};
   }
-  memset(assets->sprites, 0, sizeof(assets->sprites));
+  memset(assets->map_sprite_metrics, 0, sizeof(assets->map_sprite_metrics));
   ++assets->sprite_revision;
-}
-
-// Music Assets
-
-bool LoadCityMusicAssets(CityAssets *resources, const char *root) {
-  AssetFile file;
-  if (OpenAssetSource(&file, resources, CITY_ASSET_MUSIC_BUTTONS, root) != 1) return false;
-  u8 header[12];
-  bool valid = ReadAssetFile(&file, header, sizeof(header)) == sizeof(header) &&
-      !memcmp(header, "SC2KPIC1", 8) && ReadLE32(header + 8) == CITY_MUSIC_SPRITE_COUNT;
-  CityMusicAssets images = {0};
-  for (int i = 0; valid && i < CITY_MUSIC_SPRITE_COUNT; ++i) {
-    images.images[i] = ReadAssetPicture(&file, i, CITY_MUSIC_SPRITE_SIZE, CITY_MUSIC_SPRITE_SIZE);
-    valid = images.images[i] != NULL;
-  }
-  if (valid) valid = ReadAssetByte(&file) == EOF && !file.failed;
-  if (!CloseAssetFile(&file)) valid = false;
-  for (int i = 0; i < CITY_MUSIC_SPRITE_COUNT; ++i) {
-    if (valid) FreeRunSprite(resources->music_buttons.images[i]);
-    else FreeRunSprite(images.images[i]);
-  }
-  if (valid) resources->music_buttons = images;
-  return valid;
 }

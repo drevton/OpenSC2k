@@ -1,13 +1,22 @@
 #ifndef SC2K_DOMAIN_SRC_UI_STARTUP_STARTUP_H
 #define SC2K_DOMAIN_SRC_UI_STARTUP_STARTUP_H
 
-#include "ui/input.h"
+#include "assets/graphics.h"
 #include "city/engine/city_types.h"
-#include "drawing/canvas.h"
-#include "city/terrain/terrain.h"
 #include "city/types.h"
-#include "ui/dialogs/dialog_state.h"
-#include "ui/windows/state.h"
+
+typedef struct Game Game;
+typedef struct Canvas Canvas;
+typedef struct CanvasSDL CanvasSDL;
+typedef struct Window Window;
+typedef struct CityCanvasDesktop CityCanvasDesktop;
+typedef struct CityTerrainMap CityTerrainMap;
+typedef struct CityDropdownItem CityDropdownItem;
+
+typedef struct CityStartupWindow {
+  u32 resource_id;
+  u32 window_id;
+} CityStartupWindow;
 
 typedef enum CitySetupDifficulty {
   CITY_SETUP_DIFFICULTY_EASY = 0, CITY_SETUP_DIFFICULTY_MEDIUM = 1,
@@ -71,8 +80,9 @@ typedef struct CityCanvasStartupWindow {
 
 enum { CITY_STARTUP_WINDOW_LIMIT = 16 };
 
+// The registry borrows the base record until unregister; setup records embed it as their first member.
 typedef struct {
-  void *dialog;
+  CityStartupWindow *dialog;
   u32 window_id;
   CityCanvasStartupWindow layout;
   u32 resource;
@@ -112,7 +122,6 @@ bool UnregisterCityStartupWindow(City *city, CityStartupWindow *window);
 const CityCanvasStartupWindow *ReadCityStartupWindowLayout(City *city, u32 canvas_window_id);
 
 // Startup Menu
-typedef struct City City;
 
 typedef CityStartupWindow CityStartupMenuDialog;
 typedef enum CityStartupMenuChoice {
@@ -137,5 +146,56 @@ bool StartupMenuNewCity(City *city, CityStartupMenuDialog *dialog);
 bool StartupMenuEditMap(City *city, CityStartupMenuDialog *dialog);
 bool StartupMenuLoadScenario(City *city, CityStartupMenuDialog *dialog);
 bool StartupMenuQuit(City *city, CityStartupMenuDialog *dialog);
+
+// The startup backdrop streams into the caller's canvas; loading also prepares and presents the shared framebuffer.
+void DrawCityStartupBackdrop(Game *game, Canvas *canvas, CityRect area);
+bool DrawCityLoadingScreen(Game *game, CanvasSDL *display, CityIntroStage stage,
+    int completed, int total, bool initial);
+
+// Reserve the baked identity area when positioning startup content.
+int CityStartupContentTop(int width, int height);
+
+// Setup Dialog
+
+CityNewCitySetupDialog *ConstructNewCitySetupDialog(City *city, CityNewCitySetupDialog *dialog);
+void DestroyNewCitySetupDialog(CityNewCitySetupDialog *dialog);
+int ChooseNewCitySetupDialog(City *city, CityNewCitySetupDialog *dialog);
+
+enum {
+  CITY_SETUP_NAME = 101, CITY_SETUP_ERA_FIRST = 104, CITY_SETUP_DIFFICULTY_FIRST = 109,
+  CITY_SETUP_YEAR = 250, CITY_SETUP_YEAR_PREVIOUS, CITY_SETUP_YEAR_NEXT,
+  CITY_SETUP_YEAR_INPUT, CITY_SETUP_YEAR_CLEAR, CITY_SETUP_YEAR_DEFAULT, CITY_SETUP_DIFFICULTY, CITY_SETUP_RANDOM_NAME,
+  CITY_SETUP_YEAR_QUERY_RESOURCE = 65536,
+  CITY_SETUP_MAYOR = 200, CITY_SETUP_REGENERATE = 201,
+  CITY_SETUP_HILLS = 202, CITY_SETUP_WATER = 203, CITY_SETUP_TREES = 204,
+  CITY_SETUP_SMOOTH = 205, CITY_SETUP_FEATURE_FIRST = 210,
+  CITY_SETUP_MAP_WIDTH = 230, CITY_SETUP_MAP_HEIGHT = 231, CITY_SETUP_MAP_SIZE_FIRST = 232,
+  CITY_SETUP_MAP_SIZE_COUNT = 6,
+  CITY_SETUP_CLIMATE = 239,
+  CITY_SETUP_SNOW_COVERAGE = 240, CITY_SETUP_DESERT_COVERAGE = 241,
+  CITY_SETUP_EDIT_TERRAIN = 276, CITY_SETUP_LOAD_MAP,
+  CITY_SETUP_COAST = 272, CITY_SETUP_RIVER, CITY_SETUP_LANDFORM, CITY_SETUP_VARIETY,
+  CITY_SETUP_NAME_LIMIT = 32, CITY_SETUP_CHECKPOINT_ENTER = 17, CITY_SETUP_CHECKPOINT_LEAVE = 18,
+};
+void InitializeCitySetupName(City *city, CityNewCitySetupDialog *dialog);
+void CaptureCitySetupName(City *city, CityNewCitySetupDialog *dialog);
+void ReleaseCitySetupName(CityNewCitySetupDialog *dialog);
+
+int ChooseCitySetupWindow(City *city, CityNewCitySetupDialog *dialog);
+
+// UI stages pending controls; acceptance copies them into the setup choices.
+bool EditCitySetupControl(City *city, i32 token, i32 control, i32 value, const u8 *text, u32 length);
+bool AnswerCitySetupDialog(City *city, i32 token, i32 answer);
+
+// Startup Dialog
+
+void SetCityStartupDialogResource(CityStartupWindow *dialog, u32 resource);
+bool CityStartupMenuServiceAvailable(City *city);
+i32 ChooseCityStartupMenuDialog(City *city, CityStartupWindow *dialog);
+bool AnswerCityStartupMenuDialog(City *city, i32 token, i32 choice);
+bool EndCityStartupDialog(City *city, u32 window, i32 result);
+
+// Help is borrowed for this call; generated startup text uses the caller's buffer.
+const char *CityStartupTooltipAt(const Window *window, int x, int y, char *text, size_t size);
 
 #endif

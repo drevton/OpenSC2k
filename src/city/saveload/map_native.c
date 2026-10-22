@@ -1,10 +1,11 @@
 #include "city/infrastructure/power_lines.h"
 #include "city/maps/trees.h"
 #include "city/maps/tile_storage.h"
-#include "city/infrastructure/infrastructure.h"
 #include "city/maps/layers.h"
 #include "city/saveload/city_file_internal.h"
 #include "city/saveload/map_format.h"
+#include "base/byte_order.h"
+#include <string.h>
 
 // Initialize imported native ground, climate, tree and power metadata when no landscape state exists. Reuses an
 // existing nonzero landscape seed without rerandomizing trees; initialization may consume the independent landscape

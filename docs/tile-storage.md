@@ -183,7 +183,7 @@ a viewport's frame and visible world area, but does not change the size of its r
 The map cache prepares only the display pixel scale and its magnified map scale; it does not
 prepare a Cartesian product with UI scales.
 Stock import/export numbering remains a separate codec concern. `TileKind` contains native kinds;
-`CityLegacySurfaceTile` in `file/city/map_format.h` lists original SC2 IDs with the `TKL_` prefix.
+`CityLegacySurfaceTile` in `city/saveload/map_format.h` lists original SC2 IDs with the `TKL_` prefix.
 Numeric overlaps do not imply matching meanings: stock rail 44 and native highway 27 are separate identities.
 
 `city/maps/tile_storage.h` defines native tile values and packed fields only. Placement
@@ -748,6 +748,12 @@ stock-imported banks start with their normal climate shoreline. `ReadGroundKind`
 other wet tiles report ordinary grass. Bridge heads are dry and retain ordinary ground state; style lives in
 their altitude word.
 
+The saved per-city rule `CITY_FIX_WATER_SPREADING` controls whether adjacent open water or banks can reclaim
+flat clear land. It defaults on for new cities and off for stock imports, preserving stock coastlines whose
+dry land is level with the water without changing geometry. Shore slopes remain eligible with either setting,
+subject to the shared-edge and water-height checks above. Rivers remain confined by kind. The rule uses the
+existing City settings mask and does not add tile metadata.
+
 Stock 16-series water imports as open water, 32-series shores as water banks, and 48-series channels
 and waterfalls as rivers. Inferred corners on a level stock channel are bank decoration, not rapids.
 Stock export reconstructs those terrain codes and river bank patterns at the boundary. The stock
@@ -960,7 +966,7 @@ This is one `u16`, not two independent bytes. Decode the word before interpretin
 | 0–4 | `0x001F` | Land height, 0–31 |
 | 5–9 | `0x03E0` | Water height, construction stage on dry buildings, or deck height on dry bridge middles; head bits 5–8 store style and bit 9 artwork phase |
 | 10–14 | `0x7C00` | Tunnel depth/height field |
-| 15 | `0x8000` | Preserved independent metadata flag; no climate/growth meaning assigned |
+| 15 | `0x8000` | Opaque saved flag, preserved by field edits |
 
 Dry native buildings (surface ID at least 112, without the water class) always interpret bits 5–9 as
 construction stage, 0–31. `ReadCityWaterHeight` returns their land height instead of interpreting
@@ -995,17 +1001,36 @@ Sources: [masks](../src/city/maps/tile_storage.h), [interpretation](../src/city/
   different regions for smoothing, influences and accumulations; terrain tools reuse it for heights.
   It is not persistent per-tile metadata. Its live contents can matter while simulation work is
   suspended. SC2K native resume data includes it.
-- `route_tiles`: a preallocated `TileIndex` queue for non-stock map dimensions, with one entry of
-  capacity per tile. Read/write cursors belong to City.
-- `route_queued`: one bit per tile for queue membership on those maps, not unused terrain bits.
-- `rotation_scratch`: one `u16` of capacity per tile on those maps, reused while rotating layers.
+- `route_points`: a preallocated ring of four-byte `PointU16` coordinates, shared by utilities,
+  terrain propagation and transport paths. Capacity is `512 * max(width, height) / 128` entries:
+  2 KiB at 128x128 and 64 KiB at 4096x4096. One slot distinguishes empty from full. Read/write
+  cursors and the capacity mask belong to City; a full flood queue drops its oldest entry.
+- `route_queued`: one bit per tile for flood-queue duplicate suppression, allocated at every map size.
+  The corresponding City fix enables its use. Transport paths permit revisits and bypass suppression.
+- `water_source_order`: a separate array of up to 8,192 `u32` source-order keys on non-128x128 maps.
+  The water scan reuses it to visit sparse sources in the established order; an unavailable or
+  insufficient workspace uses the ordinary ordered scan. It does not share storage with the route ring.
 - `history`: 16 series of 52 `u32` samples, 3,328 bytes total. These are graph histories, not spatial
   tile data; SC2 stores them in `XGRP`.
 
 Sources: [allocation](../src/city/state.c), [working passes](../src/city/maps/environment.c),
 [history constants](../src/city/economy/types.h), [native resume codec](../src/city/saveload/sc2k.c).
 
+Power and water source scans, component measurement/distribution and supply totals live in
+`city/infrastructure/utilities.c`. Their public interfaces are in `infrastructure/infrastructure.h`;
+component helpers are private. Incremental scans receive the scheduler's existing retained work explicitly
+and return false while work remains. The scheduler owns phase selection and batching, while utility code
+owns the scan/component stages. Whole-pass scans keep their component work local. Every traversal requires
+exclusive use of the shared route queue and visited flags until completion.
+
 ## Tile updates
+
+`city/maps/state.c` owns the pending tile, layer and full-map change flags and their reset.
+`InvalidateTile` records the City batch, invalidates map information, then calls the direct
+`PublishCityMapTileDamage` presentation hook synchronously. UI projects the changed tile into
+visible viewports using old/new Drawing extents. Bulk layer/full notifications keep their existing
+batch behavior. Presentation clears the batch after all views receive it; City also clears it
+when replacing map storage. No callback registry, deferred tile queue or second change record is used.
 
 `ReplaceCityTileAndStatistics` in `city/maps/layers.c` owns category changes: statistics,
 footprint/connection metadata, construction progress, tree initialization and ground recovery.
@@ -1023,6 +1048,18 @@ invalidates the completed area. Family operations use shared kind replacement fo
 Clearing an exposed water tile and clearing a bridge underpass are raw edits in `water.c` and `bridges.c`;
 the tool handler owns admission/payment and reconnects neighboring networks after the edit.
 Cell and neighbor order are significant: rubble selection consumes RNG during traversal.
+
+Physical terrain queries and reconstruction live in `city/maps/terrain.c`, declared in `maps/map.h`.
+`ReadCityTerrainVertexHeight` samples shared corners for the edit planner using the same corner masks as map geometry.
+`RecalculateTerrainCell` preserves stored native slopes and water levels after removing incompatible construction;
+`RebuildCityTerrainCell` and `RefreshTerrainNeighborhood` reconstruct corners from tile minima for generation and
+disaster callers. Edit admission, propagation, prices and payment remain in `city/tools/terrain.c`.
+
+River conversion and stream placement belong to `city/maps/water.c`, declared in `maps/water.h`.
+`CreateCityRiverTile` converts an admitted dry tile to fresh river at its bed height while preserving the slope.
+Existing water is unchanged. `CmdPlaceStream` retains its source admission and execution RNG sequence.
+Stock regrade offsets used by codecs and compatibility tables live in `saveload/terrain_format.h`, separately
+from native generator settings and native slope shapes.
 Native terrain recalculation after demolition preserves dry ground and existing water levels. Applying the
 editor sea level belongs to terrain edits that change vertices, so deleting a highway does not flood its footprint.
 Flat dry tree tiles accept zoning without removing their trees or local species/growth metadata. Preview, quotes
@@ -1056,14 +1093,49 @@ shared demolition replaces cells and clears their overlay associations. Allocati
 rules. Tools own only selection
 policy; their mapping uses named group/variant initializers, and the facility class table uses named tile kinds.
 
+Newspaper problem ranking, article-score decay and event insertion live in
+[city/events/news.c](../src/city/events/news.c), with their state and public contracts in `news.h`. The City-owned
+`news_records` contains seven ranked articles plus two composition slots; each `CityNewsRecord` retains its
+8-byte ID/score/data/cache layout. Comparison root labels retain their original transport names. Historical
+series and chart calculations stay in `economy/history.c`; `RecordCityMonthlyHistory` owns sample advancement,
+while `DecayCityNewsRankings` subtracts the per-article baseline and reorders the ranked records. Neither operation
+is a facility-ranking pass. Insertion and notice/continuation ordering remain unchanged. Startup calls `InitializeCityNews`,
+which sets the existing news flags, seeds the CRT generator from the signed low word of logical time and consumes
+122 draws to initialize/shuffle six stored editions. Edition records remain five bytes each; the shuffle and byte
+swap helpers are private to the news module. No runtime buffers are allocated by this initializer. `CITY_NEWSPAPER_EDITION_COUNT`
+defines the six valid edition indexes (0..5) for storage, initialization, scripting and diagnostic admission.
+`IsCityNewspaperEditionValid` rejects negative indexes and the nonexistent seventh edition before replay dispatch.
+
+The deterministic RNG interface and its three-stream `SimulationRandomState` are declared in
+`city/engine/random.h`; implementations and all three seed functions live in `random.c`. Callers include that
+interface directly instead of relying on scheduler declarations. CRT, map and event draws retain their existing
+algorithms and order; the independent native landscape generator retains its separate seed.
+
+Logical City clock operations remain in `city/engine/simulation_clock.c` and `simulation.h`. Game delay advancement,
+clock-sample observation and cadence delivery live in `game/timing.c`, declared in `game/timing.h`. Activation polling
+belongs to `game/update.c`; UI applies its effects through `ui/input.h`, and palette refresh is declared by Drawing.
+These moves preserve observer ordering and do not sample host time while advancing the logical City clock.
+
+Monthly weather transitions live in [city/engine/weather.c](../src/city/engine/weather.c), alongside their private
+transition and property tables. `weather.h` declares the four-byte `CityWeatherState`, status identifiers and
+`AdvanceCityWeather`. The economy continuation invokes it after milestone dismissal, preserving one CRT draw and
+reading the live quarter/weather after any nested commands. The scheduler header does not expose weather tables.
+
 Tile-kind totals (`CityStatistics`/`CityTileCounts`) are declared with map-derived types in `city/maps/map_types.h`.
 Growth and map queries use that contract without importing the economy state header; City still owns one totals record.
 
 Zone growth admission, population accounting, construction and decline live in
 [city/growth/zoning.c](../src/city/growth/zoning.c). `GrowCityZonedTile` processes one scheduled tile, including
-airport/seaport growth and vehicle spawning; military growth delegates to its own domain. The map scanner owns
-interleaved visit order and the shared large-city-effect decision. Reserved-zone underlays and infrastructure
-maintenance retain their existing scan positions. Traffic decay belongs to
+airport/seaport growth and vehicle spawning; military growth delegates to its own domain. The same growth module
+owns interleaved visit order and the shared large-city-effect decision through `ScanCityTileBatch` and
+`ScanQuarterCityTiles`. Reserved-zone underlays, infrastructure maintenance and facility activity retain their
+existing scan positions. The simulation scheduler selects quarters and batch sizes without owning those rules.
+Environment calculations remain in [city/maps/environment.c](../src/city/maps/environment.c), with their retained
+`CityEnvironmentScan` declared in `map_types.h`. They own stage transitions and exclusive use of the existing
+scratch array until the pass finishes; no additional workspace is allocated. Each stage processes complete rows
+through direct calls, with no section dispatch or function-pointer calls. Incremental budgets still count rows in
+the current stage's resolution. Columns retain west-to-east order, including the four-tile influence groups whose
+coarse visited writes can affect later reads. Traffic decay belongs to
 [city/infrastructure/transport.c](../src/city/infrastructure/transport.c): the incremental scheduler accumulates
 section totals, while whole-map decay invalidates the layer and processes sections in the same order.
 
@@ -1137,8 +1209,9 @@ zoom/view data in `map_view.h`. The map-render header imports those narrow inter
 or the full City/UI state; desktop participation is an opaque pointer. `drawing.h` aggregates the map services for
 existing UI callers without redeclaring them. Drawing state explicitly includes the RNG and options types it stores.
 Placement selection allocation, sorting and retained cells live with UI input in `ui/tools/map_input.c`.
-Drawing supplies read-only marker bounds through the UI-independent `drawing/maps/placement.h` and owns marker
-rasterization. Game owns the error tile and damages its old/new marker before updating it. The unused polygon-preview
+Drawing supplies marker bounds and damage through the UI-independent `drawing/maps/placement.h` and owns marker
+rasterization. UI owns the error tile beside its window and requests old/new damage before updating it.
+The unused polygon-preview
 setter, rasterizer and desktop record have been removed, together with their obsolete ctypes entry. Active placement uses
 the existing tile selection. Scoped preview-target binding still saves and restores the caller's borrowed surface.
 
@@ -1267,8 +1340,9 @@ off selects the retained stock behavior while keeping the same native tile recor
 writing a slope preserves water and upper-nibble metadata. Neither depends on the
 fix. Water presence comes from the kind class and salinity from `TF_SALTWATER`; complete surface geometry comes
 from `ReadCityTileGeometry`. Retained stock algorithms explicitly use
-`ReadLegacyTerrainCode` and `WriteLegacyCityTerrainCode` for combined slope/bank/water
-codes. Legacy writes are decoded before entering native storage. Highway terrain
+`ReadLegacyTerrainCode` and `WriteLegacyCityTerrainCode` from `city/saveload/map_format.h` for combined slope/bank/water
+codes. Tile access and infrastructure headers do not import the stock format; retained algorithms include it explicitly.
+Legacy writes are decoded before entering native storage. Highway terrain
 preservation checks only `CITY_FIX_HIGHWAY_TERRAIN`, independently of landscape
 artwork selection.
 
@@ -1375,9 +1449,10 @@ and the current native format are maintained. Failed SC2 loads do not probe anot
 terrain and water decoding, directional road/rail/power layouts, entrance variants,
 hydro orientations and counters, building/highway footprint projection, bridge
 packing and XGND validation. Native initialization and ground-extension encoding remain in
-`map_native.c`. The shared `map_format.h` interface exposes operations and
-native family/axis/orientation arguments. Retired SC2 variant enums are
-private to the implementation; engine headers do not publish them. The single
+`map_native.c`. The shared `map_format.h` interface exposes stock IDs and conversion operations to explicit codec
+and compatibility callers, without importing City or other owner definitions. Engine headers do not publish those
+IDs. Highway span classification reads native geometry directly: flat land, shore, water or steep terrain, rather
+than indexing a stock terrain table. The single
 `City.native_map_storage` distinguishes unfinished stock file decoding from complete native tile
 encoding. Both terrain generators build native records throughout: the original 128-square command
 keeps its height, smoothing, carving and progress stages without entering stock storage or converting

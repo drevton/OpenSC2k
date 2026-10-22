@@ -6,6 +6,8 @@
 // ReadCityBaseOverlay resolves effect first, then sign, then facility; WriteOverlay(..., 0) clears only the effect.
 // Sign removal clears bit 0 explicitly. Other TileInfo bytes keep their shared/family meanings from tile_storage.h.
 
+#include "city/maps/labels.h"
+#include "city/events/news.h"
 #include "city/economy/facilities.h"
 #include "audio/types.h"
 #include "city/engine/command_types.h"
@@ -18,7 +20,7 @@
 #include <stdlib.h>
 #include "city/tools/tools.h"
 
-#include "audio/audio.h"
+#include "game/audio.h"
 #include "city/state.h"
 #include "city/engine/commands.h"
 #include "city/economy/economy.h"
@@ -26,7 +28,6 @@
 #include "city/maps/map.h"
 #include "city/saveload/file.h"
 #include "game/state.h"
-#include "audio/state.h"
 #include "assets/state.h"
 #include "game/observation.h"
 #include "base/text.h"
@@ -111,11 +112,33 @@ bool ReserveCityFacilities(City *city, int requested) {
   return true;
 }
 
-void ReleaseCityAssociations(City *city) {
+// Release sparse storage without touching the fixed facility records. Shared-facility new-city resets preserve
+// unused payload fields in those records; final release clears them as well.
+static void ReleaseCityAssociationStorage(City *city) {
   free(city->signs.record); free(city->signs.buckets);
   city->signs = (CitySigns){0};
-  free(city->annual_facilities.extra); free(city->annual_facilities.details); free(city->annual_facilities.buckets);
-  city->annual_facilities = (CityAnnualFacilities){0};
+  CityAnnualFacilities *facilities = &city->annual_facilities;
+  free(facilities->extra); free(facilities->details); free(facilities->buckets);
+  facilities->extra = NULL;
+  facilities->details = NULL;
+  facilities->buckets = NULL;
+  facilities->capacity = facilities->used = facilities->free_slot = 0;
+}
+
+void ReleaseCityAssociations(City *city) {
+  ReleaseCityAssociationStorage(city);
+  memset(city->annual_facilities.record, 0, sizeof(city->annual_facilities.record));
+}
+
+void ResetCityMapAssociations(City *city) {
+  ReleaseCityAssociationStorage(city);
+  for (TileIndex tile = 0; tile < (u32)city->map_cell_count; ++tile)
+    city->tile[tile].overlay = CITY_OVERLAY_NONE;
+  // Empty all fixed names except the mayor. Keep their unused bytes, as in stock new-city initialization.
+  for (int overlay = CITY_OVERLAY_SIGN_FIRST; overlay < CITY_OVERLAY_NAME_COUNT; ++overlay)
+    city->overlay_names.entry[overlay].character[0] = 0;
+  CityOverlayName *mayor = &city->overlay_names.entry[0];
+  CopyText((char *)mayor->character, sizeof(mayor->character), "Mayor McSim");
 }
 
 int ReadCitySignOverlay(const City *city, TileIndex tile) {
@@ -361,12 +384,12 @@ i64 CmdRenameCitySign(City *city, u32 flags, TileIndex tile, int slot, const u8 
       ReadCitySignOverlay(city, tile) != slot) return CITY_COMMAND_COST_INVALID;
   // An empty visible name deletes the sign, even if a caller supplied just its color.
   if (length == 1 && CitySignTextColor((const char *)text)) length = 0;
-  if (!slot && !length) return true;
+  if (!slot && !length) return flags & CITY_COMMAND_TEST ? 0 : true;
   if (!slot) slot = FindFreeOverlayNameSlot(city);
   if (!slot) {
     return -CITY_NOTICE_SIGN_LIMIT_REACHED;
   }
-  if (flags & CITY_COMMAND_TEST) return true;
+  if (flags & CITY_COMMAND_TEST) return 0;
   if (!ReserveCitySigns(city, CitySignOverlaySlot(slot) + 1)) return CITY_COMMAND_COST_BLOCKED;
   InvalidateTile(city, tile);
   CityOverlayName *name = CityOverlayNameAt(city, slot);
@@ -384,13 +407,13 @@ i64 CmdMoveCitySign(City *city, u32 flags, TileIndex tile, TileIndex destination
   if ((flags & ~CITY_COMMAND_TEST) || !IsMapTileValid(city, tile) || !IsMapTileValid(city, destination) ||
       !IsCitySignOverlay(slot) || ReadCitySignOverlay(city, tile) != slot)
     return CITY_COMMAND_COST_INVALID;
-  if (tile == destination) return true;
+  if (tile == destination) return flags & CITY_COMMAND_TEST ? 0 : true;
   if (ReadCitySignOverlay(city, destination) || IsTileKindFacility(ReadTile(city, destination)) ||
       (!city->individual_facilities && ReadOverlay(city, destination))) {
     if (!(flags & CITY_COMMAND_TEST)) PlayCitySound(city, destination, CITY_SOUND_PLACEMENT_REJECTED);
     return CITY_COMMAND_COST_BLOCKED;
   }
-  if (flags & CITY_COMMAND_TEST) return true;
+  if (flags & CITY_COMMAND_TEST) return 0;
   InvalidateTile(city, tile);
   InvalidateTile(city, destination);
   city->tile[tile].overlay &= ~CITY_TILE_HAS_SIGN;
@@ -439,6 +462,22 @@ i64 ApplyCityMapLabelChoice(City *city, TileIndex tile, const CityNameCommandInp
   return true;
 }
 
+// Commit a staged map-label text answer at a valid tile. Requires an active bounded text payload and OK/cancel choice;
+// TEST validates only and execution returns label-slot or placement errors.
+i64 CmdEditMapLabel(City *city, u32 flags, TileIndex tile, int answer) {
+  int invalid = CITY_COMMAND_COST_INVALID;
+  if (!city->command_name_active || !IsMapTileValid(city, tile) ||
+      (answer != CITY_DIALOG_OK && answer != CITY_DIALOG_CANCEL))
+    return invalid;
+  if (flags & CITY_COMMAND_TEST) return 0;
+  const GameObservation *observer = city->game->observation;
+  i64 applied = 1;
+  if (observer && observer->edit_map_label) observer->edit_map_label(city, tile);
+  else applied = ApplyCityMapLabelChoice(city, tile, &city->command_name, answer);
+  RefreshCityMapViews(city->game);
+  return applied;
+}
+
 // Retained comparison caller shares allocation and choice effects.
 void EditCityOverlayNameAtTile(City *city, TileIndex tile) {
   assert(IsMapTileValid(city, tile));
@@ -466,6 +505,24 @@ void ApplyCityFacilityLabelChoice(City *city, TileIndex tile, const CityNameComm
     ReportCityTileInspection(city, tile);
   else if (answer == CITY_DIALOG_OK)
     memcpy(CityOverlayNameAt(city, slot)->character, state->name.character, state->length + 1);
+}
+
+// Commit a staged text answer for the selected facility's label. Requires the active bounded name payload and
+// supported answer; TEST checks admission and execution reads the live facility state after callbacks.
+i64 CmdEditFacilityLabel(City *city, u32 flags, TileIndex tile, int answer) {
+  int invalid = CITY_COMMAND_COST_INVALID;
+  if (!city->command_name_active || !IsMapTileValid(city, tile) ||
+      (answer != CITY_DIALOG_OK && answer != CITY_DIALOG_CANCEL))
+    return invalid;
+  int slot = ReadCityFacilityOverlay(city, tile);
+  if (!IsCityFacilityOverlay(slot))
+    return invalid;
+  if (flags & CITY_COMMAND_TEST) return 0;
+  const GameObservation *observer = city->game->observation;
+  if (observer && observer->edit_facility_label) observer->edit_facility_label(city, tile);
+  else ApplyCityFacilityLabelChoice(city, tile, &city->command_name, answer);
+  RefreshCityMapViews(city->game);
+  return 1;
 }
 
 // Retained diagnostic caller; overlay 111 refreshes F3 records first.
@@ -514,6 +571,21 @@ void ApplyCityStadiumTeamChoice(City *city, TileIndex tile, int team, const char
   }
   SetCityStadiumTeam(city, tile, team, name);
   return;
+}
+
+// Assign the requested team index to the live stadium using the staged bounded name. TEST validates the tile,
+// stadium and index without effects; -1 preserves the rejection sound/error instead of assigning a team.
+i64 CmdAssignStadiumTeam(City *city, u32 flags, TileIndex tile, int team) {
+  int invalid = CITY_COMMAND_COST_INVALID;
+  if (!city->command_name_active || !IsMapTileValid(city, tile) || team < -1 || team >= CITY_TEAM_NAME_COUNT)
+    return invalid;
+  int slot = ReadCityFacilityOverlay(city, tile);
+  if (!IsCityFacilityOverlay(slot) ||
+      CityFacilityRecordAt(city, CityFacilityOverlaySlot(slot))->type != TK_STADIUM)
+    return invalid;
+  if (flags & CITY_COMMAND_TEST) return 0;
+  ApplyCityStadiumTeamChoice(city, tile, team, (const char *)city->command_name.name.character);
+  return team == -1 ? -CITY_NOTICE_SELECT_VALID_STADIUM_SPORT : 1;
 }
 
 // Diagnostic adapter retains the original rejection caller until dismissal.

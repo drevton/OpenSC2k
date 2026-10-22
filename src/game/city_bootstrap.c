@@ -1,43 +1,35 @@
-#include "city/economy/facilities.h"
-#include "drawing/maps/map_view.h"
-#include "game/application.h"
-#include "assets/assets.h"
-#include <stdio.h>
-#include <stdlib.h>
+#include "city/saveload/state.h"
+#include "city/engine/city_name.h"
+#include "city/engine/clock.h"
+#include "game/city_lifecycle.h"
+
 #include <string.h>
 
-#include "game/application_internal.h"
-#include "city/saveload/runtime.h"
-#include "audio/state.h"
-#include "city/economy/economy.h"
-#include "game/state.h"
-#include "city/engine/initialization.h"
-#include "city/engine/simulation.h"
-#include "city/state.h"
-#include "city/saveload/file.h"
-#include "game/errors.h"
+#include "assets/assets.h"
 #include "assets/catalog.h"
-#include "drawing/drawing.h"
-#include "drawing/state.h"
 #include "assets/resources.h"
 #include "assets/state.h"
+#include "audio/state.h"
+#include "city/economy/economy.h"
+#include "city/economy/facilities.h"
+#include "city/engine/commands.h"
+#include "city/engine/initialization.h"
+#include "city/engine/random.h"
+#include "city/events/news.h"
+#include "city/presentation.h"
+#include "city/saveload/file.h"
+#include "city/saveload/runtime.h"
+#include "city/state.h"
+#include "drawing/maps/map_view.h"
+#include "drawing/state.h"
+#include "game/application.h"
+#include "game/errors.h"
+#include "game/state.h"
+#include "ui/console.h"
 #include "ui/state.h"
 #include "ui/text/text.h"
 #include "ui/tools/tools.h"
 
-// Host file context
-
-bool InitializeCityFileDirectory(Game *game) {
-  char *directory = ReadWorkingDirectory();
-  if (directory == NULL) return false;
-  free(game->file_directory);
-  game->file_directory = directory;
-  return true;
-}
-
-char *CityFileDirectory(const CityFileRuntime *file) { return file->game->file_directory; }
-void SetCityFileDirectory(CityFileRuntime *file, const char *path) { SetText(&file->game->file_directory, path); }
-bool ShouldBackupCitySave(const CityFileRuntime *file) { return file->game->backup_saves; }
 
 static bool LoadInitialGameCity(Game *game, const char *path) {
   City *city = game->city;
@@ -61,7 +53,7 @@ static bool LoadInitialGameCity(Game *game, const char *path) {
     SetGameError(game, SC2K_ERROR_GUEST_BUFFER_TOO_SMALL);
     return false;
   }
-  InitializeCityFacilityInformation(city);
+  InitializeCityFacilityInformation(resources, (const char *)city->country.character);
   drawing->map_view_storage = (CityMapViewConfig){0};
   drawing->drag_view_storage = (CityMapViewConfig){0};
   drawing->default_map_view = &drawing->map_view_storage;
@@ -69,7 +61,7 @@ static bool LoadInitialGameCity(Game *game, const char *path) {
   drawing->default_map_view->zoom = CITY_MAP_ZOOM_LARGE;
   SetSimulationFrameTime(city, 0);
   InitializeCityNewsResources(resources);
-  InitializeCityRuntimeBuffers(city);
+  InitializeCityNews(city);
   // Initialize the pre-load flag before saved MISC replaces it.
   InitializeCityDisasterDefaults(city);
   InitializeCityStorage(city);
@@ -78,7 +70,7 @@ static bool LoadInitialGameCity(Game *game, const char *path) {
     SetCityNameText(game, &city->name, 8, (const u8 *)"New City");
     game->idle_state = CITY_IDLE_PLAY;
     game->city_active = false;
-    drawing->map_state.sprite_catalog = resources->sprites;
+    drawing->map_state.sprite_metrics = resources->map_sprite_metrics;
     return !GetGameError(game);
   }
   CityFile *file = CityFileRead(path);
@@ -90,7 +82,7 @@ static bool LoadInitialGameCity(Game *game, const char *path) {
   CityFileFree(file);
   if (!loaded)
     return false;
-  drawing->map_state.sprite_catalog = resources->sprites;
+  drawing->map_state.sprite_metrics = resources->map_sprite_metrics;
   Sc2kSetCityMapClientRect(drawing, (CityRect){0, 0, 600, 490});
   // Pointer input can arrive before the first framebuffer allocation/draw.
   drawing->map_width = drawing->client_rect.right - drawing->client_rect.left;
@@ -102,8 +94,7 @@ static bool LoadInitialGameCity(Game *game, const char *path) {
   } else {
     // Restore the saved view, then rebuild city unlocks.
     // The native chunk-first boot needs rendering resources ready before these existing routines run.
-    CenterCityMapViewAndResetOverlays(city, drawing->map_state.saved_view.x, drawing->map_state.saved_view.y,
-        drawing->map_state.saved_view.mode);
+    RestoreCityLoadedView(city);
     RebuildCityUnlockState(city);
   }
   game->idle_state = CITY_IDLE_PLAY;
@@ -129,5 +120,6 @@ void ReleaseGameCityAssets(Game *game) {
   CloseCityScripting(game);
   ReleaseCityAssets(game->resources);
   game->drawing->cursors.initialized = false;
-  game->drawing->map_state.sprite_catalog = NULL;
+  ++game->drawing->cursors.revision;
+  game->drawing->map_state.sprite_metrics = NULL;
 }

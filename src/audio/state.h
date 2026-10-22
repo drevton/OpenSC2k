@@ -2,6 +2,7 @@
 #define SC2K_AUDIO_STATE_H
 
 #include "city/types.h"
+#include "audio/jukebox.h"
 
 typedef struct { char text[260]; } CityMusicDirectory;
 
@@ -21,6 +22,7 @@ typedef struct {
   i32 repetitions; // Zero is finished; -1 repeats until stopped.
   i16 sound_id;
   bool looping;
+  u8 pan; // 0 left, 128 both speakers, 255 right. Fits the existing voice padding.
 } CityEffectVoice;
 
 // Audio remains outside saved City state. Music activity gates economy RNG;
@@ -29,6 +31,7 @@ typedef struct {
 typedef struct CityAudioState {
   CityAssets *assets; // Borrows immutable recordings and MIDI loaded before playback.
   u32 helicopter_sound_deadline;
+  u32 ambient_impact_deadline; // Wrapping milliseconds of unpaused presentation time; zero means no prior impact.
   u32 sound_delay;
   i32 retry_delay;
   i32 queued_sound;
@@ -62,7 +65,7 @@ typedef struct CityAudioState {
   u8 music_notify, midi_available, live_open;
   u32 effects_device;
   u8 effect_volume;
-  bool music_background, music_focused, overlapping_effects;
+  bool music_background, music_focused, overlapping_effects, ambient_sounds;
   bool fire_sound_paused, resume_fire_sound;
   u8 music_volume, master_volume;
   bool custom_soundfont;
@@ -71,8 +74,18 @@ typedef struct CityAudioState {
   _Atomic int effect_finished;
   CityEffectVoice effect_voices[CITY_EFFECT_VOICES];
   float mix_gain;
+  Jukebox jukebox;
 } CityAudioState;
 
+// Initialize a fresh owner before devices are opened. This does not release or reset an existing backend.
 void InitializeCityAudioState(CityAudioState *audio);
+
+// Preserve the live jukebox's playing choice after loading the saved music flag. Closed backends keep that flag;
+// no playback starts or stops here, so the codec retains its original word-by-word effect ordering.
+void RefreshCityLoadedMusicPreference(CityAudioState *audio);
+
+// Live overlapping effects query the mixer; otherwise use the single-effect controller's playback flag.
+bool IsCitySoundPlaying(const CityAudioState *audio);
+bool CanPlayCityToolSound(const CityAudioState *audio, int sound_id);
 
 #endif

@@ -36,11 +36,13 @@ endif()
 set(SC2K_LANDSCAPE_CATALOG "${CMAKE_SOURCE_DIR}/assets/landscape/opengfx2/sprites.json")
 set(SC2K_GENERATED_GRAPHICS_DIR "${CMAKE_BINARY_DIR}/generated-assets")
 set(SC2K_ROAD_CAR_PATHS "${CMAKE_BINARY_DIR}/generated/road-car-paths.inc")
-add_custom_command(OUTPUT "${SC2K_ROAD_CAR_PATHS}"
+set(SC2K_RAIL_PATHS "${CMAKE_BINARY_DIR}/generated/rail-paths.inc")
+add_custom_command(OUTPUT "${SC2K_ROAD_CAR_PATHS}" "${SC2K_RAIL_PATHS}"
   COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/bake_road_car_paths.py" "${SC2K_ROAD_CAR_PATHS}"
+    --rail-output "${SC2K_RAIL_PATHS}"
   DEPENDS "${CMAKE_SOURCE_DIR}/tools/bake_road_car_paths.py"
     "${CMAKE_SOURCE_DIR}/assets/landscape/vehicles/blender/manifest.json"
-  COMMENT "Baking compact road car paths" VERBATIM)
+  COMMENT "Baking compact road and rail paths" VERBATIM)
 set(SC2K_LANDSCAPE_PACK "${SC2K_GENERATED_GRAPHICS_DIR}/landscape/opengfx2/landscape.dat")
 file(GLOB SC2K_LANDSCAPE_IMAGES CONFIGURE_DEPENDS
   "${CMAKE_SOURCE_DIR}/assets/landscape/opengfx2/sprites/*.png"
@@ -152,9 +154,11 @@ target_compile_definitions(sc2k_zstd PRIVATE HUF_FORCE_DECOMPRESS_X1)
 
 add_library(sc2k_core STATIC
   "${SC2K_ROAD_CAR_PATHS}"
+  "${SC2K_RAIL_PATHS}"
 
   # assets
   src/assets/asset_file.c
+  src/assets/assets.c
   src/assets/audio.c
   src/assets/data.c
   src/assets/fonts.c
@@ -165,8 +169,8 @@ add_library(sc2k_core STATIC
 
   # audio
   src/audio/backend.c
-  src/audio/effects.c
-  src/audio/music.c
+  src/audio/jukebox.c
+  src/audio/state.c
 
   # base
   src/base/config.c
@@ -183,6 +187,7 @@ add_library(sc2k_core STATIC
   src/city/disasters/effects.c
 
   # city/economy
+  src/city/economy/budget.c
   src/city/economy/budget_advisor.c
   src/city/economy/coefficients.c
   src/city/economy/economy.c
@@ -190,6 +195,7 @@ add_library(sc2k_core STATIC
   src/city/economy/history.c
 
   # city/engine
+  src/city/engine/cheats.c
   src/city/engine/city_name.c
   src/city/engine/commands.c
   src/city/engine/initialization.c
@@ -201,9 +207,13 @@ add_library(sc2k_core STATIC
   src/city/engine/weather.c
 
   # city/events
-  src/city/events/actors.c
+  src/city/events/aircraft.c
+  src/city/events/boats.c
+  src/city/events/disaster_actors.c
+  src/city/events/emergency.c
   src/city/events/movement.c
-  src/city/events/vehicles.c
+  src/city/events/news.c
+  src/city/events/trains.c
 
   # city/growth
   src/city/growth/zoning.c
@@ -230,6 +240,7 @@ add_library(sc2k_core STATIC
   src/city/maps/rotation.c
   src/city/maps/state.c
   src/city/maps/terrain.c
+  src/city/maps/tile_queue.c
   src/city/maps/tile_scan.c
   src/city/maps/trees.c
   src/city/maps/water.c
@@ -271,46 +282,47 @@ add_library(sc2k_core STATIC
 
   # drawing
   src/drawing/bitmaps.c
+  src/drawing/cursors.c
+  src/drawing/palette.c
 
   # drawing/fonts
   src/drawing/fonts/fonts.c
 
-  # drawing
-  src/drawing/information.c
-
   # drawing/maps
   src/drawing/maps/cost_labels.c
+  src/drawing/maps/map_animation.c
   src/drawing/maps/map_coordinates.c
   src/drawing/maps/map_damage.c
   src/drawing/maps/map_data.c
+  src/drawing/maps/map_effects.c
   src/drawing/maps/map_events.c
   src/drawing/maps/map_overlays.c
   src/drawing/maps/map_sprites.c
   src/drawing/maps/map_terrain.c
   src/drawing/maps/map_traversal.c
-  src/drawing/maps/map_window.c
+  src/drawing/maps/map_view.c
   src/drawing/maps/placement.c
   src/drawing/maps/road_cars.c
   src/drawing/maps/tables.c
-
-  # drawing
-  src/drawing/newspaper.c
 
   # drawing/raster
   src/drawing/raster/canvas_primitives.c
   src/drawing/raster/screen_damage.c
 
   # drawing/sprites
+  src/drawing/sprites/preparation.c
   src/drawing/sprites/sprites.c
 
   # drawing
   src/drawing/state.c
 
   # game
+  src/game/audio.c
   src/game/city_lifecycle.c
-  src/game/input.c
+  src/game/graphics.c
   src/game/observation.c
   src/game/options.c
+  src/game/palette.c
   src/game/settings.c
   src/game/timing.c
   src/game/update.c
@@ -324,12 +336,14 @@ add_library(sc2k_core STATIC
 
   # ui/dialogs
   src/ui/dialogs/budget.c
-  src/ui/dialogs/dialogs.c
+  src/ui/dialogs/lifetime.c
   src/ui/dialogs/exit.c
   src/ui/dialogs/file_browser.c
   src/ui/dialogs/game_options.c
   src/ui/dialogs/information.c
   src/ui/dialogs/map_data.c
+  src/ui/dialogs/messages.c
+  src/ui/dialogs/name_editor.c
   src/ui/dialogs/scenario_window.c
   src/ui/dialogs/span_host.c
 
@@ -345,8 +359,10 @@ add_library(sc2k_core STATIC
   src/ui/music/jukebox.c
 
   # ui/news
-  src/ui/news/newspaper.c
+  src/ui/news/newspaper_drawing.c
   src/ui/news/newspaper_presentation.c
+  src/ui/news/newspaper_text.c
+  src/ui/news/newspaper_window.c
 
   # ui
   src/ui/signs.c
@@ -356,18 +372,24 @@ add_library(sc2k_core STATIC
   src/ui/startup/startup_host.c
 
   # ui
+  src/ui/command_feedback.c
   src/ui/state.c
+  src/ui/updates.c
 
   # ui/text
+  src/ui/text/information.c
   src/ui/text/status.c
   src/ui/text/text.c
 
   # ui/tools
+  src/ui/tools/cost_labels.c
   src/ui/tools/map_input.c
   src/ui/tools/toolbar.c
 
   # ui/windows
+  src/ui/windows/controls.c
   src/ui/windows/desktop.c
+  src/ui/windows/events.c
   src/ui/windows/tooltips.c
   src/ui/windows/window_pixels.c
   src/ui/windows/windows.c
@@ -395,7 +417,10 @@ add_executable(sc2k MACOSX_BUNDLE
   src/game/application.c
   src/game/city_bootstrap.c
   src/game/commands.c
+  src/game/frame.c
   src/game/input_script.c
+  src/ui/city_lifecycle.c
+  src/ui/command_presentation.c
   src/ui/console.c
   src/ui/dialogs/budget_host.c
   src/ui/dialogs/file_dialog.c
@@ -403,6 +428,7 @@ add_executable(sc2k MACOSX_BUNDLE
   src/ui/dialogs/presentation.c
   src/ui/input_dispatch.c
   src/ui/map_views.c
+  src/ui/map_visibility.c
   src/ui/sdl.c
 )
 if(APPLE)
@@ -533,6 +559,13 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/assets/audio/sound-effects.override.dat")
   list(APPEND SC2K_SOUND_OVERRIDE_ARGS --sound-override
     "${CMAKE_SOURCE_DIR}/assets/audio/sound-effects.override.dat")
 endif()
+if(APPLE)
+  # Resolve bundled libraries and remove host search paths before stamping/signing the player.
+  add_custom_command(TARGET sc2k POST_BUILD
+    COMMAND ${CMAKE_COMMAND} "-DSC2K_APP=$<TARGET_BUNDLE_DIR:sc2k>"
+      -P "${CMAKE_SOURCE_DIR}/tools/bundle_macos.cmake" VERBATIM)
+  set_property(TARGET sc2k APPEND PROPERTY LINK_DEPENDS "${CMAKE_SOURCE_DIR}/tools/bundle_macos.cmake")
+endif()
 add_custom_command(TARGET sc2k POST_BUILD
   COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/package_assets.py"
     --source-root "${CMAKE_SOURCE_DIR}" --destination "${SC2K_PACKAGE_ROOT}"
@@ -543,6 +576,10 @@ add_custom_command(TARGET sc2k POST_BUILD
   COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/stamp_revision.py" "$<TARGET_FILE:sc2k>"
     --source-root "${CMAKE_SOURCE_DIR}"
   COMMENT "Packaging intro, graphics and audio resources" VERBATIM)
+if(APPLE)
+  add_custom_command(TARGET sc2k POST_BUILD
+    COMMAND codesign --force --sign - "$<TARGET_BUNDLE_DIR:sc2k>" VERBATIM)
+endif()
 set_target_properties(sc2k PROPERTIES MACOSX_BUNDLE_BUNDLE_NAME "OpenSC2k"
   MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
   MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"

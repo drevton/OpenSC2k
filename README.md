@@ -65,3 +65,10 @@ Licenses and attribution are retained beside third-party code and assets and pac
 
 See [tile storage](docs/tile-storage.md), [configuration](docs/configuration.md),
 [commands](docs/commands.md) and [native saves](docs/sc2k-native.md) for the runtime contracts.
+
+## Settings
+
+Settings opened from the intro edit global defaults for new cities. Inside a city, gameplay settings edit
+that city and are saved with it. The scope menu switches between city settings and global defaults and
+can copy gameplay settings in either direction. Display, interface and audio preferences remain global.
+See [configuration](docs/configuration.md) for details.

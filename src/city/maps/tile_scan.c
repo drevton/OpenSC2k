@@ -6,21 +6,21 @@
 // This module adds no private tile bits. Heights, slopes, ground and occupant payloads follow tile_storage.h and
 // their owning family modules rather than being repurposed as disaster counters.
 
+#include "city/maps/labels.h"
+#include "city/engine/random.h"
 #include "city/maps/buildings.h"
 #include "audio/types.h"
 #include "city/maps/map_types.h"
 #include "city/maps/tile_storage.h"
-#include "audio/audio.h"
+#include "game/audio.h"
 #include "city/presentation.h"
 #include "city/state.h"
 #include "city/disasters/disasters.h"
-#include "city/engine/simulation.h"
 #include "city/events/events.h"
 #include "city/growth/growth.h"
 #include "city/maps/layers.h"
 #include "city/tools/tools.h"
 #include "game/state.h"
-#include "audio/state.h"
 #include "assets/state.h"
 
 enum {

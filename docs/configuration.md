@@ -44,13 +44,27 @@ any pending edits. The writer uses an exclusive temporary file in the same direc
 and replaces the destination after successful output. Failed writes retain pending
 changes and retry after 30 seconds, with another attempt at exit.
 
-City state remains authoritative in saved games. The configured simulation fixes
-supply stock-city defaults; native saves retain their saved fixes. Other City options
-in this file supply defaults for newly created cities. Changing a shared option in
-the UI runs its resolved City command before recording the local default. Reading or
-writing the config inside a City command is forbidden. Temporary dialog pauses do
-not update the configured speed. Terrain tool choices and simulation batching are local
-UI/Game preferences; city saves do not store them.
+The small dropdown button beside the options title selects **City settings** or
+**Global settings**. It starts in Global settings from the intro, and City settings
+inside a city. The Advanced tab explains the selected scope, and Reset All follows it.
+
+For gameplay options, Global settings changes config defaults used by future cities
+without changing City state. City settings runs the resolved City command and keeps
+the result in that city's saved state; it does not change config defaults. Speed,
+auto-budget and disaster menu changes also stay with the current city.
+
+The same menu can copy global gameplay defaults to the current city, or copy the
+current city's gameplay settings to global defaults. Copying selects the destination
+scope. City editing and both copy actions are disabled when no city is open.
+
+Interface, display, audio, playlists, key bindings, terrain tool choices and
+simulation batching remain global preferences in either scope. They belong to
+UI/Game/Drawing/Audio rather than the city save. Reading or writing the config
+inside a City command is forbidden.
+
+Configured simulation fixes supply stock-city defaults; flat-land water spreading
+starts off for stock imports. Native saves retain their saved gameplay settings.
+Other configured City options supply defaults for newly created cities.
 
 On macOS, two-finger map panning uses AppKit's precise scrolling distance in screen
 points, converted to framebuffer pixels for the current display. Small fractions

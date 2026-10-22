@@ -1,14 +1,17 @@
+#include "city/saveload/services.h"
 #include "game/state.h"
 #include "city/presentation.h"
 #include <strings.h>
 
 #include "city/saveload/sc2k.h"
 #include "city/saveload/city_file_internal.h"
-#include "base/text.h"
+#include <string.h>
+#include "city/state.h"
+#include "game/errors.h"
 
 // Append the requested extension without rewriting the host filename. Path must be initialized and extension
 // terminated; may grow path-owned storage and returns whether the normalized path is ready.
-bool EnsureCityFileExtension(Game *game, CityPath *path, char *extension) {
+bool EnsureCitySaveExtension(Game *game, CityPath *path, const char *extension) {
   size_t suffix_length = strlen(extension) + 1;
   if ((suffix_length != 4 && suffix_length != 5) || path->length > INT32_MAX - 6) {
     SetGameError(game, SC2K_ERROR_GUEST_BUFFER_TOO_SMALL);
@@ -30,8 +33,8 @@ bool EnsureCityFileExtension(Game *game, CityPath *path, char *extension) {
 bool SaveCityFile(City *city, CityPath *path) {
   CityFileRuntime *file = city->game->file;
   bool sc2k = CityUsesSc2k(city);
-  char extension[5]; CopyText(extension, sizeof(extension), sc2k ? "sc2k" : "sc2");
-  if (!EnsureCityFileExtension(city->game, path, extension)) return false;
+  const char *extension = sc2k ? "sc2k" : "sc2";
+  if (!EnsureCitySaveExtension(city->game, path, extension)) return false;
   const char *filename = CityPathText(path);
   void *stream = OpenCitySaveStream(file, filename);
   if (stream == NULL) {
@@ -43,7 +46,7 @@ bool SaveCityFile(City *city, CityPath *path) {
     RemoveCitySaveFile(file, filename);
     return false;
   }
-  void *magnified_view = BeginCitySaveView(city);
+  CityMapViewConfig *magnified_view = BeginCitySaveView(city);
   CityPath temporary = {0};
   if (!SetCityPathBytes(city->game, &temporary, path->length, CityPathText(path))) {
     ReleaseCityMiscWorkspace(file);

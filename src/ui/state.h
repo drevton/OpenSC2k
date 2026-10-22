@@ -1,35 +1,28 @@
 #ifndef SC2K_INTERFACE_STATE_H
 #define SC2K_INTERFACE_STATE_H
 
-#include "city/presentation.h"
-#include "city/tools/types.h"
-#include "ui/input.h"
-
+#include "city/economy/state.h"
 #include "city/engine/input.h"
-#include "city/economy/economy.h"
+#include "city/presentation.h"
+#include "city/terrain/terrain.h"
+#include "city/tools/types.h"
 #include "city/types.h"
 #include "ui/charts/charts.h"
-#include "ui/dialogs/dialog_state.h"
+#include "ui/dialogs/budget.h"
 #include "ui/dialogs/dialogs.h"
+#include "ui/dialogs/file_dialog.h"
 #include "ui/dialogs/game_options.h"
-#include "ui/music/jukebox_state.h"
+#include "ui/dialogs/information.h"
+#include "ui/dialogs/map_data.h"
+#include "ui/dialogs/name_editor.h"
+#include "ui/dialogs/spans.h"
+#include "ui/input.h"
+#include "ui/music/jukebox.h"
 #include "ui/signs.h"
 #include "ui/startup/startup.h"
 #include "ui/text/text.h"
+#include "ui/tools/types.h"
 #include "ui/windows/state.h"
-
-typedef struct {
-  u32 window_id, release_time;
-  i32 x, y, start_x, start_y;
-  u8 active, released;
-} CityMusicPress;
-
-typedef struct {
-  char text[100];
-  u32 started_at;
-  u16 offset;
-  bool active;
-} CityMusicTitle;
 
 // Tool choices and interaction state belong to the interface, not a saved city.
 // The signed tool readers and unsigned reset aliases share the same storage.
@@ -48,10 +41,15 @@ typedef struct {
 typedef struct CommandRecord CityCommand;
 
 typedef struct CityInterfaceState {
+  // Live SDL canvas; the host loop attaches it after startup and SDL detaches it before destruction.
+  struct CanvasSDL *display;
+  // The same window while command entry may poll minimized state; detached before shutdown callbacks.
+  struct CanvasSDL *command_display;
   // Borrowed while the command runs; nested commands restore the parent.
   const CityCommand *active_command;
   struct CityCommandFeedback *command_feedback;
   struct CityResourceNotice *resource_notices, *resource_notice_tail;
+  TileIndex error_tile; // Local command blocker; its window controls visibility.
   u32 error_tile_window;
   bool command_errors_enabled;
   u32 command_error_depth, command_error_serial;
@@ -60,7 +58,6 @@ typedef struct CityInterfaceState {
   u32 annual_budget_window;
   u32 scenario_instructions_window;
   char scenario_instructions[769];
-  NativeFileNotice *file_notices;
   bool file_dialog_redraw_pending;
   int next_label_transaction;
   // Nested newspaper callers save and restore these borrowed dialog pointers.
@@ -78,11 +75,11 @@ typedef struct CityInterfaceState {
   double startup_newspaper_open_at;
   int startup_newspaper_edition;
   int diagnostic_nested_newspaper;
-  NativeStadiumDialog stadium_dialogs[16];
-  NativeLabelDialog label_dialogs[16];
+  NativeStadiumDialog stadium_dialogs[CITY_NAME_EDITOR_CAPACITY];
+  NativeLabelDialog label_dialogs[CITY_NAME_EDITOR_CAPACITY];
   CityTileInformationSnapshot information_window;
   // Borrowed display state; pointer gestures and momentary feedback are UI-owned.
-  Jukebox jukebox;
+  i32 music_collapsed, music_pinned;
   const Jukebox *jukebox_display;
   CityMusicPress music_press;
   CityButtonFeedback button_feedback;
@@ -207,9 +204,7 @@ typedef struct CityInterfaceState {
 
 // Fresh interaction state only; preserve host configuration, windows and resources.
 void InitializeCityInteractionState(CityInterfaceState *ui);
-
-bool Sc2kMainWindowIsIconic(const CityInterfaceState *ui);
-
-bool CanPresentCityFileDialogs(const CityInterfaceState *ui);
+// Release interaction collections and console history after Drawing teardown; the caller owns UI storage.
+void ReleaseCityInteractionState(CityInterfaceState *ui);
 
 #endif

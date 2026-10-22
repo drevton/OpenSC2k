@@ -38,17 +38,6 @@ typedef struct {
   CitySectorRates sector_rates;
 } CityEconomicTables;
 
-typedef struct {
-  u16 id;
-  i16 score;
-  u8 event_data;
-  u8 article_cache[3];
-} FacilityRankingRecord;
-
-typedef struct {
-  FacilityRankingRecord record[9];
-} FacilityRankings;
-
 // Coefficients
 
 typedef struct {

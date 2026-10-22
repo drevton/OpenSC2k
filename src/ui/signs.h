@@ -1,11 +1,15 @@
 #ifndef SC2K_UI_SIGNS_H
 #define SC2K_UI_SIGNS_H
 
-#include "city/maps/tile_storage.h"
 #include "city/maps/map_types.h"
+#include "city/maps/tile_storage.h"
 #include "drawing/canvas.h"
 
+typedef struct CityExtraMapView CityExtraMapView;
+typedef struct CanvasSDLEvent CanvasSDLEvent;
+
 typedef struct Game Game;
+typedef struct Window Window;
 typedef struct City City;
 
 enum {
@@ -21,6 +25,12 @@ typedef enum CitySignControl {
   CITY_SIGN_SHADE, CITY_SIGN_DEFAULT_SIZE, CITY_SIGN_STICKY,
   CITY_SIGN_COLOR_FIRST, CITY_SIGN_COLOR_LAST = CITY_SIGN_COLOR_FIRST + CITY_SIGN_COLOR_COUNT - 1
 } CitySignControl;
+
+// Logical sign-window geometry shared by painting, input and hover help.
+CityRect CitySignControlBounds(const Window *window, CitySignControl control);
+CityRect CitySignListRows(const Window *window);
+CitySignControl CitySignControlAt(const Window *window, int x, int y);
+int CitySignVisibleRows(const Window *window);
 
 typedef struct {
   char text[CITY_OVERLAY_NAME_BYTES];
@@ -48,10 +58,17 @@ typedef struct {
   int scroll_grab;
 } CitySignState;
 
-typedef struct Window Window;
 void RefreshCitySignEntries(City *city);
 void RebuildCitySigns(City *city);
 void SortCitySigns(CitySignState *signs);
 void DrawCitySignWindow(Game *game, Canvas *canvas, const Window *window);
+
+// Returns borrowed hover help for these controls, or null when no help applies.
+const char *CitySignTooltipAt(Game *game, const Window *window, int x, int y);
+
+void OpenCitySignList(City *city);
+bool HandleCityMapSignInput(City *city, CityExtraMapView *view, const CanvasSDLEvent *event);
+void ResetCitySignEditor(City *city);
+bool PollCitySigns(City *city);
 
 #endif

@@ -1,34 +1,86 @@
-#include "city/engine/city_types.h"
-#include "city/tools/types.h"
-#include "drawing/maps/map_view.h"
-#include "game/application.h"
-#include "ui/menus/menu.h"
-#include "ui/tools/types.h"
-#include "city/tools/tools.h"
-#include "city/presentation.h"
-#include "ui/tools/tools.h"
 #include <string.h>
 
-#include "audio/audio.h"
-#include "city/state.h"
-#include "city/engine/simulation.h"
-#include "game/state.h"
-#include "audio/state.h"
-#include "drawing/state.h"
 #include "assets/state.h"
-#include "ui/map.h"
-#include "drawing/drawing.h"
-#include "drawing/drawing_internal.h"
+#include "game/audio.h"
+#include "audio/state.h"
+#include "city/engine/city_types.h"
+#include "city/engine/simulation.h"
+#include "city/events/emergency.h"
+#include "city/presentation.h"
+#include "city/saveload/file.h"
+#include "city/state.h"
+#include "city/tools/tools.h"
+#include "city/tools/types.h"
+#include "drawing/maps/map_view.h"
+#include "drawing/raster/canvas_primitives.h"
+#include "drawing/state.h"
+#include "game/application.h"
+#include "game/errors.h"
+#include "game/state.h"
+#include "ui/windows/window_internal.h"
 #include "ui/charts/charts.h"
 #include "ui/commands.h"
+#include "ui/dialogs/budget.h"
 #include "ui/dialogs/dialogs.h"
+#include "ui/dialogs/map_data.h"
+#include "ui/dialogs/messages.h"
+#include "ui/map.h"
+#include "ui/sdl.h"
 #include "ui/state.h"
 #include "ui/text/text.h"
-
-#include "city/saveload/file.h"
-#include "game/errors.h"
+#include "ui/tools/tools.h"
+#include "ui/tools/types.h"
+#include "ui/windows/windows.h"
 
 // Toolbar
+
+// Resolve local tool choices without changing City or Audio. Unsupported rail and civic variants keep the
+// previous preload, replacing the original undefined choice from an uninitialized stack slot.
+int GetCityToolPlacementSoundId(const CityInterfaceState *ui, bool terrain_editor, int previous_sound) {
+  if (terrain_editor)
+    return ui->terrain_tool >= CITY_TERRAIN_TOOL_TREE && ui->terrain_tool <= CITY_TERRAIN_TOOL_FOREST ?
+        CITY_SOUND_TREE_OR_ZONE_PLACEMENT : CITY_SOUND_WATER;
+  int group = ui->tool_group;
+  switch (group) {
+  case CITY_TOOL_GROUP_TREE_WATER:
+    return ui->selection.value[group] == CITY_TREE_WATER_TREES ? CITY_SOUND_TREE_OR_ZONE_PLACEMENT : CITY_SOUND_WATER;
+  case CITY_TOOL_GROUP_DISPATCH:
+    if (ui->selection.value[group] == CITY_DISPATCH_POLICE)
+      return CITY_SOUND_POLICE_OR_HOSPITAL;
+    return ui->selection.value[group] == CITY_DISPATCH_FIRE ? CITY_SOUND_FIRE_DISPATCH : CITY_SOUND_MILITARY_DISPATCH;
+  case CITY_TOOL_GROUP_POWER:
+    return ui->selection.value[group] == CITY_POWER_LINES ? CITY_SOUND_POWER_LINES : CITY_SOUND_CONSTRUCTION;
+  case CITY_TOOL_GROUP_WATER:
+  case CITY_TOOL_GROUP_PORT: return CITY_SOUND_CONSTRUCTION;
+  case CITY_TOOL_GROUP_REWARDS: return CITY_SOUND_CIVIC_PLACEMENT;
+  case CITY_TOOL_GROUP_ROAD:
+    return ui->selection.value[group] == CITY_ROAD_BUS_DEPOT ? CITY_SOUND_BUS_DEPOT : CITY_SOUND_CONSTRUCTION;
+  case CITY_TOOL_GROUP_RAIL:
+    return ui->selection.value[group] == CITY_RAIL_DEPOT ? previous_sound : CITY_SOUND_CONSTRUCTION;
+  case CITY_TOOL_GROUP_RESIDENTIAL:
+  case CITY_TOOL_GROUP_COMMERCIAL:
+  case CITY_TOOL_GROUP_INDUSTRIAL: return CITY_SOUND_TREE_OR_ZONE_PLACEMENT;
+  case CITY_TOOL_GROUP_EDUCATION: return CITY_SOUND_EDUCATION;
+  case CITY_TOOL_GROUP_CIVIC:
+    switch (ui->selection.value[group]) {
+    case CITY_CIVIC_POLICE:
+    case CITY_CIVIC_HOSPITAL: return CITY_SOUND_POLICE_OR_HOSPITAL;
+    case CITY_CIVIC_FIRE: return CITY_SOUND_FIRE_DISPATCH;
+    case CITY_CIVIC_PRISON: return CITY_SOUND_PRISON;
+    default: return previous_sound;
+    }
+  case CITY_TOOL_GROUP_RECREATION:
+    return ui->selection.value[group] == CITY_RECREATION_ZOO ? CITY_SOUND_SAILBOAT_OR_ZOO :
+        CITY_SOUND_CIVIC_PLACEMENT;
+  default: return previous_sound;
+  }
+}
+
+bool PreloadSelectedCityToolSound(Game *game) {
+  bool terrain_editor = game->city->settings.timer_mode == CITY_TIMER_STOPPED;
+  int sound_id = GetCityToolPlacementSoundId(game->ui, terrain_editor, game->audio->preloaded_sound_id);
+  return PreloadCityToolSound(game, sound_id);
+}
 
 // Save outgoing map flags and restore the surface/underground bank.
 // Every caller discards EAX; only the MFC button presentation is a host service.
@@ -150,7 +202,7 @@ void SelectCityToolGroupAndMode(Game *game, u32 group, u32 variant) {
     }
   }
   Sc2kRefreshCityStatusPanel(city);
-  PreloadSelectedCityToolSound(city);
+  PreloadSelectedCityToolSound(game);
   // Defined replacement for stock signed-group out-of-bounds access on malformed high-bit input.
   if (group < CITY_TOOL_GROUP_SIGN) {
     int selected = ui->selection.value[group];
@@ -189,7 +241,7 @@ void ResetCityToolboxForTerrainEditing(City *city) {
 
   ui->selected_cursor = CITY_CURSOR_CENTER;
   ui->terrain_tool = CITY_TERRAIN_TOOL_CENTER;
-  PreloadSelectedCityToolSound(city);
+  PreloadSelectedCityToolSound(game);
   ui->terrain_toolbar[CITY_TERRAIN_BUTTON_CENTER].style = CITY_TOOLBAR_STYLE_CHECKED_CHECKBOX;
   for (int index = 0; index < CITY_TERRAIN_BUTTON_CENTER; ++index)
     if (index != CITY_TERRAIN_BUTTON_RAISE_WATER_LEVEL && index != CITY_TERRAIN_BUTTON_LOWER_WATER_LEVEL)
@@ -210,26 +262,17 @@ void ResetCityToolboxForTerrainEditing(City *city) {
   ui->terrain_toolbar[CITY_TERRAIN_BUTTON_ZOOM_IN].style = CITY_TOOLBAR_STYLE_NORMAL;
 }
 
-// The native canvas handles the default message; restore the selected city cursor.
-void RestoreCityCursorAfterDialog(City *city) {
-  SetCityCursor(city, CITY_CURSOR_ARROW, 1);
-}
-
-void DisableCityToolbarButton(City *city, int index) {
+// Disable the owned toolbar item without changing its other style bits.
+void DisableCityToolbarItem(City *city, int index) {
   CityInterfaceState *ui = city->game->ui;
   ui->city_toolbar[index].style |= CITY_TOOLBAR_STYLE_DISABLED;
 }
 
-// Disable the owned toolbar item.
-void DisableCityToolbarItem(City *city, int index) {
-  DisableCityToolbarButton(city, index);
-}
-
-// Clear the special-facility button, then run the original selection.
-void SelectCityBulldozerFromToolbar(City *city, int group) {
+// Clear the reward button and select the ordinary center tool.
+void ResetCityRewardSelection(City *city) {
   CityInterfaceState *ui = city->game->ui;
   ui->city_toolbar[CITY_TOOL_GROUP_REWARDS].style = CITY_TOOLBAR_STYLE_NORMAL;
-  SelectCityToolGroupAndMode(city->game, (u32)group, CITY_TOOL_VARIANT_DEFAULT);
+  SelectCityToolGroupAndMode(city->game, CITY_TOOLBAR_BUTTON_CENTER, CITY_TOOL_VARIANT_DEFAULT);
 }
 
 // Rebuild native tool choices; original menu receivers are comparison-only.
@@ -275,30 +318,21 @@ void RebuildCityToolbar(City *city) {
 }
 
 // Retain each item style while a dialog temporarily disables tools.
-bool EnterCityPaletteModalState(City *city) {
-  CityInterfaceState *ui = city->game->ui;
+void SuspendCityToolbarForDialog(CityInterfaceState *ui) {
   for (int index = 0; index < CITY_TOOLBAR_BUTTON_COUNT; ++index) {
     int style = ui->city_toolbar[index].style;
     ui->saved_toolbar_styles[index] = style;
     if ((style & CITY_TOOLBAR_STYLE_SEPARATOR) == 0)
       ui->city_toolbar[index].style = CITY_TOOLBAR_STYLE_DISABLED;
   }
-  return true;
 }
 
 // Restore nonseparators using their current separator flag.
-bool LeaveCityPaletteModalState(City *city) {
-  CityInterfaceState *ui = city->game->ui;
+void RestoreCityToolbarAfterDialog(CityInterfaceState *ui) {
   for (int index = 0; index < CITY_TOOLBAR_BUTTON_COUNT; ++index) {
     if ((ui->city_toolbar[index].style & CITY_TOOLBAR_STYLE_SEPARATOR) == 0)
       ui->city_toolbar[index].style = ui->saved_toolbar_styles[index];
   }
-  return true;
-}
-
-// Rebuild native tool choices; menu handles have no City effect.
-void RefreshCityToolbarAndClearOverlayMenuChecks(City *city) {
-  RebuildCityToolbar(city);
 }
 
 void RefreshCityToolbarButtonStyles(City *city, bool reset_display_flags) {
@@ -309,7 +343,7 @@ void RefreshCityToolbarButtonStyles(City *city, bool reset_display_flags) {
     bool visible = false;
     switch (index) {
     case CITY_TOOLBAR_BUTTON_MAP:
-      visible = IsCityMapDataVisible(city);
+      visible = ui->map_data.visible;
       break;
     case CITY_TOOLBAR_BUTTON_POPULATION:
       visible = ui->charts.visible[CITY_CANVAS_CHART_DEMOGRAPHICS];
@@ -347,11 +381,6 @@ void RefreshCityToolbarButtonStyles(City *city, bool reset_display_flags) {
       }
     }
   }
-}
-
-// Input advances a waiting startup screen; SDL already dispatches controls.
-void RecordGameInput(Game *game) {
-  if (game->idle_state != CITY_IDLE_PLAY) game->idle_input = 1;
 }
 
 int GetCityToolbarStyle(const CityInterfaceState *ui, int index) {
@@ -396,13 +425,6 @@ void ShowCityMapToolWindows(City *city) {
   drawing->map_state.scroll_redraw = 1;
   SetCityMapControlsVisible(game->ui,
       game->idle_state != CITY_IDLE_TERRAIN && city->settings.timer_mode != CITY_TIMER_STOPPED);
-}
-
-// Remember interactive loading; original message flags and menu are unused.
-void MarkSelectedCityMenuCommand(Game *game, int command) {
-  if (command == CITY_MENU_LOAD_CITY || command == CITY_MENU_LOAD_SCENARIO) {
-    game->ui->restore_frame_tools = true;
-  }
 }
 
 // Tool Presentation
@@ -468,15 +490,78 @@ void SelectCityDispatchTool(City *city, int tool) {
   if (city->game->ui) city->game->ui->selection.value[CITY_TOOL_GROUP_DISPATCH] = tool;
 }
 
-TileIndex TrackCitySelectedInfrastructureLine(Game *game, TileIndex start, int group) {
-  int cost = kCityToolCosts[group * CITY_TOOL_VARIANT_CAPACITY + game->ui->selection.value[group]];
-  return TrackInfrastructureLinePlacement(game, start, cost);
-}
-
 void ShowCityMapControls(City *city, bool visible) {
   if (city->game->ui) SetCityMapControlsVisible(city->game->ui, visible);
 }
 
 void RestoreCityMapControls(City *city) {
   if (city->game->drawing->map_state.scroll_redraw) ShowCityMapControls(city, true);
+}
+
+// Format tool help or the selected name and construction cost.
+void FormatCityToolStatusText(const CityResourceState *assets, char *text, u32 capacity, int tool) {
+  if (tool == CITY_CANVAS_TOOL_RAISE_TERRAIN || tool == CITY_CANVAS_TOOL_LOWER_TERRAIN) {
+    CopyText(text, capacity, tool == CITY_CANVAS_TOOL_RAISE_TERRAIN ?
+        "Raise terrain: drag to select a range of tiles, then release to raise them" :
+        "Lower terrain: drag to select a range of tiles, then release to lower them");
+    return;
+  }
+  if (tool == CITY_CANVAS_TOOL_STREAM) {
+    CopyText(text, capacity, "Place stream: click a source to grow a gently winding downhill stream");
+    return;
+  }
+  if (tool == CITY_CANVAS_TOOL_LEVEL_TERRAIN || tool == CITY_CANVAS_TOOL_STRETCH_TERRAIN) {
+    CopyText(text, capacity, tool == CITY_CANVAS_TOOL_LEVEL_TERRAIN ?
+        "Level terrain: drag an area to flatten it to the starting elevation" :
+        "Stretch terrain: grab a tile and drag up or down to change its height");
+    return;
+  }
+  if (tool == CITY_CANVAS_TOOL_ROAD_BRIDGE || tool == CITY_CANVAS_TOOL_RAIL_BRIDGE) {
+    CopyText(text, capacity, tool == CITY_CANVAS_TOOL_ROAD_BRIDGE ?
+        "Road bridge: drag between two endpoints" : "Rail bridge: drag between two endpoints");
+    return;
+  }
+  i32 packed = Sc2kCanvasMapPointerTools(tool, 0);
+  if (packed < 0) {
+    snprintf(text, capacity, "%s", "Centering Tool");
+    return;
+  }
+  i32 group = packed & 255;
+  i32 variant = (packed >> 8) & 255;
+  const char *name = assets->tool_names.name[group][variant];
+  u32 cost = group < CITY_TOOL_GROUP_QUERY ? kCityToolCosts[group * CITY_TOOL_VARIANT_CAPACITY + variant] : 0;
+  if (cost)
+    snprintf(text, capacity, "%s $%u", name, cost);
+  else
+    snprintf(text, capacity, "%s", name);
+}
+
+static void CanvasDrawToolStatus(Canvas *canvas, const Window *window) {
+  CityRect bounds = window->bounds;
+  CanvasBeveledBox(canvas, bounds.left, bounds.top, bounds.right, bounds.bottom, 0xFFBDBDBDu, 1);
+  CanvasTextFont(canvas, bounds.left + 5, bounds.top + 4, window->message, canvas_text, 1,
+      kCanvasHeadingFont);
+  if (window->policy_flags)
+    CanvasTextFont(canvas, bounds.left + 5, bounds.top + 20, "*PAUSED*", 0xFF00CC00u, 1,
+        kCanvasHeadingFont);
+}
+
+// Handles this window's painting and input; paint coordinates are local to the window.
+bool ToolStatusWindowProcedure(Game *game, const Window *window, const WindowEvent *event) {
+  if (event->kind == WINDOW_PAINT) {
+    Canvas *canvas = event->canvas;
+    CanvasDrawToolStatus(canvas, window);
+    return true;
+  }
+  if (event->kind != WINDOW_INPUT) return false;
+  const CanvasSDLEvent *input = event->input;
+  if (input->kind == CANVAS_SDL_POINTER_DOWN && input->button == CANVAS_SDL_BUTTON_LEFT) {
+    CityCanvasDesktop *desktop = &game->ui->desktop;
+    desktop->dragging = desktop->count - 1;
+    desktop->drag_x = event->x - window->bounds.left;
+    desktop->drag_y = event->y - window->bounds.top;
+    return true;
+  }
+  if (input->kind == CANVAS_SDL_KEY_DOWN && input->key == CITY_KEY_ESCAPE) return true;
+  return false;
 }

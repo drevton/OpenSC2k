@@ -1,6 +1,9 @@
+#include "city/saveload/map_format.h"
 #include "city/saveload/types.h"
 #include "city/saveload/legacy_text.h"
 #include "city/saveload/summary.h"
+#include "base/byte_order.h"
+#include "base/text.h"
 
 #include <stdio.h>
 #include <stdlib.h>

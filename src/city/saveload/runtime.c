@@ -1,21 +1,34 @@
-#include "game/settings.h"
-#include <assert.h>
+#include "city/saveload/state.h"
+#include "city/saveload/services.h"
+#include "city/saveload/runtime.h"
 
+#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
 
+#include "base/file.h"
+#include "base/text.h"
 #include "city/saveload/file.h"
-
-#include "city/saveload/runtime.h"
-#include "city/state.h"
-#include "game/state.h"
 #include "game/errors.h"
 #include "game/state.h"
-#include "audio/state.h"
-#include "assets/state.h"
-#include "assets/catalog.h"
-#include "base/text.h"
+
+// Replace Game's relative-file directory with the current host directory. A failed query preserves the old value.
+bool InitializeCityFileDirectory(Game *game) {
+  char *directory = ReadWorkingDirectory();
+  if (directory == NULL) return false;
+  free(game->file_directory);
+  game->file_directory = directory;
+  return true;
+}
+
+// Borrow the current directory until Game replaces or releases its owned path.
+const char *CityFileDirectory(const CityFileRuntime *file) { return file->game->file_directory; }
+
+// Copy a new relative-file directory into Game's owned host state.
+void SetCityFileDirectory(CityFileRuntime *file, const char *path) { SetText(&file->game->file_directory, path); }
+
+// Read the local backup preference from the file operation's Game.
+bool ShouldBackupCitySave(const CityFileRuntime *file) { return file->game->backup_saves; }
 
 // Ensure a CityPath can hold capacity bytes plus its terminator while preserving existing text. Requires initialized
 // path metadata and capacity sufficient for retained text; returns borrowed owner storage or NULL for a negative
@@ -81,9 +94,7 @@ void ReleaseCityFilePaths(Game *game) {
   FreeCityPathStorage(&game->command_line_path);
 }
 
-
-// Services
-
+// File operation lifetime
 
 // Push a caller-owned file runtime onto Game's operation stack and inherit its parent's error. Runtime storage must
 // remain alive until EndCityFileOperation or an explicit suspension; nested operations keep separate cleanup and

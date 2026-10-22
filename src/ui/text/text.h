@@ -3,6 +3,7 @@
 
 #include "city/disasters/types.h"
 #include "city/engine/city_types.h"
+#include "city/engine/weather.h"
 #include "city/presentation.h"
 
 #include "ui/input.h"
@@ -20,6 +21,7 @@ enum {
 };
 
 // Owned error reason; any newline-separated context retains its spelling and case.
+char *FormatCityErrorReason(const char *reason);
 
 // Native single-line editors use decoded character boundaries in byte strings.
 

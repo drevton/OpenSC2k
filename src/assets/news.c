@@ -1,4 +1,5 @@
 #include "assets/resources.h"
+#include "assets/state.h"
 #include "city/events/news.h"
 
 #include <string.h>

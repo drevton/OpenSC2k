@@ -1,36 +1,20 @@
-#include "city/economy/facilities.h"
-#include "assets/resource_types.h"
-#include "audio/types.h"
-#include "city/economy/types.h"
-#include "city/engine/city_types.h"
-#include "city/events/news.h"
-#include "city/maps/tile_storage.h"
-#include "city/tools/types.h"
-#include "city/presentation.h"
+#include "city/economy/economy.h"
+
 #include <limits.h>
 #include <string.h>
 
-#include "audio/audio.h"
-#include "city/economy/economy.h"
 #include "city/economy/tables.h"
-#include "game/state.h"
-#include "city/engine/simulation.h"
+#include "city/engine/city_types.h"
 #include "city/maps/layers.h"
+#include "city/presentation.h"
 #include "city/state.h"
-#include "assets/state.h"
 
-// Read the newest history sample for one of the four ranked environment problems. Index must select the supported
-// history rows; the read has no ranking or newspaper side effects.
-static inline u16 NewspaperProblemMetric(City *city, i32 index) {
-  // These four original pointer slots are history rows 4 through 7.
-  return ReadHistorySample(city, CITY_HISTORY_TRAFFIC + index, 0);
-}
 // Chart Data
 // Calculation blocks in the original chart painters, without window-system drawing.
 
 // Fill caller-owned plot coordinates and scale from a selected history series and period. Rejects invalid dimensions,
 // series, periods and NULL output; a successful plot borrows no City storage.
-bool BuildCityHistoryPlot(City *city, int series, int period, int width, int height, CityHistoryPlot *plot) {
+bool BuildCityHistoryPlot(const City *city, int series, int period, int width, int height, CityHistoryPlot *plot) {
   if (plot == NULL || series < 0 || series >= CITY_HISTORY_SERIES_COUNT || period < 0 ||
       period > CITY_HISTORY_PERIOD_LAST || width < 4 || height < 4 || width > 32767 || height > 32767)
     return false;
@@ -54,7 +38,7 @@ bool BuildCityHistoryPlot(City *city, int series, int period, int width, int hei
 
 // Calculate population, health or education values for each age group. NULL outputs and unsupported modes return
 // false; success fills caller-owned values without changing simulation metrics.
-bool ReadCityDemographicValues(City *city, int mode, CityDemographicValues *values) {
+bool ReadCityDemographicValues(const City *city, int mode, CityDemographicValues *values) {
   if (values == NULL || mode < 0 || mode > CITY_DEMOGRAPHIC_MODE_LAST)
     return false;
   memset(values, 0, sizeof(*values));
@@ -87,7 +71,7 @@ bool ReadCityDemographicValues(City *city, int mode, CityDemographicValues *valu
 
 // Read industry balances, tax rates or demand and determine the chart scale. NULL outputs and unsupported modes return
 // false; success fills caller-owned balances/scale without applying a tax or demand edit.
-bool ReadCityIndustryValues(City *city, int mode, CityIndustryValues *values) {
+bool ReadCityIndustryValues(const City *city, int mode, CityIndustryValues *values) {
   if (values == NULL || mode < 0 || mode > CITY_INDUSTRY_MODE_LAST)
     return false;
   values->maximum = kIndustryGraphMinimum[mode];
@@ -103,7 +87,7 @@ bool ReadCityIndustryValues(City *city, int mode, CityIndustryValues *values) {
 
 // Neighbor painter uses this rotation order for its four surrounding icons. Neighbor must be 0 through 3 for a nonzero
 // result and rotation supported; does not change saved neighbor values.
-u32 ReadCityNeighborPopulation(City *city, int neighbor, int rotation) {
+u32 ReadCityNeighborPopulation(const City *city, int neighbor, int rotation) {
   static const i8 direction[4] = {2, -1, 0, 1};
   if (neighbor < 0 || neighbor > 3)
     return 0;
@@ -127,7 +111,7 @@ int CityNeighborPopulationIconRow(u32 population, int neighboring) {
 
 // Compute the local-city population used by the neighbor display, including special-building contributions. Requires
 // current tile statistics; the result is a read-only presentation value.
-u32 ReadCityNeighborCentralPopulation(City *city) {
+u32 ReadCityNeighborCentralPopulation(const City *city) {
   int special = city->statistics.value[TK_PLYMOUTH_ARCOLOGY] +
       city->statistics.value[TK_FOREST_ARCOLOGY] + city->statistics.value[TK_DARCO_ARCOLOGY] +
       city->statistics.value[TK_LAUNCH_ARCOLOGY];
@@ -180,9 +164,9 @@ void RebaseCityHistoryGraphScales(City *city) {
   InvalidateCityInformation(city->game, CITY_UPDATE_HISTORY);
 }
 
-// Shift history series and record the current simulation metrics for phase 21. Call once at its scheduled phase
-// boundary; repeated calls would insert extra samples.
-void Sc2kPhase21History(City *city) {
+// Record the current monthly metrics and advance longer-period series when the calendar requires it.
+// Call once at the scheduled economy boundary; repeated calls would insert extra samples.
+void RecordCityMonthlyHistory(City *city) {
   CityStatistics *stats = &city->statistics;
   CityEconomyMonths *economy = &city->economy;
   CityPopulationSectors *population = &city->population;
@@ -278,156 +262,4 @@ void Sc2kPhase21History(City *city) {
     }
   }
   InvalidateCityInformation(city->game, CITY_UPDATE_HISTORY);
-}
-
-// Rankings
-
-// Rank the seven city problems for the newspaper. Applies ranking once and returns whether its parade notice is due;
-// the caller must retain the matching tail across dismissal.
-bool BeginCityNewspaperProblemRankings(City *city) {
-  CityNewspaperProblemRankings *rankings = &city->newspaper.problems;
-  CityEconomyMonths *economy = &city->economy;
-  int weights[7] = {(int)(i16)(NewspaperProblemMetric(city, 0)), (int)(i16)(NewspaperProblemMetric(city, 1)),
-      (int)(i16)(NewspaperProblemMetric(city, 3)),
-      (int)(i16)(3 * economy->sector[CITY_ECONOMY_RESIDENTIAL].current_rate),
-      (int)(i16)city->indicators.unemployment,
-      city->indicators.workforce_education <= 100 ? 100 - city->indicators.workforce_education : 0,
-      city->indicators.workforce_life_expectancy <= 70 ? 70 - city->indicators.workforce_life_expectancy : 0};
-  // Stock stores each weight as a signed word before selecting categories.
-  // Multiply the unsigned saved rate before narrowing so host overflow is defined.
-  int total = (int)(i16)(NewspaperProblemMetric(city, 2) + 50);
-  int counts[7] = {0};
-  for (int index = 0; index < 7; ++index) {
-    total = (int)(i16)(total + weights[index]);
-    rankings->scores[index] = 0;
-    rankings->category_order[index] = index;
-  }
-  if (total == 0 || city->indicators.population < 100)
-    return false;
-  int prior_value = city->infrastructure.mayor_rating;
-  city->infrastructure.mayor_rating = 0;
-  for (int draw = 0; draw < 100; ++draw) {
-    int choice = (int)Sc2kCrtRandRange(city, total);
-    int category = 0;
-    for (; category < 7; ++category) {
-      if (choice < weights[category])
-        break;
-      choice = (int)(i16)(choice - weights[category]);
-    }
-    if (category == 7)
-      ++city->infrastructure.mayor_rating;
-    else
-      ++counts[category];
-  }
-  for (int upper = 6; upper > 0; --upper)
-    for (int index = 0; index < upper; ++index) {
-      int current = rankings->category_order[index];
-      int next = rankings->category_order[index + 1];
-      if (counts[next] > counts[current]) {
-        rankings->category_order[index] = next;
-        rankings->category_order[index + 1] = current;
-      }
-    }
-  for (int index = 0; index < 7; ++index)
-    rankings->scores[index] = counts[rankings->category_order[index]];
-  if (prior_value < 80 && city->infrastructure.mayor_rating >= 80) {
-    PlayCitySound(city, INVALID_TILE, CITY_SOUND_CIVIC_PLACEMENT);
-    return true;
-  }
-  return false;
-}
-
-// Rank current City problems and show the mayor-parade notice when the ranking step requests it. The ranking effects
-// happen before presentation, so callers must not repeat this after dismissal.
-void UpdateCityNewspaperProblemRankings(City *city) {
-  if (BeginCityNewspaperProblemRankings(city))
-    ShowCityResourceAlertDialog(city, CITY_BITMAP_NOTICE_407, CITY_NOTICE_MAYOR_PARADE);
-}
-
-// Refresh newspaper rankings and the corresponding type-0xF3 records. Executes ranking and the facility tail in the
-// original order; nested notice callbacks may change City before the tail resumes.
-void UpdateCityNewspaperRanksAndF3Records(City *city) {
-  UpdateCityNewspaperProblemRankings(city);
-  FinishCityNewspaperRanksAndF3Records(city);
-}
-
-// Complete the facility-record updates that follow newspaper problem ranking. Uses live facility state after any
-// intervening notice; the caller must preserve the original phase ordering.
-void FinishCityNewspaperRanksAndF3Records(City *city) {
-  for (int index = 1; index < CityFacilityRecordLimit(city); ++index) {
-    CityAnnualFacilityRecord *facility = CityFacilityRecordAt(city, index);
-    if (facility->type != TK_MAYORS_HOUSE)
-      continue;
-    facility->value_04 = city->infrastructure.mayor_rating;
-    if (facility->value_06 != 0) {
-      --facility->value_06;
-      ++facility->age;
-    }
-  }
-}
-
-// Update seven facility scores and sort records by score. Requires initialized facility records; recomputes scores and
-// rearranges the ranked records in place.
-void Sc2kPhase21SortFacilities(City *city) {
-  if (city->game->resources->facility_resources_unavailable)
-    return;
-  FacilityRankings *rankings = &city->facility_rankings;
-  for (int index = 0; index < 7; ++index) {
-    FacilityRankingRecord *record = &rankings->record[index];
-    int baseline = city->game->resources->rankings.facility_baselines[record->id];
-    record->score = record->score > baseline ? record->score - baseline : 0;
-  }
-  for (int index = 0; index < 6; ++index)
-    for (int candidate = index + 1; candidate < 7; ++candidate) {
-      FacilityRankingRecord *first = &rankings->record[index];
-      FacilityRankingRecord *second = &rankings->record[candidate];
-      if (second->score > first->score) {
-        FacilityRankingRecord saved = *first;
-        *first = *second;
-        *second = saved;
-      }
-    }
-}
-
-// Insert one ranked city event before any UI callback. Requires supported event code/data; returns whether insertion
-// was admitted and performs it before any newspaper callback.
-bool RecordRankedCityEvent(City *city, int event_code, u8 event_data) {
-  if (city->game->ranked_events_suppressed != 0 || city->game->resources->facility_resources_unavailable != 0)
-    return false;
-  FacilityRankings *rankings = &city->facility_rankings;
-  int severity = city->game->resources->rankings.event_severity[event_code];
-  int insert = 0;
-  for (int index = 5; index >= 0; --index) {
-    FacilityRankingRecord *source = &rankings->record[index];
-    if (source->score > severity) {
-      insert = index + 1;
-      break;
-    }
-    rankings->record[index + 1] = *source;
-  }
-  FacilityRankingRecord *target = &rankings->record[insert];
-  target->id = event_code;
-  target->score = severity;
-  target->event_data = event_data;
-  target->article_cache[0] = CITY_NEWS_CACHE_INVALID;
-  target->article_cache[1] = CITY_NEWS_CACHE_INVALID;
-  target->article_cache[2] = CITY_NEWS_CACHE_INVALID;
-  return true;
-}
-
-// Insert an event into the ranked history and determine whether its newspaper should open. Returns false when
-// insertion or presentation gating declines it; a true result does not mean the newspaper has been dismissed.
-bool PrepareRankedCityEvent(City *city, int event_code, u8 event_data) {
-  if (!RecordRankedCityEvent(city, event_code, event_data)) return false;
-  return event_code == CITY_NEWS_CITY_FOUNDED ||
-      (city->indicators.ranked_disaster_gate != 0 &&
-          ((event_code >= CITY_NEWS_POPULATION_REWARD && event_code <= CITY_NEWS_BUILDING_AVAILABLE) ||
-              event_code == CITY_NEWS_POWER_PLANT_AGING));
-}
-
-// Record a ranked City event and present its newspaper when admitted. Callers supply a valid event code and data;
-// nested presentation must retain this caller's lifetime.
-void InsertRankedCityEvent(City *city, int event_code, u8 event_data) {
-  if (PrepareRankedCityEvent(city, event_code, event_data))
-    ShowRankedCityEventModal(city, event_code, event_data);
 }

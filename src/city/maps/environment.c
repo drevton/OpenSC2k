@@ -1,194 +1,32 @@
-#include "city/economy/facilities.h"
-#include "city/maps/buildings.h"
-#include "city/infrastructure/power_lines.h"
-#include "city/economy/types.h"
-#include "city/events/news.h"
-#include "city/maps/tile_storage.h"
-#include "city/presentation.h"
-#include <string.h>
-
-#include "city/state.h"
-#include "city/economy/economy.h"
-#include "city/engine/simulation.h"
-#include "city/events/events.h"
-#include "city/growth/growth.h"
-#include "city/infrastructure/infrastructure.h"
-#include "city/maps/layers.h"
-#include "city/tools/tools.h"
-#include "city/saveload/file.h"
+// Environment passes derive coarse pollution, land value, density and service coverage from City tiles.
+// Their stages share City scratch storage; an incremental scan must finish before another scratch user runs.
 #include "city/saveload/map_format.h"
-#include "game/state.h"
-#include "audio/state.h"
-#include "assets/state.h"
+#include "city/maps/map.h"
 
-// Read the low 16 bits of an initialized sector's funding rate for maintenance compatibility. Sector must index the
-// economy table; the read does not clamp or change its stored rate.
-static int ReadCityMaintenancePercent(const City *city, int sector) {
-  // Stock reads only the low word of the current funding rate.
-  return (u16)city->economy.sector[sector].current_rate;
-}
+#include "city/economy/types.h"
+#include "city/maps/buildings.h"
+#include "city/maps/layers.h"
+#include "city/state.h"
 
-// Clamp an integer metric to the unsigned-byte range. Returns an int from zero through 255 without narrowing
-// wraparound or side effects.
-static int ClampU8(int value) {
-  return IntClamp(value, 0, 255);
-}
-
-// Process one scheduled row of every-fourth-tile growth candidates within a section. Coordinates must fit the
-// scheduled section; may consume RNG and mutate zoning, buildings and local effects in simulation order.
-static void ScanCityTileSectionRow(City *city, int first_x, int y,
-    bool large_city_effect_enabled) {
-  const int width = city->map_width;
-  TileIndex row = y * width;
-  for (int column = 0; column < CITY_MAP_SECTION_SIZE / 4; ++column) {
-    int x = first_x + column * 4;
-    const TileIndex cell_index = row + x;
-    TileInfo *tp = &city->tile[cell_index];
-    int zone = ReadCityZoneKind(tp);
-    if (zone) {
-      if (zone >= ZONE_RESERVED_FIRST) {
-        if (NextCityMapRandomModulo(city, 128) == 0) {
-          int underground = ReadUnderground(city, cell_index);
-          if (IsSubwayTile(underground)) {
-            int maintenance = ReadCityMaintenancePercent(city, CITY_ECONOMY_SUBWAY);
-            if (maintenance != 100 && Sc2kCrtRandRange(city, 100) >= maintenance) {
-              if (underground == TUK_SUBWAY_ACCESS) {
-                BulldozeCityTile(city, cell_index, false);
-              } else {
-                SetUndergroundTile(city, cell_index, TUK_CLEAR);
-              }
-            }
-          }
-        }
-        continue;
-      }
-      GrowCityZonedTile(city, cell_index, large_city_effect_enabled);
-    } else if (CityTileStatisticAt(city, cell_index) >= TKL_ROAD_EAST_WEST) {
-      // Water pylons also take a maintenance draw, despite sharing land-line kinds.
-      u32 seed = city->random.map;
-      int next = AdvanceCityMapSeed(seed);
-      city->random.map = next;
-      int tile = tp->kind;
-      int decay_sector = -1;
-      if (IsTileKindRoadRoute(tile))
-        decay_sector = CITY_ECONOMY_ROADS;
-      else if (IsTileKindRailRoute(tile))
-        decay_sector = CITY_ECONOMY_RAIL;
-      if (!IsTileKindBuilding(tile) && (next & 0x7F) == 0 &&
-          (IsTileKindBridge(tile) ||
-              IsCityWaterPowerLine(tp))) {
-        int maintenance = ReadCityMaintenancePercent(city, CITY_ECONOMY_BRIDGES);
-        if (maintenance != 100 && (u32)city->weather.wind + Sc2kCrtRandRange(city, 50) >= maintenance) {
-          CenterCityMapOnEvent(city, x, y);
-          BulldozeCityTile(city, cell_index, true);
-          InsertRankedCityEvent(city, CITY_NEWS_BRIDGE_COLLAPSE, 0);
-        }
-      } else if (!IsTileKindBuilding(tile) && (next & 0x7F) == 0 && decay_sector != -1) {
-        int percentage = ReadCityMaintenancePercent(city, decay_sector);
-        if (percentage == 100 || Sc2kCrtRandRange(city, 100) < percentage)
-          continue;
-        ReplaceCityTileVariant(city, cell_index, TK_RUBBLE, Sc2kCrtRand(city) & 3);
-        tp->flags &= ~TF_POWERABLE;
-        RefreshCityPowerConnections(city, cell_index);
-      } else if (!IsTileKindBuilding(tile) && (next & 0x7F) == 0 &&
-          (tile == TK_HIGHWAY || tile == TK_HIGHWAY_POWER ||
-              IsTileKindMultiHighway(tile)) &&
-          !(y & 1) && !(x & 1)) {
-        int percentage = ReadCityMaintenancePercent(city, CITY_ECONOMY_HIGHWAYS);
-        if (percentage == 100 || Sc2kCrtRandRange(city, 100) < percentage)
-          continue;
-        static const u8 cell_y_offsets[4] = {0, 1, 0, 1};
-        static const u8 cell_x_offsets[4] = {0, 0, 1, 1};
-        for (int cell = 0; cell < 4; ++cell) {
-          int cell_x = x + cell_x_offsets[cell];
-          int cell_y = y + cell_y_offsets[cell];
-          TileIndex cell_tile = cell_y * width + cell_x;
-          if (HasTileWater(&city->tile[cell_tile]))
-            ReplaceCityTileAndStatistics(city, cell_tile, ReadCityWaterGroundKind(&city->tile[cell_tile]));
-          else ReplaceCityTileVariant(city, cell_tile, TK_RUBBLE, Sc2kCrtRand(city) & 3);
-          RefreshCityPowerConnections(city, cell_tile);
-        }
-      }
-      if ((tile == TK_RAIL_STATION || tile == TK_MARINA) &&
-          (tp->flags & TF_POWERED)) {
-        if (NextCityMapRandomModulo(city, 4) == 0 &&
-            city->statistics.count[tile] / (tile == TK_RAIL_STATION ? 4 : 9) >
-                (tile == TK_RAIL_STATION ? city->disasters.tile237_count : city->disasters.tile248_count)) {
-          if (tile == TK_RAIL_STATION)
-            TrySpawnTile237Events(city, cell_index);
-          else
-            TrySpawnTile248Events(city, cell_index);
-        }
-      } else if (IsTileKindArcology(tile) && tile != TK_BRAUN_LLAMA_DOME &&
-          ReadFootprintCorners(city, cell_index) == CITY_ZONE_CORNER_3) {
-        int overlay = ReadCityFacilityOverlay(city, cell_index);
-        if (IsCityFacilityOverlay(overlay)) {
-          CityAnnualFacilityRecord *facility = CityFacilityRecordAt(city, CityFacilityOverlaySlot(overlay));
-          if (IsTileKindArcology(facility->type) && facility->type != TK_BRAUN_LLAMA_DOME) {
-            int sx = x / 2;
-            int sy = y / 2;
-            int score = (city->half[sy * width / 2 + sx].land_value >> 5) -
-                (city->half[sy * width / 2 + sx].crime >> 5) -
-                (city->half[sy * width / 2 + sx].pollution >> 5) + 12;
-            if (!(tp->flags & TF_POWERED))
-              score /= 2;
-            if (!(tp->flags & TF_WATERED))
-              score /= 2;
-            score = IntClamp(score, 0, 12);
-            facility->age = (u8)score;
-          }
-        }
-      }
-    }
-  }
-}
-
-// Quarter-grid scan, growth, tile decay, and special-zone underlay decay. Batch offsets/count must fit the scheduled
-// quarter; growth effects and random draws follow its stable traversal order.
-void ScanCityTileBatch(City *city, int quarter_x, int quarter_y,
-    int first, int count, bool large_city_effect_enabled) {
-  InvalidateMapLayer(city, CITY_MAP_CHANGE_TILE);
-  InvalidateMapLayer(city, CITY_MAP_CHANGE_ZONE);
-  InvalidateMapLayer(city, CITY_MAP_CHANGE_FLAGS);
-  InvalidateMapLayer(city, CITY_MAP_CHANGE_TRAFFIC_DENSITY);
-  int direction_mask = kTileScanMaskTable[city->geography.rotation];
-  SetCityTileScanPresentation(city, direction_mask);
-  const int width = city->map_width;
-  const int columns = width / 4;
-  enum { kSectionColumns = CITY_MAP_SECTION_SIZE / 4 };
-  for (int position = first; position < first + count; position += kSectionColumns) {
-    int first_x = position % columns * 4 + quarter_x;
-    int y = position / columns * 4 + quarter_y;
-    ScanCityTileSectionRow(city, first_x, y, large_city_effect_enabled);
-  }
-}
-
-// Scan the selected interleaved quarter of City tiles for growth and decline. Quarter offsets must be supported; this
-// executes simulation effects and cannot be substituted for a read-only map query.
-void ScanQuarterCityTiles(City *city, int quarter_x, int quarter_y) {
-  bool large_city_effect = ((city->fixes & (1 << CITY_FIX_RESTORED_CHEATS)) && city->cheats.church == 2) ||
-      (u32)(2500 * city->statistics.count[TK_CHURCH]) < city->indicators.population;
-  ScanCityTileBatch(city, quarter_x, quarter_y, 0, city->map_cell_count / 16, large_city_effect);
-}
-
-// Saturating signed influence into one byte in a 32x32 map. Layer must be the supplied quarter-resolution backing;
-// bounds are checked and contributions are accumulated in place.
-void AddFacilityInfluenceCell(City *city, u8 *layer, int x, int y, int amount) {
+// Add signed influence to a quarter-resolution coverage field, saturating at byte bounds. The field pointer
+// selects a member of CityQuarterMapStatistics; adjacent entries retain that record stride.
+static void AddFacilityInfluenceCell(City *city, u8 *layer, int x, int y, int amount) {
   if (y < 0 || x < 0 || y >= city->map_height / 4 || x >= city->map_width / 4)
     return;
-  int value = layer[(y * city->map_width / 4 + x) * sizeof(CityQuarterMapStatistics)];
-  int result = ClampU8(value + amount);
-  WriteByte(&layer[(y * city->map_width / 4 + x) * sizeof(CityQuarterMapStatistics)], result);
+  u8 *coverage = &layer[(y * city->map_width / 4 + x) * sizeof(CityQuarterMapStatistics)];
+  *coverage = IntClamp(*coverage + amount, 0, 255);
 }
 
 // Spread one facility's influence through the stock radius-three footprint. Requires the selected coarse layer and
 // admitted facility radius; reuses caller storage and clips at map boundaries.
-void SpreadFacilityInfluence(City *city, u8 *layer, int x, int y, int amount) {
-  static const i8 offset_y[37] = {0, -1, 1, 0, 0, -1, 1, -1, 1, -1, 0, 1, -1, 0, 1, -2, -2, -2, 2, 2, 2, -1, 0, 1, -1,
+static void SpreadFacilityInfluence(City *city, u8 *layer, int x, int y, int amount) {
+  static const i8 kInfluenceYOffset[37] = {
+      0, -1, 1, 0, 0, -1, 1, -1, 1, -1, 0, 1, -1, 0, 1, -2, -2, -2, 2, 2, 2, -1, 0, 1, -1,
       0, 1, -3, -3, -3, 3, 3, 3, -2, -2, 2, 2};
-  static const i8 offset_x[37] = {0, 0, 0, -1, 1, -1, -1, 1, 1, -2, -2, -2, 2, 2, 2, -1, 0, 1, -1, 0, 1, -3, -3, -3, 3,
+  static const i8 kInfluenceXOffset[37] = {
+      0, 0, 0, -1, 1, -1, -1, 1, 1, -2, -2, -2, 2, 2, 2, -1, 0, 1, -1, 0, 1, -3, -3, -3, 3,
       3, 3, -1, 0, 1, -1, 0, 1, -2, 2, -2, 2};
-  static const u8 amount_level[37] = {
+  static const u8 kInfluenceLevel[37] = {
       0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4};
   int level[5];
   level[0] = amount;
@@ -197,22 +35,22 @@ void SpreadFacilityInfluence(City *city, u8 *layer, int x, int y, int amount) {
   level[3] = 2 * level[2] / 3;
   level[4] = level[3] / 2;
   for (int index = 0; index < 37; ++index)
-    AddFacilityInfluenceCell(city, layer, x + offset_x[index], y + offset_y[index], level[amount_level[index]]);
+    AddFacilityInfluenceCell(city, layer, x + kInfluenceXOffset[index], y + kInfluenceYOffset[index],
+        level[kInfluenceLevel[index]]);
 }
 
-enum {
+enum CityEnvironmentStage {
   ENV_POLLUTION_INPUT, ENV_POLLUTION_SMOOTH, ENV_CENTER, ENV_INFLUENCE, ENV_LAND_VALUE, ENV_CLEAR, ENV_FACILITIES,
   ENV_DENSITY, ENV_CRIME_INPUT, ENV_CRIME_SMOOTH, ENV_DONE
 };
 
-// Accumulate raw pollution for one admitted environment section row. Requires the pollution pass's initialized work
-// and map layers; writes its coarse field before the separate smoothing stage.
-static inline void BuildPollutionSectionRow(City *city, int section, int y) {
+// Accumulate raw pollution for one half-resolution row. Requires initialized map layers;
+// the following smoothing stage consumes this scratch field.
+static inline void BuildPollutionRow(City *city, int y) {
   const int width = city->map_width;
-  int section_x = section * (CITY_MAP_SECTION_SIZE / 2);
-  for (int column = 0; column < CITY_MAP_SECTION_SIZE / 2; ++column) {
-    int x = section_x + column;
-    int value = city->half[y * width / 2 + x].pollution + city->half[y * width / 2 + x].traffic_density / 5;
+  for (int x = 0; x < width / 2; ++x) {
+    const CityHalfMapStatistics *stats = &city->half[y * width / 2 + x];
+    int value = stats->pollution + stats->traffic_density / 5;
     for (int dy = 0; dy < 2; ++dy)
       for (int dx = 0; dx < 2; ++dx) {
         TileIndex cell = (2 * y + dy) * width + 2 * x + dx;
@@ -249,15 +87,13 @@ static int AverageEnvironmentScratch(const City *city, int x, int y, int center_
   return total / divisor;
 }
 
-// Smooth one pollution section row and accumulate the resulting metric in its scan state. Source and scratch stages
-// must already be prepared; row and section coordinates use the pass's coarse resolution.
-static inline void SmoothPollutionSectionRow(City *city, int section, int y) {
+// Smooth one half-resolution pollution row and accumulate the city metric.
+// The raw pollution stage must have finished before any row is smoothed.
+static inline void SmoothPollutionRow(City *city, int y) {
   const int width = city->map_width;
-  int section_x = section * (CITY_MAP_SECTION_SIZE / 2);
   int divisor_base = city->infrastructure.capacity - city->indicators.industrial_pollution_bonus +
       ((city->unlocks.ordinance_flags & CITY_POLICY_FLAG_POLLUTION_CONTROLS) ? 5 : 4);
-  for (int column = 0; column < CITY_MAP_SECTION_SIZE / 2; ++column) {
-    int x = section_x + column;
+  for (int x = 0; x < width / 2; ++x) {
     int value = AverageEnvironmentScratch(city, x, y, 2, IntMax(divisor_base, 1));
     value = IntMin(value, 255);
     city->half[y * width / 2 + x].pollution = (u8)value;
@@ -266,35 +102,32 @@ static inline void SmoothPollutionSectionRow(City *city, int section, int y) {
 }
 
 // Accumulate developed-tile positions for the environment scan's city-center calculation. Requires valid
-// full-resolution section/row coordinates and initialized scan sums; does not move the camera.
-static inline void AccumulateCityCenterSectionRow(City *city, CityEnvironmentScan *scan, int section, int y) {
+// full-resolution row coordinates and initialized scan sums; does not move the camera.
+static inline void AccumulateCityCenterRow(City *city, CityEnvironmentScan *scan, int y) {
   const int width = city->map_width;
-  int section_x = section * CITY_MAP_SECTION_SIZE;
-  for (int column = 0; column < CITY_MAP_SECTION_SIZE; ++column) {
-    int x = section_x + column;
+  for (int x = 0; x < width; ++x) {
     const TileIndex cell_index = y * width + x;
+    TileInfo *tp = &city->tile[cell_index];
     int tile = CityTileStatisticAt(city, cell_index);
     if (IsTileKindBuilding(tile)) {
       scan->sum_y += y;
       scan->sum_x += x;
       WriteScratch(city, x, y, 40);
       ++scan->count;
-      city->tile[cell_index].flags &= ~TF_VISITED;
+      tp->flags &= ~TF_VISITED;
     }
   }
 }
 
 // Four consecutive tiles share scratch cells. Preserve row and tile order: coarse visited writes can alias flags read
-// later in this scan. Requires valid section/row coordinates and initialized scan totals; mutates coverage flags and
+// later in this scan. Requires a valid full-resolution row and initialized scan totals; mutates coverage flags and
 // live metrics in pass order.
-static inline void AccumulateCityInfluenceSectionRow(City *city, int section, int y) {
+static inline void AccumulateCityInfluenceRow(City *city, int y) {
   const int width = city->map_width;
   const int height = city->map_height;
-  int section_x = section * CITY_MAP_SECTION_SIZE;
   int scratch_y = y / 4;
-  for (int column = 0; column < CITY_MAP_SECTION_SIZE / 4; ++column) {
-    int group_x = section_x + 4 * column;
-    int scratch_x = group_x / 4;
+  for (int scratch_x = 0; scratch_x < width / 4; ++scratch_x) {
+    int group_x = 4 * scratch_x;
     int land_influence = ReadScratch(city, scratch_x, scratch_y);
     int industrial_influence = ReadScratch(city, scratch_x, height / 4 + scratch_y);
     for (int x = group_x; x < group_x + 4; ++x) {
@@ -333,12 +166,11 @@ static inline void AccumulateCityInfluenceSectionRow(City *city, int section, in
 
 // Compute one coarse land-value row from the prepared environment metrics. Requires the matching scan state and prior
 // source stages; writes the land-value layer in place.
-static inline void UpdateLandValueSectionRow(City *city, const CityEnvironmentScan *scan, int section, int y) {
+static inline void UpdateLandValueRow(City *city, const CityEnvironmentScan *scan, int y) {
   const int width = city->map_width;
   const int height = city->map_height;
-  int section_x = section * (CITY_MAP_SECTION_SIZE / 2);
-  for (int column = 0; column < CITY_MAP_SECTION_SIZE / 2; ++column) {
-    int x = section_x + column;
+  for (int x = 0; x < width / 2; ++x) {
+    CityHalfMapStatistics *stats = &city->half[y * width / 2 + x];
     int score = 0;
     if (city->tile[y * width + x].flags & TF_VISITED) {
       int tile_x = 2 * x;
@@ -375,8 +207,8 @@ static inline void UpdateLandValueSectionRow(City *city, const CityEnvironmentSc
       if (dx < 0)
         dx = -dx;
       int distance = 64 - dy - dx;
-      int pollution_value = city->half[y * width / 2 + x].pollution;
-      int crime_value = city->half[y * width / 2 + x].crime;
+      int pollution_value = stats->pollution;
+      int crime_value = stats->crime;
       int density_value = city->quarter[scratch_y * width / 4 + scratch_x].density;
       if (category == ZONE_COMMERCIAL_LOW || category == ZONE_COMMERCIAL_HIGH) {
         score = sum / divisor;
@@ -398,35 +230,31 @@ static inline void UpdateLandValueSectionRow(City *city, const CityEnvironmentSc
       if (IsTileKindBuilding(tile) &&
           kTileZoneCategory[tile - TK_RESIDENTIAL_FIRST] == CITY_BUILDING_ABANDONED)
         score -= score / 2;
-      score = ClampU8(score);
+      score = IntClamp(score, 0, 255);
       city->indicators.city_land_value += (u32)score;
     }
-    city->half[y * width / 2 + x].land_value = (u8)score;
+    stats->land_value = (u8)score;
   }
 }
 
-// Clear one quarter-resolution environment scratch row before facility influence accumulation. Section and row must be
-// valid for that coarse layer; other pass stages must not retain these scratch values.
-static inline void ClearEnvironmentSectionRow(City *city, int section, int y) {
+// Clear one quarter-resolution scratch and service-coverage row before facility influence accumulation.
+// Prior stages must have finished consuming these scratch values.
+static inline void ClearEnvironmentRow(City *city, int y) {
   const int width = city->map_width;
-  int section_x = section * (CITY_MAP_SECTION_SIZE / 4);
-  for (int column = 0; column < CITY_MAP_SECTION_SIZE / 4; ++column) {
-    int x = section_x + column;
+  for (int x = 0; x < width / 4; ++x) {
     WriteScratch(city, x, y, 0);
-    city->quarter[y * width / 4 + x].police_coverage = 0;
-    city->quarter[y * width / 4 + x].fire_coverage = 0;
+    CityQuarterMapStatistics *stats = &city->quarter[y * width / 4 + x];
+    stats->police_coverage = 0;
+    stats->fire_coverage = 0;
   }
 }
 
-// Add facility and ordinance influence from one full-resolution section row to the environment workspace. Requires
-// valid section coordinates and cleared scratch; repeated rows would count influences twice.
-static inline void AccumulateFacilitySectionRow(City *city, int section, int y) {
+// Add facility and ordinance influence from one full-resolution interior row to the cleared workspace.
+// Skip the outer map border; repeated rows would count influences twice.
+static inline void AccumulateFacilityRow(City *city, int y) {
   const int width = city->map_width;
-  int section_x = section * CITY_MAP_SECTION_SIZE;
   u32 options = city->unlocks.ordinance_flags;
-  for (int column = 0; column < CITY_MAP_SECTION_SIZE; ++column) {
-    int x = section_x + column;
-    if (x == 0 || x == width - 1) continue;
+  for (int x = 1; x < width - 1; ++x) {
     const TileIndex cell_index = y * width + x;
     int tile = CityTileStatisticAt(city, cell_index);
     if (!IsTileKindBuilding(tile))
@@ -469,28 +297,25 @@ static inline void AccumulateFacilitySectionRow(City *city, int section, int y) 
 
 // Convert accumulated environment values into one quarter-resolution density row. Requires the preceding accumulation
 // stage; updates the density layer without allocating a separate plane.
-static inline void UpdateDensitySectionRow(City *city, int section, int y) {
+static inline void UpdateDensityRow(City *city, int y) {
   const int width = city->map_width;
-  int section_x = section * (CITY_MAP_SECTION_SIZE / 4);
-  for (int column = 0; column < CITY_MAP_SECTION_SIZE / 4; ++column) {
-    int x = section_x + column;
+  for (int x = 0; x < width / 4; ++x) {
     int value = 4 * ReadScratch(city, x, y);
     value = IntMin(value, 255);
-    int change = value - city->quarter[y * width / 4 + x].density;
-    city->quarter[y * width / 4 + x].density = (u8)value;
-    int smoothed = (8 * change + 128 + 7 * city->quarter[y * width / 4 + x].density_history) / 8;
-    city->quarter[y * width / 4 + x].density_history = ClampU8(smoothed);
+    CityQuarterMapStatistics *stats = &city->quarter[y * width / 4 + x];
+    int change = value - stats->density;
+    stats->density = (u8)value;
+    int smoothed = (8 * change + 128 + 7 * stats->density_history) / 8;
+    stats->density_history = IntClamp(smoothed, 0, 255);
   }
 }
 
-// Compute one raw crime row from current policies, population and coverage. Requires valid half-resolution section/row
-// coordinates; the following smoothing stage consumes this prepared field.
-static inline void BuildCrimeSectionRow(City *city, int section, int y) {
+// Compute one half-resolution crime row from current policies, population and coverage.
+// The following smoothing stage consumes this scratch field.
+static inline void BuildCrimeRow(City *city, int y) {
   const int width = city->map_width;
-  int section_x = section * (CITY_MAP_SECTION_SIZE / 2);
   u32 options = city->unlocks.ordinance_flags;
-  for (int column = 0; column < CITY_MAP_SECTION_SIZE / 2; ++column) {
-    int x = section_x + column;
+  for (int x = 0; x < width / 2; ++x) {
     int value = 0;
     if (city->tile[y * width + x].flags & TF_VISITED) {
       value = city->quarter[(y / 2) * width / 4 + x / 2].density -
@@ -503,15 +328,13 @@ static inline void BuildCrimeSectionRow(City *city, int section, int y) {
   }
 }
 
-// Smooth one prepared crime row and retain its aggregate metric. Requires the raw crime stage and compatible scratch;
-// section coordinates are in the coarse crime layer.
-static inline void SmoothCrimeSectionRow(City *city, int section, int y) {
+// Smooth one half-resolution crime row and accumulate the city metric.
+// The raw crime stage must have finished before any row is smoothed.
+static inline void SmoothCrimeRow(City *city, int y) {
   const int width = city->map_width;
-  int section_x = section * (CITY_MAP_SECTION_SIZE / 2);
-  for (int column = 0; column < CITY_MAP_SECTION_SIZE / 2; ++column) {
-    int x = section_x + column;
+  for (int x = 0; x < width / 2; ++x) {
     int value = AverageEnvironmentScratch(city, x, y, 1, 1);
-    value = ClampU8(value);
+    value = IntClamp(value, 0, 255);
     city->half[y * width / 2 + x].crime = (u8)value;
     city->indicators.city_crime += (u32)value;
   }
@@ -521,10 +344,8 @@ static inline void SmoothCrimeSectionRow(City *city, int section, int y) {
 // and true finalizes the map metrics.
 bool StepCityEnvironment(City *city, CityEnvironmentScan *scan, int rows) {
   const int height = city->map_height;
-  const int sections = city->map_width / CITY_MAP_SECTION_SIZE;
   while (rows > 0 && scan->stage != ENV_DONE) {
     int limit = height / 2;
-    void (*update_row)(City *, int, int) = NULL;
     switch (scan->stage) {
     case ENV_POLLUTION_INPUT:
       if (scan->row == 0) {
@@ -537,10 +358,8 @@ bool StepCityEnvironment(City *city, CityEnvironmentScan *scan, int rows) {
         InvalidateMapLayer(city, CITY_MAP_CHANGE_DENSITY_HISTORY);
         city->indicators.city_pollution = 0;
       }
-      update_row = BuildPollutionSectionRow;
       break;
     case ENV_POLLUTION_SMOOTH:
-      update_row = SmoothPollutionSectionRow;
       break;
     case ENV_CENTER:
       if (scan->row == 0) {
@@ -558,7 +377,6 @@ bool StepCityEnvironment(City *city, CityEnvironmentScan *scan, int rows) {
         city->indicators.zone_count = 0;
       }
       limit = height;
-      update_row = AccumulateCityInfluenceSectionRow;
       break;
     case ENV_LAND_VALUE:
       if (scan->row == 0) {
@@ -567,34 +385,39 @@ bool StepCityEnvironment(City *city, CityEnvironmentScan *scan, int rows) {
       break;
     case ENV_CLEAR:
       limit = height / 4;
-      update_row = ClearEnvironmentSectionRow;
       break;
     case ENV_FACILITIES:
       limit = height - 1;
-      update_row = AccumulateFacilitySectionRow;
       break;
     case ENV_DENSITY:
       limit = height / 4;
-      update_row = UpdateDensitySectionRow;
       break;
     case ENV_CRIME_INPUT:
-      update_row = BuildCrimeSectionRow;
       break;
     case ENV_CRIME_SMOOTH:
       if (scan->row == 0) {
         city->indicators.city_crime = 0;
       }
-      update_row = SmoothCrimeSectionRow;
       break;
     default: continue;
     }
     int end = IntMin(limit, scan->row + rows);
-    for (int y = scan->row; y < end; ++y)
-      for (int section = 0; section < sections; ++section) {
-        if (scan->stage == ENV_CENTER) AccumulateCityCenterSectionRow(city, scan, section, y);
-        else if (scan->stage == ENV_LAND_VALUE) UpdateLandValueSectionRow(city, scan, section, y);
-        else update_row(city, section, y);
+    // Each stage visits rows north to south and columns west to east. The influence pass also retains its
+    // four-tile groups because its coarse visited writes can affect subsequent tile reads.
+    for (int y = scan->row; y < end; ++y) {
+      switch (scan->stage) {
+      case ENV_POLLUTION_INPUT: BuildPollutionRow(city, y); break;
+      case ENV_POLLUTION_SMOOTH: SmoothPollutionRow(city, y); break;
+      case ENV_CENTER: AccumulateCityCenterRow(city, scan, y); break;
+      case ENV_INFLUENCE: AccumulateCityInfluenceRow(city, y); break;
+      case ENV_LAND_VALUE: UpdateLandValueRow(city, scan, y); break;
+      case ENV_CLEAR: ClearEnvironmentRow(city, y); break;
+      case ENV_FACILITIES: AccumulateFacilityRow(city, y); break;
+      case ENV_DENSITY: UpdateDensityRow(city, y); break;
+      case ENV_CRIME_INPUT: BuildCrimeRow(city, y); break;
+      case ENV_CRIME_SMOOTH: SmoothCrimeRow(city, y); break;
       }
+    }
     rows -= end - scan->row;
     scan->row = end;
     if (end == limit) {

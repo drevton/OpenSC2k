@@ -1,3 +1,11 @@
+#include "city/maps/labels.h"
+#include "city/engine/city_name.h"
+#include "city/engine/simulation_state.h"
+#include "city/disasters/types.h"
+#include "city/infrastructure/types.h"
+#include "city/maps/tile_queue.h"
+#include "city/events/news.h"
+#include "city/engine/random.h"
 #include "city/economy/facilities.h"
 #include "city/military.h"
 #include "city/economy/types.h"
@@ -20,7 +28,7 @@ static size_t CityStorageSize(int width, int height, int event_capacity) {
   size_t size = (sizeof(TileInfo) + sizeof(u16)) * cells + sizeof(CityHalfMapStatistics) * (cells / 4) +
       sizeof(CityQuarterMapStatistics) * (cells / 16) +
       sizeof(CityHistoryRow) * CITY_HISTORY_SERIES_COUNT;
-  size += CityRouteQueueCapacity(width, height) * sizeof(PointU16) + cells / 8;
+  size += CityTileQueueCapacity(width, height) * sizeof(PointU16) + cells / 8;
   if (width != CITY_MAP_SIZE || height != CITY_MAP_SIZE) {
     int sources = IntMin(width * height / 2, CITY_WATER_SOURCE_SORT_LIMIT);
     size += sources * sizeof(u32);
@@ -52,7 +60,7 @@ void BindOwnedSimulationMapLayers(City *city) {
   CityHistoryRow *history = (CityHistoryRow *)(quarter + cells / 16);
   u8 *route = (u8 *)(history + CITY_HISTORY_SERIES_COUNT);
   bool large = width != CITY_MAP_SIZE || height != CITY_MAP_SIZE;
-  int route_capacity = CityRouteQueueCapacity(width, height);
+  int route_capacity = CityTileQueueCapacity(width, height);
   city->route_queue_cursor.mask = route_capacity - 1;
   size_t route_bytes = route_capacity * sizeof(PointU16);
   city->tile = tiles;
@@ -167,8 +175,8 @@ void InitializeCityDefaults(City *city) {
   city->mission = (CityMissionState){0};
   city->settings = (CitySavedSettings){.speed = CITY_SPEED_NORMAL};
   city->newspaper = (CityNewspaperState){0};
-  city->route_queue_cursor = (RouteQueueCursor){.mask =
-      CityRouteQueueCapacity(city->map_width ? city->map_width : CITY_MAP_SIZE,
+  city->route_queue_cursor = (CityTileQueueCursor){.mask =
+      CityTileQueueCapacity(city->map_width ? city->map_width : CITY_MAP_SIZE,
           city->map_height ? city->map_height : CITY_MAP_SIZE) - 1};
 }
 
@@ -187,15 +195,25 @@ void InitializeSimulation(City *city, void *map_storage) {
   city->map_changes.full = true;
 }
 
-// Clear the City's bound map-layer pointers before the backing leaves its lifetime. Does not free the backing; callers
-// must stop simulation and release any remaining aliases separately.
-void DetachSimulationMapLayers(City *city) {
+// Final owned storage release. Callers have already stopped work and released external map aliases.
+void ReleaseSimulation(City *city) {
+  FreeCityNameStorage(&city->name);
+  ReleaseCityFileExtensions(city);
   ReleaseCityAssociations(city);
+  free(city->map_storage);
+  city->map_storage = NULL;
   city->tile = NULL;
   city->scratch = NULL;
   city->half = NULL;
   city->quarter = NULL;
   city->history = NULL;
+  city->route_points = NULL;
+  city->route_queued = NULL;
+  city->water_source_order = NULL;
+  city->events = (CityMapEvents){0};
+  city->snow.points = city->snow.moisture = NULL;
+  city->route_queue_cursor = (CityTileQueueCursor){0};
+  city->map_width = city->map_height = city->map_width_shift = city->map_cell_count = 0;
 }
 
 // Initialization effects, using the City's existing backing. Requires bound history storage; replaces initial

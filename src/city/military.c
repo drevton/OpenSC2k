@@ -1,21 +1,30 @@
+#include "city/engine/random.h"
+#include "city/infrastructure/networks.h"
 #include "city/maps/buildings.h"
 #include "city/infrastructure/surface_lines.h"
 #include "city/infrastructure/power_lines.h"
 #include "city/military.h"
+#include "city/maps/terrain.h"
 #include "city/engine/command_types.h"
-#include "city/engine/simulation.h"
+#include "city/engine/commands.h"
 #include "city/events/news.h"
 #include "city/growth/growth.h"
-#include "city/infrastructure/infrastructure.h"
 #include "city/maps/layers.h"
 #include "city/maps/map.h"
 #include "city/presentation.h"
 #include "city/tools/tools.h"
 #include <assert.h>
 
-// Store the diagnostic reply consumed by the military reward offer. The comparison caller supplies the original answer
-// value; this does not open or dismiss presentation.
-void Sc2kQueueUnlockBonusAnswer(City *city, i32 answer) { city->unlock_bonus_answer = answer; }
+// Stage an explicit answer for OfferDisasterUnlockBonus. Rejects unsupported answers and reserved input;
+// TEST leaves the pending choice unchanged, while execution stores the answer for the retained caller.
+i64 CmdSetMilitaryRewardAnswer(City *city, u32 flags, int answer, int reserved1, int reserved2) {
+  if ((answer != CITY_DIALOG_UNANSWERED && answer != CITY_DIALOG_YES && answer != CITY_DIALOG_NO) ||
+      reserved1 != 0 || reserved2 != 0)
+    return CITY_COMMAND_COST_INVALID;
+  if (flags & CITY_COMMAND_TEST) return 0;
+  city->unlock_bonus_answer = answer;
+  return 1;
+}
 
 // Native equivalents of sc2kfix military restoration. Bounded searches use City RNG;
 // presentation rotation and host rand() cannot alter the selected military site.

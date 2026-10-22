@@ -1,18 +1,25 @@
-#include "drawing/maps/map_effects.h"
-#include "ui/map.h"
+#include "city/maps/labels.h"
+#include "city/maps/terrain.h"
+#include "drawing/maps/map_data.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+
+#include "assets/state.h"
 #include "city/infrastructure/bridges.h"
-#include "city/maps/map_types.h"
-#include "city/maps/tile_storage.h"
-#include "drawing/maps/map_view.h"
 #include "city/maps/layers.h"
 #include "city/maps/map.h"
-#include "drawing/drawing.h"
-#include "drawing/drawing_internal.h"
+#include "city/state.h"
 #include "drawing/fonts/fonts.h"
+#include "drawing/maps/map_animation.h"
+#include "drawing/maps/map_events.h"
 #include "drawing/maps/map_render.h"
+#include "drawing/raster/canvas_primitives.h"
+#include "drawing/raster/canvas_raster_internal.h"
+#include "drawing/state.h"
+#include "game/state.h"
 
-// Map Overlay
-// Drawing subsystem: map overlay.
+// Map labels, sign composition and compact data-layer previews.
 
 void SetCityMapLabelStyle(Drawing *drawing, bool enabled) {
   drawing->label_style = enabled;
@@ -283,7 +290,7 @@ static void DrawCityConnectionSigns(City *city) {
       (drawing->map_state.data_overlay_enabled && drawing->map_state.data_mode != CITY_DATA_MODE_NONE)) return;
   int zoom = drawing->default_map_view->zoom, scale = 1 << zoom;
   CityRect area = VisibleCityMapTileBounds(city, drawing->map_state.origin_x, drawing->map_state.origin_y,
-      zoom, CityMapCameraRotation(drawing), drawing->map_state.paint_parameters.rect);
+      zoom, CityMapCameraRotation(drawing), drawing->map_state.paint_rect);
   int width = city->map_width, height = city->map_height;
   CityRect edges[] = {
     {area.left, area.top, area.right, IntMin(area.bottom, 2)},
@@ -363,7 +370,7 @@ void DrawCityMapOverlay(City *city, int zoom, int x, int y, int screen_x, int sc
         slot = NextCityMapEventOnTile(city, slot))
       DrawCityMapEventOverlay(city, zoom, x, y, slot);
   }
-  if (animated) EndCityMapOverlayAnimation(city, drawing);
+  if (animated) EndCityMapSpriteAnimation(city, drawing);
 }
 
 // Map Overlays

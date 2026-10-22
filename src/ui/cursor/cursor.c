@@ -1,21 +1,21 @@
-#include "assets/cursors.h"
-#include "assets/graphics.h"
-#include "ui/menus/menu.h"
-#include "ui/tools/types.h"
-#include "base/byte_order.h"
 #include "ui/cursor/cursor.h"
 
-#include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
-#include "assets/assets.h"
-#include "game/state.h"
-#include "drawing/drawing.h"
-#include "drawing/state.h"
-#include "drawing/bitmaps.h"
-#include "drawing/maps/tables.h"
+#include "assets/cursors.h"
+#include "assets/graphics.h"
 #include "assets/state.h"
+#include "city/maps/buildings.h"
+#include "city/state.h"
+#include "drawing/bitmaps.h"
+#include "drawing/cursors.h"
+#include "drawing/maps/map_render.h"
+#include "drawing/maps/tables.h"
+#include "drawing/state.h"
+#include "game/state.h"
+#include "ui/menus/menu.h"
+#include "ui/tools/tools.h"
+#include "ui/tools/types.h"
 
 // Cursor
 
@@ -38,6 +38,8 @@ static const u32 *FallbackCursor(Game *game) {
   return game->resources->cursors.fallback;
 }
 
+_Static_assert(CITY_CANVAS_TOOL_COUNT == CITY_CURSOR_TOOL_CAPACITY,
+    "UI tool cursor slots must match Drawing capacity");
 _Static_assert(SC2K_CURSOR_ASSET_ICON_COUNT == CITY_CANVAS_CURSOR_ICON_COUNT,
     "Cursor crop IDs follow the data-file order");
 
@@ -116,34 +118,14 @@ static const u8 kFallbackToolIcons[CITY_CANVAS_TOOL_COUNT] = {
   [CITY_CANVAS_TOOL_RAIL_BRIDGE] = CITY_CANVAS_CURSOR_ICON_RAIL,
 };
 
-static u32 CursorPixelOver(u32 source, u32 destination) {
-  int alpha = source >> 24, background = ((destination >> 24) * (255 - alpha) + 127) / 255;
-  int combined = alpha + background;
-  if (!combined) return 0;
-  u32 color = (u32)combined << 24;
-  for (int shift = 0; shift < 24; shift += 8)
-    color |= (u32)(((source >> shift & 255) * alpha + (destination >> shift & 255) * background +
-        combined / 2) / combined) << shift;
-  return color;
-}
-
-void ComposeCityCursorIcon(Game *game, int tool, const u32 *icon) {
-  u32 *pixels = game->drawing->cursors.tools[tool];
-  memcpy(pixels, game->resources->cursors.pixels + SC2K_CURSOR_ASSET_BADGE_OFFSET,
-      sizeof(game->drawing->cursors.tools[tool]));
-  for (i32 y = 0; y < 40; ++y)
-    for (i32 x = 0; x < 40; ++x)
-      pixels[(y + 18) * 72 + x + 16] = CursorPixelOver(icon[y * 40 + x], pixels[(y + 18) * 72 + x + 16]);
-  for (i32 i = 0; i < 72 * 72; ++i)
-    pixels[i] = CursorPixelOver(game->resources->cursors.pixels[SC2K_CURSOR_ASSET_ARROW_OFFSET + i], pixels[i]);
-}
 // Compose tool cursors from startup-loaded artwork. Before loading completes,
 // GetCityCursorSprite supplies the geometric pointer without attempting resource I/O.
-void InitializeCityCursor(Game *game) {
+static void InitializeCityCursor(Game *game) {
   if (game->drawing->cursors.initialized) return;
   if (!game->resources->cursors.pixels) return;
   for (int tool = 0; tool < CITY_CANVAS_TOOL_COUNT; ++tool)
-    ComposeCityCursorIcon(game, tool, game->resources->cursors.pixels + SC2K_CURSOR_ASSET_ICONS_OFFSET +
+    ComposeCityCursorIcon(game->drawing->cursors.tools[tool], &game->resources->cursors,
+        game->resources->cursors.pixels + SC2K_CURSOR_ASSET_ICONS_OFFSET +
         kFallbackToolIcons[tool] * SC2K_CURSOR_ASSET_ICON_PIXELS);
   // Zones have their actual R/C/I colours; stripes distinguish dense zones.
   for (i32 tool = 0; tool < CITY_CANVAS_TOOL_POLICE; ++tool) {
@@ -155,55 +137,50 @@ void InitializeCityCursor(Game *game) {
         icon[y * 40 + x] = (x == 20 - half || x == 20 + half ||
             (tool >= CITY_CANVAS_TOOL_DENSE_RESIDENTIAL && y % 4 == 0)) ? 0xFF303030u : color[tool % 3];
     }
-    ComposeCityCursorIcon(game, tool, icon);
+    ComposeCityCursorIcon(game->drawing->cursors.tools[tool], &game->resources->cursors, icon);
   }
   game->drawing->cursors.initialized = 1;
+  ++game->drawing->cursors.revision;
 }
+
 const u32 *GetCityCursorSprite(Game *game, int tool) {
   InitializeCityCursor(game);
   if (!game->resources->cursors.pixels) return FallbackCursor(game);
   return tool >= 0 && tool < CITY_CANVAS_TOOL_COUNT ? game->drawing->cursors.tools[tool] :
       game->resources->cursors.pixels + SC2K_CURSOR_ASSET_DEFAULT_OFFSET;
 }
-CityRect Sc2kCanvasCursorBounds(i32 x, i32 y, i32 scale) {
-  if (scale < 100 || scale > 500) return (CityRect){x,y,x,y};
-  i32 size = (SC2K_CURSOR_SOURCE_SIZE * scale + SC2K_CURSOR_SCALE_DENOMINATOR - 1) /
-      SC2K_CURSOR_SCALE_DENOMINATOR;
-  return (CityRect){x,y,x+size,y+size};
-}
-RunSprite *PrepareCityCursorSprite(Game *game, int tool, int size) {
-  RunSprite *source = EncodeRgbaRunSprite(GetCityCursorSprite(game, tool),
-      SC2K_CURSOR_SOURCE_SIZE, SC2K_CURSOR_SOURCE_SIZE, SC2K_CURSOR_SOURCE_SIZE);
-  if (!source) return NULL;
-  RunSprite *prepared = ResizeRunSprite(source, size, size);
-  FreeRunSprite(source);
-  return prepared;
-}
 
-// Normal play installs SDL cursors. Diagnostic software captures use the same
-// prepared image and sprite drawer, including clipping and partial alpha.
+// UI selects the tool image and records a Drawing preparation failure on Game.
 void DrawCityCursor(Game *game, Canvas *canvas, i32 tool, i32 x, i32 y, i32 scale) {
   if (!canvas || !canvas->pixels || scale < 100 || scale > 500) return;
-  int size = Sc2kCanvasCursorBounds(0, 0, scale).right;
-  RunSprite *sprite = PrepareCityCursorSprite(game, tool, size);
-  if (!sprite) { game->execution_failed = true; return; }
-  SpriteSurface surface = {.canvas = *canvas, .indices = canvas->palette_indices,
-      .index_stride = canvas->index_stride, .row_flags = canvas->palette_rows};
-  DrawRunSprite(&surface, sprite, x, y, SPRITE_COPY, NULL);
-  FreeRunSprite(sprite);
+  if (!DrawCityCursorSprite(canvas, GetCityCursorSprite(game, tool), x, y, scale))
+    game->execution_failed = true;
+}
+
+static bool DecodeCityBuildingCursorIcon(Game *game, int kind, const u32 palette[256], u32 icon[40 * 40]) {
+  int art = CityBuildingSprite(game->city, kind, 0);
+  int sprite = CITY_SPRITE_CATALOG_LARGE_BASE + kCityMapKindSprites[kind];
+  if (art >= 0) {
+    // Wind previews include the rotor, which is a separate animated layer on the map.
+    if (kind == TK_WIND_POWER)
+      art = CITY_LANDSCAPE_WIND_PREVIEW_FIRST +
+          (game->city->geography.start_year + game->city->clock.year >= CITY_WIND_MODERN_YEAR ? CITY_CIVIC_VIEWS : 0);
+    sprite = MAP_LANDSCAPE_SPRITE_FIRST + 2 * MAP_LANDSCAPE_SPRITES_PER_ZOOM + art - CITY_LANDSCAPE_GROUND_FIRST;
+  }
+  return DecodeCityMapIcon(game->drawing, sprite, palette, icon, 40);
 }
 
 void LoadCityCursorToolIcons(Game *game, const u32 palette[256]) {
   InitializeCityCursor(game);
   if (!game->resources->cursors.pixels || !palette) return;
+  // A later allocation failure may leave earlier badges updated. Invalidate host copies before those writes.
+  ++game->drawing->cursors.revision;
 
   for (i32 tool = 0; tool < CITY_CANVAS_TOOL_COUNT; ++tool) {
     u32 icon[40 * 40];
-    bool building = (tool >= CITY_CANVAS_TOOL_POLICE && tool <= CITY_CANVAS_TOOL_NUCLEAR) ||
-        (tool >= CITY_CANVAS_TOOL_SUBWAY_STATION && tool <= CITY_CANVAS_TOOL_WATER_PUMP) ||
-        tool == CITY_CANVAS_TOOL_HYDRO || tool == CITY_CANVAS_TOOL_MARINA;
-    if (building && DecodeCityBuildingCursorIcon(game, CityToolSpriteTile(tool), palette, icon)) {
-      ComposeCityCursorIcon(game, tool, icon);
+    TileKind kind = CityToolBuildingKind(tool);
+    if (kind != TK_CLEAR && DecodeCityBuildingCursorIcon(game, kind, palette, icon)) {
+      ComposeCityCursorIcon(game->drawing->cursors.tools[tool], &game->resources->cursors, icon);
       continue;
     }
     const CityInterfaceIcons *toolbar = &game->resources->main_toolbar_icons;
@@ -221,6 +198,6 @@ void LoadCityCursorToolIcons(Game *game, const u32 palette[256]) {
     bool copied = prepared && CopyRunSpriteRgba(prepared, icon + (40 - height) / 2 * 40, 40, NULL, NULL);
     FreeRunSprite(prepared);
     if (!copied) { game->execution_failed = true; return; }
-    ComposeCityCursorIcon(game, tool, icon);
+    ComposeCityCursorIcon(game->drawing->cursors.tools[tool], &game->resources->cursors, icon);
   }
 }

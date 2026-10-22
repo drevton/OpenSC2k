@@ -1,16 +1,20 @@
-#include "city/maps/layers.h"
-#include "city/maps/buildings.h"
-#include "city/tools/types.h"
+#include <string.h>
+
+#include "assets/graphics.h"
+#include "assets/state.h"
 #include "city/infrastructure/bridges.h"
 #include "city/infrastructure/highways.h"
+#include "city/infrastructure/lines.h"
 #include "city/infrastructure/power_lines.h"
-#include "assets/graphics.h"
-#include "city/maps/tile_storage.h"
-#include "drawing/drawing_internal.h"
-#include "drawing/maps/map_render.h"
+#include "city/maps/buildings.h"
+#include "city/maps/layers.h"
 #include "city/maps/tables.h"
-#include "city/infrastructure/infrastructure.h"
+#include "city/maps/tile_storage.h"
+#include "city/tools/types.h"
+#include "drawing/maps/map_render.h"
 #include "drawing/maps/tables.h"
+#include "drawing/state.h"
+#include "game/state.h"
 
 // Drawing subsystem: map sprites.
 
@@ -109,13 +113,11 @@ int CityMapViewTileFlip(const City *city, TileIndex tile) {
   return 0;
 }
 
-// Catalog dimensions are in map coordinates for an already zoomed cache slot, before target scaling.
+// Logical width and top-to-ground-anchor distance for an already zoomed map-cache slot.
 CityPoint CityMapSpriteExtent(const Drawing *drawing, int id) {
-  const CityMapSprite *sprite = &CityDrawingSpriteCatalog(drawing)[id];
-  return (CityPoint){sprite->width, sprite->height};
+  const MapSpriteMetrics *sprite = &drawing->map_state.sprite_metrics[id];
+  return (CityPoint){sprite->width, sprite->baseline};
 }
-
-
 
 i32 CityMapBridgeArtworkDepth(const City *city, TileIndex tile, bool foreground) {
   CityPoint point = CityMapViewTilePoint(city, tile);
@@ -265,17 +267,4 @@ static bool DecodeNativeMapIcon(const RunSprite *sprite, const u32 palette[256],
 bool DecodeCityMapIcon(const Drawing *drawing, int sprite_id, const u32 palette[256], u32 *icon, int size) {
   if ((unsigned)sprite_id >= MAP_SPRITE_COUNT || size <= 4) return false;
   return DecodeNativeMapIcon(drawing->sprite_cache.base[sprite_id], palette, drawing->animation_palette, icon, size);
-}
-
-bool DecodeCityBuildingCursorIcon(Game *game, int kind, const u32 palette[256], u32 icon[40 * 40]) {
-  int art = CityBuildingSprite(game->city, kind, 0);
-  int sprite = CITY_SPRITE_CATALOG_LARGE_BASE + kCityMapKindSprites[kind];
-  if (art >= 0) {
-    // Wind previews include the rotor, which is a separate animated layer on the map.
-    if (kind == TK_WIND_POWER)
-      art = CITY_LANDSCAPE_WIND_PREVIEW_FIRST +
-          (game->city->geography.start_year + game->city->clock.year >= CITY_WIND_MODERN_YEAR ? CITY_CIVIC_VIEWS : 0);
-    sprite = MAP_LANDSCAPE_SPRITE_FIRST + 2 * MAP_LANDSCAPE_SPRITES_PER_ZOOM + art - CITY_LANDSCAPE_GROUND_FIRST;
-  }
-  return DecodeCityMapIcon(game->drawing, sprite, palette, icon, 40);
 }

@@ -1,3 +1,5 @@
+#include "city/saveload/runtime.h"
+#include "city/disasters/disasters.h"
 #include "city/saveload/types.h"
 #include "city/presentation.h"
 #include "game/state.h"
@@ -12,6 +14,7 @@
 #include "city/saveload/legacy_text.h"
 #include "city/saveload/file.h"
 #include "base/text.h"
+#include "city/state.h"
 
 // Scenario
 

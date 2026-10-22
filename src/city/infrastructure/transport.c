@@ -7,7 +7,8 @@
 
 #include "city/infrastructure/bridges.h"
 #include "city/infrastructure/highways.h"
-#include "city/events/events.h"
+#include "city/infrastructure/transport.h"
+#include "city/maps/tile_queue.h"
 #include "city/presentation.h"
 #include "city/infrastructure/types.h"
 #include "city/maps/tile_storage.h"
@@ -15,7 +16,6 @@
 #include "city/state.h"
 #include "city/engine/random.h"
 #include "city/growth/growth.h"
-#include "city/infrastructure/infrastructure.h"
 #include "city/maps/layers.h"
 #include "game/state.h"
 #include "game/observation.h"
@@ -53,71 +53,12 @@ void DecayTrafficDensity(City *city) {
   city->indicators.city_traffic = total;
 }
 
-// Append an in-map coordinate to the reusable flood queue, suppressing duplicates when enabled. Out-of-map coordinates
-// are ignored; a full ring drops its oldest entry and updates duplicate tracking consistently.
-void PushRouteCoordinate(City *city, int x, int y) {
-  if ((u32)x >= city->map_width || (u32)y >= city->map_height) return;
-  RouteQueueCursor *queue = &city->route_queue_cursor;
-  u8 *queued = city->fixes & (1u << CITY_FIX_ROUTE_QUEUE_DEDUPLICATION) ? city->route_queued : NULL;
-  if (queued) {
-    TileIndex tile = MapTileXY(city, x, y);
-    if (queued[tile / 8] & (1 << (tile & 7))) return;
-    queued[tile / 8] |= 1 << (tile & 7);
-  }
-  city->route_points[queue->write] = (PointU16){x, y};
-  int next = (queue->write + 1) & queue->mask;
-  queue->write = next;
-  if (queue->read == next) {
-    if (queued) {
-      PointU16 point = city->route_points[next];
-      TileIndex dropped = MapTileXY(city, point.x, point.y);
-      queued[dropped / 8] &= ~(1 << (dropped & 7));
-    }
-    queue->read = (next + 1) & queue->mask;
-  }
-}
-
-// Empty the reusable route ring and clear duplicate marks for its queued entries. Requires an initialized queue and
-// matching map workspace; this does not clear unrelated scratch state.
-static void ClearRouteQueue(City *city) {
-  RouteQueueCursor *queue = &city->route_queue_cursor;
-  if (city->fixes & (1u << CITY_FIX_ROUTE_QUEUE_DEDUPLICATION)) {
-    u8 *queued = city->route_queued;
-    for (int index = queue->read; index != queue->write; index = (index + 1) & queue->mask) {
-      PointU16 point = city->route_points[index];
-      TileIndex tile = MapTileXY(city, point.x, point.y);
-      queued[tile / 8] &= ~(1 << (tile & 7));
-    }
-  }
-  queue->read = queue->write = 0;
-}
-
-// Discard the previous traversal and enqueue the supplied starting coordinate. The queue and optional duplicate map
-// must be initialized; an out-of-map starting point leaves the queue empty.
-void ResetRouteQueueAndPush(City *city, int x, int y) {
-  ClearRouteQueue(city);
-  PushRouteCoordinate(city, x, y);
-}
-
 // Append a valid transport path point without flood-queue duplicate suppression. The path owns queue capacity and
 // traversal state; revisiting a tile in a different transport state is permitted.
 static void PushTransportRoutePoint(City *city, int x, int y) {
-  RouteQueueCursor *queue = &city->route_queue_cursor;
+  CityTileQueueCursor *queue = &city->route_queue_cursor;
   city->route_points[queue->write] = (PointU16){x, y};
   queue->write = (queue->write + 1) & queue->mask;
-}
-
-// Remove and return the oldest queued flood coordinate. Requires a nonempty initialized ring; releases that
-// coordinate's duplicate marker when deduplication is enabled.
-PointU16 PowerDequeue(City *city) {
-  RouteQueueCursor *queue = &city->route_queue_cursor;
-  PointU16 point = city->route_points[queue->read];
-  queue->read = (queue->read + 1) & queue->mask;
-  if (city->fixes & (1u << CITY_FIX_ROUTE_QUEUE_DEDUPLICATION)) {
-    TileIndex tile = MapTileXY(city, point.x, point.y);
-    city->route_queued[tile / 8] &= ~(1 << (tile & 7));
-  }
-  return point;
 }
 
 // Lane changes stay inside a footprint. Separate straight spans join only at their ends, with the same explicit axis
@@ -133,26 +74,6 @@ static bool CityHighwaysCanJoin(const City *city, TileIndex from, TileIndex to, 
   if (axis != ReadCityHighwayAxis(&city->tile[to]) || axis != (direction & 1)) return false;
   return axis == CITY_HIGHWAY_AXIS_Y ? MapTileX(city, first) == MapTileX(city, second) :
       MapTileY(city, first) == MapTileY(city, second);
-}
-
-// Remove and return the newest queued coordinate for route backtracking. Requires a nonempty initialized ring; clears
-// its duplicate marker when that mode is enabled.
-PointU16 PopRouteCoordinate(City *city) {
-  RouteQueueCursor *queue = &city->route_queue_cursor;
-  queue->write = (queue->write - 1) & queue->mask;
-  PointU16 point = city->route_points[queue->write];
-  if (city->fixes & (1u << CITY_FIX_ROUTE_QUEUE_DEDUPLICATION)) {
-    TileIndex tile = MapTileXY(city, point.x, point.y);
-    city->route_queued[tile / 8] &= ~(1 << (tile & 7));
-  }
-  return point;
-}
-
-// Return the number of entries currently retained by the route ring. Requires a power-of-two queue mask and
-// initialized cursors; this query does not consume entries.
-int RouteQueueLength(City *city) {
-  RouteQueueCursor *queue = &city->route_queue_cursor;
-  return (queue->write - queue->read) & queue->mask;
 }
 
 // Find transport access, traverse its graph, and apply route traffic. Requires valid source-zone/footprint inputs and
@@ -211,7 +132,7 @@ i32 FindTransportRouteAndApplyTraffic(City *city, int x, int y, int source_zone,
   state[0] = initial_state;
   remaining[0] = 15;
   bool route_found = false;
-  ClearRouteQueue(city);
+  ClearCityTileQueue(city);
   PushTransportRoutePoint(city, road_x, road_y);
   int step = 2 * (NextCrtRandom(&city->random.crt) & 1) + 1;
   while (depth && cost[depth - 1] < maximum_cost) {
@@ -391,7 +312,7 @@ route_complete:
   }
   int used_bus = 0, used_rail = 0, used_subway = 0;
   while (city->route_queue_cursor.write != city->route_queue_cursor.read) {
-    PointU16 coordinate = PopRouteCoordinate(city);
+    PointU16 coordinate = PopCityTileCoordinate(city);
     int route_state = state[--depth];
     if (route_state == CITY_ROUTE_BUS_STATION)
       used_bus = 1;
@@ -415,109 +336,3 @@ route_complete:
     city->infrastructure.counter_c += size;
   return route_found;
 }
-
-// Tables
-
-const u8 kLineTerrainOverrideBySlope[16] = {
-  0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0
-};
-
-const u8 kLineTileOffsetByConnectionMask[16] = {
-  0, 0, 1, 6, 0, 0, 7, 11, 1, 9, 1, 10, 8, 13, 12, 14
-};
-
-// Surface reconnectors index the full terrain bank, even across adjacent stock tables.
-// Some offsets exceed a byte; tile storage and native statistics use the same narrowed tile.
-const u16 kLineTileOffsetByTerrain[CITY_TERRAIN_BANK_48] = {
-  0, 2, 3, 4, 5, 0, 0, 0, 1, 1, 257, 257, 257, 257, 257, 1,
-  1, 1, 257, 257, 257, 257, 257, 1, 1, 1, 257, 257, 257, 257, 257, 1,
-  257, 257, 257, 257, 257, 257, 257, 257, 257, 257, 0, 0, 257, 256, 256, 257
-};
-
-const u8 kLineHorizontalConnectionAllowed[256] = {
-  1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0, 1, 1,
-  1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 0, 1,
-  0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1,
-  1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 21, 21, 20, 1, 1, 1, 1, 1, 1, 1, 2, 3, 4, 5, 23, 22
-};
-
-const i8 kLineYStep[4] = {
-  0, 1, 0, -1
-};
-
-const i8 kLineXStep[4] = {
-  -1, 0, 1, 0
-};
-
-const u16 kBridgeSelectionCostPerCell[CITY_SPAN_STYLE_COUNT] = {
-  10, 75, 25, 50, 75, 200, 300, 20, 28, 36, 42, 46, 48, 56, 58, 62, 60, 64, 95, 128
-};
-
-const u16 kSpanCostPerCell[CITY_SPAN_STYLE_COUNT] = {
-  10, 75, 25, 50, 75, 200, 300, 20, 28, 36, 42, 46, 48, 56, 58, 62, 60, 64, 95, 128
-};
-
-const i8 kSpanYStep[4] = {
-  0, 1, 0, -1
-};
-
-const i8 kSpanXStep[4] = {
-  -1, 0, 1, 0
-};
-
-const u8 kLineTerrainElevationDelta[16] = {
-  0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 0, 0
-};
-
-const u16 kInfrastructureTerrainByDirection[64] = {
-  0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 256, 256, 1, 1, 256, 256, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-  0, 2, 1, 2, 1, 2, 3, 2, 3, 4, 3, 4, 3, 4, 1, 4, 1, 0, 0, 1, 6, 0, 0, 7, 11, 1, 9, 1, 10
-};
-
-const u8 kLineTerrainDirectionAllowed[64] = {
-  0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 1, 0, 2, 0, 1, 0
-};
-
-const u8 kTransportTerrainClass[256] = {
-  0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-  1,
-};
-
-const u8 kTransportSpanNorthClass[18] = {
-  0, 0, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0
-};
-
-const u8 kTransportSpanSouthClass[18] = {
-  0, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0
-};
-
-const u8 kTransportSpanDirectionByMask[16] = {
-  2, 2, 3, 8, 2, 2, 9, 12, 3, 11, 3, 12, 10, 12, 12, 12
-};
-
-const u8 kTransportSpanDirectionByComplement[16] = {
-  2, 2, 3, 3, 2, 2, 3, 2, 3, 3, 3, 2, 3, 2, 2, 2
-};
-
-const u8 kLineVerticalConnectionAllowed[256] = {
-  1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0,
-  1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-  1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-  0, 0, 0, 0, 0, 0, 0, 0, 21, 21, 20, 1, 1, 1, 1, 1, 1, 1, 2, 3, 4, 5, 23, 22, 6, 7, 8, 9, 10, 11, 0, 0,
-  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 19, 0, 0, 17, 18, 0, 0, 0, 0, 0, 12, 13, 24, 0, 0, 25, 0, 14, 15, 15, 15,
-  15, 16, 0, 0, 0, 0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 60, 0, 0, 0,
-};
-
-// Generated terrain occupies entries 0..69. Higher bytes from malformed saves
-// must not read adjacent stock globals or depend on disaster counters.
-const u16 kBridgeTunnelTerrainClass[CITY_BRIDGE_TERRAIN_VALID_COUNT] = {
-  4096, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 256, 16, 16, 16, 16, 16, 16, 16, 16,
-  16, 16, 16, 16, 16, 16, 16, 16, 16, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 16, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-  1, 1, 1, 1, 1, 4096, 4096, 4096, 4096, 4096, 4096,
-};

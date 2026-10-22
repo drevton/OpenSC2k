@@ -8,14 +8,19 @@
 // are dry; water spans use distinct native bridge kinds. zone[4] selects slope versus zoning in zone[0..3];
 // zone[5..7] has no highway payload. Land/tunnel heights, flags, overlays and underground follow tile_storage.h.
 
+#include "city/maps/labels.h"
+#include "city/infrastructure/lines.h"
+#include "city/infrastructure/networks.h"
+#include "city/infrastructure/spans.h"
 #include "city/infrastructure/surface_lines.h"
-#include "audio/audio.h"
+#include "game/audio.h"
 #include "city/infrastructure/bridges.h"
 #include "city/infrastructure/highways.h"
+#include "city/infrastructure/types.h"
+#include "city/maps/terrain.h"
 #include "city/infrastructure/power_lines.h"
 #include "city/engine/commands.h"
 // Highway planning, placement, junctions, approaches, footprint metadata and drawing.
-#include "city/infrastructure/infrastructure.h"
 #include "assets/state.h"
 #include "city/maps/module.h"
 #include "drawing/maps/map_terrain.h"
@@ -35,6 +40,27 @@
 #include "city/tools/tools.h"
 
 // The complete two-by-two highway footprint must fit on the map before it can start a water span.
+static const u8 kTransportTerrainClass[256] = {
+  0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+  1,
+};
+
+static const u8 kTransportSpanNorthClass[18] = {
+  0, 0, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 0, 1, 0
+};
+
+static const u8 kTransportSpanSouthClass[18] = {
+  0, 1, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0
+};
+
+static const u8 kTransportSpanDirectionByMask[16] = {
+  2, 2, 3, 8, 2, 2, 9, 12, 3, 11, 3, 12, 10, 12, 12, 12
+};
+
+static const u8 kTransportSpanDirectionByComplement[16] = {
+  2, 2, 3, 3, 2, 2, 3, 2, 3, 3, 3, 2, 3, 2, 2, 2
+};
+
 bool CityHighwayFootprintHasWater(const City *city, TileIndex anchor) {
   if (!IsMapTileValid(city, anchor)) return false;
   CityPoint anchor_point = MapTilePt(city, anchor);
@@ -678,6 +704,47 @@ i64 CmdBuildCityCompactHighway(City *city, u32 flags, TileIndex start, TileIndex
   return cost;
 }
 
+// Place a highway line with explicit span, neighbor-connection and orientation choices. Rejects unsupported payload
+// bits and endpoints; TEST quotes geometry and affordability without construction or UI selection reads.
+i64 CmdPlaceTransportLine(City *city, u32 flags, TileIndex start,
+    TileIndex end, int options, int reserved) {
+  (void)reserved;
+  int invalid = CITY_COMMAND_COST_INVALID;
+  int span_style = options & 255;
+  if (!IsMapTileValid(city, start) || !IsMapTileValid(city, end) ||
+      options < 0 || (options & ~CITY_HIGHWAY_COMMAND_MASK) != 0 ||
+      (options >> CITY_HIGHWAY_FACING_SHIFT) > 4 || span_style > CITY_ROAD_SPAN_CANCEL)
+    return invalid;
+  int orientation = (options >> CITY_HIGHWAY_FACING_SHIFT) - 1;
+  if (IsCityCompactHighwayLine(city, start, end)) {
+    i64 result = CmdBuildCityCompactHighway(city, flags, start, end, orientation,
+        span_style == CITY_ROAD_SPAN_CANCEL ? CITY_SPAN_CANCEL : span_style);
+    if (flags & CITY_COMMAND_TEST) return result;
+    return result < 0 ? result : 1;
+  }
+  if (flags & CITY_COMMAND_TEST) {
+    int styles = span_style == CITY_ROAD_SPAN_CANCEL ? 0 : 1 << span_style;
+    CityCommandCost quote = GetCityInfrastructureCost(city, start, end, CITY_INFRASTRUCTURE_HIGHWAY, styles, NULL);
+    if (options & 256) quote.cost += GetCityLineConnectionCost(city, start, end, CITY_INFRASTRUCTURE_HIGHWAY);
+    return CityCommandPriceResult(quote);
+  }
+
+  return PlaceCityInfrastructureLine(city, CITY_INFRASTRUCTURE_HIGHWAY, start, end);
+}
+
+// Connect an eligible road cell to its neighboring highway and charge the onramp price. Rejects unused parameters and
+// unsuitable tiles; TEST performs admission and affordability only.
+i64 CmdPlaceHighwayOnramp(City *city, u32 flags, TileIndex tile,
+    int reserved) {
+  int invalid = CITY_COMMAND_COST_INVALID;
+  if (!IsMapTileValid(city, tile) || reserved != 0)
+    return invalid;
+  if (flags & CITY_COMMAND_TEST)
+    return CanPlaceCityOnramp(city, tile) ? CITY_ONRAMP_COST :
+        CITY_COMMAND_COST_BLOCKED;
+  return PlaceCityHighwayOnramp(city, tile);
+}
+
 // Advance the transport-line cursor after checking span, height, and water state. Requires initialized route state and
 // valid cursor pointers; false means the traversal is finished or the next step is not admitted.
 bool AdvanceCityHighwayLine(const City *city, CityConstructionState *state, int *x, int *y) {
@@ -800,13 +867,22 @@ bool CityHighwayCellAlreadyBuilt(const City *city, TileIndex tile) {
   return IsTileKindHighwayFootprint(surface);
 }
 
-// Classify a valid tile's decoded land/water geometry for the legacy highway span search. Rapids are too steep; result
-// is a scan category, not a native slope encoding.
-static int BridgeTerrainClass(const City *city, TileIndex tile) {
+// Each category occupies one nibble when four cells are combined with weights 1, 2, 4 and 8.
+typedef enum CitySpanTerrainClass {
+  CITY_SPAN_TERRAIN_SHORE = 1,
+  CITY_SPAN_TERRAIN_WATER = 1 << 4,
+  CITY_SPAN_TERRAIN_STEEP = 1 << 8,
+  CITY_SPAN_TERRAIN_LAND = 1 << 12
+} CitySpanTerrainClass;
+
+// Classify decoded geometry for the legacy highway span search. Dry slopes and rapids are too steep; the result
+// is a scan category, not a stored terrain code. Only the shape matters on dry land.
+static CitySpanTerrainClass ReadHighwaySpanTerrainClass(const City *city, TileIndex tile) {
   CityTileGeometry geometry = ReadCityTileGeometry(city, tile);
-  if (geometry.water == CITY_WATER_NONE) return kBridgeTunnelTerrainClass[geometry.land_shape];
-  if (geometry.water_surface == CITY_WATER_SURFACE_RAPIDS) return CITY_BRIDGE_TERRAIN_TOO_STEEP;
-  return geometry.water_surface == CITY_WATER_SURFACE_SHORE ? 1 : 16;
+  if (geometry.water == CITY_WATER_NONE)
+    return geometry.land_shape == CITY_TERRAIN_FLAT ? CITY_SPAN_TERRAIN_LAND : CITY_SPAN_TERRAIN_STEEP;
+  if (geometry.water_surface == CITY_WATER_SURFACE_RAPIDS) return CITY_SPAN_TERRAIN_STEEP;
+  return geometry.water_surface == CITY_WATER_SURFACE_SHORE ? CITY_SPAN_TERRAIN_SHORE : CITY_SPAN_TERRAIN_WATER;
 }
 
 // Stock two-by-two shoreline classification and span search. Returns an unavailable span for rejected starts/banks;
@@ -833,12 +909,10 @@ CityInfrastructureSpan FindCityHighwaySpan(const City *city, TileIndex origin_ti
 
   direction &= 3;
   if (choose_direction) {
-    int terrain_class = (BridgeTerrainClass(city, start_index) +
-        2 *
-            (BridgeTerrainClass(city, start_south) +
-                2 *
-                    (BridgeTerrainClass(city, start_southeast) +
-                        2 * BridgeTerrainClass(city, start_east))));
+    int terrain_class = ReadHighwaySpanTerrainClass(city, start_index) +
+        2 * ReadHighwaySpanTerrainClass(city, start_south) +
+        4 * ReadHighwaySpanTerrainClass(city, start_southeast) +
+        8 * ReadHighwaySpanTerrainClass(city, start_east);
     if ((terrain_class & 0x0F00) != 0) {
       span.error = CITY_NOTICE_SHORELINE_TOO_STEEP;
       return span;
@@ -860,8 +934,8 @@ CityInfrastructureSpan FindCityHighwaySpan(const City *city, TileIndex origin_ti
   int span_steps = 0;
   int span_y = start_point.y;
   int span_x = start_point.x;
-  int step_y = kSpanYStep[direction];
-  int step_x = kSpanXStep[direction];
+  int step_y = kLineYStep[direction];
+  int step_x = kLineXStep[direction];
   for (;;) {
     span_y += 2 * step_y;
     span_x += 2 * step_x;
@@ -882,12 +956,10 @@ CityInfrastructureSpan FindCityHighwaySpan(const City *city, TileIndex origin_ti
       return span;
     }
 
-    int terrain_class = (BridgeTerrainClass(city, span_index) +
-        2 *
-            (BridgeTerrainClass(city, span_south) +
-                2 *
-                    (BridgeTerrainClass(city, span_southeast) +
-                        2 * BridgeTerrainClass(city, span_east))));
+    int terrain_class = ReadHighwaySpanTerrainClass(city, span_index) +
+        2 * ReadHighwaySpanTerrainClass(city, span_south) +
+        4 * ReadHighwaySpanTerrainClass(city, span_southeast) +
+        8 * ReadHighwaySpanTerrainClass(city, span_east);
     if ((terrain_class & 0x0F00) != 0) {
       span.error = CITY_NOTICE_OPPOSITE_SHORE_TOO_STEEP;
       return span;
@@ -1025,7 +1097,7 @@ i64 PlaceCityBridgeOrTunnel(City *city, TileIndex origin_tile, int ui_mode) {
   TileIndex highway_start = CityHighwayPlacementAnchor(city, origin_tile);
   if (highway_start == INVALID_TILE) return CITY_COMMAND_COST_BLOCKED;
   int direction = span.direction, span_steps = span.length, styles = span.styles;
-  int step_y = kSpanYStep[direction], step_x = kSpanXStep[direction];
+  int step_y = kLineYStep[direction], step_x = kLineXStep[direction];
   static const i8 kFootprintX[4] = {0, 1, 1, 0};
   static const i8 kFootprintY[4] = {0, 0, 1, 1};
   int style = SelectInfrastructureSpan(city, span_steps, styles);
@@ -1133,8 +1205,8 @@ i64 PlaceCityLegacyTransportLine(City *city, TileIndex origin_tile) {
   ClearZoneStateAndUpdateTransportSpanNeighbors(city, current_tile);
 
   int direction = city->construction.direction;
-  int follow_y = current_y + 2 * kSpanYStep[direction];
-  int follow_x = current_x + 2 * kSpanXStep[direction];
+  int follow_y = current_y + 2 * kLineYStep[direction];
+  int follow_x = current_x + 2 * kLineXStep[direction];
   TileIndex follow = MapTileXYOrInvalid(city, follow_x, follow_y);
   if (CityHighwayFootprintHasWater(city, follow))
     return PlaceCityBridgeOrTunnel(city, follow, 0);
@@ -1752,7 +1824,8 @@ void DrawCityHighwaySharedFootprint(City *city, TileIndex tile, int layout, int 
   if (zoom != CITY_MAP_ZOOM_SMALL || native) {
     int ground = -1;
     int zone = ReadCityZoneKind(&city->tile[tile]);
-    if (zoom == CITY_MAP_ZOOM_SMALL && CityMapViewTerrainCode(city, tile) == CITY_TERRAIN_FLAT && zone != ZONE_NONE)
+    if (zoom == CITY_MAP_ZOOM_SMALL && CityMapDryGroundShape(city, tile, geometry) == CITY_TERRAIN_FLAT &&
+        zone != ZONE_NONE)
       ground = 290 + zone;
     // Keep the anchor, rear, right and front order used by the shared two-by-two artwork. Each cell owns its
     // underpass; sorted rendering paints it through DrawHighwayGround before submitting the shared deck.

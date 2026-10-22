@@ -7,8 +7,8 @@
   "mask": "approved-foundation-mask.png",
   "terrain_masks": "../../opengfx2/detail128/terrain-masks.png",
   "paving": "../../buildings/ground/concrete-material.png",
-  "retain_painted_ground": true,
-  "omit_ground_in_sprite": false,
+  "retain_painted_ground": false,
+  "omit_ground_in_sprite": true,
   "content_inset_pixels": 3,
   "reject_opaque_trim": true,
   "edge_registration_pixels": 0,
@@ -18,12 +18,28 @@
     {
       "original": "approved-original.png",
       "foreground": "approved-foreground.png",
-      "plinth_pixels": 0
+      "plinth_pixels": 0,
+      "ground_corners": [
+        [
+          -150,
+          1381.25
+        ],
+        [
+          549.5,
+          1731
+        ],
+        [
+          1249,
+          1381.25
+        ]
+      ]
     }
   ],
   "corner_fill_color": [
     93,
     87,
     87
-  ]
+  ],
+  "target_roof_height": 940,
+  "roof_width_pixels": 1
 }

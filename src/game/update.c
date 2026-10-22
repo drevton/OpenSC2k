@@ -1,33 +1,58 @@
+#include "game/update.h"
+
+#include "base/time.h"
+#include "game/palette.h"
+#include "game/city_lifecycle.h"
+#include "game/commands.h"
+#include "ui/city_lifecycle.h"
+
 // Game startup, presentation cadence and simulation scheduling.
 #include "city/disasters/types.h"
 #include "game/application.h"
+#include "ui/input.h"
 #include "city/engine/simulation.h"
 
-#include <string.h>
-
-#include "ui/frontend.h"
 #include "city/engine/city_types.h"
 #include "game/state.h"
-#include "city/engine/initialization.h"
 #include "city/events/events.h"
 #include "city/state.h"
 #include "city/saveload/file.h"
 #include "game/errors.h"
 #include "game/observation.h"
-#include "game/state.h"
+#include "game/audio.h"
 #include "audio/state.h"
 #include "drawing/state.h"
-#include "assets/state.h"
 #include "ui/map.h"
 #include "ui/news/newspaper.h"
-#include "ui/startup/services.h"
-#include "drawing/drawing.h"
+#include "ui/startup/startup.h"
 #include "drawing/maps/map_render.h"
 #include "ui/charts/charts.h"
 #include "ui/commands.h"
 #include "ui/dialogs/dialogs.h"
 #include "ui/state.h"
 #include "ui/tools/tools.h"
+
+// Input advances a waiting startup screen; SDL already dispatches controls.
+void RecordGameInput(Game *game) {
+  if (game->idle_state != CITY_IDLE_PLAY) game->idle_input = 1;
+}
+
+// Poll one pending activation input, notifying observers before applying its UI effects. The installed comparison
+// adapter retains its own input stream; ordinary polling leaves unrelated events queued.
+void PumpGameActivation(Game *game) {
+  const GameObservation *observer = game->observation;
+  if (observer && observer->pump_activation) {
+    observer->pump_activation(game);
+    return;
+  }
+  bool active = false;
+  int present = game->poll_activation != NULL ? game->poll_activation(game->activation_context, &active) : -1;
+  if (present < 0) return;
+  if (game->activation_polled != NULL)
+    game->activation_polled(game, present != 0, active);
+  if (present)
+    HandleApplicationActivation(game, active);
+}
 
 // Startup choices, asynchronous file requests and ordinary simulation idle.
 void UpdateGame(Game *game) {
@@ -36,11 +61,11 @@ void UpdateGame(Game *game) {
   CityInterfaceState *ui = game->ui;
   i32 animated_fast = drawing->palette.fast_due == 1;
   if (animated_fast) {
-    AnimateCityPalette(city, 0);
+    AnimateCityPalette(game, 0);
     drawing->palette.fast_due = 0;
   }
   if (drawing->palette.slow_due == 1) {
-    AnimateCityPalette(city, 1);
+    AnimateCityPalette(game, 1);
     drawing->palette.slow_due = 0;
   }
   if (game->idle_state == CITY_IDLE_TOOL_PREVIEW) {
@@ -100,11 +125,11 @@ void UpdateGame(Game *game) {
         break;
       case CITY_STARTUP_NEW_CITY:
         game->idle_state = CITY_IDLE_NEW_CITY;
-        HandleNewCityCommand(city);
+        RunCityCreationSetup(city);
         break;
       case CITY_STARTUP_EDIT_MAP:
         game->idle_state = CITY_IDLE_TERRAIN;
-        InitializeNewCityTerrainSession(city);
+        RunCityTerrainEditorSetup(city);
         game->idle_state = (u32)CITY_IDLE_PLAY;
         break;
       case CITY_STARTUP_LOAD_SCENARIO:
@@ -231,11 +256,11 @@ void AdvanceGameCadencePresentation(Game *game, u32 counter, bool animate) {
   }
   if (palette->direct_animation != 0) {
     if (palette->fast_due == 1) {
-      AnimateCityPalette(city, 0);
+      AnimateCityPalette(game, 0);
       palette->fast_due = 0;
     }
     if (palette->slow_due == 1) {
-      AnimateCityPalette(city, 1);
+      AnimateCityPalette(game, 1);
       palette->slow_due = 0;
     }
   }
@@ -254,4 +279,38 @@ void FinishGameCitySimulationWork(Game *game) {
   if (ui) ui->command_feedback = NULL;
   FinishCitySimulationWork(city);
   if (ui) ui->command_feedback = feedback;
+}
+
+// Defer teardown until the retained original Quit/Save caller has returned.
+void RequestCityApplicationExit(Game *game) {
+  game->close_requested = 1;
+}
+
+// Host time controls delivery count, never the deterministic work inside a batch.
+// Always finish one batch, even if preparing/presenting the frame used its budget.
+void RunCitySimulationFrame(Game *game, double deadline) {
+  City *city = game->city;
+  do {
+    RunGameIdle(game, (CityIdleInputs){true, true, true});
+    if (game->execution_failed) break;
+    if (game->close_requested || game->execution_failed || game->idle_blocked || game->delay_blocked ||
+        game->idle_state != (u32)CITY_IDLE_PLAY || city->settings.speed == CITY_SPEED_PAUSED ||
+        city->settings.timer_mode != CITY_TIMER_RUNNING || !city->cadence_counter.tick_due ||
+        (!city->simulation_work.phase && city->settings.speed != CITY_SPEED_UNLIMITED)) break;
+  } while (MonotonicSeconds() < deadline);
+}
+
+void RunGameIdle(Game *game, CityIdleInputs inputs) {
+  CityIdleInputs previous = game->idle_inputs;
+  game->idle_inputs = inputs;
+  ClearGameError(game);
+  UpdateGame(game);
+  game->idle_inputs = previous;
+  DeliverCitySimulationEvents(game, 0, 1, false);
+  if (!game->observation && game->ui->newspaper_month != game->city->clock.month) {
+    game->ui->newspaper_month = game->city->clock.month;
+    if (!game->city->newspaper.enabled && !game->ui->newspaper_delivery_disabled &&
+        (game->ui->newspaper_month == CITY_MONTH_APRIL || game->ui->newspaper_month == CITY_MONTH_AUGUST))
+      OpenCityManualNewspaper(game->city, game->city->newspaper.edition_index);
+  }
 }

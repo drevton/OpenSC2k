@@ -1,33 +1,37 @@
-#include "assets/resource_types.h"
-#include "city/economy/types.h"
-#include "city/engine/city_types.h"
-#include "city/presentation.h"
-#include "ui/tools/types.h"
-#include "game/application_internal.h"
-#include "base/byte_order.h"
+#include "ui/windows/window_internal.h"
 #include "ui/charts/charts.h"
 
 #include <stdio.h>
 #include <string.h>
 
-#include "city/economy/economy.h"
-#include "city/maps/layers.h"
-#include "game/state.h"
-#include "audio/state.h"
-#include "city/state.h"
-#include "drawing/state.h"
-#include "drawing/bitmaps.h"
-#include "assets/state.h"
-#include "ui/state.h"
 #include "assets/catalog.h"
-#include "drawing/drawing_internal.h"
-
+#include "assets/resource_types.h"
+#include "assets/state.h"
+#include "audio/state.h"
+#include "base/byte_order.h"
+#include "city/economy/economy.h"
+#include "city/economy/types.h"
+#include "city/engine/city_types.h"
+#include "city/maps/layers.h"
+#include "city/presentation.h"
+#include "city/state.h"
+#include "drawing/bitmaps.h"
+#include "drawing/raster/canvas_primitives.h"
+#include "drawing/raster/canvas_raster_internal.h"
+#include "drawing/state.h"
 #include "game/errors.h"
-#include "ui/map.h"
-#include "ui/startup/services.h"
+#include "game/state.h"
 #include "ui/commands.h"
+#include "ui/dialogs/budget.h"
+#include "ui/dialogs/map_data.h"
+#include "ui/map.h"
+#include "ui/startup/startup.h"
+#include "ui/sdl.h"
+#include "ui/state.h"
 #include "ui/text/text.h"
 #include "ui/tools/tools.h"
+#include "ui/tools/types.h"
+#include "ui/windows/windows.h"
 
 static const char *const kIndustryNames[] = {
   "Metals and Mining",
@@ -569,9 +573,9 @@ static Window *ChartWindow(CityChartState *charts, int slot) {
   if (charts->desktop == NULL) return NULL;
   return FindCityCanvasWindow(charts->desktop, charts->window_id[slot]);
 }
-bool CityChartPanelReady(City *city, int code) {
-  if (code == CITY_PANEL_MAP_DATA) return CityMapDataServiceAvailable(city);
-  return ChartSlot(code) >= 0 && city->game->ui->charts.ready;
+bool IsCityPanelReady(const CityInterfaceState *ui, int code) {
+  if (code == CITY_PANEL_MAP_DATA) return ui->map_data.desktop != NULL;
+  return ChartSlot(code) >= 0 && ui->charts.ready;
 }
 static void UpdateChartWindow(City *city, int slot) {
   CityChartState *charts = &city->game->ui->charts;
@@ -608,7 +612,7 @@ bool SetCityPanelVisibilityByCode(City *city, int code) {
     visible = ToggleCityMapDataDialog(city);
     button = CITY_TOOLBAR_BUTTON_MAP;
   } else {
-    if (!CityChartPanelReady(city, code)) return false;
+    if (!IsCityPanelReady(city->game->ui, code)) return false;
     if (charts->visible[slot]) {
       HideCityChartPanel(city, code);
     } else {
@@ -652,17 +656,34 @@ bool SetCityPanelVisibilityByCode(City *city, int code) {
         visible ? CITY_TOOLBAR_STYLE_CHECKED_CHECKBOX : CITY_TOOLBAR_STYLE_CHECKBOX);
   return visible;
 }
-int RefreshCityPanel(City *city, int code) {
-  if (code == CITY_PANEL_MAP_DATA) return RefreshCityMapDataPreview(city);
-  int slot = ChartSlot(code);
-  if (slot < 0) return code;
-  CityChartState *charts = &city->game->ui->charts;
-  if (!charts->visible[slot]) return 0;
-  UpdateChartWindow(city, slot);
-  return 1;
+
+// Reconcile remembered panel visibility with the current stack before the shared pause is computed.
+// Keep the chart order and map-data pass separate: closing each panel retains its own toolbar and overlay effects.
+void ReconcileCityPanelWindows(City *city) {
+  CityInterfaceState *ui = city->game->ui;
+  if (city->game->command_depth == 0) {
+    CityChartState *charts = &ui->charts;
+    for (i32 slot = 0; slot < CITY_CANVAS_CHART_COUNT; ++slot) {
+      if (!charts->visible[slot])
+        continue;
+      i32 open = 0;
+      for (i32 index = 0; index < ui->desktop.count; ++index)
+        open |= Sc2kCanvasChartCode(ui->desktop.windows[index].kind) == kChartCodes[slot];
+      if (!open)
+        SetCityPanelVisibilityByCode(city, kChartCodes[slot]);
+    }
+  }
+  if (city->game->command_depth == 0 && ui->map_data.visible) {
+    i32 open = 0;
+    for (i32 index = 0; index < ui->desktop.count; ++index)
+      open |= ui->desktop.windows[index].kind == CITY_CANVAS_MAP_DATA;
+    if (!open)
+      SetCityPanelVisibilityByCode(city, CITY_PANEL_MAP_DATA);
+  }
 }
+
 bool SelectCityChartControl(City *city, int code, int control, int value) {
-  if (!CityChartPanelReady(city, code)) return false;
+  if (!IsCityPanelReady(city->game->ui, code)) return false;
   CityChartState *charts = &city->game->ui->charts;
   if (code == CITY_PANEL_HISTORY) {
     if (control >= CITY_CONTROL_HISTORY_SERIES_FIRST && control <= CITY_CONTROL_HISTORY_SERIES_LAST &&
@@ -719,8 +740,6 @@ void UnbindCityChartPanels(City *city) {
 
 // Chart Windows
 
-bool CityPanelHostReady(City *city, int code) { return CityChartPanelReady(city, code); }
-
 // Handles this window's painting and input; paint coordinates are local to the window.
 bool ChartsWindowProcedure(Game *game, const Window *window, const WindowEvent *event) {
   if (event->kind == WINDOW_PAINT) {
@@ -738,4 +757,33 @@ bool ChartsWindowProcedure(Game *game, const Window *window, const WindowEvent *
     }
   }
   return false;
+}
+
+void Sc2kCanvasChartFill(Canvas *canvas, CityRect rect, u32 color) {
+  CanvasFill(canvas, rect.left, rect.top, rect.right, rect.bottom, color);
+}
+
+void Sc2kCanvasChartText(Canvas *canvas, i32 x, i32 y, const char *text, u32 color) {
+  CanvasTextAt(canvas, x, y, text != NULL ? text : "", color);
+}
+
+i32 Sc2kCanvasChartTextWidth(const char *text) {
+  return CanvasTextWidth(text != NULL ? text : "");
+}
+
+void Sc2kCanvasChartFrame(Canvas *canvas, CityRect rect, const char *title) {
+  CanvasPanelFrame(canvas, rect, title != NULL ? title : "");
+}
+
+void Sc2kCanvasChartBox(Canvas *canvas, CityRect rect, u32 color, i32 raised) {
+  CanvasBeveledBox(canvas, rect.left, rect.top, rect.right, rect.bottom, color, raised);
+}
+
+const char *CityChartTooltipAt(Game *game, const Window *window, int x, int y) {
+  int code, control, value;
+  if (Sc2kCanvasChartActionAt(window, x, y, &code, &control, &value)) {
+    const CityCanvasChartControl *item = Sc2kCanvasChartControl(&game->ui->charts, code, control);
+    return item ? item->text : "Choose the data shown in this graph.";
+  }
+  return "City statistics. Use the controls to choose the data and time period.";
 }

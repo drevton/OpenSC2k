@@ -1,25 +1,67 @@
 #ifndef SC2K_DOMAIN_SRC_UI_DIALOGS_DIALOGS_H
 #define SC2K_DOMAIN_SRC_UI_DIALOGS_DIALOGS_H
 
-#include "city/presentation.h"
-
-#include "ui/input.h"
 #include "city/engine/commands.h"
 #include "city/engine/input.h"
 #include "city/types.h"
-#include "ui/windows/state.h"
 
-bool HasCityDialogPause(const CityInterfaceState *ui, int token);
-
-// Budget presentation. The annual entry retains its preparation and paused-host lifetime; manual opening uses UI.
-void ShowAnnualBudgetDialog(City *city);
-void ShowBudgetDialogManually(City *city);
-
-// Connection Host
-
-typedef struct City City;
+typedef struct Game Game;
+typedef struct Window Window;
 typedef struct CityInterfaceState CityInterfaceState;
+
+// A close transfers completions from Window to UI. The lifetime module releases each record before invoking
+// its callback; the callback owns its context until it runs, after the outer command has unwound.
+typedef void CityWindowCallback(City *city, void *context);
+typedef struct CityWindowCompletion {
+  struct CityWindowCompletion *next;
+  CityWindowCallback *callback;
+  void *context;
+} CityWindowCompletion;
+// The caller or window-close callback owns the reply through window dismissal.
+typedef struct CityConfirmationState {
+  u32 window_id;
+  CityCommand command;
+  i32 answer;
+} CityConfirmationState;
+
+// Operation-local retained notice records. The UI owner borrows the active innermost scope.
 typedef struct CityConnectionDialog CityConnectionDialog;
+typedef struct CityMissionNotice CityMissionNotice;
+
+struct CityConnectionDialog {
+  CityConnectionDialog *parent;
+  u32 window_id;
+  int token, answer;
+  bool answered;
+  char message[128];
+};
+
+typedef enum CityNoticeKind { NOTICE_MISSION, NOTICE_RESOURCE, NOTICE_TEXT } CityNoticeKind;
+
+struct CityMissionNotice {
+  CityMissionNotice *parent;
+  u32 window_id;
+  int token;
+  u8 kind;
+  bool answered;
+};
+
+typedef struct CityNoticeRequest {
+  u32 window;
+  int detail, text, kind;
+} CityNoticeRequest;
+
+// Retained dialog presentation boundary. Native UI saves/restores toolbar styles; canvas-free diagnostics
+// can observe the palette-dialog request separately. The caller owns the matching restore.
+void SetCityPaletteDialogState(City *city, bool paused);
+void SetCityCanvasPaletteDialogState(City *city, bool paused);
+
+// Reconcile the requested pause after the outermost command returns.
+void ApplicationSyncDialogPause(City *city);
+// Reconcile open windows, retained questions and local pause requests; this may submit cancellation commands.
+void ApplicationUpdateDialogPause(City *city);
+
+// Connection questions
 
 typedef struct {
   CityConnectionDialog *active;
@@ -29,12 +71,7 @@ typedef struct {
 bool AnswerCityConnectionQuestion(City *city, int token, bool accept);
 bool CityConnectionQuestionWaiting(const CityInterfaceState *ui);
 
-
-// Mission Host
-
-typedef struct City City;
-typedef struct CityInterfaceState CityInterfaceState;
-typedef struct CityMissionNotice CityMissionNotice;
+// Mission and resource notices
 
 typedef struct {
   CityMissionNotice *active;
@@ -44,22 +81,22 @@ typedef struct {
 void WaitForCityMissionNotice(City *city, u32 window_id, int outcome);
 void WaitForCityResourceAlert(City *city, u32 window_id, int bitmap_id, int text_id);
 void WaitForCityTextNotice(City *city, u32 window_id, int resource);
+// Match both the scope token and notice kind before closing its window.
+bool AnswerCityNotice(City *city, int token, int kind);
 bool AnswerCityMissionNotice(City *city, int token);
 bool AnswerCityResourceAlert(City *city, int token);
 bool AnswerCityTextNotice(City *city, int token);
 bool CityMissionNoticeWaiting(const CityInterfaceState *ui);
 
-
-// Name
-
-// Canvas name presentation; command execution owns name-table writes.
-i32 ChooseCityOverlayNameDialog(City *city, int slot, CityNameCommandInput *state);
-bool AnswerCityOverlayNameDialog(City *city, i32 token, i32 answer, const u8 *text, u32 length);
-
-
 // Window state is released before completion runs, outside any command.
+// Attach before any call that can reconcile pauses or run nested UI work. Failure leaves the window unchanged;
+// success retains callback delivery and borrows its context until completion. This API never frees the context.
 bool AttachCityWindowCallback(Window *window, CityWindowCallback *callback, void *context);
+// Open the notice for an existing City continuation. UI retains its reply and pause until completion;
+// the callback resumes the live caller once. Unknown tokens do nothing; an open failure cancels that caller.
 void OpenCityTickContinuation(City *city, int token);
+// Copies text and attaches completion before pause reconciliation. Success transfers callback delivery to UI;
+// the window may already have closed on return. Failure retains neither callback nor context.
 bool OpenCityNoticeWithCallback(City *city, const char *title, const char *text, u32 flags,
     CityWindowCallback *callback, void *context);
 void CompleteCityWindowCallbacks(City *city);
@@ -97,22 +134,14 @@ typedef struct {
 
 i32 ChooseCityCanvasDialog(City *city, void *dialog);
 
+// Leave/abandon choices are local windows; Game applies an accepted shutdown or replacement after callers unwind.
+void HandleCityExitCommand(City *city);
+void OpenCityAbandonDialog(Game *game);
+void AnswerCityLeaveDialog(Game *game, bool accept);
+void CompleteCityAbandon(Game *game);
 
-// Span Dialog
-
-// Span Host
-
-// Bridge choices return to the main loop before executing their saved command.
-void SetCitySpanPresentation(CityInterfaceState *ui, CityCanvasDesktop *desktop);
-bool OpenCitySpanCommand(City *city, CityCommand command, int distance, int styles);
-void CancelCitySpanCommands(City *city);
-bool NativeSpanDialogWaiting(const CityInterfaceState *ui);
-
-void PresentCityLabelEditor(City *city, TileIndex tile, bool facility);
-
-void PresentCityStadiumTeamDialog(City *city, TileIndex tile);
-
-enum { CITY_NAME_EDITOR_INPUT, CITY_NAME_EDITOR_OK, CITY_NAME_EDITOR_CANCEL };
-CityRect CityNameEditorBounds(const Window *window, int control);
+// Local retained callers borrow action/context synchronously. The matching pause wraps the complete call.
+int RunPausedCityAction(City *city, int (*action)(City *city, void *context), void *context);
+i32 RunPausedCityModalDialog(City *city, void *dialog);
 
 #endif

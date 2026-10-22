@@ -37,6 +37,7 @@ typedef enum CityFix {
   CITY_FIX_EXPANDED_EVENTS = 29,
   CITY_FIX_TRANSPORT_PAVING,
   CITY_FIX_ROUTE_QUEUE_DEDUPLICATION,
+  CITY_FIX_WATER_SPREADING, // Allow adjacent water to reclaim flat land; shore slopes remain eligible.
   CITY_FIX_COUNT
 } CityFix;
 
@@ -46,17 +47,5 @@ _Static_assert(CITY_FIX_COUNT <= 64, "city fixes fit the saved 64-bit mask");
 #define CITY_FIX_DEFAULT_MASK (CITY_FIX_SIMULATION_MASK & ~(1ull << CITY_FIX_GRASS_CLEARING_COST))
 // Settings introduced after the two-byte compatibility mask.
 #define CITY_FIX_NEW_MASK (CITY_FIX_SIMULATION_MASK & ~((1ull << CITY_FIX_BURIED_UTILITY_TERRAIN) - 1))
-
-typedef enum DrawingFix {
-  // IDs0–8 were retired sprite repairs, hangar variants and dark underground.
-  DRAWING_FIX_CITY_CENTER = 9,
-  // IDs10–14 were palette effects for retired indexed artwork.
-  // ID15 was the full-date host title option.
-  DRAWING_FIX_PIXEL_SCROLLING = 16,
-  // ID17 was the removed pipe endpoint option; do not reuse it.
-  DRAWING_FIX_COUNT,
-  DRAWING_FIX_ACTIVE_MASK = (1 << DRAWING_FIX_CITY_CENTER) | (1 << DRAWING_FIX_PIXEL_SCROLLING),
-  DRAWING_FIX_DEFAULT_MASK = (1 << DRAWING_FIX_PIXEL_SCROLLING)
-} DrawingFix;
 
 #endif

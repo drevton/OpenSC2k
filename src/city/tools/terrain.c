@@ -1,41 +1,37 @@
-#include "city/infrastructure/power_lines.h"
-#include "city/engine/city_types.h"
-#include "city/maps/tile_storage.h"
-#include "city/tools/types.h"
-#include "city/maps/layers.h"
-#include "city/presentation.h"
-#include <assert.h>
-#include <string.h>
-#include <stdlib.h>
-
 #include "game/errors.h"
-
-#include "audio/audio.h"
-#include "city/state.h"
-#include "city/engine/initialization.h"
+#include "city/infrastructure/lines.h"
+#include "city/infrastructure/networks.h"
+#include "city/maps/terrain.h"
+#include "city/maps/tile_queue.h"
+#include "city/tools/tools.h"
 #include "city/engine/commands.h"
-#include "city/engine/simulation.h"
-#include "city/infrastructure/infrastructure.h"
+#include "city/infrastructure/power_lines.h"
+#include "city/maps/layers.h"
 #include "city/maps/map.h"
 #include "city/maps/water.h"
 #include "city/maps/tables.h"
-#include "city/tools/tools.h"
-#include "city/saveload/file.h"
-#include "game/state.h"
-#include "audio/state.h"
-#include "assets/state.h"
-#include "base/text.h"
+#include "city/presentation.h"
+#include "city/state.h"
+#include <assert.h>
+#include <string.h>
+
+// Protect existing structures during terrain edits. TEST validates the Boolean option without editing City.
+i64 CmdSetTerrainProtection(City *city, u32 flags, int enabled, int reserved1, int reserved2) {
+  if ((enabled != 0 && enabled != 1) || reserved1 || reserved2)
+    return CITY_COMMAND_COST_INVALID;
+  if (flags & CITY_COMMAND_TEST) return 0;
+  city->protect_terrain_structures = enabled != 0;
+  return 1;
+}
 
 // Return the first cardinal neighbor below the valid starting tile's land elevation. Out-of-map neighbors are skipped
 // and no lower neighbor returns INVALID_TILE; this does not mark or edit terrain.
 TileIndex FindLowerTerrainNeighbor(const City *city, TileIndex tile) {
   CityPoint point = MapTilePt(city, tile);
-  static const i8 neighbor_y[4] = {0, 1, 0, -1};
-  static const i8 neighbor_x[4] = {-1, 0, 1, 0};
   int elevation = ReadCityLandHeight(&city->tile[tile]);
   for (int direction = 0; direction < 4; ++direction) {
-    int next_y = point.y + neighbor_y[direction];
-    int next_x = point.x + neighbor_x[direction];
+    int next_y = point.y + kLineYStep[direction];
+    int next_x = point.x + kLineXStep[direction];
     TileIndex next = MapTileXYOrInvalid(city, next_x, next_y);
     if (next != INVALID_TILE) {
       if (ReadCityLandHeight(&city->tile[next]) < elevation) return next;
@@ -75,7 +71,6 @@ static int TerrainObstructionError(const City *city, TileIndex tile) {
 // and execution on the same bounded plan, without map-sized scratch storage.
 enum { kTerrainEditRadius = 33, kTerrainEditWidth = 67,
     kTerrainEditCapacity = kTerrainEditWidth * kTerrainEditWidth };
-static const u8 kTerrainCornerMasks[16] = {0, 9, 3, 6, 12, 11, 7, 14, 13, 1, 2, 4, 8, 15, 15, 0};
 static const int kTerrainCornerX[4] = {0, 0, 1, 1};
 static const int kTerrainCornerY[4] = {0, 1, 1, 0};
 
@@ -89,21 +84,6 @@ typedef struct {
   CityRect vertices;
 } TerrainEditPlan;
 
-// Derive a shared vertex's height from its valid neighboring native tile corners. Vertex coordinates may lie on the
-// outer map edge; absent neighbor cells are skipped and the highest contributing corner wins.
-static int ReadTerrainVertex(const City *city, int x, int y) {
-  int height = 0;
-  for (int corner = 0; corner < 4; ++corner) {
-    int tx = x - kTerrainCornerX[corner], ty = y - kTerrainCornerY[corner];
-    TileIndex tile = MapTileXYOrInvalid(city, tx, ty);
-    if (tile == INVALID_TILE) continue;
-    const TileInfo *tp = &city->tile[tile];
-    int shape = ReadTerrainCode(tp), level = ReadCityLandHeight(tp);
-    height = IntMax(height, level + ((kTerrainCornerMasks[shape] >> corner) & 1));
-  }
-  return height;
-}
-
 // Map world vertex coordinates into the bounded local terrain plan. Plan origin must be initialized; returns -1
 // outside its fixed neighborhood and does not allocate or grow it.
 static int TerrainEditIndex(const TerrainEditPlan *plan, int x, int y) {
@@ -116,7 +96,7 @@ static int TerrainEditIndex(const TerrainEditPlan *plan, int x, int y) {
 // markers and native geometry; neither plan nor map is modified.
 static int TerrainEditHeight(const City *city, const TerrainEditPlan *plan, int x, int y) {
   int index = TerrainEditIndex(plan, x, y);
-  return index >= 0 && plan->heights[index] != 255 ? plan->heights[index] : ReadTerrainVertex(city, x, y);
+  return index >= 0 && plan->heights[index] != 255 ? plan->heights[index] : ReadCityTerrainVertexHeight(city, x, y);
 }
 
 // Stage an interior plan vertex height from zero through 30 and queue it once for propagation. Returns false outside
@@ -164,7 +144,7 @@ static bool TerrainEditChangesTile(const City *city, const TerrainEditPlan *plan
   for (int corner = 0; corner < 4; ++corner) {
     int vx = x + kTerrainCornerX[corner], vy = y + kTerrainCornerY[corner];
     int index = TerrainEditIndex(plan, vx, vy);
-    if (index >= 0 && plan->heights[index] != 255 && plan->heights[index] != ReadTerrainVertex(city, vx, vy))
+    if (index >= 0 && plan->heights[index] != 255 && plan->heights[index] != ReadCityTerrainVertexHeight(city, vx, vy))
       return true;
   }
   return false;
@@ -186,7 +166,7 @@ static CityCommandCost PlanNativeTerrainEdit(const City *city, TileIndex tile, b
   int base = city->tile[tile].altitude & CITY_ALTITUDE_LAND_MASK;
   for (int corner = 0; corner < (point ? 1 : 4); ++corner) {
     int x = plan->origin_x + kTerrainCornerX[corner], y = plan->origin_y + kTerrainCornerY[corner];
-    int height = ReadTerrainVertex(city, x, y);
+    int height = ReadCityTerrainVertexHeight(city, x, y);
     int next = target_height < 0 ? height + (raise ? 1 : -1) : level ? target_height : height + target_height - base;
     // A sloped diamond can still be flattened when its low corners are at zero.
     if (next == height || (target_height < 0 && !raise && height == 0)) continue;
@@ -234,7 +214,7 @@ static CityCommandCost PlanNativeTerrainEdit(const City *city, TileIndex tile, b
     for (int x = plan->vertices.left; x < plan->vertices.right; ++x) {
       int index = TerrainEditIndex(plan, x, y);
       if (plan->heights[index] == 255) continue;
-      int difference = plan->heights[index] - ReadTerrainVertex(city, x, y);
+      int difference = plan->heights[index] - ReadCityTerrainVertexHeight(city, x, y);
       if (difference) changes += target_height < 0 ? 1 : difference < 0 ? -difference : difference;
     }
   for (int y = IntMax(0, plan->vertices.top - 1); y < IntMin(city->map_height, plan->vertices.bottom); ++y) {
@@ -274,7 +254,7 @@ static void CommitTerrainEditPlan(City *city, TerrainEditPlan *plan, int options
   for (int y = affected_bounds.top; y <= affected_bounds.bottom; ++y)
     for (int x = affected_bounds.left; x <= affected_bounds.right; ++x) {
       int index = TerrainEditIndex(plan, x, y);
-      if (index >= 0 && plan->heights[index] == 255) plan->heights[index] = ReadTerrainVertex(city, x, y);
+      if (index >= 0 && plan->heights[index] == 255) plan->heights[index] = ReadCityTerrainVertexHeight(city, x, y);
     }
   for (int y = affected_bounds.top; y < affected_bounds.bottom; ++y) {
     for (int x = affected_bounds.left; x < affected_bounds.right; ++x) {
@@ -351,52 +331,60 @@ i64 CmdStretchTerrainTile(City *city, u32 flags, TileIndex tile, int height, int
   return SetCityTerrainTileHeight(city, flags, tile, height, options, false);
 }
 
-static bool CanPlaceStreamCell(City *city, TileIndex tile) {
-  const TileInfo *tp = &city->tile[tile];
-  return IsTileKindUnbuilt(tp->kind) && tp->kind != TK_RADIOACTIVE_WASTE &&
-      ReadCityZoneKind(tp) == ZONE_NONE && ReadUnderground(city, tile) == TUK_CLEAR && !tp->overlay;
+// Raise one terrain tile or move it one step toward an explicit target height. Validates the action's payload; TEST
+// quotes the corresponding edit and execution preserves the zero-step and signed-error contracts.
+i64 CmdRaiseOrStepTerrain(City *city, u32 flags, TileIndex tile,
+    bool raise, int options, int terrain_options, int reserved) {
+  if ((terrain_options & ~CITY_TERRAIN_OPTIONS_MASK) || reserved)
+    return CITY_COMMAND_COST_INVALID;
+  int invalid = CITY_COMMAND_COST_INVALID;
+  int tool = raise ? options : (options & CITY_TERRAIN_COMMAND_TOOL_MASK) >> CITY_TERRAIN_COMMAND_TOOL_SHIFT;
+  if (!IsMapTileValid(city, tile) ||
+      tool < CITY_DEMOLISH_CLEAR || tool > CITY_DEMOLISH_DEZONE ||
+      (!raise && (options & ~CITY_TERRAIN_COMMAND_STEP_MASK) != 0))
+    return invalid;
+  if (flags & CITY_COMMAND_TEST) {
+    if (!raise) {
+      int height = ReadCityLandHeight(&city->tile[tile]);
+      int target = options & CITY_TERRAIN_COMMAND_HEIGHT_MASK;
+      if (height == target) return 0;
+      raise = height < target;
+    }
+    return CityCommandPriceResult(GetCityTerrainCost(city, tile, raise, tool, terrain_options));
+  }
+  ClearGameError(city->game);
+  if (city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)) {
+    if (!raise) {
+      int height = ReadCityLandHeight(&city->tile[tile]);
+      int target = options & CITY_TERRAIN_COMMAND_HEIGHT_MASK;
+      if (height == target) return 1;
+      raise = height < target;
+    }
+    return EditCityTerrainCell(city, tile, raise, tool);
+  }
+  return raise ? RaiseCityTerrainCell(city, tile, tool) :
+      StepCityTerrainTowardHeight(city, tile, options & CITY_TERRAIN_COMMAND_HEIGHT_MASK, tool);
 }
 
-// Grow a freshwater channel downhill, favoring the current heading with occasional gentle turns. Admission only
-// checks the source; execution consumes City RNG and stops at water, obstructions, a basin or the length limit.
-i64 CmdPlaceStream(City *city, u32 flags, TileIndex tile, int length) {
-  if (!IsMapTileValid(city, tile) || length < 1 || length > 256) return CITY_COMMAND_COST_INVALID;
-  if (city->settings.timer_mode != CITY_TIMER_STOPPED || HasTileWater(&city->tile[tile]) ||
-      !CanPlaceStreamCell(city, tile)) return CITY_COMMAND_COST_BLOCKED;
-  if (flags & CITY_COMMAND_TEST) return 0;
-  int heading = Sc2kCrtRandRange(city, 4);
-  int reach = length / 2 + Sc2kCrtRandRange(city, length - length / 2 + 1);
-  TileIndex previous = INVALID_TILE;
-  int placed = 0;
-  do {
-    CityPoint point = MapTilePt(city, tile);
-    int height = ReadCityLandHeight(&city->tile[tile]);
-    InvalidateTile(city, tile);
-    RegradeCityTerrainCell(city, tile);
-    ++placed;
-    if (placed >= reach) break;
-    if (Sc2kCrtRandRange(city, 5) == 0)
-      heading = (heading + (Sc2kCrtRandRange(city, 2) ? 1 : 3)) & 3;
-    static const int kTurns[4] = {0, 1, -1, 2};
-    TileIndex next = INVALID_TILE;
-    int next_heading = heading, lowest = height + 1;
-    for (int turn = 0; turn < 4; ++turn) {
-      int direction = (heading + kTurns[turn]) & 3;
-      TileIndex candidate = GetRelativeTileOrInvalid(city, tile, kLineXStep[direction], kLineYStep[direction]);
-      if (candidate == INVALID_TILE || candidate == previous || !CanPlaceStreamCell(city, candidate)) continue;
-      CityTileGeometry geometry = ReadCityTileGeometry(city, candidate);
-      int elevation = geometry.water != CITY_WATER_NONE ? geometry.surface_height : geometry.land_height;
-      if (elevation >= lowest) continue;
-      lowest = elevation;
-      next = candidate;
-      next_heading = direction;
-    }
-    if (next == INVALID_TILE || HasTileWater(&city->tile[next])) break;
-    previous = tile;
-    tile = next;
-    heading = next_heading;
-  } while (true);
-  return placed;
+// Lower one admitted terrain tile with the explicit charge/tool contract. Rejects invalid tile/payload; TEST quotes
+// the selected charging behavior and execution preserves uncharged lowering semantics.
+i64 CmdLowerTerrainTile(City *city, u32 flags, TileIndex tile,
+    int options, int terrain_options, int reserved) {
+  if ((terrain_options & ~CITY_TERRAIN_OPTIONS_MASK) || reserved)
+    return CITY_COMMAND_COST_INVALID;
+  int invalid = CITY_COMMAND_COST_INVALID;
+  int tool = (options & CITY_TERRAIN_COMMAND_TOOL_MASK) >> CITY_TERRAIN_COMMAND_TOOL_SHIFT;
+  if (!IsMapTileValid(city, tile) ||
+      (options & ~CITY_TERRAIN_COMMAND_LOWER_MASK) != 0 || tool > CITY_DEMOLISH_DEZONE)
+    return invalid;
+  if (flags & CITY_COMMAND_TEST) {
+    CityCommandCost quote = GetCityTerrainCost(city, tile, false, tool, terrain_options);
+    if (quote.error) return CityCommandPriceResult(quote);
+    return options & CITY_TERRAIN_COMMAND_CHARGE ? quote.cost : 0;
+  }
+  ClearGameError(city->game);
+  if (city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)) return EditCityTerrainCell(city, tile, false, tool);
+  return LowerCityTerrainCell(city, tile, (options & CITY_TERRAIN_COMMAND_CHARGE) != 0, tool);
 }
 
 // A one-level edit propagates through the 5-bit elevation range. Keep its temporary heights local to that
@@ -538,9 +526,9 @@ i64 LowerCityTerrainCell(City *city, TileIndex tile_index, bool charge, int tool
     WriteAltitudeWord(city, tile_index, ((cell & CITY_ALTITUDE_LAND_MASK) - 1) | (cell & CITY_ALTITUDE_CLEAR_LAND));
   if (charge != 0)
     DebitCityCommandCost(city, cost);
-  ResetRouteQueueAndPush(city, tile_point.x, tile_point.y);
+  ResetCityTileQueueAndPush(city, tile_point.x, tile_point.y);
   while (city->route_queue_cursor.read != city->route_queue_cursor.write) {
-    PointU16 point = PowerDequeue(city);
+    PointU16 point = DequeueCityTileCoordinate(city);
     int current_y = point.y;
     int current_x = point.x;
     TileIndex tile_index = MapTileXY(city, current_x, current_y);
@@ -578,7 +566,7 @@ i64 LowerCityTerrainCell(City *city, TileIndex tile_index, bool charge, int tool
           if (charge != 0)
             DebitCityCommandCost(city, cost);
           InvalidateTile(city, next);
-          PushRouteCoordinate(city, next_x, next_y);
+          PushCityTileCoordinate(city, next_x, next_y);
           WriteAltitudeWord(city, next, (next_elevation - 1) | (cell &
               CITY_ALTITUDE_CLEAR_LAND));
         }
@@ -608,7 +596,6 @@ i64 LowerCityTerrainCell(City *city, TileIndex tile_index, bool charge, int tool
   return true;
 }
 
-
 // Coordinate deltas and absolute magnitudes determine cardinal direction. Returns -1 for no movement; otherwise
 // returns the dominant-axis cardinal direction without changing any pointer state.
 int ClassifyCardinalDragDirection(int x, int y, int previous_x, int previous_y) {
@@ -622,7 +609,6 @@ int ClassifyCardinalDragDirection(int x, int y, int previous_x, int previous_y) 
     return delta_x <= 0 ? 0 : 2;
   return delta_y <= 0 ? 3 : 1;
 }
-
 
 // Check whether terrain can be raised and mark the affected lower neighbors. Invalid candidate tiles end recursion;
 // origin identifies the initial edit for blocker reporting, and visitation marks belong to the matching raise pass.
@@ -671,9 +657,6 @@ i64 MarkTerrainRaisePath(City *city, TileIndex tile_index, bool allow_water, Til
   }
   return true;
 }
-
-static void FinishCityTerrainRecalculation(City *city, TileIndex tile_index, int tile);
-static void PrepareCityTerrainRebuild(City *city, TileIndex tile);
 
 // Raise the marked terrain cells, charging each successful elevation change. Invalid or unmarked tiles are ignored
 // with the original completion value; charges only applied raises and preserves earlier effects on later funds
@@ -733,144 +716,4 @@ i64 StepCityTerrainTowardHeight(City *city, TileIndex tile_index, int target_hei
   if (height > target_height)
     return LowerCityTerrainCell(city, tile_index, true, tool);
   return true;
-}
-
-// Connect a valid graded terrain tile to its neighbors; may adjust adjoining
-// grade/metadata and callers retain the enclosing edit's damage and charging contract.
-void RegradeCityTerrainCell(City *city, TileIndex tile) {
-  assert(IsMapTileValid(city, tile));
-  TileInfo *tp = &city->tile[tile];
-  if (HasTileWater(tp)) return;
-  int shape = ReadTerrainCode(tp), water = ReadCityLandHeight(tp);
-  ReplaceCityTileAndStatistics(city, tile, TK_CLEAR);
-  // A new river starts at bed level. Its kind retains channel behavior on both
-  // flat stretches and rapids, independently of the open-water datum.
-  tp->altitude = (tp->altitude & CITY_ALTITUDE_CLEAR_WATER) | water << CITY_ALTITUDE_WATER_SHIFT;
-  tp->flags &= ~TF_SALTWATER;
-  tp->kind = TK_RIVER;
-  SetCityTerrainWater(city, tile, water, shape, true);
-  CityPoint point = MapTilePt(city, tile);
-  int left = IntMax(0, point.x - 1), top = IntMax(0, point.y - 1);
-  InvalidateTileRange(city, MapTileXY(city, left, top), point.x + 2 - left, point.y + 2 - top);
-  RefreshCityPowerConnections(city, tile);
-  RefreshCityTileClimates(city, tile);
-}
-
-// Recalculate terrain shape from the eight neighboring elevations. Requires a valid admitted tile; removes
-// incompatible construction and updates terrain through its native geometry path.
-void RecalculateTerrainCell(City *city, TileIndex tile) {
-  if (!IsMapTileValid(city, tile)) return;
-  InvalidateTile(city, tile);
-  int kind = ReadTile(city, tile);
-  if (!IsTileKindUnbuilt(kind)) BulldozeCityTile(city, tile, true);
-  FinishCityTerrainRecalculation(city, tile, kind);
-}
-
-// Restore terrain elevation gradients around a changed cell. Invalid input is ignored; changes only admitted nearby
-// cells and explicitly damages their old/new geometry.
-void RebalanceAdjacentTerrainElevations(City *city, TileIndex tile) {
-  if (!IsMapTileValid(city, tile)) return;
-  int level = ReadCityLandHeight(&city->tile[tile]);
-  static const i8 kNeighborX[4] = {-1, 0, 1, 0};
-  static const i8 kNeighborY[4] = {0, 1, 0, -1};
-  for (int neighbor = 0; neighbor < 4; ++neighbor) {
-    TileIndex nearby = GetRelativeTileOrInvalid(city, tile, kNeighborX[neighbor], kNeighborY[neighbor]);
-    if (nearby == INVALID_TILE) continue;
-    TileInfo *tp = &city->tile[nearby];
-    if (!IsTileKindUnbuilt(tp->kind)) continue;
-    int altitude = tp->altitude;
-    int difference = level - ReadCityLandHeight(tp);
-    if (difference >= -1 && difference <= 1) continue;
-    InvalidateTile(city, nearby);
-    tp->altitude = (difference > 1 ? level - 1 : level + 1) | (altitude & CITY_ALTITUDE_CLEAR_LAND);
-    InvalidateTile(city, nearby);
-    RebalanceAdjacentTerrainElevations(city, nearby);
-    RefreshTerrainNeighborhood(city, nearby);
-  }
-}
-
-// Generation and original disaster algorithms write tile minima directly. Only those callers reconstruct corners;
-// ordinary demolition preserves point edits. Tile must be valid or INVALID_TILE; reconstructs only admitted
-// native-generation/disaster corners and does not replace ordinary point-edit geometry.
-static void PrepareCityTerrainRebuild(City *city, TileIndex tile) {
-  if (!(city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)) || tile == INVALID_TILE) return;
-  InvalidateTile(city, tile);
-  int shape = CityTerrainSlopeAt(city, tile);
-  if (shape == CITY_TERRAIN_RAISE_LEVEL) {
-    int altitude = ReadAltitudeWord(city, tile);
-    WriteAltitudeWord(city, tile, (altitude & CITY_ALTITUDE_CLEAR_LAND) |
-        ((altitude & CITY_ALTITUDE_LAND_MASK) + 1));
-    shape = CITY_TERRAIN_FLAT;
-  }
-  WriteTerrainCode(&city->tile[tile], shape);
-}
-
-// Reconstruct terrain corners from tile minima for generation/disaster callers, then recalculate that cell. Requires
-// the caller's valid edit context; ordinary point edits must preserve their stored corners instead of using this
-// rebuild path.
-void RebuildCityTerrainCell(City *city, TileIndex tile_index) {
-  PrepareCityTerrainRebuild(city, tile_index);
-  RecalculateTerrainCell(city, tile_index);
-}
-
-// Refresh terrain state and drawing bounds for the 3-by-3 neighborhood. Invalid input is ignored; reconstructs each
-// valid neighbor only for callers that own that terrain-rebuild semantics.
-void RefreshTerrainNeighborhood(City *city, TileIndex tile) {
-  if (!IsMapTileValid(city, tile)) return;
-  for (int neighbor = 0; neighbor < 9; ++neighbor) {
-    TileIndex nearby = GetRelativeTileOrInvalid(city, tile,
-        kTerrainNeighborXOffsets[neighbor], kTerrainNeighborYOffsets[neighbor]);
-    if (nearby == INVALID_TILE) continue;
-    InvalidateTile(city, nearby);
-    PrepareCityTerrainRebuild(city, nearby);
-    RecalculateTerrainCell(city, nearby);
-    InvalidateTile(city, nearby);
-  }
-}
-
-// Complete a valid cell's terrain category change, removing incompatible surface/underground construction and
-// normalizing water. Tile is the captured prior kind; callers preserve statistics and invalidate old/new extents
-// around the recalculation.
-static void FinishCityTerrainRecalculation(City *city, TileIndex tile_index, int tile) {
-  if (city->settings.timer_mode != CITY_TIMER_STOPPED && tile != TK_RADIOACTIVE_WASTE)
-    ReplaceCityTileAndStatistics(city, tile_index,
-        ReadCityWaterGroundKind(&city->tile[tile_index]));
-  if (ReadUnderground(city, tile_index) != TUK_CLEAR)
-    SetUndergroundTile(city, tile_index, TUK_CLEAR);
-  int elevation = ReadCityLandHeight(&city->tile[tile_index]);
-  TileInfo *tp = &city->tile[tile_index];
-  bool wet = HasTileWater(tp);
-  int water_height = wet ? ReadCityWaterHeight(tp) : 0;
-  int shape = city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE) ?
-      ReadTerrainCode(tp) : CityTerrainSlopeAt(city, tile_index);
-  if (shape != 0)
-    WriteZoneByte(city, tile_index, ReadZoneByte(city, tile_index) & CITY_ZONE_METADATA_MASK);
-  if (shape == CITY_TERRAIN_RAISE_LEVEL) {
-    elevation += 1;
-    WriteAltitudeWord(city, tile_index, (ReadAltitudeWord(city, tile_index) & CITY_ALTITUDE_CLEAR_LAND) | elevation);
-  }
-  if ((city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)) || ReadCityWaterGroundKind(tp) == TK_RIVER) {
-    // Recalculation removes structures without changing the water plane. Actual terrain edits apply sea level
-    // when they change the vertices; doing that here would flood dry ground after highway demolition.
-    if (wet) SetCityTerrainWater(city, tile_index, water_height, shape, true);
-    else WriteTerrainCode(tp, shape);
-    if (HasTileWater(&city->tile[tile_index]) &&
-        ReadTile(city, tile_index) != TK_RADIOACTIVE_WASTE)
-      ReplaceCityTileAndStatistics(city, tile_index, ReadCityWaterGroundKind(&city->tile[tile_index]));
-  } else if (city->geography.edit_height > elevation) {
-    city->tile[tile_index].kind = TK_WATER;
-    WriteAltitudeWord(city, tile_index, (ReadAltitudeWord(city, tile_index) & CITY_ALTITUDE_CLEAR_WATER) |
-            (CITY_ALTITUDE_WATER_STEP * city->geography.edit_height));
-    if (ReadTile(city, tile_index) != TK_RADIOACTIVE_WASTE)
-      ReplaceCityTileAndStatistics(city, tile_index, ReadCityWaterGroundKind(&city->tile[tile_index]));
-    WriteLegacyCityTerrainCode(city, tile_index, shape == CITY_TERRAIN_RAISE_LEVEL
-            ? CITY_TERRAIN_WATER_FIRST
-            : (u8)(shape +
-                  (city->geography.edit_height - elevation == 1 ? CITY_TERRAIN_BANK_32 : CITY_TERRAIN_WATER_FIRST)));
-  } else {
-    WriteLegacyCityTerrainCode(city, tile_index, shape == CITY_TERRAIN_RAISE_LEVEL ? CITY_TERRAIN_FLAT : shape);
-  }
-  RefreshCityPowerConnections(city, tile_index);
-  RefreshCityTileClimates(city, tile_index);
-  ReclaimCityShorelineBanks(city, tile_index);
 }

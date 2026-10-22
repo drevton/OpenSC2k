@@ -11,16 +11,19 @@
 // altitude[0..4] remains land/bed height. zone[4] selects underlying slope versus zoning in zone[0..3]; zone[5..7]
 // has no bridge payload. Shared flags/overlay, tunnels and underground retain their tile_storage.h meanings.
 
+#include "city/infrastructure/networks.h"
+#include "city/infrastructure/spans.h"
+#include "city/saveload/map_format.h"
 #include "city/infrastructure/bridges.h"
+#include "city/maps/terrain.h"
 
 #include <assert.h>
 #include <stdlib.h>
 
 #include "assets/state.h"
-#include "audio/audio.h"
+#include "game/audio.h"
 #include "city/engine/commands.h"
 #include "city/events/events.h"
-#include "city/infrastructure/infrastructure.h"
 #include "city/infrastructure/power_lines.h"
 #include "city/maps/ground.h"
 #include "city/maps/layers.h"

@@ -1,35 +1,56 @@
-#include "city/infrastructure/tunnels.h"
+#include "game/update.h"
+#include "city/infrastructure/lines.h"
+#include "city/infrastructure/spans.h"
+#include "city/maps/terrain.h"
+#include <stdlib.h>
+
+#include "assets/state.h"
+#include "game/audio.h"
+#include "audio/backend.h"
+#include "audio/state.h"
+#include "base/time.h"
+#include "city/economy/economy.h"
 #include "city/infrastructure/bridges.h"
 #include "city/infrastructure/highways.h"
-#include "city/maps/water.h"
-#include "city/maps/buildings.h"
-#include "city/maps/trees.h"
+#include "city/infrastructure/tunnels.h"
 #include "city/infrastructure/types.h"
-#include "city/maps/tile_storage.h"
-#include "city/presentation.h"
-#include "city/tools/types.h"
-#include "ui/tools/types.h"
-#include "ui/windows/state.h"
-#include "base/time.h"
+#include "city/maps/buildings.h"
 #include "city/maps/layers.h"
-#include "ui/tools/tools.h"
-#include "ui/frontend.h"
-#include "game/application_internal.h"
-#include "audio/audio.h"
-#include "city/economy/economy.h"
-#include "city/infrastructure/infrastructure.h"
-#include "city/tools/tools.h"
-#include "game/state.h"
-#include "audio/state.h"
+#include "city/maps/tile_storage.h"
+#include "city/maps/trees.h"
+#include "city/maps/water.h"
+#include "city/presentation.h"
 #include "city/state.h"
+#include "city/tools/tools.h"
+#include "city/tools/types.h"
+#include "drawing/raster/canvas_primitives.h"
 #include "drawing/state.h"
-#include "assets/state.h"
-#include "ui/state.h"
+#include "game/commands.h"
+#include "game/state.h"
+#include "ui/map_visibility.h"
+#include "ui/cursor/cursor.h"
+#include "ui/charts/charts.h"
+#include "ui/commands.h"
+#include "ui/console.h"
+#include "ui/dialogs/dialogs.h"
+#include "ui/dialogs/file_dialog.h"
+#include "ui/dialogs/information.h"
+#include "ui/dialogs/scenario.h"
+#include "ui/dialogs/spans.h"
 #include "ui/input.h"
 #include "ui/map.h"
-#include "ui/charts/charts.h"
-#include "ui/dialogs/dialogs.h"
+#include "ui/map_views.h"
+#include "ui/menus/menu.h"
+#include "ui/signs.h"
+#include "ui/sdl.h"
+#include "ui/state.h"
 #include "ui/text/text.h"
+#include "ui/tools/tools.h"
+#include "ui/tools/types.h"
+#include "ui/windows/controls.h"
+#include "ui/windows/state.h"
+#include "ui/windows/tooltips.h"
+#include "ui/windows/windows.h"
 
 static u32 CityPointerModifiers(const CanvasSDLEvent *event);
 static void TrackCityPointerEndpoint(CityInterfaceState *ui, const CanvasSDLEvent *event, bool released);
@@ -55,43 +76,6 @@ static void TrackCityPointerEndpoint(CityInterfaceState *ui, const CanvasSDLEven
   ui->pointer_stroke[index] = (CityPointerInput){{event->x, event->y},
       CityPointerModifiers(event) | (released ? CITY_POINTER_SAMPLE_RELEASE : 0)};
   ui->pointer_stroke_count = index + 1;
-}
-
-bool IsCityMapVisibleAt(City *city, int x, int y) {
-  if (!city->game->city_active) return false;
-  CityInterfaceState *ui = city->game->ui;
-  Drawing *drawing = city->game->drawing;
-  if (NativeSpanDialogWaiting(ui) || CityConnectionQuestionWaiting(ui) || CityMissionNoticeWaiting(ui) ||
-      ui->startup_waiting ||
-      NativeScenarioDialogWaiting(city)) return false;
-  if (x < 0 || y < 0 || x >= drawing->map_width || y >= drawing->map_height) return false;
-  for (int overlay = 0; overlay < CITY_MENU_OVERLAY_COUNT; ++overlay) {
-    CityRect b = CityMenuPixelBounds(&ui->desktop, overlay);
-    int px = x * drawing->map_pixel_scale, py = y * drawing->map_pixel_scale;
-    if (CanvasPointInRect(b, px, py)) return false;
-  }
-  for (int index = 0; index < ui->desktop.count; ++index) {
-    Window *window = &ui->desktop.windows[index];
-    CityRect bounds = Sc2kCanvasDesktopPixelBounds(&ui->desktop, window->window_id);
-    bounds.right += (4 * drawing->options.scale + 99) / 100;
-    bounds.bottom += (4 * drawing->options.scale + 99) / 100;
-    bounds.left /= drawing->map_pixel_scale; bounds.top /= drawing->map_pixel_scale;
-    bounds.right = (bounds.right + drawing->map_pixel_scale - 1) / drawing->map_pixel_scale;
-    bounds.bottom = (bounds.bottom + drawing->map_pixel_scale - 1) / drawing->map_pixel_scale;
-    if (window->visible && CanvasPointInRect(bounds, x, y))
-      return false;
-  }
-  return true;
-}
-
-void UpdateCityToolCursor(City *city) {
-  CityInterfaceState *ui = city->game->ui;
-  Drawing *drawing = city->game->drawing;
-  Sc2kSDLCursorTool(drawing->ui_display,
-      ui->placement_hover_ctrl ? CITY_CANVAS_TOOL_DEMOLISH : ui->desktop.selected_tool,
-      ui->placement_hover_valid && !ui->placement_hover_shift && ui->desktop.dragging == CITY_CANVAS_DRAG_NONE &&
-      !ui->options_slider && !ui->jukebox_slider &&
-      IsCityMapVisibleAt(city, ui->placement_hover.x, ui->placement_hover.y));
 }
 
 static bool AppendCityPlacementRectangle(City *city, CityRect rectangle, CityRect visible, int *count) {
@@ -174,7 +158,7 @@ static void ApplyLiveCityPlacements(City *city, const CanvasSDLEvent *event) {
   int steps = IntMax(1, IntMax(abs(dx), abs(dy)));
   for (int step = 0; step <= steps; ++step) {
     int x = first.x + (i64)dx * step / steps, y = first.y + (i64)dy * step / steps;
-    if (!IsCityMapVisibleAt(city, x, y)) {
+    if (!IsCityMainMapInteractiveAt(city, x, y)) {
       ui->pointer_terrain_tile = INVALID_TILE;
       continue;
     }
@@ -183,7 +167,7 @@ static void ApplyLiveCityPlacements(City *city, const CanvasSDLEvent *event) {
     ui->pointer_terrain_tile = tile;
     if (building != TK_CLEAR) {
       if (GetCityBuildingCost(city, tile, building).error != CITY_COMMAND_COST_OK) continue;
-    } else if (!CanPlaceCityToolCell(city, tile, group, variant)) continue;
+    } else if (!CanPlaceCityToolCell(city, tile, group, variant, 0)) continue;
     CityPlacementIntent intent = ResolveCityPlacementIntent(game, tools, tile, tile, CityPointerModifiers(event));
     u32 previous_window = ui->desktop.next_window_id;
     bool placed = RunCityMapToolAction(game, &intent);
@@ -219,7 +203,7 @@ static void ApplyLiveCityStretch(City *city, const CanvasSDLEvent *event) {
 static void ApplyLiveCityLevel(City *city, const CanvasSDLEvent *event) {
   Game *game = city->game;
   CityInterfaceState *ui = game->ui;
-  if (event->shift || event->ctrl || !IsCityMapVisibleAt(city, event->x, event->y)) return;
+  if (event->shift || event->ctrl || !IsCityMainMapInteractiveAt(city, event->x, event->y)) return;
   CityRect previous = ui->pointer_level_bounds;
   bool applied = previous.left < previous.right && previous.top < previous.bottom;
   if (applied && event->x == ui->pointer_level_pointer.x && event->y == ui->pointer_level_pointer.y) return;
@@ -261,7 +245,7 @@ void UpdateCityPlacementPreview(City *city) {
   CityPlacementIntent intent = {0};
   if (ui->desktop.menu.selected || ui->desktop.menu.held || !ui->placement_hover_valid || ui->desktop.dragging != CITY_CANVAS_DRAG_NONE ||
       ui->options_slider || ui->jukebox_slider || ui->placement_hover_shift || ui->pan_button ||
-      !IsCityMapVisibleAt(city, ui->placement_hover.x, ui->placement_hover.y)) goto done;
+      !IsCityMainMapInteractiveAt(city, ui->placement_hover.x, ui->placement_hover.y)) goto done;
   int tools = Sc2kCanvasMapPointerTools(ui->desktop.selected_tool, 0);
   if (tools < 0) goto done;
   TileIndex tile = ui->placement_hover_ctrl ? PickCityMapTile(city, drawing->default_map_view,
@@ -488,7 +472,7 @@ static void FinishCityPointerStroke(City *city, const CanvasSDLEvent *event) {
   if (!ui->pointer_stroke_count)
     return;
   CanvasSDLEvent release = *event;
-  if (!ui->pointer_terrain_stretch && !IsCityMapVisibleAt(city, release.x, release.y)) {
+  if (!ui->pointer_terrain_stretch && !IsCityMainMapInteractiveAt(city, release.x, release.y)) {
     release.x = ui->pointer_stroke[ui->pointer_stroke_count - 1].point.x;
     release.y = ui->pointer_stroke[ui->pointer_stroke_count - 1].point.y;
   }
@@ -683,7 +667,8 @@ static void HandleCityCanvasContentPress(City *city, const CanvasSDLEvent *map_e
   CityInterfaceState *ui = game->ui;
   const CanvasSDLEvent *event = map_event;
   if (NativeSpanDialogWaiting(ui) || CityConnectionQuestionWaiting(ui) || CityMissionNoticeWaiting(ui)) return;
-  if (!IsCityMapVisibleAt(city, event->x, event->y) || (ui->desktop.selected_tool < 0 && !event->shift && !event->ctrl))
+  if (!IsCityMainMapInteractiveAt(city, event->x, event->y) ||
+      (ui->desktop.selected_tool < 0 && !event->shift && !event->ctrl))
     return;
   int tools = ui->desktop.selected_tool < 0 ? (int)(Sc2kCurrentCityMapPointerTools(ui)) :
       Sc2kCanvasMapPointerTools(ui->desktop.selected_tool, 0);
@@ -755,7 +740,7 @@ void HandleCityCanvasPointerDown(City *city, const CanvasSDLEvent *event) {
   TrackCityPlacementPointer(ui, event);
   if (DispatchCityWindowInput(game, event)) return;
   if (HandleCityMapSignInput(city, NULL, event) || HandleCityMainMapPan(city, event)) return;
-  if (IsCityMapVisibleAt(city, event->x, event->y)) ui->map_view_focus_window = 0;
+  if (IsCityMainMapInteractiveAt(city, event->x, event->y)) ui->map_view_focus_window = 0;
   HandleCityCanvasContentPress(city, event);
   UpdateCityPlacementPreview(city);
 }
@@ -773,7 +758,7 @@ void HandleCityCanvasPointerMove(City *city, const CanvasSDLEvent *event) {
   if (!game->observation && ui->pointer_stroke_count &&
       (ui->pointer_terrain_stretch || ui->pointer_terrain_level)) {
     TrackCityPlacementPointer(ui, event);
-    if (ui->pointer_terrain_stretch || IsCityMapVisibleAt(city, event->x, event->y))
+    if (ui->pointer_terrain_stretch || IsCityMainMapInteractiveAt(city, event->x, event->y))
       TrackCityPointerEndpoint(ui, event, false);
     if (ui->pointer_terrain_stretch) ApplyLiveCityStretch(city, event);
     else ApplyLiveCityLevel(city, event);
@@ -784,7 +769,7 @@ void HandleCityCanvasPointerMove(City *city, const CanvasSDLEvent *event) {
   TrackCityPlacementPointer(ui, event);
   UpdateCityPlacementPreview(city);
   if (ui->pointer_stroke_count) {
-    if (ui->pointer_terrain_stretch || IsCityMapVisibleAt(city, event->x, event->y))
+    if (ui->pointer_terrain_stretch || IsCityMainMapInteractiveAt(city, event->x, event->y))
       TrackCityPointerEndpoint(ui, event, false);
     return;
   }
@@ -829,7 +814,7 @@ static void ZoomCityCanvasAt(City *city, int x, int y, int steps) {
     return;
   }
   Drawing *drawing = game->drawing;
-  if (!IsCityMapVisibleAt(city, x / drawing->map_pixel_scale, y / drawing->map_pixel_scale)) return;
+  if (!IsCityMainMapInteractiveAt(city, x / drawing->map_pixel_scale, y / drawing->map_pixel_scale)) return;
   int zoom = drawing->default_map_view->zoom + drawing->default_map_view->magnified_large_zoom;
   int target = IntClamp(zoom + steps, CITY_CANVAS_MAP_ZOOM_SMALL,
       CityMapZoomLimit(drawing->map_pixel_scale * 100));
@@ -848,7 +833,7 @@ static void PinchCityCanvas(City *city, const CanvasSDLEvent *event) {
   }
   if (ui->desktop.dropdown.items || ui->desktop.menu.selected || ui->desktop.menu.held ||
       ui->pointer_stroke_count || ui->pan_button || ui->desktop.dragging != CITY_CANVAS_DRAG_NONE ||
-      ui->startup_waiting || NativeScenarioDialogWaiting(city)) {
+      ui->startup_waiting || NativeScenarioDialogWaiting(ui)) {
     ui->pinch_remainder = 0;
     return;
   }
@@ -867,8 +852,8 @@ void ScrollCityCanvas(City *city, const CanvasSDLEvent *event) {
   CityInterfaceState *ui = game->ui;
   if (ui->desktop.menu.selected || ui->desktop.menu.held) return;
   int pointer_x = ui->desktop.tooltip.pointer_x, pointer_y = ui->desktop.tooltip.pointer_y;
-  if (game->drawing->ui_display)
-    Sc2kSDLFramebufferPointer(game->drawing->ui_display, &pointer_x, &pointer_y);
+  if (ui->display)
+    Sc2kSDLFramebufferPointer(ui->display, &pointer_x, &pointer_y);
   if (DispatchCityWindowInput(game, event)) return;
   if (ui->pointer_stroke_count || ui->pan_button || ui->desktop.dragging != CITY_CANVAS_DRAG_NONE)
     return;
@@ -997,7 +982,7 @@ static void DispatchCityCanvasInput(City *city, CanvasSDLEvent *event) {
   if (event->kind == CANVAS_SDL_KEY_DOWN && ui->pointer_stroke_count &&
       HandleCityPlacementRotationKey(game, event->key)) return;
   if (event->kind == CANVAS_SDL_POINTER_DOWN && event->button == CANVAS_SDL_BUTTON_MIDDLE &&
-      ui->middle_center && !CountCityCanvasWindows(ui) && IsCityMapVisibleAt(city, event->x, event->y)) {
+      ui->middle_center && !CountCityCanvasWindows(ui) && IsCityMainMapInteractiveAt(city, event->x, event->y)) {
     TileIndex tile = PickCityMapTile(city, game->drawing->default_map_view, event->x, event->y);
     if (IsMapTileValid(city, tile)) CenterCityMapViewAtTile(city, NULL, MapTileX(city, tile), MapTileY(city, tile));
     return;
@@ -1105,4 +1090,22 @@ void DispatchCityCanvasEvent(City *city, CanvasSDLEvent *event) {
   CompleteCityFileDialogs(city);
   ui->command_error_depth = previous_depth;
   ui->command_errors_enabled = previous_enabled;
+}
+
+void CityInterfacePixels(Game *game, const CanvasSDLEvent *event, int *x, int *y) {
+  Drawing *drawing = game->drawing;
+  *x = event->x * drawing->map_pixel_scale; *y = event->y * drawing->map_pixel_scale;
+  if (game->ui->display) Sc2kSDLFramebufferPointer(game->ui->display, x, y);
+}
+
+CanvasSDLEvent TransformCityInterfaceEvent(Game *game, const CanvasSDLEvent *event) {
+  CityInterfaceState *ui = game->ui;
+  CanvasSDLEvent transformed = *event;
+  int x, y;
+  CityInterfacePixels(game, event, &x, &y);
+  u32 capture = ui->options_slider ? ui->options_slider_window : ui->jukebox_slider ?
+      ui->jukebox_slider_window :
+      ui->jukebox_pressed_window;
+  Sc2kCanvasDesktopPixelPointer(&ui->desktop, capture, x, y, &transformed.x, &transformed.y);
+  return transformed;
 }

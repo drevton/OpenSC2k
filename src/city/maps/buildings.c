@@ -10,25 +10,32 @@
 // altitude[0..4] remains land/bed height. Footprint/facility identities are City records, not overlay byte IDs.
 // Utility flags, climate region, sign/effect overlay, tunnel depth and underground retain tile_storage.h meanings.
 
+#include "city/maps/labels.h"
+#include "city/events/events.h"
+#include "city/infrastructure/networks.h"
+#include "city/infrastructure/utilities.h"
+#include "city/maps/tile_queue.h"
+#include "city/saveload/map_format.h"
+#include "city/engine/random.h"
 #include "city/economy/facilities.h"
 #include "city/maps/buildings.h"
+#include "city/maps/terrain.h"
 
 #include <assert.h>
 
 #include "assets/state.h"
-#include "audio/audio.h"
+#include "game/audio.h"
 #include "city/economy/economy.h"
 #include "city/engine/commands.h"
-#include "city/engine/simulation.h"
 #include "city/growth/growth.h"
 #include "city/infrastructure/highways.h"
-#include "city/infrastructure/infrastructure.h"
 #include "city/infrastructure/power_lines.h"
 #include "city/maps/layers.h"
 #include "city/maps/module.h"
 #include "city/presentation.h"
 #include "city/state.h"
 #include "city/tools/tools.h"
+#include "drawing/maps/map_animation.h"
 #include "drawing/maps/map_effects.h"
 #include "drawing/maps/map_terrain.h"
 #include "drawing/maps/map_view.h"
@@ -566,9 +573,9 @@ void RemoveCityConnectedRunwayOrPier(City *city, TileIndex start, int kind, bool
   int first_kind = runway ? TK_RUNWAY_FIRST : TK_PIER;
   int last_kind = runway ? TK_RUNWAY_LAST : TK_CRANE;
   CityPoint start_point = MapTilePt(city, start);
-  ResetRouteQueueAndPush(city, start_point.x, start_point.y);
-  while (RouteQueueLength(city) != 0) {
-    PointU16 point = PopRouteCoordinate(city);
+  ResetCityTileQueueAndPush(city, start_point.x, start_point.y);
+  while (CityTileQueueLength(city) != 0) {
+    PointU16 point = PopCityTileCoordinate(city);
     TileIndex tile = MapTileXY(city, point.x, point.y);
     TileInfo *tp = &city->tile[tile];
     if (runway)
@@ -586,10 +593,22 @@ void RemoveCityConnectedRunwayOrPier(City *city, TileIndex start, int kind, bool
       int neighbor_kind = city->tile[neighbor].kind;
       if (neighbor_kind == first_kind || neighbor_kind == last_kind) {
         CityPoint neighbor_point = MapTilePt(city, neighbor);
-        PushRouteCoordinate(city, neighbor_point.x, neighbor_point.y);
+        PushCityTileCoordinate(city, neighbor_point.x, neighbor_point.y);
       }
     }
   }
+}
+
+// Place the specified building kind with automatic orientation (-1) or an explicit orientation (0 through 3). Rejects
+// invalid tiles, unsupported kinds and nonzero reserved input; TEST quotes admission, while execution preserves the
+// placement result and invalidates the footprint.
+i64 CmdPlaceBuilding(City *city, u32 flags, TileIndex tile, int kind, int orientation, int reserved) {
+  if (!IsMapTileValid(city, tile) || kind < 0 || kind >= TK_COUNT || !kCityBuildings[kind].size ||
+      orientation < -1 || orientation > 3 || reserved ||
+      (orientation >= 0 && (!IsTileKindBuilding(kind) || kind == TK_HYDRO_POWER)))
+    return CITY_COMMAND_COST_INVALID;
+  if (flags & CITY_COMMAND_TEST) return CityCommandPriceResult(GetCityBuildingCost(city, tile, kind));
+  return PlaceCityBuilding(city, tile, kind);
 }
 
 // Place an explicit building footprint without charging. The command pays before calling
@@ -674,9 +693,30 @@ void FinishCityBuildingPlacement(City *city, TileIndex tile_index, int kind) {
     if ((city->tile[tile_index].flags & TF_POWERABLE) != 0 && city->indicators.population < 50000)
       ScanPowerGridPhase(city);
     if ((city->tile[tile_index].flags & TF_PIPED) != 0 && city->indicators.population < 50000)
-      ScanCityMapPhase20(city);
+      ScanCityWaterNetwork(city);
   }
   InvalidateCityInformation(city->game, CITY_UPDATE_STATUS);
+}
+
+// Finish the paid, successful building command using its captured kind and orientation. Facility callbacks
+// run first and may retain the caller; orientation, train spawning and reward consumption use live state afterward.
+void FinishCityBuildingCommand(City *city, TileIndex tile, int kind, int orientation) {
+  FinishCityBuildingPlacement(city, tile, kind);
+  if (orientation >= 0) {
+    int size = kCityBuildings[kind].size;
+    CityPoint point = MapTilePt(city, tile);
+    TileIndex anchor = MapTileXY(city, point.x - (size > 2), point.y - (size > 2));
+    InvalidateTileRange(city, anchor, size, size);
+    for (int dy = 0; dy < size; ++dy) for (int dx = 0; dx < size; ++dx) {
+      TileIndex building_tile = anchor + dy * city->map_width + dx;
+      TileInfo *tp = &city->tile[building_tile];
+      WriteZoneByte(city, building_tile,
+          (ReadTileZoneByte(tp) & ~CITY_BUILDING_ORIENTATION_MASK) | EncodeBuildingOrientation(orientation));
+    }
+    InvalidateTileRange(city, anchor, size, size);
+  }
+  if (kind == TK_RAIL_STATION) TrySpawnCityStationTrains(city, tile);
+  if (kCityBuildings[kind].reward) SetSpecialFacilityAvailability(city, kCityBuildings[kind].reward - 1, 0);
 }
 
 // Place the special power facility on water at one map cell.
@@ -976,7 +1016,7 @@ static bool DrawBuildingTile(City *city, TileIndex cell, int zoom, int screen_x,
     int cached_rotor = MAP_LANDSCAPE_SPRITE_FIRST + zoom * MAP_LANDSCAPE_SPRITES_PER_ZOOM +
         rotor - CITY_LANDSCAPE_GROUND_FIRST;
     DrawCityMapSpriteAtBaseline(drawing, cached_rotor, screen_x, ground_y, 0);
-    if (animation) EndCityMapOverlayAnimation(city, drawing);
+    if (animation) EndCityMapSpriteAnimation(city, drawing);
   }
   int smoke_kind = CityBuildingSmokeIndex(kind);
   if (smoke_kind >= 0) {
@@ -1007,7 +1047,7 @@ static bool DrawBuildingTile(City *city, TileIndex cell, int zoom, int screen_x,
             id - CITY_LANDSCAPE_GROUND_FIRST;
         DrawCityMapSpriteAtBaselineQ8(drawing, cached_smoke, x_q8, baseline_q8, source->flipped);
       }
-      if (animation) EndCityMapOverlayAnimation(city, drawing);
+      if (animation) EndCityMapSpriteAnimation(city, drawing);
     }
   }
   if ((tp->flags & TF_POWER_SERVICE) == TF_POWERABLE)

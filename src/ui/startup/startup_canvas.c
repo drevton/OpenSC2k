@@ -1,14 +1,27 @@
-#include "city/engine/command_types.h"
-#include "base/version.h"
-#include "city/maps/tile_storage.h"
+#include <assert.h>
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
+#include "assets/state.h"
+#include "base/version.h"
+#include "city/engine/command_types.h"
 #include "city/maps/layers.h"
-#include "ui/startup/services.h"
-#include "drawing/drawing_internal.h"
+#include "city/maps/tile_storage.h"
+#include "drawing/bitmaps.h"
+#include "drawing/fonts/fonts.h"
+#include "drawing/raster/canvas_primitives.h"
+#include "drawing/raster/canvas_raster_internal.h"
+#include "drawing/sprites/sprites.h"
+#include "drawing/state.h"
+#include "game/graphics.h"
+#include "game/state.h"
 #include "ui/charts/charts.h"
+#include "ui/menus/menu.h"
 #include "ui/startup/startup.h"
+#include "ui/sdl.h"
+#include "ui/state.h"
+#include "ui/windows/controls.h"
 
 // Resource-backed canvas controls. All raster writes target the final framebuffer.
 
@@ -321,4 +334,89 @@ void Sc2kCanvasDrawStartupWindow(Game *game, Canvas *canvas, const Window *windo
         (CityRect){left, top + 224, left + preview_size, top + 238}, summary, 0xFF101010, false, 8);
   }
   canvas->clip = saved;
+}
+
+int CityStartupContentTop(int width, int height) {
+  // The baker puts the 170-pixel identity at y=12 in this same background.
+  return IntMax(width * 182 / 1024, height * 182 / 683) + 8;
+}
+
+// Loading artwork uses the shared row resampler and sprite drawer. Streaming
+// avoids retaining a scaled full-screen copy of the backdrop.
+static void DrawIntroImage(Game *game, Canvas *canvas, int id, int left, int top, int scale) {
+  const RunSprite *image = game->resources->intro.images[id];
+  CityRect bounds = {left, top, left + IntMax(1, image->width * scale / 65536),
+      top + IntMax(1, image->height * scale / 65536)};
+  if (!DrawCanvasSpriteImage(canvas, NULL, image,
+      (CityRect){0, 0, image->width, image->height}, bounds, 0)) game->execution_failed = true;
+}
+
+void DrawCityStartupBackdrop(Game *game, Canvas *canvas, CityRect area) {
+  const RunSprite *image = game->resources->intro.images[CITY_INTRO_CITY_ART];
+  int scale = IntMax((int)(((i64)canvas->width * 65536 + image->width - 1) / image->width),
+      (int)(((i64)canvas->height * 65536 + image->height - 1) / image->height));
+  Canvas clipped = *canvas;
+  clipped.clip = IntersectCityRects(canvas->clip, area);
+  DrawIntroImage(game, &clipped, CITY_INTRO_CITY_ART, (canvas->width - image->width * scale / 65536) / 2, 0, scale);
+}
+
+static void DrawIntroProgress(Canvas *canvas, int left, int top, int width, int height, int percent) {
+  double radius = height / 2.0;
+  for (int y = IntMax(0, top - 1); y < IntMin(canvas->height, top + height + 1); ++y)
+    for (int x = IntMax(0, left - 1); x < IntMin(canvas->width, left + width + 1); ++x) {
+      double dx = fmax(left + radius - x - .5, x + .5 - (left + width - radius));
+      double dy = y + .5 - (top + radius);
+      double coverage = fmax(0, fmin(1, radius + .5 - hypot(fmax(0, dx), dy)));
+      if (!coverage) continue;
+      u32 color = x < left + width * percent / 100 ? 0xFFFCB030 : 0xFF67532B;
+      size_t index = (size_t)y * canvas->stride + x;
+      u32 background = canvas->pixels[index], result = 0xFF000000;
+      for (int shift = 0; shift <= 16; shift += 8)
+        result |= (u32)((color >> shift & 255) * coverage + (background >> shift & 255) * (1 - coverage) + .5)
+            << shift;
+      canvas->pixels[index] = result;
+    }
+}
+
+bool DrawCityLoadingScreen(Game *game, CanvasSDL *display, CityIntroStage stage,
+    int completed, int total, bool initial) {
+  Drawing *drawing = game->drawing;
+  int width = drawing->framebuffer.width, height = drawing->framebuffer.height;
+  if (!PrepareCityScreenBuffer(game, display) || Sc2kSDLConfigureFramebuffer(display, 100)) return false;
+  Canvas canvas = drawing->framebuffer;
+  const CityIntroArt *art = &game->resources->intro;
+  assert(art->images[0] && stage >= 0 && stage < CITY_INTRO_STAGE_COUNT);
+  initial |= width != canvas.width || height != canvas.height;
+  // Both screens share the still backdrop and the same baked game identity.
+  int scale = IntClamp(IntMin(canvas.width * 65536 / 704, canvas.height * 65536 / 404), 16384, 98304);
+  int panel_width = 620 * scale / 65536, panel_height = 160 * scale / 65536;
+  int left = (canvas.width - panel_width) / 2;
+  int top = (CityStartupContentTop(canvas.width, canvas.height) + canvas.height - panel_height) / 2;
+  CityRect panel = {left, top, left + panel_width, top + panel_height};
+  CityRect dirty = initial ? canvas.clip : panel;
+  DrawCityStartupBackdrop(game, &canvas, dirty);
+  DrawCanvasFrame(&canvas, panel, 0xFF97835B, 0xFFD3BB93, 0xFF674F2B, true);
+  int label = stage;
+  DrawIntroImage(game, &canvas, label, (canvas.width - (int)art->images[label]->width * scale / 65536) / 2,
+      top + 32 * scale / 65536, scale);
+  int percent = total > 0 ? (int)((i64)IntClamp(completed, 0, total) * 100 / total) : 0;
+  int bar_width = 360 * scale / 65536;
+  DrawIntroProgress(&canvas, (canvas.width - bar_width) / 2, top + 82 * scale / 65536,
+      bar_width, IntMax(3, 4 * scale / 65536), percent);
+  char text[8]; snprintf(text, sizeof(text), "%d%%", percent);
+  int percent_width = 0;
+  for (const char *c = text; *c; ++c) {
+    int image = CITY_INTRO_DIGIT_FIRST + (*c == '%' ? 10 : *c - '0');
+    percent_width += art->images[image]->width * scale / 65536;
+  }
+  int x = (canvas.width - percent_width) / 2;
+  for (const char *c = text; *c; ++c) {
+    int image = CITY_INTRO_DIGIT_FIRST + (*c == '%' ? 10 : *c - '0');
+    DrawIntroImage(game, &canvas, image, x, top + 108 * scale / 65536, scale);
+    x += art->images[image]->width * scale / 65536;
+  }
+  if (game->execution_failed) return false;
+  ClearScreenDamage(&drawing->upload_damage);
+  MarkScreenDirty(&drawing->upload_damage, dirty);
+  return Sc2kSDLPresentFramebuffer(display, &drawing->framebuffer, &drawing->upload_damage, (CityRect){0}) == 0;
 }

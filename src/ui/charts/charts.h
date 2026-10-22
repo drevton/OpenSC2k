@@ -9,6 +9,8 @@
 #include "city/types.h"
 #include "ui/windows/state.h"
 
+typedef struct CityInterfaceState CityInterfaceState;
+
 // Canvas Ui Ids
 
 // Host chart resource array slots, distinct from original dialog IDs.
@@ -109,11 +111,18 @@ typedef enum CityChartControlId {
   CITY_CONTROL_INDUSTRY_CHART = 295
 } CityChartControlId;
 
-bool CityPanelHostReady(City *city, int code);
-bool CityChartPanelReady(City *city, int code);
+// Read whether a chart or map-data panel has its required UI binding. Does not open, refresh or mutate it.
+bool IsCityPanelReady(const CityInterfaceState *ui, int code);
 bool SetCityPanelVisibilityByCode(City *city, int code);
-int RefreshCityPanel(City *city, int code);
+// Outside commands, clear remembered chart/map-data visibility when no corresponding window remains.
+// Retains the normal panel close effects on toolbar state, map overlays and damage.
+void ReconcileCityPanelWindows(City *city);
 
 bool SelectCityChartControl(City *city, int code, int control, int value);
+
+// Returns borrowed hover help for these controls, or null when no help applies.
+const char *CityChartTooltipAt(Game *game, const Window *window, int x, int y);
+
+void HideCityChartPanel(City *city, int code);
 
 #endif

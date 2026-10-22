@@ -2,7 +2,8 @@
 #define SC2K_CITY_MAPS_BUILDINGS_H
 
 #include "city/engine/command_types.h"
-#include "city/maps/map.h"
+#include "city/maps/tile_storage.h"
+#include "city/maps/terrain.h"
 
 // Buildings are identified by their actual tile kind, independent of toolbar layout.
 typedef struct {
@@ -48,6 +49,10 @@ int GetCityFacilityPlacementError(const City *city, TileIndex tile, int kind, in
 i64 PlaceSpecialZoneFootprint(City *city, TileIndex tile, u8 kind, int size);
 // Quote admission without RNG or callbacks. Placement remains unpaid; the command pays before the finishing phase.
 CityCommandCost GetCityBuildingCost(const City *city, TileIndex tile, int kind);
+// Command admission includes kind, tile and optional facing (-1 means automatic). TEST quotes without mutation.
+// Placement installs the footprint unpaid; DoCityCommand pays before calling FinishCityBuildingCommand.
+i64 CmdPlaceBuilding(City *city, u32 flags, TileIndex tile, int kind, int orientation, int reserved);
+void FinishCityBuildingCommand(City *city, TileIndex tile, int kind, int orientation);
 i64 PlaceCityBuilding(City *city, TileIndex tile, int kind);
 void FinishCityBuildingPlacement(City *city, TileIndex tile, int kind);
 i64 PlaceCityWaterPowerFacility(City *city, TileIndex tile);

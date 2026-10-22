@@ -2,23 +2,25 @@
   "kind": 254,
   "source_selection": {
     "kind": 254,
-    "name": "Lanch Archology",
-    "review": "assets/landscape/building-studies/approval-batch-253-255/254-launch-arcology/native-composited-study.png",
-    "recipe": "assets/landscape/building-studies/approval-batch-253-255/254-launch-arcology/bake.json",
-    "source": "assets/landscape/building-studies/approval-batch-253-255/254-launch-arcology/calibrated-source.png",
-    "review_sha256": "70f75ec2ad1515c2b95cf7ea4f74713fc91f62d7be435d98cefb39b6658c91e1"
+    "name": "Launch Arcology",
+    "source": "assets/landscape/civic/254-launch-arcology/landscape-revision/smaller-lakes-subtle-frame-raw.png",
+    "foreground": "assets/landscape/civic/254-launch-arcology/landscape-revision/smaller-lakes-subtle-frame-raw.png",
+    "recipe": "assets/landscape/civic/254-launch-arcology/approved-bake.json",
+    "review": "assets/landscape/civic/254-launch-arcology/approved-view.png",
+    "generation_history": "assets/landscape/civic/254-launch-arcology/landscape-revision/generation-history.json",
+    "review_sha256": "79cf1de864c14795d20f2280f375fedd8579fee27c304adf89918e8cd91ed8e5"
   },
-  "installed_view_sha256": "70f75ec2ad1515c2b95cf7ea4f74713fc91f62d7be435d98cefb39b6658c91e1",
+  "installed_view_sha256": "79cf1de864c14795d20f2280f375fedd8579fee27c304adf89918e8cd91ed8e5",
   "dependencies": [
     {
-      "source": "assets/landscape/building-studies/approval-batch-253-255/254-launch-arcology/calibrated-source.png",
+      "source": "assets/landscape/civic/254-launch-arcology/landscape-revision/smaller-lakes-subtle-frame-raw.png",
       "installed": "assets/landscape/civic/254-launch-arcology/approved-original.png",
-      "sha256": "fb4f8a1261ccc99d86f3e062fffdc5908fd0512e6901e5917308c4d73113304c"
+      "sha256": "f52fd4bbccff295b8473af3db57cd8f6b6b3a0fa8d741073d8e662eb2a3d0327"
     },
     {
-      "source": "assets/landscape/building-studies/approval-batch-253-255/254-launch-arcology/calibrated-source.png",
+      "source": "assets/landscape/civic/254-launch-arcology/landscape-revision/smaller-lakes-subtle-frame-raw.png",
       "installed": "assets/landscape/civic/254-launch-arcology/approved-foreground.png",
-      "sha256": "fb4f8a1261ccc99d86f3e062fffdc5908fd0512e6901e5917308c4d73113304c"
+      "sha256": "f52fd4bbccff295b8473af3db57cd8f6b6b3a0fa8d741073d8e662eb2a3d0327"
     },
     {
       "source": "assets/landscape/building-studies/approval-batch-253-255/254-launch-arcology/native-foundation-mask.png",
@@ -28,13 +30,39 @@
     {
       "source": "assets/landscape/building-studies/approval-batch-253-255/254-launch-arcology/view-0.png",
       "installed": "assets/landscape/civic/254-launch-arcology/approved-view.png",
-      "sha256": "70f75ec2ad1515c2b95cf7ea4f74713fc91f62d7be435d98cefb39b6658c91e1"
+      "sha256": "79cf1de864c14795d20f2280f375fedd8579fee27c304adf89918e8cd91ed8e5"
     },
     {
       "source": "assets/landscape/building-studies/approval-batch-253-255/254-launch-arcology/ground-0.png",
       "installed": "assets/landscape/civic/254-launch-arcology/approved-ground.png",
-      "sha256": "f700c0f738fec27679670467e9fd14e4720857254eb1c91cf1c444f4615dd839"
+      "sha256": "076252addef56ae28c32f503e4cff6ad29b0dfffec6edbe4ffc0c088370fe3d3"
     }
   ],
-  "rotations": "deferred; all four asset IDs reference this single view"
+  "rotations": "deferred; all four asset IDs reference this single view",
+  "scale_correction": {
+    "previous_occupied_height": 1089,
+    "stock_reference_height": 940,
+    "target_roof_height": 940,
+    "method": "Redesigned longer supports and narrower habitat; uniform offline registration; separate reusable concrete ground."
+  },
+  "source_selection_history": [
+    {
+      "kind": 254,
+      "name": "Lanch Archology",
+      "review": "assets/landscape/building-studies/approval-batch-253-255/254-launch-arcology/native-composited-study.png",
+      "recipe": "assets/landscape/building-studies/approval-batch-253-255/254-launch-arcology/bake.json",
+      "source": "assets/landscape/building-studies/approval-batch-253-255/254-launch-arcology/calibrated-source.png",
+      "review_sha256": "70f75ec2ad1515c2b95cf7ea4f74713fc91f62d7be435d98cefb39b6658c91e1"
+    },
+    {
+      "kind": 254,
+      "name": "Launch Arcology",
+      "source": "assets/landscape/civic/254-launch-arcology/scale-revision/longer-legs-raw.png",
+      "foreground": "assets/landscape/civic/254-launch-arcology/scale-revision/longer-legs-raw.png",
+      "recipe": "assets/landscape/civic/254-launch-arcology/approved-bake.json",
+      "review": "assets/landscape/civic/254-launch-arcology/approved-view.png",
+      "generation_history": "assets/landscape/civic/254-launch-arcology/scale-revision/generation-history.json",
+      "review_sha256": "04f71f2c1dceec2d40d35e9bf37e1156cc4b89eb7bd12fc629378a1d223ae68e"
+    }
+  ]
 }

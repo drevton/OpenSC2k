@@ -1,32 +1,17 @@
 #ifndef SC2K_GAME_TIMING_H
 #define SC2K_GAME_TIMING_H
 
-#include "city/types.h"
-
-// Original application and newspaper timer identifiers.
-typedef enum CityTimerId {
-  CITY_TIMER_ID_SIMULATION = 1, CITY_TIMER_ID_NEWSPAPER_CLOSE = 0x8094,
-} CityTimerId;
+#include "game/types.h"
 
 typedef struct Game Game;
 
-// Host clocks are presentation inputs, never sources of deterministic City ticks.
-typedef enum GameTimePolicy {
-  GAME_TIME_REALTIME, // UI deadlines continue during pause.
-  GAME_TIME_UNPAUSED, // World presentation freezes during pause, without a resume jump.
-} GameTimePolicy;
-
-typedef struct {
-  double realtime, unpaused;
-  bool initialized, paused;
-} GameTiming;
-
-// One delay boundary. Each suspended caller retains its own instance. Durations and polling gaps must stay below
-// 2^31 milliseconds so signed modular deadline comparisons remain unambiguous across u32 clock wrap.
-typedef struct {
-  u32 deadline, saved_idle_gate, saved_input_gate;
-  bool active, poll_timers;
-} GameDelay;
+// Logical delay-clock adapter. Advancing one frame returns whether it crosses a cadence boundary, even if no
+// cadence is delivered. The two readers notify time observers; only screen-shake reads advance City by one frame.
+bool AdvanceGameDelayFrame(Game *game);
+u32 ReadCityScreenShakeTime(City *city);
+u32 ReadCityAnimationTime(City *city);
+// Poll the retained delay cadence and deliver it once when due.
+void PumpGameDelayCadence(Game *game);
 
 void BeginGameDelay(Game *game, GameDelay *delay, int milliseconds, bool poll_timers);
 // Poll once, then return. False leaves the caller suspended until another frame.

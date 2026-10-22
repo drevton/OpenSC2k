@@ -1,5 +1,5 @@
+#include "assets/fonts.h"
 #include "base/byte_order.h"
-#include "drawing/fonts/fonts.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -164,24 +164,6 @@ bool LoadCityOverlayFont(CityOverlayFont *font, CityAssets *assets, const char *
   free(bytes);
   return true;
 }
-
-// Draw an empty box for unavailable characters, without embedding a second
-// pixel font. The packaged OpenTTD Sans rasters supply actual labels and metrics.
-void InitializeCityOverlayFont(CityOverlayFont *font) {
-  memset(font, 0, sizeof(*font));
-  for (int size = 0; size < CITY_OVERLAY_FONT_COUNT; ++size) {
-    for (int index = 0; index < CITY_OVERLAY_GLYPH_COUNT; ++index) {
-      CityOverlayGlyph *glyph = &font->glyphs[size * CITY_OVERLAY_GLYPH_COUNT + index];
-      glyph->advance = glyph->paint_advance = 6 + size;
-      if (index == 0) continue; // Space has no ink.
-      int width = 4 + size, height = 8 + size * 2;
-      for (int row = 2; row < height + 2; ++row)
-        glyph->rows[row] = row == 2 || row == height + 1 ?
-            (1 << width) - 1 : 1 | (1 << (width - 1));
-    }
-  }
-}
-
 
 const u8 kPublicationSizes[kPublicationSizeCount] = {
   8, 10, 12, 14, 16, 18, 20, 22, 24, 28, 32, 36, 40, 44, 48, 56, 64, 72, 80, 96, 112, 128

@@ -55,8 +55,8 @@ typedef struct {
   bool fallback_ready;
 } CityCursorAssets;
 
-typedef struct Game Game;
-bool LoadCityCursorAssets(Game *game, const char *graphics_root);
-void ReleaseCityCursorAssets(Game *game);
+// Source loading replaces only Assets-owned pixels after validation. Game coordinates the composed Drawing cache.
+bool LoadCityCursorArtwork(CityAssets *assets, const char *graphics_root);
+void ReleaseCityCursorArtwork(CityAssets *assets);
 
 #endif

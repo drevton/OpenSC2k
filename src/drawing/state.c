@@ -1,6 +1,12 @@
 #include "drawing/state.h"
 
+#include <stdlib.h>
 #include <string.h>
+
+#include "drawing/bitmaps.h"
+#include "drawing/display.h"
+#include "drawing/maps/map_render.h"
+#include "drawing/newspaper.h"
 
 // Native drawing preferences and presentation defaults.
 void InitializeDrawingDefaults(Drawing *drawing) {
@@ -42,9 +48,27 @@ void InitializeDrawing(Drawing *drawing) {
   drawing->map_pixel_scale = 4;
   drawing->ui_scale_applied = 400;
   drawing->ui_map_scale_applied = 4;
-  drawing->options = (GameOptions){.tab = GAME_OPTIONS_TAB_GRAPHICS, .scale = 400,
-      .preview_scale = 400, .automatic = 1, .snapping = 1,
+  drawing->options = (DrawingOptions){.scale = 400, .automatic = 1, .snapping = 1,
       .scale_bevels = true, .sprite_font = true, .font_antialias = true, .black_background = true,
       .fixes = DRAWING_FIX_DEFAULT_MASK, .demolition_elevation = true, .save_view_position = true,
       .window_width = 2400, .window_height = 1960, .driver = "headless"};
+}
+
+void ReleaseCityNewspaperOpening(Drawing *drawing) {
+  free(drawing->newspaper_opening.pixels);
+  drawing->newspaper_opening = (Canvas){0};
+  drawing->newspaper_opening_window = 0;
+  drawing->newspaper_opening_bounds = (CityRect){0};
+}
+
+void ReleaseDrawing(Drawing *drawing) {
+  ReleaseCityNewspaperOpening(drawing);
+  ReleaseDrawingFramebuffer(drawing);
+  FreeMapSpriteCache(&drawing->sprite_cache);
+  ReleaseCityToolbarIcons(drawing);
+  while (drawing->window_drawing) ReleaseCityWindowDrawing(drawing->window_drawing);
+  ReleaseCityMapDrawingStorage(drawing);
+  free(drawing->signs);
+  drawing->signs = NULL;
+  drawing->sign_count = drawing->sign_capacity = 0;
 }

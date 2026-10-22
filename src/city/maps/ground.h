@@ -1,7 +1,7 @@
 #ifndef SC2K_CITY_MAPS_GROUND_H
 #define SC2K_CITY_MAPS_GROUND_H
 
-#include "city/maps/map.h"
+#include "city/maps/terrain.h"
 
 // Generation follows tree/climate initialization and borrows its landscape RNG and prior full-map invalidation.
 void GenerateCityGround(City *city);

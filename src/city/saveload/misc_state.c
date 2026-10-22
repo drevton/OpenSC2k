@@ -1,14 +1,32 @@
+#include "city/saveload/state.h"
+#include "city/engine/city_name.h"
+#include "city/saveload/map_format.h"
 #include "city/saveload/types.h"
 #include "city/economy/types.h"
 #include "city/maps/tile_storage.h"
 #include "city/tools/types.h"
-#include "audio/audio.h"
+#include "game/audio.h"
+#include "audio/state.h"
 #include "game/state.h"
 #include "city/presentation.h"
 #include "city/maps/layers.h"
 #include "city/state.h"
 #include "city/saveload/city_file_internal.h"
 #include "assets/catalog.h"
+#include "base/byte_order.h"
+#include <string.h>
+
+// MISC stores three current totals followed by alternating monthly amount/rate.
+static void *CityFileEconomyField(EconomySector *sector, int field) {
+  switch (field) {
+  case 0: return &sector->current_amount;
+  case 1: return &sector->current_rate;
+  case 2: return &sector->accumulated;
+  default:
+    if (field & 1) return &sector->monthly_amount[(field - 3) / 2];
+    return &sector->monthly_rate[(field - 3) / 2];
+  }
+}
 
 // Ordinary SC2 files keep the exact original field. Large balances use a bounded legacy fallback plus an optional XNAT
 // packet, never wrapped low bits. Returns the signed-32-bit clamp without modifying the native signed-64-bit treasury.
@@ -259,7 +277,7 @@ static void ApplyCityMiscWord(City *city, u32 index, u32 value) {
   }
   if (index == CITY_MISC_WORD_NEWSPAPER_EDITION) {
     city->settings.loaded_speed = city->settings.speed;
-    RefreshCityLoadedMusicPreference(city);
+    RefreshCityLoadedMusicPreference(audio);
     if (audio->music_enabled == 0) {
       StopCityMusicSequence(game);
     }

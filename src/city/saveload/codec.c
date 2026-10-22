@@ -1,3 +1,6 @@
+#include "city/maps/labels.h"
+#include "city/saveload/events_format.h"
+#include "city/saveload/map_format.h"
 #include "city/events/events.h"
 #include "city/maps/map_types.h"
 #include "city/saveload/legacy_text.h"
@@ -9,7 +12,7 @@
 // Object locations and train next tiles must be in bounds. Other target pairs are offsets; destination pairs can be
 // off-map aircraft waypoints. Event must be writable with its type already decoded; positions/train targets are
 // clamped while other targets retain offset semantics.
-void DecodeCityMapEventCoordinates(City *city, CityMapEvent *event, int x, int y, int target_x, int target_y) {
+static void DecodeStockCityEventCoordinates(City *city, CityMapEvent *event, int x, int y, int target_x, int target_y) {
   event->tile = MapTileXY(city, IntClamp(x, 0, city->map_width - 1),
       IntClamp(y, 0, city->map_height - 1));
   if (IsCityMapEventTrain(event->type)) {
@@ -82,7 +85,7 @@ void DecodeStockCityMapEvent(City *city, CityMapEvent *event, const u8 bytes[CIT
   }
   if (event->type == CITY_MAP_EVENT_MAXIS_MAN && bytes[11] < CITY_STOCK_EVENT_SLOT_COUNT)
     event->maxis_man.goal = CityEventOverlay(bytes[11]);
-  DecodeCityMapEventCoordinates(city, event, bytes[4], bytes[3], bytes[7], bytes[6]);
+  DecodeStockCityEventCoordinates(city, event, bytes[4], bytes[3], bytes[7], bytes[6]);
   if (event->type == CITY_MAP_EVENT_AIRPLANE &&
       (event->state & CITY_AIRPLANE_STAGE_MASK) == CITY_AIRPLANE_APPROACH) {
     int x, y;
@@ -90,6 +93,26 @@ void DecodeStockCityMapEvent(City *city, CityMapEvent *event, const u8 bytes[CIT
     event->raw.destination_y = (u8)(bytes[8] - y);
     event->raw.destination_x = (u8)(bytes[9] - x);
   }
+}
+
+// Separate stock overlay stacks into native terrain overlays and per-tile event membership. Run after stock records
+// are decoded; clears unused event records and rebuilds hash links from active event locations.
+void ImportStockCityEventLinks(City *city) {
+  // Stock tiles keep only the top overlay. Native tiles retain the non-event
+  // association underneath, and every active record is indexed at its own tile.
+  for (TileIndex tile = 0; tile < (u32)city->map_cell_count; ++tile) {
+    TileInfo *tp = &city->tile[tile];
+    int overlay = tp->overlay;
+    for (int depth = 0; IsCityEventOverlay(overlay) && depth < CITY_STOCK_EVENT_SLOT_COUNT; ++depth)
+      overlay = city->events.event[CityEventOverlaySlot(overlay)].previous_overlay;
+    tp->overlay = IsCityEventOverlay(overlay) ? CITY_OVERLAY_NONE : overlay;
+  }
+  for (int slot = 0; slot < city->events.capacity; ++slot) {
+    CityMapEvent *event = &city->events.event[slot];
+    if (event->type == CITY_MAP_EVENT_UNUSED) memset(event, 0, sizeof(*event));
+    else if (IsMapTileValid(city, event->tile)) event->previous_overlay = city->tile[event->tile].overlay;
+  }
+  RebuildCityEventHash(city);
 }
 
 // Look up a four-byte stock chunk tag in the immutable schema table. Tag must provide four readable bytes; returns a
