@@ -23,7 +23,8 @@ typedef struct TileModule {
   // NULL uses only the shared ground-cover refresh. Economic growth keeps its separate scheduled scan.
   void (*tick)(City *city, TileIndex tile);
   // Drawing receives prepared camera geometry; false leaves drawing to the shared artwork path.
-  // May change Drawing pixels/state, never City or simulation RNG.
+  // May change Drawing and the supplied City's painter RNG for animated artwork. Native frames pass a paint copy
+  // of City so these draws never advance the live simulation RNG.
   bool (*draw)(City *city, TileIndex tile, int zoom, int screen_x, int ground_y, const CityTileGeometry *geometry);
   // Sorted rendering calls this for each tile beneath a deferred object, after preparing that object's sprites.
   // Paint only ground/underpasses: no selection, overlays or object submission. NULL/false uses natural terrain.

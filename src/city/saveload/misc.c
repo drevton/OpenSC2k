@@ -1,12 +1,11 @@
 #include "city/saveload/services.h"
+#include "city/saveload/runtime.h"
 #include "city/saveload/state.h"
 #include "city/saveload/types.h"
 #include "game/state.h"
 #include "city/presentation.h"
-#include "base/text.h"
 #include "city/state.h"
 #include "city/saveload/city_file_internal.h"
-#include "assets/catalog.h"
 
 // Decode and apply stock MISC words in their original order from the configured input. Requires an active MISC
 // workspace; errors preserve preceding writes and callback-visible side effects.
@@ -27,11 +26,4 @@ bool LoadCityMiscFromInput(City *city, CityFileInput *input, u32 encoded_size) {
   if (!ApplyLoadedCityMisc(city)) return false;
   ReleaseCityMiscWorkspace(file);
   return true;
-}
-
-// Read a stock MISC chunk from an opened load stream through the shared input decoder. Stream remains caller-owned;
-// false or throwing errors preserve the original partial-application behavior.
-bool LoadCityMisc(City *city, void *stream, u32 encoded_size) {
-  CityFileInput input = {.kind = CITY_FILE_INPUT_PLATFORM, .stream = stream};
-  return LoadCityMiscFromInput(city, &input, encoded_size);
 }

@@ -1,8 +1,8 @@
+#include "drawing/maps/map_view.h"
 #include "drawing/maps/cost_labels.h"
 
 #include "base/text.h"
 #include "drawing/fonts/fonts.h"
-#include "drawing/maps/map_render.h"
 #include "drawing/state.h"
 
 // The caller has selected a canvas target; retained labels return before reaching this raster path.

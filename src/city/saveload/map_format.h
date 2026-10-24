@@ -1,10 +1,12 @@
 #ifndef SC2K_CITY_MAP_FORMAT_H
 #define SC2K_CITY_MAP_FORMAT_H
 
-#include "city/maps/map.h"
-#include "city/maps/terrain.h"
+#include "city/maps/map_types.h"
 #include "city/maps/tile_storage.h"
 #include "city/saveload/terrain_format.h"
+
+// Native XGND climate header precedes the existing snow/moisture lattice bytes.
+enum { CITY_SAVE_CLIMATE_HEADER_SIZE = 8 };
 
 // Stock XZON uses one-hot footprint corners. Native footprint links are
 // converted to this convention only for codecs and retained stock algorithms.
@@ -124,11 +126,8 @@ void WriteLegacyCityTerrainCode(City *city, TileIndex tile, int value);
 int ReadLegacyTerrainCode(const City *city, TileIndex tile);
 // Project a supplied native shape or raw stock code using the tile's occupant/water metadata.
 int ProjectCityTerrainToLegacy(const City *city, TileIndex tile, int terrain);
-CityTileGeometry ReadLegacyCityTileGeometry(const City *city, TileIndex tile);
-void TranslateLegacyCityTerrain(const City *city, TileIndex tile, TileInfo *result);
 
 typedef struct CityFileChunkSpec CityFileChunkSpec;
-u8 ExportCityMapByte(const City *city, const CityFileChunkSpec *spec, TileIndex tile);
 void ExportCityMapChunk(City *city, const CityFileChunkSpec *spec, u8 *bytes, u32 size);
 // Codec lifecycle: new cities start native; raw stock decoding is explicitly scoped.
 void InitializeCityMapFormat(City *city);
@@ -137,9 +136,6 @@ void BeginLegacyCityMapImport(City *city);
 bool ConvertCityMapToNative(City *city);
 // Finish landscape/facility initialization after the load's simulation rebuilding.
 bool ImportCityMapFormat(City *city);
-// Normalize decoded stock banks before native conversion. Returns changed tiles.
-// Legacy diagnostics may explicitly use the same repaired baseline on both sides.
-int RepairLegacyCityRiverBanks(City *city);
 
 u32 CityGroundExtensionSize(const City *city);
 bool EncodeCityGroundExtension(const City *city, u8 *bytes, u32 size);
@@ -147,33 +143,11 @@ bool ApplyCityGroundExtension(City *city, const u8 *bytes, u32 size);
 // Native save admission reads the records directly; no stock conversion or map copy.
 bool ValidateCityTileRecords(const City *city);
 
-// Legacy IDs and style enums are implementation details of map_legacy.c.
-int LegacyCityBridgeKind(const City *city, TileIndex tile);
-
-int LegacyTransportConnectionMask(int kind);
-int LegacyTransportTileKind(const City *city, TileIndex tile, int base, int mask);
-int LegacyHighwayAxis(int kind, int flags);
-u8 LegacyPowerTileKind(int mask, int shape);
 // Stock sprite mirroring derived from native facing/axis, never native flags.
 bool LegacyCityTileFlip(const City *city, TileIndex tile);
-
-// Artwork/stock algorithm values are opaque. Supply a native family kind and
-// semantic axis or slope rather than importing the retired directional IDs.
-bool IsCityOrdinaryLineArtwork(int artwork, int family);
+// Stock rubble classification retained by the original placement algorithm.
 bool IsLegacyRubbleKind(int kind);
-bool IsLegacyTunnelEntranceKind(int kind);
-bool IsLegacyHighwayRampKind(int kind);
-// Stock two-by-two artwork includes legacy highway bridge IDs 106/107.
-static inline bool IsCityMultiHighwayArtwork(int artwork) {
-  return artwork >= TKL_HIGHWAY_INCLINE_FIRST && artwork <= TKL_HIGHWAY_BRIDGE_LAST;
-}
-bool IsCitySurfaceTransportArtwork(int artwork);
-bool IsCityRailSlopeArtwork(int artwork);
-bool IsCityRailTransitionArtwork(int artwork);
-int CityLineSlopeArtwork(int family, int shape);
-int CityRailFlatArtwork(int artwork);
-bool CityRampArtworkFacesPositive(int artwork);
-int CityTileInformationCategory(int artwork);
+// Compatibility counter keys used by simulation bookkeeping; neither query changes counters or tile records.
 int CityTileStatisticsKind(const City *city, int kind);
 int CityTileStatisticAt(const City *city, TileIndex tile);
 

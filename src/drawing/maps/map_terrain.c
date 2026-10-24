@@ -1,5 +1,8 @@
+#include "city/events/events.h"
+#include "drawing/maps/map_sprites.h"
 #include "drawing/maps/map_terrain.h"
 #include "city/maps/terrain.h"
+#include "city/maps/tables.h"
 #include "city/presentation.h"
 
 #include "assets/graphics.h"
@@ -17,7 +20,8 @@
 #include "city/saveload/map_format.h"
 #include "city/tools/tools.h"
 #include "drawing/maps/map_animation.h"
-#include "drawing/maps/map_events.h"
+#include "drawing/maps/map_vehicles.h"
+#include "drawing/maps/map_depth.h"
 #include "drawing/maps/map_render.h"
 #include "drawing/maps/map_view.h"
 #include "drawing/maps/tables.h"
@@ -30,7 +34,7 @@ bool IsCityMapGroundPass(const Drawing *drawing) {
 
 // Original diagnostic layout is selected at runtime, independently of the build.
 static bool NativeMapArtworkEnabled(const City *city) {
-  return (city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE));
+  return (city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE));
 }
 
 // Terrain faces join cells inside the map; the outside boundary has no wall.
@@ -40,15 +44,14 @@ enum { kTerrainFaceLeft = 1, kTerrainFaceRight = 2, kTerrainFaceBoth = 3 };
 // A matching foreground slope covers the shared edge, but its bitmap does not
 // cover a wall extending below that edge. Such a wall leaks at the map border.
 int CityMapSlopeFaceSides(const City *city, TileIndex tile, int shape, int height) {
-  static const u8 kCorners[] = {0, 9, 3, 6, 12, 11, 7, 14, 13, 1, 2, 4, 8, 15, 15, 0};
   if (shape == CITY_TERRAIN_FLAT) return 0;
   int sides = 0;
-  int corners = kCorners[shape];
+  int corners = kTerrainRaisedCorners[shape];
   for (int side = 0; side < 2; ++side) {
     TileIndex neighbor = CityMapViewNeighbor(city, tile, !side, side);
     if (neighbor == INVALID_TILE) continue;
     CityTileGeometry next = ReadCityMapViewGeometry(city, neighbor);
-    int adjacent = kCorners[next.surface_shape];
+    int adjacent = kTerrainRaisedCorners[next.surface_shape];
     int near = side ? 1 : 3, far = side ? 3 : 1;
     if (height + ((corners >> near) & 1) > next.surface_height + (adjacent & 1) ||
         height + ((corners >> 2) & 1) > next.surface_height + ((adjacent >> far) & 1))
@@ -59,9 +62,10 @@ int CityMapSlopeFaceSides(const City *city, TileIndex tile, int shape, int heigh
 
 void DrawCityMapTerrainFace(City *city, TileIndex tile, int zoom, int sprite, int screen_x, int ground_y,
     int sides) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   if (!IsCityMapGroundPass(drawing)) return;
-  CityPoint point = CityMapViewTilePoint(city, tile), size = CityMapCameraSize(city, CityMapCameraRotation(city->game->drawing));
+  CityPoint point = CityMapViewTilePoint(city, tile);
+  CityPoint size = CityMapCameraSize(city, CityMapCameraRotation(city->drawing));
   if (point.x == size.x - 1) sides &= ~kTerrainFaceLeft;
   if (point.y == size.y - 1) sides &= ~kTerrainFaceRight;
   if (!sides) return;
@@ -80,8 +84,7 @@ void DrawCityMapTerrainFace(City *city, TileIndex tile, int zoom, int sprite, in
 // SC2 stores independent cell heights. Close exposed land and water edges
 // with the existing prepared vertical face, one level per blit.
 void DrawCityMapTerrainSkirt(City *city, TileIndex tile, int zoom, int screen_x, int ground_y, int base) {
-  if (!IsCityMapGroundPass(city->game->drawing)) return;
-  static const u8 kCorners[] = {0, 9, 3, 6, 12, 11, 7, 14, 13, 1, 2, 4, 8, 15, 15, 0};
+  if (!IsCityMapGroundPass(city->drawing)) return;
   int bottom[2] = {base, base};
   for (int side = 0; side < 2; ++side) {
     TileIndex next = CityMapViewNeighbor(city, tile, side, 1 - side);
@@ -91,7 +94,7 @@ void DrawCityMapTerrainSkirt(City *city, TileIndex tile, int zoom, int screen_x,
     // Compare the shared edge, not the low corner on the far side of a slope.
     // x+1 shares the neighbor's north/east corners; y+1 its north/west corners.
     int edge = side ? 3 : 9;
-    height += (kCorners[shape] & edge) == edge;
+    height += (kTerrainRaisedCorners[shape] & edge) == edge;
     bottom[side] = IntMin(base, height);
   }
   int face = MAP_LANDSCAPE_SPRITE_FIRST + zoom * MAP_LANDSCAPE_SPRITES_PER_ZOOM - CITY_LANDSCAPE_GROUND_FIRST +
@@ -113,7 +116,7 @@ static int TerrainTileSprite(const City *city, TileIndex tile, int zoom,
 
 void DrawCityMapTerrainTile(City *city, TileIndex tile, int zoom, int sprite, int screen_x, int ground_y,
     const CityTileGeometry *geometry) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   if (!IsCityMapGroundPass(drawing)) return;
   if (sprite < 0) sprite = TerrainTileSprite(city, tile, zoom, geometry);
   if (NativeMapArtworkEnabled(city)) {
@@ -148,7 +151,7 @@ void DrawCityMapTerrainTile(City *city, TileIndex tile, int zoom, int sprite, in
 // belong to those surface sprites, so adjacent hangars must paint over their overhang.
 // Raised tile artwork is deferred, including its baked base. Bridges submit front structures separately.
 static bool IsDepthObjectTile(const City *city, TileIndex tile) {
-  const Drawing *drawing = city->game->drawing;
+  const Drawing *drawing = city->drawing;
   int kind = ReadTile(city, tile);
   if (IsTileKindBareGround(kind) || IsTileKindPlainTransport(kind)) return false;
   if (ReadCityTileClasses(kind) & TCLASS_GROUND_ARTWORK) return false;
@@ -171,7 +174,7 @@ static bool IsDepthObjectAnchor(const City *city, TileIndex tile) {
 }
 
 static i32 DepthTilePosition(const City *city, TileIndex tile) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   CityPoint point = CityMapViewTilePoint(city, tile);
   int kind = ReadTile(city, tile), x = point.x * 4096, y = point.y * 4096;
   CityTileGeometry geometry = ReadCityTileGeometry(city, tile);
@@ -196,7 +199,7 @@ static i32 DepthTilePosition(const City *city, TileIndex tile) {
 
 // Zooms share tile traversal, visibility, module dispatch and overlays.
 void DrawCityMapTile(City *city, int zoom, TileIndex cell, int screen_x, int screen_y) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   const TileInfo *tp = &city->tile[cell];
   if (drawing->map_depth.phase == MAP_DEPTH_COLLECT) {
     if (IsDepthObjectTile(city, cell) && IsDepthObjectAnchor(city, cell)) {
@@ -209,7 +212,7 @@ void DrawCityMapTile(City *city, int zoom, TileIndex cell, int screen_x, int scr
       drawing->map_depth.phase = MAP_DEPTH_OBJECTS;
       drawing->map_depth.depth = CityMapOverlayDepth(city, cell);
       int ground_y = screen_y - ReadCitySurfaceHeight(&city->tile[cell]) * CityMapHeightStep(zoom);
-      DrawCityMapOverlay(city, zoom, MapTileX(city, cell), MapTileY(city, cell), screen_x, ground_y);
+      DrawCityMapOverlay(city, cell, zoom, (CityPoint){screen_x, ground_y});
     }
     // Plain roads and ground fall straight through to painting; only raised
     // objects above used the preparing path. The indexed caller restores it.
@@ -301,13 +304,13 @@ overlay:
     if (overlay >= CITY_OVERLAY_POLLUTION && overlay < 256) return;
   }
   if (ReadOverlay(city, cell) != 0)
-    DrawCityMapOverlay(city, zoom, MapTileX(city, cell), MapTileY(city, cell), screen_x, ground_y);
+    DrawCityMapOverlay(city, cell, zoom, (CityPoint){screen_x, ground_y});
 }
 
 // The caller prepares the active map target and logical clip. Both sorted objects and direct ground painting use
 // the same clip-derived tile traversal; no map-size-specific fallback or repaint-from-tile cursor is retained.
 void DrawCityMapSurface(City *city, const CityMapViewConfig *view, int zoom) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   drawing->map_depth.bridge_palettes = city->game->resources->bridge_palettes;
   drawing->map_depth.underworld_palettes = city->game->resources->underworld_palettes;
   drawing->map_depth.car_palettes = city->game->resources->road_vehicle_palettes;

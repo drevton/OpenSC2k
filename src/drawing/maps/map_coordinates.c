@@ -9,10 +9,8 @@
 #include "city/maps/terrain.h"
 #include "city/state.h"
 #include "city/saveload/map_format.h"
-#include "drawing/maps/map_render.h"
 #include "drawing/maps/map_view.h"
 #include "drawing/state.h"
-#include "game/state.h"
 
 // Drawing subsystem: map coordinates.
 
@@ -64,11 +62,11 @@ TileIndex CityMapCameraTile(const City *city, int rotation, int x, int y) {
 }
 
 CityPoint CityMapViewTilePoint(const City *city, TileIndex tile) {
-  return CityMapCameraPoint(city, CityMapCameraRotation(city->game->drawing), MapTileX(city, tile), MapTileY(city, tile));
+  return CityMapCameraPoint(city, CityMapCameraRotation(city->drawing), MapTileX(city, tile), MapTileY(city, tile));
 }
 
 TileIndex CityMapViewNeighbor(const City *city, TileIndex tile, int dx, int dy) {
-  CityPoint offset = CityMapCameraVector(-CityMapCameraRotation(city->game->drawing), dx, dy);
+  CityPoint offset = CityMapCameraVector(-CityMapCameraRotation(city->drawing), dx, dy);
   return GetRelativeTileOrInvalid(city, tile, offset.x, offset.y);
 }
 
@@ -85,7 +83,7 @@ SC2K_PRESERVE_MOST int CityMapCameraMask(int mask, int rotation) {
 
 static CityTileGeometry ReadCityMapCameraGeometry(const City *city, TileIndex tile, int rotation) {
   CityTileGeometry geometry = ReadCityTileGeometry(city, tile);
-  if (!city->game->drawing->map_state.water_enabled) {
+  if (!city->drawing->map_state.water_enabled) {
     geometry.water = CITY_WATER_NONE;
     geometry.water_height = 0;
     geometry.water_surface = CITY_WATER_SURFACE_NONE;
@@ -98,12 +96,12 @@ static CityTileGeometry ReadCityMapCameraGeometry(const City *city, TileIndex ti
 }
 
 CityTileGeometry ReadCityMapViewGeometry(const City *city, TileIndex tile) {
-  return ReadCityMapCameraGeometry(city, tile, CityMapCameraRotation(city->game->drawing));
+  return ReadCityMapCameraGeometry(city, tile, CityMapCameraRotation(city->drawing));
 }
 
 int CityMapViewTerrainCode(const City *city, TileIndex tile) {
-  if (!city->game->drawing->map_state.water_enabled) return ReadCityMapViewGeometry(city, tile).land_shape;
-  return CityMapCameraShape(ReadLegacyTerrainCode(city, tile), CityMapCameraRotation(city->game->drawing));
+  if (!city->drawing->map_state.water_enabled) return ReadCityMapViewGeometry(city, tile).land_shape;
+  return CityMapCameraShape(ReadLegacyTerrainCode(city, tile), CityMapCameraRotation(city->drawing));
 }
 
 int CityMapDryGroundShape(const City *city, TileIndex tile, const CityTileGeometry *geometry) {
@@ -117,19 +115,17 @@ int CityMapViewUnderground(const City *city, TileIndex tile) {
   int kind = ReadUnderground(city, tile);
   if (kind >= CITY_UNDERGROUND_ROTATION_COUNT) return kind;
   const CityMapRotationTables *tables = ReadCityMapRotationTables();
-  for (int turn = 0; turn < CityMapCameraRotation(city->game->drawing); ++turn) kind = tables->underground_clockwise[kind];
+  for (int turn = 0; turn < CityMapCameraRotation(city->drawing); ++turn) kind = tables->underground_clockwise[kind];
   return kind;
 }
 
 int CityMapViewOrientation(const City *city, TileIndex tile) {
-  return (ReadBuildingOrientation(city, tile) + CityMapCameraRotation(city->game->drawing)) & 3;
+  return (ReadBuildingOrientation(city, tile) + CityMapCameraRotation(city->drawing)) & 3;
 }
 
 bool IsCityMapViewFootprintAnchor(const City *city, TileIndex tile) {
-  return IsCityFootprintCorner(city, tile, (CITY_BUILDING_CORNER_TOP_RIGHT + CityMapCameraRotation(city->game->drawing)) & 3);
+  return IsCityFootprintCorner(city, tile, (CITY_BUILDING_CORNER_TOP_RIGHT + CityMapCameraRotation(city->drawing)) & 3);
 }
-
-static const u8 kGroundCorners[] = {0, 9, 3, 6, 12, 11, 7, 14, 13, 1, 2, 4, 8, 15, 15, 0};
 
 CityMapGround CityMapUnderworldGround(const City *city, TileIndex tile) {
   CityTileGeometry geometry = ReadCityMapViewGeometry(city, tile);
@@ -165,7 +161,7 @@ static CityMapUnderworldPatch MakeCityMapUnderworldPatch(CityMapGround ground) {
   CityMapUnderworldPatch patch = {.elevation = ground.elevation, .shape = ground.shape};
   // Drawing, picking and selection describe this tile's stored corners.
   int heights[4];
-  for (int corner = 0; corner < 4; ++corner) heights[corner] = (kGroundCorners[ground.shape] >> corner) & 1;
+  for (int corner = 0; corner < 4; ++corner) heights[corner] = (kTerrainRaisedCorners[ground.shape] >> corner) & 1;
   patch.coefficient[0][0] = heights[0];
   patch.coefficient[1][0] = heights[3] - heights[0];
   patch.coefficient[0][1] = heights[1] - heights[0];
@@ -197,7 +193,7 @@ static bool UnderworldContainsPoint(const City *city, TileIndex tile, CityMapCam
 }
 
 static void CityMapCameraTileCorners(const City *city, TileIndex tile, CityMapCamera camera, int points[8]) {
-  const Drawing *drawing = city->game->drawing;
+  const Drawing *drawing = city->drawing;
   CityPoint point = CityMapCameraPoint(city, camera.rotation, MapTileX(city, tile), MapTileY(city, tile));
   int zoom = camera.zoom;
   int x = point.x, y = point.y, scale = 1 << zoom;
@@ -226,7 +222,7 @@ static void CityMapCameraTileCorners(const City *city, TileIndex tile, CityMapCa
     shape = surface.shape;
     elevation += surface.raised;
   }
-  int raised = kGroundCorners[shape];
+  int raised = kTerrainRaisedCorners[shape];
   int left = camera.origin_x + 4 * scale * (y - x);
   int bottom = camera.origin_y + 2 * scale * (y + x) - CityMapHeightStep(zoom) * elevation;
   const int corners[8] = {left + 4 * scale, bottom - 4 * scale,
@@ -238,7 +234,7 @@ static void CityMapCameraTileCorners(const City *city, TileIndex tile, CityMapCa
 }
 
 void CityMapTileCorners(const City *city, TileIndex tile, int zoom, int points[8]) {
-  const Drawing *drawing = city->game->drawing;
+  const Drawing *drawing = city->drawing;
   CityMapCamera camera = {drawing->map_state.origin_x, drawing->map_state.origin_y, zoom,
       0, 0, CityMapCameraRotation(drawing)};
   CityMapCameraTileCorners(city, tile, camera, points);
@@ -246,67 +242,18 @@ void CityMapTileCorners(const City *city, TileIndex tile, int zoom, int points[8
 
 // Elevation used when converting screen diagonals to a map tile.
 int CityMapTileElevation(const City *city, int x, int y) {
-  const Drawing *drawing = city->game->drawing;
+  const Drawing *drawing = city->drawing;
   TileIndex tile = MapTileXYOrInvalid(city, x, y);
   if (tile == INVALID_TILE) return 0;
   if (drawing->map_state.events_suppressed)
-    return CityMapUnderworldSurface(city, tile).elevation;
+    return CityMapUnderworldGround(city, tile).elevation;
   CityTileGeometry geometry = ReadCityMapViewGeometry(city, tile);
   return IntMax(geometry.land_height, geometry.water_height);
 }
 
-static CityPoint PickCityMapDiagonalPoint(City *city, int diagonal_x, int diagonal_y, int zoom,
-    bool legacy, int rotation) {
-  int step = 4 << zoom, elevation_step = CityMapHeightStep(zoom);
-  int diagonal[] = {diagonal_x, diagonal_y};
-  int coordinate[] = {diagonal_x / step, diagonal_y / step};
-  int edge[] = {step * coordinate[0], step * coordinate[1]};
-  CityPoint camera_size = CityMapCameraSize(city, rotation);
-  int size[] = {legacy ? CITY_MAP_SIZE : camera_size.x, legacy ? CITY_MAP_SIZE : camera_size.y};
-  int limit = legacy ? CITY_MAP_SIZE : CITY_ALTITUDE_LAND_MASK * elevation_step / step + 2;
-  int first_axis = diagonal_x >= diagonal_y ? 0 : 1;
-  CityPoint chosen = {coordinate[0], coordinate[1]};
-  for (int count = 0; count < limit; ++count) {
-    for (int turn = 0; turn < 2; ++turn) {
-      int axis = first_axis ^ turn;
-      edge[axis] += step;
-      if (++coordinate[axis] >= size[axis]) return chosen;
-      CityPoint world = CityMapWorldPoint(city, rotation, coordinate[0], coordinate[1]);
-      if (edge[axis] - elevation_step * CityMapTileElevation(city, world.x, world.y) < diagonal[axis])
-        chosen = (CityPoint){coordinate[0], coordinate[1]};
-    }
-  }
-  return chosen;
-}
-
-static int CityMapDiagonalToLegacyTile(City *city, int diagonal_x, int diagonal_y, int zoom) {
-  CityPoint point = PickCityMapDiagonalPoint(city, diagonal_x, diagonal_y, zoom, true, 0);
-  return point.y + 256 * point.x;
-}
-
-// Inverse projection for small map tiles.
-int CityMapDiagonalToTileSmall(City *city, int diagonal_x, int diagonal_y) {
-  return CityMapDiagonalToLegacyTile(city, diagonal_x, diagonal_y, 0);
-}
-
-// Inverse projection for medium map tiles.
-int CityMapDiagonalToTileMedium(City *city, int diagonal_x, int diagonal_y) {
-  return CityMapDiagonalToLegacyTile(city, diagonal_x, diagonal_y, 1);
-}
-
-// Inverse projection for large map tiles.
-int CityMapDiagonalToTileLarge(City *city, int diagonal_x, int diagonal_y) {
-  return CityMapDiagonalToLegacyTile(city, diagonal_x, diagonal_y, 2);
-}
-
-TileIndex PickCityMapCameraDiagonalTile(City *city, int rotation, int diagonal_x, int diagonal_y, int zoom) {
-  CityPoint point = PickCityMapDiagonalPoint(city, diagonal_x, diagonal_y, zoom, false, rotation);
-  return CityMapCameraTile(city, rotation, point.x, point.y);
-}
-
 static TileIndex PickCityMapSurface(const City *city, CityMapCamera camera,
     int scaled_x, int scaled_y, bool point) {
-  const Drawing *drawing = city->game->drawing;
+  const Drawing *drawing = city->drawing;
   // A ray can cross at most the supported elevation range. Test projected
   // surfaces in painter order, independent of total map dimensions.
   int unit = 1 << camera.zoom;
@@ -322,11 +269,15 @@ static TileIndex PickCityMapSurface(const City *city, CityMapCamera camera,
     for (int ty = center_y - 1; ty <= center_y + 1; ++ty)
       for (int tx = center_x - 1; tx <= center_x + 1; ++tx) {
         TileIndex tile = CityMapCameraTile(city, camera.rotation, tx, ty);
-        if (tile == INVALID_TILE || (!point && (tx + ty < best_diagonal ||
-            (tx + ty == best_diagonal && ty <= best_y)))) continue;
+        if (tile == INVALID_TILE) continue;
+        int diagonal = tx + ty;
+        bool in_front = diagonal > best_diagonal || (diagonal == best_diagonal && ty > best_y);
+        if (!point && !in_front) continue;
         if (drawing->map_state.events_suppressed) {
           if (UnderworldContainsPoint(city, tile, camera, scaled_x, scaled_y)) {
-            best = tile; best_diagonal = tx + ty; best_y = ty;
+            best = tile;
+            best_diagonal = diagonal;
+            best_y = ty;
           }
           continue;
         }
@@ -335,9 +286,11 @@ static TileIndex PickCityMapSurface(const City *city, CityMapCamera camera,
         if (point) {
           i64 dx = scaled_x - points[0], dy = scaled_y - points[1];
           i64 distance = dx * dx + dy * dy;
-          if (distance < best_distance || (distance == best_distance &&
-              (tx + ty > best_diagonal || (tx + ty == best_diagonal && ty > best_y)))) {
-            best = tile; best_diagonal = tx + ty; best_y = ty; best_distance = distance;
+          if (distance < best_distance || (distance == best_distance && in_front)) {
+            best = tile;
+            best_diagonal = diagonal;
+            best_y = ty;
+            best_distance = distance;
           }
           continue;
         }
@@ -347,7 +300,11 @@ static TileIndex PickCityMapSurface(const City *city, CityMapCamera camera,
               (i64)(points[2 * next + 1] - points[2 * corner + 1]) * (scaled_x - points[2 * corner]);
           positive |= cross > 0; negative |= cross < 0;
         }
-        if (!(positive && negative)) { best = tile; best_diagonal = tx + ty; best_y = ty; }
+        if (!(positive && negative)) {
+          best = tile;
+          best_diagonal = diagonal;
+          best_y = ty;
+        }
       }
   }
   return best;
@@ -357,7 +314,7 @@ static TileIndex PickCityMapSurface(const City *city, CityMapCamera camera,
 // while layer visibility and underground mode remain read-only Drawing options.
 static TileIndex PickCityMapViewSurface(const City *city, const CityMapViewConfig *view,
     int screen_x, int screen_y, bool point) {
-  const Drawing *drawing = city->game->drawing;
+  const Drawing *drawing = city->drawing;
   int scale = drawing->map_pixel_scale * (view->magnified_large_zoom ? 2 : 1);
   int x = screen_x * drawing->map_pixel_scale - drawing->scroll_pixels.x;
   int y = screen_y * drawing->map_pixel_scale - drawing->scroll_pixels.y;
@@ -368,29 +325,23 @@ static TileIndex PickCityMapViewSurface(const City *city, const CityMapViewConfi
   return PickCityMapSurface(city, camera, scaled_x, scaled_y, point);
 }
 
-TileIndex PickCityMapTile(City *city, const CityMapViewConfig *view, int screen_x, int screen_y) {
+TileIndex PickCityMapTile(const City *city, const CityMapViewConfig *view, int screen_x, int screen_y) {
   return PickCityMapViewSurface(city, view, screen_x, screen_y, false);
 }
 
 // Point tools snap to the closest projected marker anchor, including elevation and camera rotation.
 // The bounded ray search is independent of map dimensions and shares projection with the marker renderer.
-TileIndex PickCityMapTerrainPoint(City *city, const CityMapViewConfig *view, int screen_x, int screen_y) {
+TileIndex PickCityMapTerrainPoint(const City *city, const CityMapViewConfig *view, int screen_x, int screen_y) {
   return PickCityMapViewSurface(city, view, screen_x, screen_y, true);
 }
 
 int ReadCityMapTerrainPointHeight(const City *city, TileIndex tile) {
   CityTileGeometry geometry = ReadCityMapViewGeometry(city, tile);
-  return geometry.land_height + (kGroundCorners[geometry.land_shape] & 1);
-}
-
-// Stock byte-packed result for original callers that have not migrated.
-int CityMapScreenToTile(City *city, const CityMapViewConfig *view, int screen_x, int screen_y) {
-  TileIndex tile = PickCityMapTile(city, view, screen_x, screen_y);
-  return IsMapTileValid(city, tile) ? (MapTileX(city, tile) << 8) | MapTileY(city, tile) : -1;
+  return geometry.land_height + (kTerrainRaisedCorners[geometry.land_shape] & 1);
 }
 
 CityPoint CityMapTileToScreen(const City *city, const CityMapViewConfig *view, CityPoint world) {
-  const Drawing *drawing = city->game->drawing;
+  const Drawing *drawing = city->drawing;
   TileIndex tile = MapTileXY(city, world.x, world.y);
   CityPoint point = CityMapCameraPoint(city, CityMapViewRotation(view), world.x, world.y);
   int delta = point.y - point.x;
@@ -398,15 +349,10 @@ CityPoint CityMapTileToScreen(const City *city, const CityMapViewConfig *view, C
   int elevation = ReadCityLandHeight(&city->tile[tile]);
   int offset_y = sum;
 
-  if (view->zoom == CITY_MAP_ZOOM_SMALL) {
-    delta = delta * 4;
-    offset_y = 2 * sum - CityMapHeightStep(0) * elevation;
-  } else if (view->zoom == CITY_MAP_ZOOM_MEDIUM) {
-    delta = delta * 8;
-    offset_y = 4 * sum - CityMapHeightStep(1) * elevation;
-  } else if (view->zoom == CITY_MAP_ZOOM_LARGE) {
-    delta = delta * 16;
-    offset_y = 8 * sum - CityMapHeightStep(2) * elevation;
+  if (view->zoom <= CITY_MAP_ZOOM_LARGE) {
+    int scale = 1 << view->zoom;
+    delta *= 4 * scale;
+    offset_y = 2 * scale * sum - CityMapHeightStep(view->zoom) * elevation;
   }
 
   int result_x = drawing->map_state.origin_x + delta;
@@ -420,13 +366,13 @@ CityPoint CityMapTileToScreen(const City *city, const CityMapViewConfig *view, C
 
 // Camera points are logical pixels, with no canvas scaling or fractional scroll.
 // The supplied camera is independent of Drawing's active view and is never installed there.
-TileIndex PickCityMapCameraPoint(City *city, CityMapCamera camera, CityPoint point) {
+TileIndex PickCityMapCameraPoint(const City *city, CityMapCamera camera, CityPoint point) {
   return PickCityMapSurface(city, camera, point.x, point.y, false);
 }
 
 // Transfer the same world point, including the offset inside its terrain tile,
 // between cameras. Quarter turns require only integer coordinate arithmetic.
-CityPoint TransferCityMapCameraCenter(City *city, CityMapCamera source, CityMapCamera target) {
+CityPoint TransferCityMapCameraCenter(const City *city, CityMapCamera source, CityMapCamera target) {
   CityPoint source_center = {source.width / 2, source.height / 2};
   CityPoint target_center = {target.width / 2, target.height / 2};
   if (source.rotation == target.rotation) {

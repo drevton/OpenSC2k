@@ -1,12 +1,15 @@
 #ifndef SC2K_UI_WINDOWS_H
 #define SC2K_UI_WINDOWS_H
 
-#include "drawing/canvas.h"
-#include "ui/windows/state.h"
+#include "drawing/types.h"
+#include "ui/windows/types.h"
+#include "ui/windows/controls.h"
 
 // UI owns the window stack, focus and dirty regions. Window pointers are borrowed until the stack changes;
 // retain IDs across callbacks or operations that open, close or focus windows.
 
+typedef struct Game Game;
+typedef struct CityInterfaceState CityInterfaceState;
 typedef struct CanvasSDLEvent CanvasSDLEvent;
 
 typedef enum WindowEventKind {
@@ -29,7 +32,9 @@ typedef struct WindowEvent {
   };
 } WindowEvent;
 
-// Window pointers are borrowed until the next callback that can change the stack.
+// Procedures run first. Unhandled input reaches common chrome handling after a fresh lookup by ID;
+// a window closed by its procedure consumes that input. Other unhandled event kinds return false.
+// Borrowed window pointers must be reacquired after delivery, which may change the stack.
 bool SendWindowEvent(Game *game, const Window *window, const WindowEvent *event);
 bool DispatchCityWindowInput(Game *game, const CanvasSDLEvent *input);
 Window *FindCityWindowAtPixels(CityCanvasDesktop *desktop, int x, int y);
@@ -42,24 +47,15 @@ typedef enum CityCaptionControl {
 CityRect CityCaptionControlBounds(const Window *window, CityCaptionControl control);
 CityCaptionControl CityCaptionControlAt(const Window *window, int x, int y);
 
-// A logical coordinate view backed by the final framebuffer. The callback must
-// use canvas drawing functions; stride and pixel storage remain physical.
-typedef void (*CityCanvasScaledPaint)(Canvas *canvas, void *context);
-void Sc2kCanvasPaintScaled(Canvas *framebuffer, i32 numerator, i32 denominator,
-    CityCanvasScaledPaint paint, void *context);
-
-// Rounding logical coordinates to cover physical pixels follows the desktop scale.
-i32 CanvasScaleFloor(i32 value, i32 numerator, i32 denominator);
-i32 CanvasScaleCeil(i32 value, i32 numerator, i32 denominator);
-CityRect CanvasScaleCover(CityRect b, i32 numerator, i32 denominator);
-
 // Physical window origins are independent of scaled logical widget geometry.
 void Sc2kCanvasDesktopPixelMetrics(CityCanvasDesktop *desktop, i32 scale, i32 map_scale,
     i32 width, i32 height);
 CityRect Sc2kCanvasDesktopPixelBounds(const CityCanvasDesktop *desktop, u32 id);
 void PositionCityWindowPixels(CityCanvasDesktop *desktop, u32 id, CityPoint position);
-void Sc2kCanvasDesktopPixelPointer(const CityCanvasDesktop *desktop, u32 capture,
-    i32 x, i32 y, i32 *logical_x, i32 *logical_y);
+// Convert framebuffer pixels to logical desktop coordinates using the window's physical anchor.
+// ID 0 chooses the topmost visible window under the point. A missing window uses the desktop scale;
+// before pixel metrics are installed the point is unchanged. This query never changes capture or focus.
+CityPoint CityWindowPointFromPixels(const CityCanvasDesktop *desktop, u32 window_id, int x, int y);
 // Focus the visible physical hit without highlighting; an existing drag stays attached to its window.
 u32 Sc2kCanvasDesktopFocusPixels(CityCanvasDesktop *desktop, i32 x, i32 y);
 void Sc2kCanvasDesktopBeginPixelDrag(CityCanvasDesktop *desktop, i32 x, i32 y);
@@ -69,8 +65,6 @@ void Sc2kCanvasSetUIScale(CityCanvasDesktop *desktop, i32 numerator, i32 denomin
 void Sc2kCanvasSetMapZoom(CityCanvasDesktop *desktop, int level);
 CityRect Sc2kCanvasUIBounds(const CityCanvasDesktop *desktop, CityRect bounds);
 void Sc2kCanvasSetWindowSnapRadius(CityCanvasDesktop *desktop, i32 radius);
-void DrawCityDesktopMap(Game *game, const CityCanvasDesktop *desktop, Canvas *canvas,
-    const u8 *map_indices, i32 map_stride, const u32 *palette);
 void DrawCityDesktopFramebuffer(Game *game, const CityCanvasDesktop *desktop, Canvas *framebuffer,
     const u8 *map_indices, i32 map_stride, const u32 *palette, i32 map_scale, i32 ui_scale);
 // Translate logical damage to framebuffer pixels, respecting explicit window anchors.
@@ -78,7 +72,13 @@ CityRect CityCanvasDirtyPixelBounds(const CityCanvasDesktop *desktop, CityRect l
 // Paint with a window-local canvas; return button-probe bounds in logical desktop coordinates.
 void DrawCityCanvasWindow(Game *game, Canvas *canvas, const Window *window);
 void DrawCityDesktopUI(Game *game, const CityCanvasDesktop *desktop, Canvas *canvas);
-bool Sc2kCanvasClickWindow(Window *window, i32 x, i32 y);
+// Composite UI damage over the already painted map, then remember the painted preview bounds.
+// The prepared framebuffer and main view are required. Consume desktop/placement dirty state after painting;
+// keep final pixel damage for upload and F8. Game owns frame timing and presentation.
+void ComposeCityDesktopFrame(City *city);
+// With no active map, paint the startup backdrop and UI damage into the prepared framebuffer.
+// Discard retained main-map/preview pixels and consume dirty state; do not prepare or present the display.
+void ComposeCityStartupFrame(City *city);
 // Logical paint bounds include the window border and any unshaded content.
 CityRect CanvasWindowPaintRect(const Window *window);
 // Window damage uses physical pixels; id 0 names the main map. Other ids use window-local pixels.
@@ -94,10 +94,23 @@ bool PollCityButtonFeedback(Game *game, double now);
 void BeginCityButtonRepeat(Game *game, const Window *window, const WindowEvent *event);
 void ResetCityWindowSize(Window *window);
 void Sc2kCanvasDesktopInit(CityCanvasDesktop *desktop);
+// Open or focus a singleton. Allocate required Drawing caches before publishing the new window/ID.
+// Returns its stack index, or -1 without inserting a window when capacity/allocation fails.
+// New insertion adopts owned fields; failure or focusing an existing singleton leaves them with the caller.
+// Picture-bearing windows require a bound Game/Drawing.
 i32 Sc2kCanvasDesktopOpen(CityCanvasDesktop *desktop, Window window);
 // Dismissal detaches before WINDOW_DESTROY; completion callbacks still wait for the outer UI loop.
 bool Sc2kCanvasDesktopDismissTop(CityCanvasDesktop *desktop);
 bool Sc2kCanvasDesktopDismissWindow(CityCanvasDesktop *desktop, u32 window_id);
+// Window state is released before completion runs, outside any command.
+// Attach before any call that can reconcile pauses or run nested UI work. Failure leaves the window unchanged;
+// success retains callback delivery and borrows its context until completion. This API never frees the context.
+bool AttachCityWindowCallback(Window *window, CityWindowCallback *callback, void *context);
+// Drain detached completion batches only outside commands. Window-owned data is already released.
+// Windows resume in dismissal order; callbacks attached to one window resume newest first.
+// Each record is freed before its callback runs; callbacks may open, close or reorder windows.
+void CompleteCityWindowCallbacks(City *city);
+
 // IDs in back-to-front order for one pass. Newly opened windows wait for the next pass.
 // Reacquire each ID before use because callbacks may close or reorder windows.
 typedef struct WindowIds {

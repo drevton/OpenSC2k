@@ -40,26 +40,26 @@ static bool InitializeAssetDecoder(AssetFile *asset) {
   return true;
 }
 
-int OpenAssetFile(AssetFile *asset, const char *path) {
+AssetOpenResult OpenAssetFile(AssetFile *asset, const char *path) {
   *asset = (AssetFile){0};
   asset->file = fopen(path, "rb");
-  if (!asset->file) return errno == ENOENT ? 0 : -1;
+  if (!asset->file) return errno == ENOENT ? ASSET_OPEN_MISSING : ASSET_OPEN_ERROR;
   struct stat status;
   if (fstat(fileno(asset->file), &status) || status.st_size < 0) {
     CloseAssetFile(asset);
-    return -1;
+    return ASSET_OPEN_ERROR;
   }
   asset->length = status.st_size;
   u8 magic[4];
   size_t count = fread(magic, 1, sizeof(magic), asset->file);
   if (ferror(asset->file) || fseek(asset->file, 0, SEEK_SET)) {
     CloseAssetFile(asset);
-    return -1;
+    return ASSET_OPEN_ERROR;
   }
-  if (count != sizeof(magic) || memcmp(magic, "\x28\xb5\x2f\xfd", sizeof(magic))) return 1;
-  if (InitializeAssetDecoder(asset)) return 1;
+  if (count != sizeof(magic) || memcmp(magic, "\x28\xb5\x2f\xfd", sizeof(magic))) return ASSET_OPEN_OK;
+  if (InitializeAssetDecoder(asset)) return ASSET_OPEN_OK;
   CloseAssetFile(asset);
-  return -1;
+  return ASSET_OPEN_ERROR;
 }
 
 static size_t DecodeAssetBytes(AssetFile *asset, void *destination, size_t size) {
@@ -140,6 +140,19 @@ int ReadAssetByte(AssetFile *asset) {
 
 u8 *ReadAllAssetFile(AssetFile *asset, size_t limit, size_t *size) {
   *size = 0;
+  // Raw files and borrowed spans have a known remaining length; allocate their result once.
+  if (!asset->decoder && asset->length > asset->position) {
+    u64 remaining = asset->length - asset->position;
+    if (remaining > limit) return NULL;
+    u8 *data = malloc(remaining);
+    if (!data) return NULL;
+    if (ReadAssetFile(asset, data, remaining) != remaining || ReadAssetByte(asset) != EOF || asset->failed) {
+      free(data);
+      return NULL;
+    }
+    *size = remaining;
+    return data;
+  }
   size_t capacity = limit < kAssetOutputBytes ? limit : kAssetOutputBytes;
   u8 *data = malloc(capacity);
   if (!data) return NULL;
@@ -147,7 +160,13 @@ u8 *ReadAllAssetFile(AssetFile *asset, size_t limit, size_t *size) {
     *size += ReadAssetFile(asset, data + *size, capacity - *size);
     if (asset->failed) break;
     if (*size < capacity || capacity == limit) {
-      if (ReadAssetByte(asset) == EOF && !asset->failed) return data;
+      if (ReadAssetByte(asset) == EOF && !asset->failed) {
+        if (*size) {
+          u8 *compact = realloc(data, *size);
+          if (compact) data = compact;
+        }
+        return data;
+      }
       break;
     }
     capacity = capacity > limit / 2 ? limit : capacity * 2;
@@ -160,9 +179,9 @@ u8 *ReadAllAssetFile(AssetFile *asset, size_t limit, size_t *size) {
   return NULL;
 }
 
-int OpenAssetSpan(AssetFile *asset, ByteSpan span) {
+AssetOpenResult OpenAssetSpan(AssetFile *asset, ByteSpan span) {
   *asset = (AssetFile){.memory = span.data, .length = span.size};
-  return span.data ? 1 : 0;
+  return span.data ? ASSET_OPEN_OK : ASSET_OPEN_MISSING;
 }
 
 bool SeekAssetFile(AssetFile *asset, u64 position) {

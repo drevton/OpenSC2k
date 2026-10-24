@@ -5,6 +5,7 @@
 #include "city/disasters/types.h"
 #include "city/maps/tile_storage.h"
 #include "city/maps/layers.h"
+#include "city/maps/tables.h"
 #include "game/audio.h"
 #include "city/presentation.h"
 #include <assert.h>
@@ -828,7 +829,7 @@ bool ApplyCityAirCrashDisaster(City *city) {
   int y;
   int x;
   int probes = 0;
-  bool bounded = (city->fixes & (1 << CITY_FIX_BOUNDED_DISASTER_SEARCH)) != 0;
+  bool bounded = (city->fixes & (1ull << CITY_FIX_BOUNDED_DISASTER_SEARCH)) != 0;
   do {
     y = NextCityMapRandomModulo(city, city->map_height / 2) + city->map_height / 4;
     x = NextCityMapRandomModulo(city, city->map_width / 2) + city->map_width / 4;

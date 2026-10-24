@@ -110,7 +110,8 @@ static CityInfrastructureSpan FindNativeWaterSpan(const City *city, TileIndex or
 bool IsCityInfrastructureSpanWater(const City *city, TileIndex tile) {
   assert(IsMapTileValid(city, tile));
   return HasTileWater(&city->tile[tile]) &&
-      ((city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)) || ReadLegacyTerrainCode(city, tile) < CITY_TERRAIN_BANK_END);
+      ((city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) ||
+          ReadLegacyTerrainCode(city, tile) < CITY_TERRAIN_BANK_END);
 }
 
 // Find a supported crossing from a candidate tile and direction, optionally choosing an admitted direction. Invalid
@@ -125,7 +126,7 @@ CityInfrastructureSpan FindCityInfrastructureSpan(const City *city, TileIndex or
   static const u8 kAllowedDirections[16] = {CONN_NONE, CONN_SOUTH, CONN_EAST,
       CONN_NORTH, CONN_WEST, CONN_SE, CONN_NE, CONN_NW,
       CONN_WS};
-  if ((city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)) &&
+  if ((city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) &&
       HasTileWater(&city->tile[origin_tile])) {
     static const i8 kDirectionPreference[4] = {0, 2, 1, -1};
     for (int candidate = 0; candidate < (choose_direction ? 4 : 1); ++candidate) {
@@ -222,7 +223,7 @@ i64 PlaceInfrastructureSpan(City *city, TileIndex origin_tile, int styles, int c
   }
   bool native_road = choice >= CITY_ROAD_BRIDGE_STYLE_FIRST;
   bool ground_approaches = dry_banks && choice != CITY_SPAN_POWER &&
-      (city->fixes & (1 << CITY_FIX_DRY_BRIDGE_APPROACHES));
+      (city->fixes & (1ull << CITY_FIX_DRY_BRIDGE_APPROACHES));
   u32 cost = (u32)distance * kSpanCostPerCell[choice];
   i64 payment = PayCityCommandCost(city, cost);
   if (payment < 0) return payment;

@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include "ui/input.h"
+#include "ui/state.h"
 
 typedef struct { CityHotkey key; const char *name; } CityNamedKey;
 static const CityNamedKey kNamedKeys[] = {
@@ -48,4 +49,40 @@ CityHotkey CityHotkeyFromString(const char *text) {
   for (size_t i = 0; i < sizeof(kNamedKeys) / sizeof(*kNamedKeys); ++i)
     if (!strcmp(kNamedKeys[i].name, text)) return modifiers | kNamedKeys[i].key;
   return CITY_KEY_NONE;
+}
+
+bool ParseCityKeyBinding(const char *text, CityKeyBinding *binding) {
+  char first[48], second[48], extra;
+  if (sscanf(text, "%47s %47s %c", first, second, &extra) != 2) return false;
+  CityHotkey key = CityHotkeyFromString(first), action = CityHotkeyFromString(second);
+  if (!key || !action || key == CITY_KEY_F12 || key == CITY_KEY_ESCAPE || key == CITY_KEY_CONSOLE) return false;
+  *binding = (CityKeyBinding){key, action};
+  return true;
+}
+
+bool BindCityKey(CityInterfaceState *ui, const char *text) {
+  CityKeyBinding binding;
+  if (!ParseCityKeyBinding(text, &binding)) return false;
+  int index = 0;
+  while (index < ui->console.binding_count && ui->console.bindings[index].key != binding.key) ++index;
+  if (index == CITY_KEY_BINDING_CAPACITY) return false;
+  if (index == ui->console.binding_count) ++ui->console.binding_count;
+  ui->console.bindings[index] = binding;
+  return true;
+}
+
+void UnbindCityKey(CityInterfaceState *ui, CityHotkey key) {
+  for (int i = 0; i < ui->console.binding_count; ++i)
+    if (ui->console.bindings[i].key == key) {
+      memmove(&ui->console.bindings[i], &ui->console.bindings[i + 1],
+          (ui->console.binding_count - i - 1) * sizeof(ui->console.bindings[0]));
+      --ui->console.binding_count;
+      break;
+    }
+}
+
+CityHotkey RemapCityKey(const CityInterfaceState *ui, CityHotkey key) {
+  for (int i = 0; i < ui->console.binding_count; ++i)
+    if (ui->console.bindings[i].key == key) return ui->console.bindings[i].action;
+  return key;
 }

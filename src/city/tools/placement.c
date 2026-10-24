@@ -69,7 +69,7 @@ int GetCityFacilityTile(int group, int variant) {
 
 // Zoning and de-zoning share these rules in quotes, previews and execution.
 // The caller supplies an existing tile; this only inspects its current contents.
-bool CanZoneCityTile(const TileInfo *tp) {
+static bool CanZoneCityTile(const TileInfo *tp) {
   return !HasTileWater(tp) && !IsTileKindTransportOrBuilding(tp->kind) &&
       tp->kind != TK_RADIOACTIVE_WASTE && tp->kind != TK_PARK &&
       ReadTerrainCode(tp) == CITY_TERRAIN_FLAT && ReadCityZoneKind(tp) != ZONE_MILITARY;
@@ -162,7 +162,7 @@ bool CanPlaceCityToolCell(const City *city, TileIndex tile, int group, int varia
   if (group == CITY_TOOL_GROUP_REWARDS && variant == CITY_REWARD_MAYORS_HOUSE &&
       city->statistics.count[TK_MAYORS_HOUSE]) return false;
   if (IsTileKindTransportOrBuilding(kind) || kind == TK_RADIOACTIVE_WASTE || kind == TK_PARK ||
-      (military && !(city->fixes & (1 << CITY_FIX_MILITARY_GROWTH))))
+      (military && !(city->fixes & (1ull << CITY_FIX_MILITARY_GROWTH))))
     return false;
   return (marina && water) || (!water && terrain == CITY_TERRAIN_FLAT);
 }
@@ -222,7 +222,7 @@ i64 CalculateCityZoneCost(const City *city, TileIndex start, TileIndex end, int 
 
 // Check whether any tile in a resolved inclusive rectangle already has the requested zone. Invalid endpoints return
 // false; this query neither applies zoning nor changes construction state.
-bool CityZoneRectangleContainsZone(const City *city, TileIndex start, TileIndex end, int zone) {
+static bool CityZoneRectangleContainsZone(const City *city, TileIndex start, TileIndex end, int zone) {
   if (!IsMapTileValid(city, start) || !IsMapTileValid(city, end)) return false;
   CityRect bounds = MapTileRectangle(city, start, end);
   for (int y = bounds.top; y < bounds.bottom; ++y) {
@@ -242,7 +242,7 @@ const i16 kCityZoneCosts[ZONE_RESERVED_FIRST] = {
 
 // Quote raw zoning work over an inclusive rectangle for an explicit supported ZoneKind.
 // Rejects invalid endpoints or unavailable kinds without consulting treasury or changing City.
-CityCommandCost GetCityZoneRectangleCost(const City *city, TileIndex start, TileIndex end, int zone) {
+static CityCommandCost GetCityZoneRectangleCost(const City *city, TileIndex start, TileIndex end, int zone) {
   CityCommandCost quote = {.error = CITY_COMMAND_COST_INVALID, .error_tile = INVALID_TILE};
   if (!IsMapTileValid(city, start) || !IsMapTileValid(city, end) ||
       zone < 0 || zone >= ZONE_RESERVED_FIRST || kCityZoneCosts[zone] < 0) return quote;
@@ -278,7 +278,7 @@ i64 ApplyPreparedCityZoneRectangle(City *city, TileIndex origin_tile, TileIndex 
 
 // Prepare and commit zoning from resolved endpoints and a domain ZoneKind. Caller admission must validate indices and
 // kind; updates construction state and returns the actual placement/error result.
-i64 PlaceCityZoneRectangleAt(City *city, TileIndex start, TileIndex end, int zone) {
+static i64 PlaceCityZoneRectangleAt(City *city, TileIndex start, TileIndex end, int zone) {
   city->construction.stage = CITY_PLACEMENT_ZONE;
   city->construction.zone_code = zone;
   city->construction.cost = CalculateCityZoneCost(city, start, end, zone, kCityZoneCosts[zone]);

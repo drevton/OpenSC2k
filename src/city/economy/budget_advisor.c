@@ -5,10 +5,9 @@
 #include "city/maps/tile_storage.h"
 #include "city/presentation.h"
 #include "game/audio.h"
-#include "city/economy/economy.h"
+#include "city/economy/history.h"
 #include "city/engine/questions.h"
 #include "game/state.h"
-#include "city/maps/layers.h"
 #include "city/state.h"
 
 // Prepare cursor and music for a due manual annual budget. Retained comparison callers preserve their minimized

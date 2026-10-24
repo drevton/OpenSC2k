@@ -8,14 +8,18 @@
 #include "drawing/raster/canvas_primitives.h"
 #include "drawing/raster/canvas_raster_internal.h"
 #include "drawing/state.h"
-#include "game/errors.h"
+#include "game/state.h"
 #include "ui/map_views.h"
+#include "ui/charts/charts.h"
 #include "ui/dialogs/dialogs.h"
 #include "ui/dialogs/file_browser.h"
 #include "ui/dialogs/game_options.h"
 #include "ui/dialogs/messages.h"
 #include "ui/news/newspaper.h"
+#include "ui/news/newspaper_capture.h"
 #include "ui/state.h"
+#include "ui/startup/startup.h"
+#include "ui/tools/placement.h"
 #include "ui/tools/types.h"
 #include "ui/windows/controls.h"
 #include "ui/windows/tooltips.h"
@@ -143,28 +147,11 @@ void Sc2kCanvasSetUIScale(CityCanvasDesktop *desktop, i32 numerator, i32 denomin
   }
 }
 
-i32 CanvasScaleFloor(i32 value, i32 numerator, i32 denominator) {
-  i64 product = (i64)value * numerator;
-  return (i32)(product / denominator - (product % denominator < 0));
-}
-
-i32 CanvasScaleCeil(i32 value, i32 numerator, i32 denominator) {
-  return -CanvasScaleFloor(-value, numerator, denominator);
-}
-
 CityRect Sc2kCanvasUIBounds(const CityCanvasDesktop *desktop, CityRect b) {
   return (CityRect){CanvasScaleFloor(b.left, desktop->ui_scale_numerator, desktop->ui_scale_denominator),
                     CanvasScaleFloor(b.top, desktop->ui_scale_numerator, desktop->ui_scale_denominator),
                     CanvasScaleCeil(b.right, desktop->ui_scale_numerator, desktop->ui_scale_denominator),
                     CanvasScaleCeil(b.bottom, desktop->ui_scale_numerator, desktop->ui_scale_denominator)};
-}
-
-// Only fully covered map pixels are excluded; fractional UI edges need map pixels beneath.
-CityRect CanvasScaleCover(CityRect b, i32 numerator, i32 denominator) {
-  return (CityRect){CanvasScaleCeil(b.left, numerator, denominator),
-                    CanvasScaleCeil(b.top, numerator, denominator),
-                    CanvasScaleFloor(b.right, numerator, denominator),
-                    CanvasScaleFloor(b.bottom, numerator, denominator)};
 }
 
 // Split around opaque windows before dispatching paints, including the map behind them.
@@ -178,8 +165,8 @@ static void CanvasVisitVisibleScaled(const CityCanvasDesktop *desktop, CityRect 
     CityRect cover = CityMenuBounds(desktop, overlay);
     if (desktop->pixel_state.scale) {
       cover = CityMenuPixelBounds(desktop, overlay);
-      cover = CanvasScaleCover(cover, 1, desktop->pixel_state.map_scale);
-    } else cover = CanvasScaleCover(cover, numerator, denominator);
+      cover = CanvasScaleInnerRect(cover, 1, desktop->pixel_state.map_scale);
+    } else cover = CanvasScaleInnerRect(cover, numerator, denominator);
     CityRect overlap = IntersectCityRects(area, cover);
     if (overlap.left >= overlap.right || overlap.top >= overlap.bottom) continue;
     CityRect pieces[4];
@@ -195,7 +182,7 @@ static void CanvasVisitVisibleScaled(const CityCanvasDesktop *desktop, CityRect 
     if (CityNewspaperOpening(window)) continue;
     CityRect cover = desktop->pixel_state.scale != 0 ?
         CanvasPixelMapCover(desktop, window->window_id, window->bounds) :
-        CanvasScaleCover(window->bounds, numerator, denominator);
+        CanvasScaleInnerRect(window->bounds, numerator, denominator);
     CityRect overlap = IntersectCityRects(area, cover);
     if (overlap.left >= overlap.right || overlap.top >= overlap.bottom)
       continue;
@@ -373,6 +360,50 @@ void Sc2kCanvasDesktopInit(CityCanvasDesktop *desktop) {
   desktop->tooltip = (CityTooltip){0};
 }
 
+i32 Sc2kCanvasDesktopOpen(CityCanvasDesktop *desktop, Window window) {
+  const CityWindowTraits *traits = ReadCityWindowTraits(window.kind);
+  // Persistent panels have one instance. Command prompts and startup dialogs retain
+  // separate callers, and additional map viewports are deliberately independent windows.
+  if (traits->flags & CITY_WINDOW_SINGLETON) {
+    int existing = FocusCityCanvasWindowKind(desktop, window.kind);
+    if (existing >= 0) return existing;
+  }
+  if (desktop->count == CITY_CANVAS_WINDOW_CAPACITY)
+    return -1;
+  if (!window.procedure) window.procedure = traits->procedure;
+  if (window.portrait || (desktop->game && traits->picture_images)) {
+    int images = IntMax(1, traits->picture_images);
+    window.picture_drawing = (CitySpriteDrawing *)CreateCityWindowDrawing(desktop->game->drawing,
+        CITY_WINDOW_DRAWING_SPRITE, images);
+    if (!window.picture_drawing) return -1;
+  }
+  window.visible = 1;
+  window.window_id = ++desktop->next_window_id;
+  window.update_categories |= traits->update_categories;
+  desktop->information_updates |= window.update_categories;
+  i32 index = desktop->count;
+  // Windows without keyboard focus join the bottom without disturbing an existing editor.
+  if (traits->flags & CITY_WINDOW_NO_KEYBOARD) {
+    index = 0;
+    for (i32 next = desktop->count; next > 0; --next)
+      desktop->windows[next] = desktop->windows[next - 1];
+    if (desktop->dragging >= 0) ++desktop->dragging;
+  }
+  desktop->windows[index] = window;
+  ++desktop->count;
+  Sc2kDirtyMarkRect(&desktop->dirty, CanvasWindowPaintRect(&window));
+  return index;
+}
+
+bool AttachCityWindowCallback(Window *window, CityWindowCallback *callback, void *context) {
+  if (!callback) return false;
+  CityWindowCompletion *completion = malloc(sizeof(*completion));
+  if (!completion) return false;
+  *completion = (CityWindowCompletion){window->completion, callback, context};
+  window->completion = completion;
+  return true;
+}
+
 // The record has left the stack. Its owned data stays alive through WINDOW_DESTROY.
 static void ReleaseClosedCityWindow(CityCanvasDesktop *desktop, Window *window) {
   if (desktop->game && desktop->interface->button_feedback.window_id == window->window_id)
@@ -405,6 +436,30 @@ static void ReleaseClosedCityWindow(CityCanvasDesktop *desktop, Window *window) 
     CityInterfaceState *ui = desktop->interface;
     window->advisor_question->next = ui->closed_advisor_questions;
     ui->closed_advisor_questions = window->advisor_question;
+  }
+}
+
+void CompleteCityWindowCallbacks(City *city) {
+  if (city->game->command_depth) return;
+  CityInterfaceState *ui = city->game->ui;
+  while (ui->closed_windows) {
+    CityWindowCompletion *closed = ui->closed_windows, *pending = NULL;
+    ui->closed_windows = NULL;
+    // Resume in dismissal order, including windows closed together by replacement.
+    while (closed) {
+      CityWindowCompletion *next = closed->next;
+      closed->next = pending;
+      pending = closed;
+      closed = next;
+    }
+    while (pending) {
+      CityWindowCompletion *next = pending->next;
+      CityWindowCallback *callback = pending->callback;
+      void *context = pending->context;
+      free(pending);
+      callback(city, context);
+      pending = next;
+    }
   }
 }
 
@@ -680,7 +735,7 @@ void DrawCityDesktop(Game *game, CityCanvasDesktop *desktop, Canvas *canvas,
   Sc2kDirtyClear(&desktop->dirty);
 }
 
-void DrawCityDesktopMap(Game *game, const CityCanvasDesktop *desktop, Canvas *canvas,
+static void DrawCityDesktopMap(Game *game, const CityCanvasDesktop *desktop, Canvas *canvas,
     const u8 *map_indices, i32 map_stride, const u32 *palette) {
   CityRect clip = canvas->clip;
   CityCanvasPaintContext paint = {canvas, map_indices, map_stride, palette, NULL, desktop, game};
@@ -746,20 +801,6 @@ void DrawCityDesktopUI(Game *game, const CityCanvasDesktop *desktop, Canvas *can
   DrawCityTooltip(desktop, canvas);
 }
 
-void Sc2kCanvasPaintScaled(Canvas *framebuffer, i32 numerator, i32 denominator,
-    CityCanvasScaledPaint paint, void *context) {
-  if (!framebuffer || !framebuffer->pixels || !paint || numerator < 1 || numerator > 1600 ||
-      denominator < 1 || denominator > 1600 || framebuffer->width < 1 || framebuffer->height < 1)
-    return;
-  Canvas logical = *framebuffer;
-  logical.raster = (CanvasRaster){framebuffer->pixels, numerator, denominator, 0, 0,
-      framebuffer->width, framebuffer->height, framebuffer->clip, 0, 0};
-  logical.width = (i32)(((i64)framebuffer->width * denominator + numerator - 1) / numerator);
-  logical.height = (i32)(((i64)framebuffer->height * denominator + numerator - 1) / numerator);
-  logical.clip = (CityRect){0, 0, logical.width, logical.height};
-  paint(&logical, context);
-}
-
 static void CanvasFramebufferMap(Canvas *canvas, void *context) {
   CanvasFramebufferPaint *paint = context;
   DrawCityDesktopMap(paint->game, paint->desktop, canvas, paint->indices, paint->stride, paint->palette);
@@ -773,6 +814,79 @@ static void CanvasFramebufferWindows(Canvas *canvas, void *context) {
 void DrawCityDesktopFramebuffer(Game *game, const CityCanvasDesktop *desktop, Canvas *framebuffer,
     const u8 *map_indices, i32 map_stride, const u32 *palette, i32 map_scale, i32 ui_scale) {
   CanvasFramebufferPaint paint = {desktop, map_indices, map_stride, palette, game};
-  Sc2kCanvasPaintScaled(framebuffer, map_scale, 1, CanvasFramebufferMap, &paint);
-  Sc2kCanvasPaintScaled(framebuffer, ui_scale, 100, CanvasFramebufferWindows, &paint);
+  PaintScaledCanvas(framebuffer, map_scale, 1, CanvasFramebufferMap, &paint);
+  PaintScaledCanvas(framebuffer, ui_scale, 100, CanvasFramebufferWindows, &paint);
+}
+
+static void PaintWindowsScaled(Canvas *canvas, void *context) {
+  City *city = context;
+  DrawCityDesktopUI(city->game, &city->game->ui->desktop, canvas);
+}
+
+static void CompositeCityScreenDamage(CityRect rect, void *context) {
+  City *city = context;
+  Drawing *drawing = city->drawing;
+  drawing->framebuffer.clip = rect;
+  MarkScreenDirty(&drawing->upload_damage, rect);
+  PaintScaledCanvas(&drawing->framebuffer, drawing->options.scale, 100, PaintWindowsScaled, city);
+  drawing->framebuffer.clip = (CityRect){0, 0, drawing->framebuffer.width, drawing->framebuffer.height};
+}
+
+static void PaintInactiveCityScreen(CityRect rect, void *context) {
+  City *city = context;
+  Drawing *drawing = city->drawing;
+  Canvas canvas = drawing->framebuffer;
+  canvas.clip = rect;
+  DrawCityStartupBackdrop(city->game, &canvas, rect);
+  CompositeCityScreenDamage(rect, context);
+}
+
+static void FinishCityDesktopPaint(City *city) {
+  Drawing *drawing = city->drawing;
+  CityInterfaceState *ui = city->game->ui;
+  if (drawing->show_redraw_rects) drawing->world_damage = drawing->screen_damage;
+  else ClearScreenDamage(&drawing->world_damage);
+  ClearScreenDamage(&drawing->screen_damage);
+  Sc2kDirtyClear(&ui->desktop.dirty);
+  Sc2kDirtyClear(&ui->desktop.window_damage);
+  ui->placement_dirty = false;
+}
+
+void ComposeCityStartupFrame(City *city) {
+  Drawing *drawing = city->drawing;
+  CityCanvasDesktop *desktop = &city->game->ui->desktop;
+  if (drawing->main_cache.valid)
+    MarkScreenDirty(&drawing->screen_damage, drawing->framebuffer.clip);
+  drawing->main_cache.valid = false;
+  drawing->map_target.canvas.clip = (CityRect){0};
+  drawing->placement_painted_bounds = (CityRect){0};
+  desktop->placement.count = 0;
+  for (int index = 0; index < desktop->dirty.count; ++index) {
+    MarkScreenDirty(&drawing->screen_damage, CityCanvasDirtyPixelBounds(desktop, desktop->dirty.rects[index]));
+  }
+  for (int index = 0; index < desktop->window_damage.count; ++index)
+    MarkScreenDirty(&drawing->screen_damage, desktop->window_damage.rects[index]);
+  VisitScreenDamage(&drawing->screen_damage, PaintInactiveCityScreen, city);
+  FinishCityDesktopPaint(city);
+}
+
+void ComposeCityDesktopFrame(City *city) {
+  Drawing *drawing = city->drawing;
+  CityInterfaceState *ui = city->game->ui;
+  Sc2kCanvasSetMapZoom(&ui->desktop, drawing->default_map_view->zoom +
+      (drawing->default_map_view->magnified_large_zoom != 0));
+  ClearScreenDamage(&drawing->world_damage);
+  for (int index = 0; index < ui->desktop.dirty.count; ++index) {
+    CityRect rect = CityCanvasDirtyPixelBounds(&ui->desktop, ui->desktop.dirty.rects[index]);
+    MarkScreenDirty(&drawing->screen_damage, rect);
+    MarkScreenDirty(&drawing->world_damage, rect);
+  }
+  for (int index = 0; index < ui->desktop.window_damage.count; ++index) {
+    MarkScreenDirty(&drawing->screen_damage, ui->desktop.window_damage.rects[index]);
+    MarkScreenDirty(&drawing->world_damage, ui->desktop.window_damage.rects[index]);
+  }
+  VisitScreenDamage(&drawing->world_damage, CompositeCityScreenDamage, city);
+  drawing->framebuffer.clip = (CityRect){0, 0, drawing->framebuffer.width, drawing->framebuffer.height};
+  drawing->placement_painted_bounds = CityPlacementPixelBounds(city);
+  FinishCityDesktopPaint(city);
 }

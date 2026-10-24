@@ -6,24 +6,25 @@
 #include <SDL.h>
 
 #include "assets/assets.h"
+#include "assets/asset_file.h"
 #include "base/byte_order.h"
 #include "base/file.h"
 #include "base/text.h"
 
-// 1 = loose development override loaded, 0 = absent, -1 = invalid/unreadable.
-static int LoadCityLooseEffect(const char *name, u8 **samples, u32 *bytes) {
+// Return OK for a loaded development override, MISSING for absence, or ERROR for invalid/unreadable input.
+static AssetOpenResult LoadCityLooseEffect(const char *name, u8 **samples, u32 *bytes) {
   const char *directory = SDL_getenv("SC2K_AUDIO_OVERRIDES");
-  if (!directory || !directory[0]) return 0;
+  if (!directory || !directory[0]) return ASSET_OPEN_MISSING;
   char *path = NULL;
   FormatText(&path, "%s/%s", directory, name);
   HostFileInfo info;
   if (!ReadHostFileInfo(path, &info)) {
-    int result = errno == ENOENT ? 0 : -1;
+    AssetOpenResult result = errno == ENOENT ? ASSET_OPEN_MISSING : ASSET_OPEN_ERROR;
     free(path);
     return result;
   }
   SDL_RWops *source = SDL_RWFromFile(path, "rb");
-  if (!source) { free(path); return -1; }
+  if (!source) { free(path); return ASSET_OPEN_ERROR; }
   SDL_AudioSpec format;
   bool valid = SDL_LoadWAV_RW(source, 1, &format, samples, bytes) != NULL;
   valid = valid && format.freq == 44100 && format.format == AUDIO_S16LSB && format.channels == 1 &&
@@ -35,7 +36,7 @@ static int LoadCityLooseEffect(const char *name, u8 **samples, u32 *bytes) {
     *bytes = 0;
   }
   free(path);
-  return valid ? 1 : -1;
+  return valid ? ASSET_OPEN_OK : ASSET_OPEN_ERROR;
 }
 
 // The native pack stores an ID directory and raw little-endian mono PCM.
@@ -44,10 +45,10 @@ static int LoadCityLooseEffect(const char *name, u8 **samples, u32 *bytes) {
 // entries identify roles without their own recording: rejection, tree/zone, query,
 // aircraft crash, helicopter stage (exact role unproved), unknown 526/528,
 // sailboat/zoo and terrain generation. No legacy sample fallback.
-// 1 = loaded, 0 = optional pack/ID absent, -1 = invalid/unreadable.
 enum { kSoundHeaderBytes = 24, kSoundRecordBytes = 80 };
 typedef struct { ByteSpan bytes; u32 count; } CitySoundPack;
 
+// Optional pack absence produces an empty directory. Invalid required or optional packs fail.
 static bool ReadCitySoundPack(CityAssets *assets, u32 asset_id, CitySoundPack *out) {
   ByteSpan pack = GetAsset(assets, asset_id);
   bool required = asset_id == CITY_ASSET_SOUNDS;
@@ -99,9 +100,9 @@ bool LoadCityAudioAssets(CityAssets *assets) {
     if (!source) return false;
     u8 *override = NULL;
     u32 bytes = 0;
-    int result = LoadCityLooseEffect(source, &override, &bytes);
-    if (result < 0) return false;
-    if (result) {
+    AssetOpenResult result = LoadCityLooseEffect(source, &override, &bytes);
+    if (result == ASSET_OPEN_ERROR) return false;
+    if (result == ASSET_OPEN_OK) {
       u8 *data = malloc(bytes);
       if (data) memcpy(data, override, bytes);
       SDL_FreeWAV(override);

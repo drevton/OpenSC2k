@@ -2,6 +2,7 @@
 #include "city/infrastructure/lines.h"
 #include "city/infrastructure/networks.h"
 #include "city/maps/terrain.h"
+#include "city/maps/ground.h"
 #include "city/maps/tile_queue.h"
 #include "city/tools/tools.h"
 #include "city/engine/commands.h"
@@ -353,7 +354,7 @@ i64 CmdRaiseOrStepTerrain(City *city, u32 flags, TileIndex tile,
     return CityCommandPriceResult(GetCityTerrainCost(city, tile, raise, tool, terrain_options));
   }
   ClearGameError(city->game);
-  if (city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)) {
+  if (city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) {
     if (!raise) {
       int height = ReadCityLandHeight(&city->tile[tile]);
       int target = options & CITY_TERRAIN_COMMAND_HEIGHT_MASK;
@@ -383,7 +384,7 @@ i64 CmdLowerTerrainTile(City *city, u32 flags, TileIndex tile,
     return options & CITY_TERRAIN_COMMAND_CHARGE ? quote.cost : 0;
   }
   ClearGameError(city->game);
-  if (city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)) return EditCityTerrainCell(city, tile, false, tool);
+  if (city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) return EditCityTerrainCell(city, tile, false, tool);
   return LowerCityTerrainCell(city, tile, (options & CITY_TERRAIN_COMMAND_CHARGE) != 0, tool);
 }
 
@@ -394,7 +395,7 @@ CityCommandCost GetCityTerrainCost(const City *city, TileIndex tile, bool raise,
   CityCommandCost quote = {.error = CITY_COMMAND_COST_BLOCKED, .error_tile = INVALID_TILE};
   enum { kRadius = 32, kWidth = 2 * kRadius + 1, kCapacity = kWidth * kWidth };
   if (!IsMapTileValid(city, tile) || tool < CITY_DEMOLISH_CLEAR || tool > CITY_DEMOLISH_DEZONE) return quote;
-  if (city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)) {
+  if (city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) {
     TerrainEditPlan plan;
     return PlanNativeTerrainEdit(city, tile, raise, tool, options, -1, false, &plan);
   }
@@ -497,7 +498,7 @@ CityCommandCost GetCityTerrainCost(const City *city, TileIndex tile, bool raise,
 // RECT.top/bottom for this tile envelope. Requires a valid tile and admitted tool; charge selects treasury effects and
 // partial recursive edits retain the original failure behavior.
 i64 LowerCityTerrainCell(City *city, TileIndex tile_index, bool charge, int tool) {
-  if (city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)) {
+  if (city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) {
     if (!charge) return EditCityTerrainCell(city, tile_index, false, tool);
     return DoCityCommand(city, CITY_COMMAND_LOWER_TERRAIN_TILE, 0, tile_index,
         CITY_TERRAIN_COMMAND_CHARGE | tool << CITY_TERRAIN_COMMAND_TOOL_SHIFT,
@@ -538,7 +539,7 @@ i64 LowerCityTerrainCell(City *city, TileIndex tile_index, bool charge, int tool
       WriteTileZoneByte(tp, ReadTileZoneByte(tp) & CITY_ZONE_METADATA_MASK);
     CityRect area = {IntMin(current_y, tile_point.y), IntMin(current_x, tile_point.x), IntMax(current_y, tile_point.y),
         IntMax(current_x, tile_point.x)};
-    if (city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)) {
+    if (city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) {
       // Include every changed cell, also along the origin's row or column.
       bounds = UnionCityRects(bounds, (CityRect){current_y, current_x, current_y + 1, current_x + 1});
     } else if (area.left < area.right && area.top < area.bottom) {
@@ -573,7 +574,7 @@ i64 LowerCityTerrainCell(City *city, TileIndex tile_index, bool charge, int tool
       }
     }
   }
-  if (city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)) {
+  if (city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) {
     for (int refresh_y = bounds.left - 1; refresh_y < bounds.right + 1; ++refresh_y) {
       for (int refresh_x = bounds.top - 1; refresh_x < bounds.bottom + 1; ++refresh_x) {
         TileIndex refreshed = MapTileXYOrInvalid(city, refresh_x, refresh_y);
@@ -689,7 +690,7 @@ i64 RaiseMarkedTerrain(City *city, TileIndex tile) {
 // Validate the recursive raise, apply it and refresh city status.
 i64 RaiseCityTerrainCell(City *city, TileIndex tile_index, int tool) {
   assert(IsMapTileValid(city, tile_index));
-  if (city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE))
+  if (city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE))
     return DoCityCommand(city, CITY_COMMAND_RAISE_TERRAIN_TILE, 0, tile_index, tool,
         city->command_choices.terrain_options, 0);
   if (city->protect_terrain_structures) {

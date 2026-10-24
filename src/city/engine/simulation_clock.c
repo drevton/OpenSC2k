@@ -32,3 +32,17 @@ void SetSimulationFrameTime(City *city, u32 milliseconds) {
   if (city->game != NULL && city->game->clock_advanced != NULL)
     city->game->clock_advanced(city, CITY_CLOCK_EXTERNAL_TIME, milliseconds, before, city->scheduler_frame);
 }
+
+int UpdateCityCalendar(City *city, int tick) {
+  int months = tick / CITY_PHASE_COUNT;
+  int month = months % CITY_MONTH_COUNT;
+  city->clock.month = month;
+  city->clock.quarter = ((month + 1) % CITY_MONTH_COUNT) / 3;
+  city->clock.year = tick / CITY_TICKS_PER_YEAR;
+  return months;
+}
+
+// Each of the simulation's 25 monthly phases is one calendar day.
+int CityDayOfMonth(const City *city) {
+  return 1 + city->clock.tick % CITY_PHASE_COUNT;
+}

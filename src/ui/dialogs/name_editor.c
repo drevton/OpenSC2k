@@ -2,6 +2,7 @@
 #include "ui/windows/window_internal.h"
 #include "ui/dialogs/name_editor.h"
 #include "ui/dialogs/information.h"
+#include "ui/text/text.h"
 
 #include <string.h>
 
@@ -11,10 +12,10 @@
 #include "base/text.h"
 #include "city/economy/facilities.h"
 #include "city/engine/questions.h"
-#include "city/maps/layers.h"
 #include "city/maps/map.h"
 #include "city/presentation.h"
 #include "city/state.h"
+#include "drawing/canvas.h"
 #include "drawing/fonts/fonts.h"
 #include "drawing/raster/canvas_primitives.h"
 #include "game/commands.h"
@@ -183,7 +184,6 @@ void PresentCityLabelEditor(City *city, TileIndex tile, bool facility) {
           ResumeCityFacilityNameQuestion(city, token, false);
           pending->opening = false;
           SetGameError(city->game, SC2K_ERROR_HOST_ALLOCATION_FAILURE);
-          city->game->execution_failed = true;
         } else ApplicationUpdateDialogPause(city);
       } else {
         FinishCityFacilityEditor(city, pending, tile, token, result);
@@ -197,15 +197,15 @@ void PresentCityLabelEditor(City *city, TileIndex tile, bool facility) {
   }
 }
 
-void AnswerCityLabelEditor(City *city, NativeLabelDialog *pending, i32 accept) {
+void AnswerCityLabelEditor(City *city, NativeLabelDialog *pending, bool accept) {
   CityCommand packet = pending->command;
   u32 window_id = pending->window_id;
   char name[CITY_OVERLAY_NAME_BYTES];
   memcpy(name, pending->name, sizeof(name));
   if (pending->continuation || packet.id == CITY_COMMAND_REPLY_TO_QUESTION)
-    packet.parameter2 = accept ? 1 : 2;
+    packet.parameter2 = accept ? CITY_DIALOG_OK : CITY_DIALOG_CANCEL;
   else
-    packet.parameter3 = accept ? 1 : 2;
+    packet.parameter3 = accept ? CITY_DIALOG_OK : CITY_DIALOG_CANCEL;
   if (!pending->continuation) {
     Sc2kCanvasDesktopDismissWindow(&city->game->ui->desktop, window_id);
     if (pending->window_id == window_id) pending->window_id = 0;
@@ -257,13 +257,7 @@ void PresentCityStadiumTeamDialog(City *city, TileIndex tile) {
   }
 }
 
-// Keep the complete game placement caller on its stack while canvas events run.
-void PresentCityStadiumPlacementDialog(City *city, TileIndex tile) {
-  CityCanvasStadiumRequest request = {CITY_CANVAS_STADIUM_DIALOG_REQUEST, tile};
-  RunPausedCityModalDialog(city, &request);
-}
-
-void SelectCityStadiumTeam(City *city, NativeStadiumDialog *pending, Window *window, int team) {
+static void SelectCityStadiumTeam(City *city, NativeStadiumDialog *pending, Window *window, int team) {
   window->stadium_team_selection = team;
   if (pending->command.id == CITY_COMMAND_ASSIGN_STADIUM_TEAM) pending->command.parameter1 = team;
   else pending->command.parameter3 = team;
@@ -296,27 +290,6 @@ void AnswerCityStadiumEditor(City *city, NativeStadiumDialog *pending, bool acce
   if (pending->window_id == window_id) pending->window_id = 0;
   ApplicationUpdateDialogPause(city);
 }
-
-
-bool AnswerCityOverlayNameDialog(City *city, i32 token, i32 answer, const u8 *text, u32 length) {
-  for (i32 index = 0; index < CITY_NAME_EDITOR_CAPACITY; ++index) {
-    NativeLabelDialog *pending = &city->game->ui->label_dialogs[index];
-    if (!pending->continuation || pending->answer || pending->command.parameter1 != token)
-      continue;
-    if (length > CITY_OVERLAY_NAME_MAX_LENGTH)
-      return false;
-    if (length)
-      memmove(pending->name, text, length);
-    pending->name[length] = '\0';
-    pending->answer = answer;
-    Sc2kCanvasDesktopDismissWindow(&city->game->ui->desktop, pending->window_id);
-    pending->window_id = 0;
-    ApplicationUpdateDialogPause(city);
-    return true;
-  }
-  return false;
-}
-
 
 // Edit bounded labels and stadium names. Answers may close the window and resume
 // a retained caller, so no window pointer is used after submitting an answer.

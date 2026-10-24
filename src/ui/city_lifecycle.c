@@ -1,4 +1,5 @@
 #include "city/saveload/state.h"
+#include "base/text.h"
 #include "city/engine/city_name.h"
 #include "ui/city_lifecycle.h"
 
@@ -7,7 +8,6 @@
 
 #include "assets/state.h"
 #include "game/audio.h"
-#include "base/version.h"
 #include "city/engine/initialization.h"
 #include "city/engine/simulation.h"
 #include "city/events/news.h"
@@ -34,11 +34,12 @@
 #include "ui/dialogs/messages.h"
 #include "ui/dialogs/scenario.h"
 #include "ui/dialogs/spans.h"
+#include "ui/map.h"
 #include "ui/news/newspaper.h"
-#include "ui/sdl.h"
 #include "ui/signs.h"
 #include "ui/startup/startup.h"
 #include "ui/state.h"
+#include "ui/text/status.h"
 #include "ui/text/text.h"
 #include "ui/tools/tools.h"
 #include "ui/tools/types.h"
@@ -177,7 +178,7 @@ void OpenCityFromFileDialog(City *city) {
   Game *game = city->game;
   char *path = NULL;
   city->game->ui->save_prompt_active = false;
-  city->game->drawing->palette.direct_animation = 1;
+  city->drawing->palette.direct_animation = 1;
   const char *title = "Open City";
   CityPath directory = {0};
   GetCitySaveDirectory(city->game, &directory);
@@ -202,7 +203,7 @@ void OpenCityFromFileDialog(City *city) {
       game->idle_state = CITY_IDLE_STARTUP_MENU;
       game->idle_entry = 1;
     }
-    city->game->drawing->palette.direct_animation = 0;
+    city->drawing->palette.direct_animation = 0;
   }
   free(path);
   FreeCityPathStorage(&directory);
@@ -443,7 +444,7 @@ static void FinishCityReplacementRequest(City *city, CityReplacementRequest *req
       ui->replacement_prompt_suppressed = false;
       ShowCityMapToolWindows(city);
       if (!request->options.edit_terrain && !game->ranked_events_suppressed &&
-          !game->resources->facility_resources_unavailable) ScheduleCityStartupNewspaper(city);
+          !game->resources->news_resources_unavailable) ScheduleCityStartupNewspaper(city);
     } else if (request->startup) {
       game->idle_state = CITY_IDLE_STARTUP_MENU;
       game->idle_entry = 1;
@@ -461,7 +462,7 @@ void CompleteCityTerrainEditing(Game *game) {
     game->ui->desktop.selected_tool = CITY_CANVAS_TOOL_NONE;
   }
   ResetCityReplacementPresentation(game->city);
-  if (!game->ranked_events_suppressed && !game->resources->facility_resources_unavailable)
+  if (!game->ranked_events_suppressed && !game->resources->news_resources_unavailable)
     ScheduleCityStartupNewspaper(game->city);
 }
 
@@ -523,7 +524,7 @@ static void AcceptCityConfiguration(City *city, const CityCreationOptions *optio
   }
   ResetCityReplacementPresentation(city);
   if (!options->edit_terrain && !city->game->ranked_events_suppressed &&
-      !city->game->resources->facility_resources_unavailable) ScheduleCityStartupNewspaper(city);
+      !city->game->resources->news_resources_unavailable) ScheduleCityStartupNewspaper(city);
 }
 
 bool RequestCityConfiguration(Game *game) {
@@ -577,14 +578,8 @@ void ResetCityReplacementPresentation(City *city) {
   InvalidateCityInformation(game, CITY_UPDATE_ALL);
 }
 
-void SetCityHostWindowTitle(City *city, const char *text) {
-  (void)text;
-  if (city->game->ui->display != NULL)
-    Sc2kSDLTitle(city->game->ui->display, SC2K_APP_NAME);
-}
-
 void InvalidateLoadedCityCanvas(City *city) {
-  city->game->drawing->main_cache.valid = 0;
+  city->drawing->main_cache.valid = 0;
   Sc2kDirtyMarkRect(&city->game->ui->desktop.dirty,
       (CityRect){0, 0, kDefaultCityCanvasWidth, kDefaultCityCanvasHeight});
 }

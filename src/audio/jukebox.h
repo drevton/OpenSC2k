@@ -16,10 +16,23 @@ typedef enum JukeboxProgramme {
 enum {
   JUKEBOX_TRACKS = 31, JUKEBOX_CAPACITY = 32,
   JUKEBOX_CUSTOM_PROGRAMMES = JUKEBOX_PROGRAMMES - JUKEBOX_PROGRAMME_CUSTOM_1,
+  JUKEBOX_PLAYLIST_TEXT_CAPACITY = JUKEBOX_CAPACITY * 3 + 1,
 };
 typedef struct { const char *title; const char *file; } JukeboxTrack;
 extern const JukeboxTrack kJukeboxTracks[JUKEBOX_TRACKS];
 extern const char *const kJukeboxProgrammes[JUKEBOX_PROGRAMMES];
+
+typedef struct JukeboxPlaylist {
+  u8 tracks[JUKEBOX_CAPACITY];
+  u8 count;
+} JukeboxPlaylist;
+
+// Comma-separated catalog IDs, including duplicates and track zero; empty text produces an empty playlist.
+// No allocation or playback. Parse failure leaves the destination unchanged.
+bool ParseJukeboxPlaylist(const char *text, JukeboxPlaylist *playlist);
+// Format a playlist with 0..JUKEBOX_CAPACITY valid catalog IDs. Reports truncation/failure;
+// output may contain a partial prefix on failure.
+bool FormatJukeboxPlaylist(const JukeboxPlaylist *playlist, char *text, size_t capacity);
 
 // Audio owns playback preferences, playlist order, its private RNG and the last backend error.
 typedef struct Jukebox {
@@ -27,8 +40,7 @@ typedef struct Jukebox {
   i32 position, count;
   i32 interrupt_track; // Temporary playback; the playlist and its cursor remain unchanged.
   u8 order[JUKEBOX_CAPACITY];
-  u8 custom[JUKEBOX_CUSTOM_PROGRAMMES][JUKEBOX_CAPACITY];
-  i32 custom_count[JUKEBOX_CUSTOM_PROGRAMMES];
+  JukeboxPlaylist custom[JUKEBOX_CUSTOM_PROGRAMMES];
   u32 random;
   char error[96];
 } Jukebox;

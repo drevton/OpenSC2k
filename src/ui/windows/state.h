@@ -2,38 +2,26 @@
 #define SC2K_UI_WINDOWS_STATE_H
 
 #include "city/economy/types.h"
-#include "city/engine/commands.h"
+#include "city/maps/information.h"
+#include "city/engine/command_types.h"
 #include "city/infrastructure/types.h"
 #include "city/maps/map_types.h"
 #include "city/maps/tile_storage.h"
 #include "city/types.h"
+#include "ui/windows/types.h"
 #include "ui/dialogs/budget.h"
 #include "ui/dialogs/messages.h"
-#include "ui/map.h"
+#include "ui/tools/placement.h"
 #include "ui/menus/menu.h"
 #include "ui/news/newspaper_state.h"
 #include "ui/signs.h"
 #include "ui/windows/controls.h"
 #include "ui/windows/tooltips.h"
 
-enum { CITY_CANVAS_WINDOW_CAPACITY = 16 };
-
 // Nonnegative dragging values are window indices.
 typedef enum CityCanvasDragTarget {
   CITY_CANVAS_DRAG_NONE = -1,
 } CityCanvasDragTarget;
-
-// Native label continuation and captured volume-slider domains.
-typedef enum CityCanvasLabelContinuation {
-  CITY_CANVAS_LABEL_CONTINUATION_NONE = 0,
-  CITY_CANVAS_LABEL_CONTINUATION_SIGN = 1,
-  CITY_CANVAS_LABEL_CONTINUATION_FACILITY = 2,
-} CityCanvasLabelContinuation;
-
-typedef enum CityCanvasVolumeSlider {
-  CITY_CANVAS_VOLUME_SLIDER_NONE = 0,
-  CITY_CANVAS_VOLUME_SLIDER_MUSIC = 1, CITY_CANVAS_VOLUME_SLIDER_EFFECTS = 2,
-} CityCanvasVolumeSlider;
 
 typedef struct CityButtonFeedback {
   u32 window_id;
@@ -44,61 +32,23 @@ typedef struct CityButtonFeedback {
   bool repeating, shift;
 } CityButtonFeedback;
 
+typedef struct Game Game;
 typedef struct CityInterfaceState CityInterfaceState;
 typedef struct CityFileBrowser CityFileBrowser;
 typedef struct CityTileInformationSnapshot CityTileInformationSnapshot;
-typedef struct CityConfirmationState CityConfirmationState;
-typedef struct CityWindowCompletion CityWindowCompletion;
+
+// A close transfers these records from Window to UI. The desktop releases each record before invoking its
+// callback outside the outer command. Context stays caller-owned through delivery.
+typedef struct CityWindowCompletion {
+  struct CityWindowCompletion *next;
+  CityWindowCallback *callback;
+  void *context;
+} CityWindowCompletion;
 typedef struct CityAdvisorWindowState {
   struct CityAdvisorWindowState *next;
   i32 token;
   bool opening;
 } CityAdvisorWindowState;
-
-typedef enum WindowKind {
-  CITY_CANVAS_BUDGET = 1,
-  CITY_CANVAS_NOTICE = 2,
-  CITY_CANVAS_NEWSPAPER = 3,
-  CITY_CANVAS_ADVISOR = 4,
-  CITY_CANVAS_CONFIRM = 5,
-  CITY_CANVAS_SPAN_STYLE = 6,
-  CITY_CANVAS_POLICIES = 7,
-  CITY_CANVAS_BONDS = 8,
-  CITY_CANVAS_MAP_DATA = 9,
-  CITY_CANVAS_LAND_USE = 10,
-  CITY_CANVAS_LABEL_EDIT = 11,
-  CITY_CANVAS_FACILITY_INFORMATION = 12,
-  CITY_CANVAS_TILE_INFORMATION = 13,
-  CITY_CANVAS_STADIUM_TEAM = 14,
-  CITY_CANVAS_TOOL_STATUS = 15,
-  CITY_CANVAS_JUKEBOX = 16,
-  CITY_CANVAS_MUSIC_PROGRAMME = 17,
-  CITY_CANVAS_GAME_OPTIONS = 18,
-  CITY_CANVAS_HISTORY = 19,
-  CITY_CANVAS_DEMOGRAPHICS = 20,
-  CITY_CANVAS_NEIGHBORS = 21,
-  CITY_CANVAS_INDUSTRY = 22,
-  CITY_CANVAS_FILE_SAVE = 23,
-  CITY_CANVAS_SAVE_QUESTION = 24,
-  CITY_CANVAS_FILE_OPEN = 25,
-  CITY_CANVAS_FILE_QUESTION = 26,
-  CITY_CANVAS_STARTUP_MENU = 27,
-  CITY_CANVAS_SCENARIO_LIST = 28,
-  CITY_CANVAS_MAP_VIEWPORT = 29,
-  CITY_CANVAS_EXIT = 30,
-  CITY_CANVAS_SIGN_EDIT = 31,
-  CITY_CANVAS_SIGN_LIST = 32,
-  CITY_CANVAS_CONSOLE = 33,
-  CITY_CANVAS_CONSTRUCTION = 34,
-  CITY_CANVAS_ABANDON = 35,
-  CITY_CANVAS_COMMAND_ERROR = 36,
-  CITY_CANVAS_BUDGET_RATE = 37,
-  CITY_CANVAS_WINDOW_KIND_COUNT
-} WindowKind;
-
-typedef struct Window Window;
-
-typedef struct WindowEvent WindowEvent;
 
 // Return true to consume the event. Only unhandled input proceeds to common chrome handling;
 // the dispatcher reacquires the window by ID first, since the procedure may have closed it.
@@ -165,12 +115,12 @@ typedef struct Window {
   CityAdvisorWindowState *advisor_question; // Owned until closure; then transferred to UI cancellation.
   u8 advisor_category; // Category + 1; zero for generic portrait notices.
   CityCommand confirmed_command; // UI owns this command until the user accepts or closes the window.
-  CityConfirmationState *confirmation; // Borrowed from a caller or window-close callback context.
+  CityConfirmationState *confirmation; // Optional borrowed reply sink; the command lives above.
   u8 message_style; // CityMessageStyle; explicitly supplied by the message-box caller.
   u8 message_buttons; // CityMessageButtons; explicitly supplied by the message-box caller.
 } Window;
 
-typedef struct {
+typedef struct CityDirtyRegions {
   CityRect rects[64];
   i32 count;
 } CityDirtyRegions;

@@ -20,7 +20,8 @@ _Static_assert(sizeof(CityTileQueueCursor) == 6 && offsetof(CityTileQueueCursor,
     "tile queue cursor layout");
 
 // The queue is exclusive workspace shared by utility scans, terrain edits and commuter routes.
-// Flood insertion/removal maintains optional duplicate marks. Commuter append bypasses those marks because
+// Flood insertion/removal maintains duplicate marks when the fix is enabled and route_queued is non-NULL.
+// Without marker backing, every operation skips duplicate bookkeeping. Commuter append bypasses those marks because
 // revisiting a tile in a different route state is valid; its backtracking still uses this ring.
 // Do not interleave users or retain point references across a reset.
 void ClearCityTileQueue(City *city);

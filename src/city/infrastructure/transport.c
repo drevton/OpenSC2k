@@ -5,6 +5,7 @@
 // is one byte per 2x2 tile region in City.half, so no kind/orientation bit is borrowed to store route usage.
 // Height/slope and all flags/overlay fields retain the shared contract in tile_storage.h.
 
+#include "city/events/events.h"
 #include "city/infrastructure/bridges.h"
 #include "city/infrastructure/highways.h"
 #include "city/infrastructure/transport.h"
@@ -15,12 +16,41 @@
 
 #include "city/state.h"
 #include "city/engine/random.h"
-#include "city/growth/growth.h"
 #include "city/maps/layers.h"
 #include "game/state.h"
 #include "game/observation.h"
 
 // Transport
+
+// Original startup initializer order, stored as native x/y byte pairs.
+const TransportNeighborOffsets kTransportNeighborOffsets = {{
+  {1, 0}, {0, 1}, {-1, 0}, {0, -1},
+  {2, 0}, {0, 2}, {-2, 0}, {0, -2},
+  {3, 0}, {0, 3}, {-3, 0}, {0, -3},
+  {1, 1}, {1, -1}, {-1, 1}, {-1, -1},
+  {1, 2}, {1, -2}, {-1, 2}, {-1, -2},
+  {2, 1}, {2, -1}, {-2, 1}, {-2, -1}
+}};
+
+const u16 kZoneCompatibilityMask[16] = {
+  65535, 65528, 65528, 65510, 65510, 65438, 65438, 0, 1, 1, 3, 6, 12, 0, 1803, 3342
+};
+
+// Recount the industry rail/highway border bonus from current surface tiles. Requires normalized native storage;
+// replaces the cached count without changing tiles or the route queue.
+void RecountCityIndustryConnections(City *city) {
+  int count = 0;
+  for (TileIndex tile = 0; tile < city->map_cell_count; ++tile) {
+    const TileInfo *tp = &city->tile[tile];
+    if (tp->overlay != CITY_OVERLAY_BORDER_CONNECTION) continue;
+    int surface = tp->kind;
+    if (surface == TK_RAIL ||
+        surface == TK_ROAD_RAIL_CROSSING || surface == TK_RAIL_POWER_CROSSING ||
+        IsTileKindStraightHighway(surface) ||
+        IsTileKindMultiHighway(surface)) ++count;
+  }
+  city->infrastructure.service_bonus_a = count;
+}
 
 // Decay one complete traffic section by one quarter and sum its remaining density. Section must be in range; caller
 // owns layer invalidation and accumulation of the returned total across sections.
@@ -36,7 +66,7 @@ u32 DecayTrafficDensitySection(City *city, int section) {
     for (size_t x = 0; x < CITY_MAP_SECTION_SIZE / 2; ++x) {
       int value = row[x].traffic_density;
       value -= value >> 2;
-      WriteByte(&row[x].traffic_density, value);
+      row[x].traffic_density = value;
       total += value;
     }
   }
@@ -81,10 +111,10 @@ static bool CityHighwaysCanJoin(const City *city, TileIndex from, TileIndex to, 
 i32 FindTransportRouteAndApplyTraffic(City *city, int x, int y, int source_zone, int size, int maximum_cost) {
   const int width = city->map_width, height = city->map_height;
   const TileInfo *tiles = city->tile;
-  bool native_routes = (city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)) != 0;
+  bool native_routes = (city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) != 0;
   const u16 compatibility = kZoneCompatibilityMask[source_zone];
-  static const i8 dr[4] = {0, 1, 0, -1};
-  static const i8 dc[4] = {-1, 0, 1, 0};
+  static const i8 kRouteStepY[4] = {0, 1, 0, -1};
+  static const i8 kRouteStepX[4] = {-1, 0, 1, 0};
   // Each pushed depth initializes its entries before use; only the root cost
   // needs a default. Avoid clearing the entire stack for every zoned tile.
   int path_row[128], path_column[128];
@@ -92,34 +122,34 @@ i32 FindTransportRouteAndApplyTraffic(City *city, int x, int y, int source_zone,
   int road_y = 0;
   int road_x = 0;
   int initial_state = CITY_ROUTE_ROAD;
-  int found_start = 0;
+  bool found_start = false;
   for (int neighbor = 0; neighbor < 24; ++neighbor) {
     int neighbor_y = y + kTransportNeighborOffsets.offset[neighbor].y;
     int neighbor_x = x + kTransportNeighborOffsets.offset[neighbor].x;
     TileIndex neighbor_tile = MapTileXYOrInvalid(city, neighbor_x, neighbor_y);
     if (neighbor_tile == INVALID_TILE) continue;
-    const TileInfo *neighbor_cell = &tiles[neighbor_tile];
-    int tile = neighbor_cell->kind;
-    if (native_routes && IsTileKindBridge(neighbor_cell->kind)) {
-      int axis = ReadCityBridgeAxis(&city->tile[neighbor_tile]);
-      tile = CityBridgeTransportKind(neighbor_cell, IsCityBridgeHead(neighbor_cell) ?
+    const TileInfo *tp = &tiles[neighbor_tile];
+    int kind = tp->kind;
+    if (native_routes && IsTileKindBridge(tp->kind)) {
+      int axis = ReadCityBridgeAxis(tp);
+      kind = CityBridgeTransportKind(tp, IsCityBridgeHead(tp) ?
           axis : !axis);
     }
-    if (ReadCityTileClasses(tile) & (TCLASS_ROAD | TCLASS_ROUTE_STATION)) {
+    if (ReadCityTileClasses(kind) & (TCLASS_ROAD | TCLASS_ROUTE_STATION)) {
       road_y = neighbor_y;
       road_x = neighbor_x;
-      initial_state = tile == TK_BUS_STATION ? CITY_ROUTE_BUS_STATION
-          : tile == TK_RAIL_STATION          ? CITY_ROUTE_RAIL_STATION
-          : tile == TK_SUBWAY_STATION        ? CITY_ROUTE_SUBWAY_STATION
+      initial_state = kind == TK_BUS_STATION ? CITY_ROUTE_BUS_STATION
+          : kind == TK_RAIL_STATION          ? CITY_ROUTE_RAIL_STATION
+          : kind == TK_SUBWAY_STATION        ? CITY_ROUTE_SUBWAY_STATION
                                                     : CITY_ROUTE_ROAD;
-      found_start = 1;
+      found_start = true;
       break;
     }
   }
   if (!found_start)
     return 0;
   int root_cost = 0;
-  if (!(city->fixes & (1 << CITY_FIX_ROUTE_ROOT_COST)) && city->game->observation &&
+  if (!(city->fixes & (1ull << CITY_FIX_ROUTE_ROOT_COST)) && city->game->observation &&
       city->game->observation->transport_root_cost)
     root_cost = city->game->observation->transport_root_cost(city->game);
 
@@ -137,34 +167,36 @@ i32 FindTransportRouteAndApplyTraffic(City *city, int x, int y, int source_zone,
   int step = 2 * (NextCrtRandom(&city->random.crt) & 1) + 1;
   while (depth && cost[depth - 1] < maximum_cost) {
     int direction = NextCrtRandom(&city->random.crt) & 3;
-    int moved = 0;
+    bool moved = false;
     for (int j = 0; j < 4; ++j) {
       direction = (direction + step) & 3;
       int bit = (u8)(1u << direction);
       if (!(remaining[depth - 1] & bit))
         continue;
       remaining[depth - 1] &= (u8)~bit;
-      int r = path_row[depth - 1] + dr[direction];
-      int c = path_column[depth - 1] + dc[direction];
-      if (r < 0 || r >= height || c < 0 || c >= width) {
+      int next_y = path_row[depth - 1] + kRouteStepY[direction];
+      int next_x = path_column[depth - 1] + kRouteStepX[direction];
+      if (next_y < 0 || next_y >= height || next_x < 0 || next_x >= width) {
         if (ReadOverlay(city, path_row[depth - 1] * width + path_column[depth - 1]) == CITY_OVERLAY_BORDER_CONNECTION) {
           route_found = true;
           goto route_complete;
         }
         continue;
       }
-      TileIndex next_tile = r * width + c;
+      TileIndex next_tile = next_y * width + next_x;
       TileIndex current_tile = path_row[depth - 1] * width + path_column[depth - 1];
+      const TileInfo *current_tp = &tiles[current_tile];
+      const TileInfo *tp = &tiles[next_tile];
       if (native_routes &&
           (state[depth - 1] == CITY_ROUTE_HIGHWAY || state[depth - 1] == CITY_ROUTE_BUS_HIGHWAY) &&
           !CityHighwaysCanJoin(city, current_tile, next_tile, direction)) continue;
-      bool current_bridge = IsTileKindBridge(city->tile[current_tile].kind);
-      bool next_bridge = IsTileKindBridge(city->tile[next_tile].kind);
+      bool current_bridge = IsTileKindBridge(current_tp->kind);
+      bool next_bridge = IsTileKindBridge(tp->kind);
       if (native_routes && state[depth - 1] != CITY_ROUTE_SUBWAY && (current_bridge || next_bridge)) {
         if (current_bridge) {
-          int axis = ReadCityBridgeAxis(&city->tile[current_tile]);
+          int axis = ReadCityBridgeAxis(current_tp);
           int entry_axis = depth > 1 ? path_row[depth - 2] != path_row[depth - 1] :
-              IsCityBridgeHead(&city->tile[current_tile]) ? axis : !axis;
+              IsCityBridgeHead(current_tp) ? axis : !axis;
           if ((direction & 1) != entry_axis) continue;
         }
         if (CityBridgeTransportEdgeHeight(city, current_tile, direction) !=
@@ -172,22 +204,22 @@ i32 FindTransportRouteAndApplyTraffic(City *city, int x, int y, int source_zone,
       }
       int next_state = state[depth - 1];
       int move_cost = 3;
-      int tile = native_routes && next_bridge && state[depth - 1] != CITY_ROUTE_SUBWAY ?
-          CityBridgeTransportKind(&city->tile[next_tile], direction) : ReadTile(city, next_tile);
-      u32 classes = ReadCityTileClasses(tile);
+      int kind = native_routes && next_bridge && state[depth - 1] != CITY_ROUTE_SUBWAY ?
+          CityBridgeTransportKind(tp, direction) : tp->kind;
+      u32 classes = ReadCityTileClasses(kind);
       // Stock explores bridge heads from every side, including failed detours.
       // Preserve those graph steps and RNG draws when native geometry is off.
-      bool connector = IsTileKindBridge(tile) ||
-          (!native_routes && IsCityWaterPowerLine(&tiles[next_tile]));
-      if (!native_routes && IsTileKindHighwayBridge(tile)) classes |= TCLASS_HIGHWAY;
+      bool connector = IsTileKindBridge(kind) ||
+          (!native_routes && IsCityWaterPowerLine(tp));
+      if (!native_routes && IsTileKindHighwayBridge(kind)) classes |= TCLASS_HIGHWAY;
       if ((next_state == CITY_ROUTE_ROAD || next_state == CITY_ROUTE_BUS_ROAD || next_state == CITY_ROUTE_BUS_STATION ||
               next_state == CITY_ROUTE_ALIGHTING_STATION) &&
-          (compatibility & (1u << ReadCityZoneKind(&tiles[next_tile])))) {
+          (compatibility & (1u << ReadCityZoneKind(tp)))) {
         route_found = true;
         goto route_complete;
       }
       if ((next_state == CITY_ROUTE_ROAD || next_state == CITY_ROUTE_BUS_ROAD || next_state == CITY_ROUTE_RAIL) &&
-          IsTileKindArcology(tile)) {
+          IsTileKindArcology(kind)) {
         route_found = true;
         goto route_complete;
       }
@@ -195,29 +227,29 @@ i32 FindTransportRouteAndApplyTraffic(City *city, int x, int y, int source_zone,
         bool bus = next_state == CITY_ROUTE_BUS_ROAD;
         if (bus) move_cost = 2;
         if (classes & TCLASS_ROUTE_STATION) {
-          next_state = tile == TK_BUS_STATION ? (bus ? CITY_ROUTE_ALIGHTING_STATION : CITY_ROUTE_BUS_STATION)
-              : tile == TK_RAIL_STATION ? CITY_ROUTE_RAIL_STATION : CITY_ROUTE_SUBWAY_STATION;
+          next_state = kind == TK_BUS_STATION ? (bus ? CITY_ROUTE_ALIGHTING_STATION : CITY_ROUTE_BUS_STATION)
+              : kind == TK_RAIL_STATION ? CITY_ROUTE_RAIL_STATION : CITY_ROUTE_SUBWAY_STATION;
           move_cost = 4;
         } else if (connector)
           next_state = bus ? CITY_ROUTE_BUS_CONNECTOR : CITY_ROUTE_CONNECTOR;
         else if (!(classes & TCLASS_ROAD))
           continue;
-        else if (IsTileKindTunnel(tile))
+        else if (IsTileKindTunnel(kind))
           next_state = bus ? CITY_ROUTE_BUS_TUNNEL : CITY_ROUTE_TUNNEL;
-        else if (tile == TK_HIGHWAY_ENTRANCE) {
+        else if (kind == TK_HIGHWAY_ENTRANCE) {
           next_state = bus ? CITY_ROUTE_BUS_HIGHWAY : CITY_ROUTE_HIGHWAY;
           if (!bus) move_cost = 2;
         }
       } else if (next_state == CITY_ROUTE_HIGHWAY || next_state == CITY_ROUTE_BUS_HIGHWAY) {
         bool bus = next_state == CITY_ROUTE_BUS_HIGHWAY;
-        if (tile == TK_HIGHWAY_ENTRANCE)
+        if (kind == TK_HIGHWAY_ENTRANCE)
           next_state = bus ? CITY_ROUTE_BUS_ROAD : CITY_ROUTE_ROAD;
         else if (!(classes & TCLASS_HIGHWAY))
           continue;
         move_cost = 1;
       } else if (next_state == CITY_ROUTE_TUNNEL || next_state == CITY_ROUTE_BUS_TUNNEL) {
         bool bus = next_state == CITY_ROUTE_BUS_TUNNEL;
-        if (((tiles[next_tile].altitude >> 8) & 0x7C) == 0) {
+        if (((tp->altitude >> 8) & 0x7C) == 0) {
           if (!(classes & TCLASS_ROAD))
             continue;
           next_state = bus ? CITY_ROUTE_BUS_ROAD : CITY_ROUTE_ROAD;
@@ -231,7 +263,7 @@ i32 FindTransportRouteAndApplyTraffic(City *city, int x, int y, int source_zone,
           continue;
         if (bus) move_cost = 2;
       } else if (next_state == CITY_ROUTE_BUS_STATION) {
-        if (tile == TK_BUS_STATION)
+        if (kind == TK_BUS_STATION)
           move_cost = 4;
         else if (classes & TCLASS_ROAD) {
           next_state = CITY_ROUTE_BUS_ROAD;
@@ -239,14 +271,14 @@ i32 FindTransportRouteAndApplyTraffic(City *city, int x, int y, int source_zone,
         } else
           continue;
       } else if (next_state == CITY_ROUTE_ALIGHTING_STATION) {
-        if (tile == TK_BUS_STATION || tile == TK_RAIL_STATION)
+        if (kind == TK_BUS_STATION || kind == TK_RAIL_STATION)
           move_cost = 4;
         else if (classes & TCLASS_ROAD)
           next_state = CITY_ROUTE_ROAD;
         else
           continue;
       } else if (next_state == CITY_ROUTE_RAIL_STATION) {
-        if (tile == TK_RAIL_STATION)
+        if (kind == TK_RAIL_STATION)
           move_cost = 4;
         else if (classes & TCLASS_RAIL) {
           next_state = CITY_ROUTE_RAIL;
@@ -254,45 +286,45 @@ i32 FindTransportRouteAndApplyTraffic(City *city, int x, int y, int source_zone,
         } else
           continue;
       } else if (next_state == CITY_ROUTE_SUBWAY_STATION) {
-        int water = ReadUnderground(city, next_tile);
-        if (!IsSubwayTile(water))
+        int underground = ReadUnderground(city, next_tile);
+        if (!IsSubwayTile(underground))
           continue;
         next_state = CITY_ROUTE_SUBWAY;
         move_cost = 1;
       } else if (next_state == CITY_ROUTE_RAIL) {
-        if (tile == TK_RAIL_STATION) {
+        if (kind == TK_RAIL_STATION) {
           next_state = CITY_ROUTE_ALIGHTING_STATION;
           move_cost = 4;
         } else if (classes & TCLASS_RAIL)
           move_cost = 1;
-        else if (IsTileKindArcology(tile)) {
+        else if (IsTileKindArcology(kind)) {
           route_found = true;
           goto route_complete;
         } else
           continue;
       } else if (next_state == CITY_ROUTE_SUBWAY) {
-        if (tile == TK_SUBWAY_STATION) {
+        if (kind == TK_SUBWAY_STATION) {
           next_state = CITY_ROUTE_ALIGHTING_STATION;
           move_cost = 4;
         } else {
-          int water = ReadUnderground(city, next_tile);
-          if (!IsSubwayTile(water))
+          int underground = ReadUnderground(city, next_tile);
+          if (!IsSubwayTile(underground))
             continue;
           move_cost = 1;
         }
       } else
         continue;
-      path_row[depth] = r;
-      path_column[depth] = c;
+      path_row[depth] = next_y;
+      path_column[depth] = next_x;
       cost[depth] = (u8)(cost[depth - 1] + move_cost);
       state[depth] = next_state;
       remaining[depth] =
           (u8)(next_state == CITY_ROUTE_CONNECTOR || next_state == CITY_ROUTE_BUS_CONNECTOR ? 1u << direction
                   : next_state == CITY_ROUTE_SUBWAY_STATION                                 ? 15u
                                                             : 15 & ~(1u << ((direction + 2) & 3)));
-      PushTransportRoutePoint(city, c, r);
+      PushTransportRoutePoint(city, next_x, next_y);
       ++depth;
-      moved = 1;
+      moved = true;
       break;
     }
     if (moved)
@@ -310,16 +342,16 @@ route_complete:
   if (!route_found || size == 0) {
     return route_found;
   }
-  int used_bus = 0, used_rail = 0, used_subway = 0;
+  bool used_bus = false, used_rail = false, used_subway = false;
   while (city->route_queue_cursor.write != city->route_queue_cursor.read) {
     PointU16 coordinate = PopCityTileCoordinate(city);
     int route_state = state[--depth];
     if (route_state == CITY_ROUTE_BUS_STATION)
-      used_bus = 1;
+      used_bus = true;
     if (route_state == CITY_ROUTE_RAIL_STATION)
-      used_rail = 1;
+      used_rail = true;
     if (route_state == CITY_ROUTE_SUBWAY_STATION)
-      used_subway = 1;
+      used_subway = true;
     if (route_state == CITY_ROUTE_ROAD || route_state == CITY_ROUTE_HIGHWAY || route_state == CITY_ROUTE_CONNECTOR) {
       int y = (i32)(coordinate.y / 2u);
       int x = (i32)(coordinate.x / 2u);

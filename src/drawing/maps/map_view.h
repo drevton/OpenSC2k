@@ -5,6 +5,9 @@
 
 typedef struct CityExtraMapView CityExtraMapView;
 
+// Drawing retains the main camera plus this bounded set of auxiliary views.
+enum { CITY_EXTRA_MAP_VIEW_COUNT = 8 };
+
 // Borrowed for one synchronous paint/damage visit. A null view selects Drawing's main map target.
 typedef struct CityMapPaint {
   City *city;
@@ -103,6 +106,29 @@ struct CityMapViewConfig {
   u8 zoom, rotation;
   u8 pointer_command_stage, pointer_drag_active, pointer_moved, pan_capture_active, magnified_large_zoom;
 };
+
+// Initial city bootstrap only, before painting. Clear the inline main/drag camera records, bind their Drawing pointers
+// and select large main-map zoom. No pixel allocation, cache invalidation or UI callbacks.
+void InitializeDrawingMapViews(Drawing *drawing);
+
+// Map-view storage and damage belong to Drawing. Invalidate retained map values and all main/auxiliary
+// pixel caches after shared appearance changes; the caller schedules the required screen damage.
+void InvalidateCityMapViews(Drawing *drawing);
+// Schedule main-map logical pixel damage, including the displaced retained copy during a pending scroll.
+// view supplies the main camera's magnification; rectangle coordinates are relative to its logical target.
+void InvalidateCityMapRect(Drawing *drawing, const CityMapViewConfig *view, CityRect rect);
+
+// Store/query the raw logical client bounds used by Drawing and diagnostic fallback. Empty/reversed bounds
+// are preserved. Setting bounds only replaces this value; callers arrange invalidation and clip preparation.
+void SetDrawingMapClientRect(Drawing *drawing, CityRect rect);
+CityRect DrawingMapClientRect(const Drawing *drawing);
+
+// Intersect logical map pixels with the client rectangle; an empty request selects the whole client.
+// A nonempty request outside the client clears paint_clip and returns false, retaining paint_rect.
+// Success keeps the one-pixel top overlap for immediate previews and selects paint_rect for traversal.
+bool PrepareCityMapPaintClip(Drawing *drawing, CityRect request);
+// Clear paint_clip_active and paint_clip after the immediate preview; retain the last traversal paint_rect.
+void ResetCityMapPaintClip(Drawing *drawing);
 
 // Logical sprite zoom and display magnification for an extra map camera; no window or input state is read.
 int CityViewportMapZoom(const CityExtraMapView *view);

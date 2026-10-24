@@ -1,9 +1,16 @@
 #include "drawing/maps/map_view.h"
 
-#include "drawing/maps/map_render.h"
 #include "drawing/state.h"
 
 // Drawing map-view clipping, display layers and cache invalidation.
+
+void InitializeDrawingMapViews(Drawing *drawing) {
+  drawing->map_view_storage = (CityMapViewConfig){0};
+  drawing->drag_view_storage = (CityMapViewConfig){0};
+  drawing->default_map_view = &drawing->map_view_storage;
+  drawing->drag_map_view = &drawing->drag_view_storage;
+  drawing->default_map_view->zoom = CITY_MAP_ZOOM_LARGE;
+}
 
 void InvalidateCityMapRect(Drawing *drawing, const CityMapViewConfig *view, CityRect rect) {
   if (rect.left >= rect.right || rect.top >= rect.bottom) return;
@@ -62,12 +69,12 @@ void InvalidateCityMapViews(Drawing *drawing) {
     drawing->views[index].cache.valid = false;
 }
 
-void Sc2kSetCityMapClientRect(Drawing *drawing, CityRect rect) {
+void SetDrawingMapClientRect(Drawing *drawing, CityRect rect) {
   drawing->client_rect = rect;
 }
 
-void Sc2kGetCityMapClientRect(Drawing *drawing, CityRect *rect) {
-  *rect = drawing->client_rect;
+CityRect DrawingMapClientRect(const Drawing *drawing) {
+  return drawing->client_rect;
 }
 
 // Set the renderer clip from the requested and host client rectangles.

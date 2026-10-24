@@ -1,3 +1,5 @@
+#ifndef SC2K_TERRAIN_INTERNAL_H
+#define SC2K_TERRAIN_INTERNAL_H
 
 #include "base/fixed.h"
 #include <stdlib.h>
@@ -6,8 +8,9 @@
 #include "terrain.h"
 
 // OpenSC2K terrain port; see LICENSE.OpenSC2K and README.md.
-#ifndef SC2K_TERRAIN_INTERNAL_H
-#define SC2K_TERRAIN_INTERNAL_H
+// The original map size is the reference spacing for generator feature density.
+enum { kTerrainEdge = 128, kTerrainLast = kTerrainEdge - 1,
+    kTerrainCells = kTerrainEdge * kTerrainEdge };
 
 enum {
   kSaltWater = 1, kSaltyChannel = 2, kWater = 4, kTreeFirst = 6, kTreeLast = 12,
@@ -107,4 +110,7 @@ Fixed SampleTerrainNoise(const TerrainNoise *noise, Fixed x, Fixed y);
 void CarveTerrainFeatures(TerrainWork *work, u32 generation_seed);
 void TerrainWaterDistances(TerrainWork *work);
 void ApplyTerrainElevation(TerrainWork *work, Fixed angle, Fixed phase, const TerrainNoise *noise);
+// Generation samples the prepared temperature/moisture lattice without changing it.
+int TerrainClimateValue(const CitySnowClimate *snow, CityPoint position, bool moisture);
+int TerrainGrassPaletteAt(const CitySnowClimate *snow, CityPoint position);
 #endif

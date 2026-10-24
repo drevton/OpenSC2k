@@ -4,7 +4,8 @@
 #include "city/engine/city_types.h"
 
 // Initialized names own any overflow. Set copies length readable bytes and adds a terminator; text is borrowed.
-// Negative lengths or allocation failure return false and set Game's error. Free resets the complete name record.
+// Negative lengths or allocation failure preserve the name, return false and set Game's error.
+// Overlapping input is allowed when length bytes are readable. Free resets the complete name record.
 bool SetCityNameText(Game *game, CityName *name, int length, const u8 *text);
 void FreeCityNameStorage(CityName *name);
 
@@ -15,5 +16,10 @@ void EmptyCityName(City *city);
 // Generate slot 0..3, or all four labels, from the current name and saved neighbor indices without simulation RNG.
 void GenerateCityNeighborName(City *city, int slot);
 void RefreshCityNeighborNames(City *city);
+
+// Generate a name using caller-owned PRNG state, independently of City's simulation RNG. Try up to eight candidates;
+// success writes a terminated name that fits and differs from previous. Keep previous separate from the output.
+// Failure may advance the PRNG and leave candidate/truncated text in name; consume the output only on success.
+bool GenerateCityName(u32 *random, const char *previous, char *name, size_t capacity);
 
 #endif

@@ -9,8 +9,10 @@
 // altitude keeps land/tunnel heights. Dry clear ground has no use for altitude[5..9]; it is not a water-presence test.
 // Water kinds use the low terrain nibble differently and are handled by water.c. Other fields follow tile_storage.h.
 
+#include "drawing/maps/map_sprites.h"
 #include "city/maps/buildings.h"
 #include "city/maps/ground.h"
+#include "city/maps/tables.h"
 #include "city/maps/terrain.h"
 #include "city/maps/module.h"
 
@@ -19,14 +21,15 @@
 #include "city/engine/random.h"
 #include "city/growth/growth.h"
 #include "city/maps/layers.h"
+#include "city/infrastructure/highways.h"
 #include "city/maps/trees.h"
 #include "city/maps/water.h"
 #include "city/presentation.h"
 #include "city/state.h"
 #include "city/terrain/terrain.h"
 #include "drawing/maps/map_terrain.h"
+#include "drawing/maps/map_camera.h"
 #include "drawing/maps/map_view.h"
-#include "game/state.h"
 
 // Ground and coverage occupy the low nibble, including exposed bank recovery.
 // Other wet tiles use it for their underlying water kind instead.
@@ -37,6 +40,116 @@ int ReadGroundKind(const TileInfo *tp) {
 void WriteGroundKind(TileInfo *tp, int kind) {
   assert(kind >= 0 && kind <= CITY_GROUND_SHORE);
   tp->terrain = (tp->terrain & 240) | kind;
+}
+
+static CityPoint ClimatePosition(const City *city, TileIndex tile) {
+  assert(IsMapTileValid(city, tile));
+  CityPoint position = MapTilePt(city, tile);
+  int width = city->map_width, height = city->map_height;
+  // The map arrays rotate. Sample the fixed weather pattern in the original
+  // coordinates so rotating a map cannot move its snow boundary.
+  for (int rotation = city->geography.rotation; rotation > 0; --rotation) {
+    position = (CityPoint){position.y, width - 1 - position.x};
+    int previous_width = width;
+    width = height; height = previous_width;
+  }
+  return position;
+}
+
+// The two permanent bits are interpreted by the City's landscape preset and survive every occupant change.
+int ReadCityTileBaseClimate(const City *city, const TileInfo *tp) {
+  int region = (tp->flags & TF_REGION_MASK) >> 1;
+  if (city->terrain_climate == CITY_TERRAIN_MIXED) {
+    static const u8 kMixed[] = {CLIMATE_TEMPERATE, CLIMATE_ARCTIC, CLIMATE_TROPICAL, CLIMATE_DESERT_100};
+    return kMixed[region];
+  }
+  if (city->terrain_climate == CITY_TERRAIN_DESERT) {
+    static const u8 kDesert[] = {CLIMATE_TROPICAL, CLIMATE_DESERT_100, CLIMATE_RAINFOREST, CLIMATE_TROPICAL};
+    return kDesert[region];
+  }
+  return city->terrain_climate == CITY_TERRAIN_NORMAL ? CLIMATE_TEMPERATE :
+      city->terrain_climate == CITY_TERRAIN_SNOWY ? CLIMATE_ARCTIC : CLIMATE_SIMCITY;
+}
+
+// Coverage is stored as ground state. Region supplies only the permanent grass/tree family.
+int ReadTileClimate(const City *city, const TileInfo *tp) {
+  int base = ReadCityTileBaseClimate(city, tp);
+  if (HasTileWater(tp)) return base == CLIMATE_DESERT_100 ? CLIMATE_TROPICAL : base;
+  int ground = ReadGroundKind(tp);
+  if (ground >= CITY_GROUND_SNOW_FIRST && ground <= CITY_GROUND_SNOW_LAST)
+    return CLIMATE_ARCTIC + ground;
+  if (ground == CITY_GROUND_DESERT_HALF) return CLIMATE_DESERT_50;
+  if (ground == CITY_GROUND_DESERT_FULL) return CLIMATE_DESERT_100;
+  return base == CLIMATE_DESERT_100 ? CLIMATE_TROPICAL : base;
+}
+
+// Blend artwork is selected from bounded permanent-region neighbors, independently of their occupants.
+int ReadCityTileClimate(const City *city, TileIndex tile) {
+  const TileInfo *tp = &city->tile[tile];
+  int appearance = ReadTileClimate(city, tp), base = ReadCityTileBaseClimate(city, tp);
+  if (city->terrain_climate != CITY_TERRAIN_MIXED || base == CLIMATE_DESERT_100) return appearance;
+  bool temperate = false, tropical = false;
+  for (int d = 0; d < 8; d += 2) {
+    TileIndex next = GetRelativeTileOrInvalid(city, tile, kTerrainNeighborXOffsets[d], kTerrainNeighborYOffsets[d]);
+    if (next == INVALID_TILE) continue;
+    int adjacent = ReadCityTileBaseClimate(city, &city->tile[next]);
+    temperate |= adjacent == CLIMATE_TEMPERATE;
+    tropical |= adjacent == CLIMATE_TROPICAL;
+  }
+  int blend = base == CLIMATE_ARCTIC ?
+      (temperate ? CLIMATE_TEMPERATE_ARCTIC : tropical ? CLIMATE_ARCTIC_TROPICAL : base) :
+      base == CLIMATE_TROPICAL && temperate ? CLIMATE_TEMPERATE_TROPICAL : base;
+  int snow = ReadTileSnowCoverage(tp);
+  if (snow) return snow <= 2 && blend == CLIMATE_TEMPERATE_ARCTIC ? CLIMATE_SNOW_TEMPERATE_ARCTIC_50 :
+      snow <= 2 && blend == CLIMATE_ARCTIC_TROPICAL ? CLIMATE_SNOW_ARCTIC_TROPICAL_50 : appearance;
+  return appearance == base ? blend : appearance;
+}
+
+// Move stored coverage toward its current height/region target. Terrain-editor edits can settle it immediately.
+void RefreshCityTileGroundCover(City *city, TileIndex tile, bool immediate) {
+  TileInfo *tp = &city->tile[tile];
+  if (HasTileWater(tp) && !IsTileKindShoreTree(tp->kind)) return;
+  int ground = ReadGroundKind(tp), base = ReadCityTileBaseClimate(city, tp), target = 0;
+  // Clearing and exposed beds must finish their bare phase before climate
+  // coverage can settle, including immediate terrain-editor refreshes.
+  if (ground >= CITY_GROUND_RECOVERY_FIRST && ground <= CITY_GROUND_RECOVERY_GRASS_FIRST) return;
+  if (ground == CITY_TRANSPORT_GROUND_PAVED && IsTileKindGroundTransport(tp->kind)) return;
+  if (base == CLIMATE_ARCTIC && city->snow.line != CITY_SNOW_LINE_DISABLED)
+    target = IntClamp(ReadCityLandHeight(tp) - TerrainSnowLineAt(&city->snow, ClimatePosition(city, tile)) + 1, 0, 4);
+  if (base == CLIMATE_DESERT_100) target = CITY_GROUND_DESERT_FULL;
+  else if (city->terrain_climate == CITY_TERRAIN_DESERT || city->terrain_climate == CITY_TERRAIN_MIXED) {
+    for (int d = 0; d < 8; d += 2) {
+      TileIndex next = GetRelativeTileOrInvalid(city, tile, kTerrainNeighborXOffsets[d], kTerrainNeighborYOffsets[d]);
+      if (next != INVALID_TILE && ReadCityTileBaseClimate(city, &city->tile[next]) == CLIMATE_DESERT_100) {
+        target = CITY_GROUND_DESERT_HALF;
+        break;
+      }
+    }
+  }
+  bool snow = ground >= CITY_GROUND_SNOW_FIRST && ground <= CITY_GROUND_SNOW_LAST;
+  bool desert = ground == CITY_GROUND_DESERT_HALF || ground == CITY_GROUND_DESERT_FULL;
+  int next = ground;
+  if (target >= CITY_GROUND_DESERT_HALF) next = target;
+  else if (target) {
+    int amount = snow ? ground : 0;
+    next = immediate ? target : amount < target ? amount + 1 : amount > target ? amount - 1 : amount;
+  } else if (snow) next = immediate || ground == CITY_GROUND_SNOW_FIRST ? CITY_GROUND_GRASS : ground - 1;
+  else if (desert) next = CITY_GROUND_GRASS;
+  if (next == ground) return;
+  InvalidateTile(city, tile);
+  WriteGroundKind(tp, next);
+  InvalidateTile(city, tile);
+}
+
+void RefreshCityTileClimates(City *city, TileIndex tile) {
+  if (!IsMapTileValid(city, tile)) return;
+  for (int dy = -1; dy <= 1; ++dy) for (int dx = -1; dx <= 1; ++dx) {
+    TileIndex next = GetRelativeTileOrInvalid(city, tile, dx, dy);
+    if (next == INVALID_TILE) continue;
+    InvalidateTile(city, next);
+    RefreshCityTileGroundCover(city, next, city->settings.timer_mode == CITY_TIMER_STOPPED);
+    InvalidateTile(city, next);
+  }
 }
 
 void BeginCityGroundRecovery(City *city, TileInfo *tp) {
@@ -171,7 +284,7 @@ static bool CityTransportShouldBePaved(const City *city, TileIndex tile) {
 // Settle transport-ground inheritance after import when native landscape and paving fixes are enabled. Repeats until
 // stable and invalidates changed drawing; this initialization scan is not a routine redraw operation.
 void InitializeCityTransportPaving(City *city) {
-  u32 required = (1 << CITY_FIX_NATIVE_LANDSCAPE) | (1 << CITY_FIX_TRANSPORT_PAVING);
+  u64 required = (1ull << CITY_FIX_NATIVE_LANDSCAPE) | (1ull << CITY_FIX_TRANSPORT_PAVING);
   if ((city->fixes & required) != required) return;
   bool changed, any_changed = false;
   // Stock imports settle inheritance immediately, independent of scan order.
@@ -194,7 +307,7 @@ void InitializeCityTransportPaving(City *city) {
 // Occasionally update one valid transport tile's paving using landscape RNG. Requires native landscape traversal; the
 // paving option gates the effect and changed ground is explicitly invalidated.
 void GrowCityTransportGround(City *city, TileIndex tile) {
-  if (!(city->fixes & (1 << CITY_FIX_TRANSPORT_PAVING)) ||
+  if (!(city->fixes & (1ull << CITY_FIX_TRANSPORT_PAVING)) ||
       (NextLandscapeRandom(&city->landscape_random) & 3)) return;
   bool pave = CityTransportShouldBePaved(city, tile);
   TileInfo *tp = &city->tile[tile];
@@ -207,15 +320,16 @@ void GrowCityTransportGround(City *city, TileIndex tile) {
   InvalidateTile(city, tile);
 }
 
-// Advance recovery timing and ground appearance for one landscape visit. Requires a valid tile and the caller's
-// cycle/tree classification; updates metadata in place and invalidates visible transitions.
-void GrowCityGround(City *city, TileIndex tile, u32 cycle, bool tree) {
+// Advance recovery for one landscape visit. Trees/bridges borrow the spatial scan phase because their zone bits
+// belong to the occupant; clear ground/banks retain their own modulo-eight counter.
+void AdvanceCityGroundRecovery(City *city, TileIndex tile) {
   TileInfo *tp = &city->tile[tile];
   int ground = ReadGroundKind(tp);
   if (ground < CITY_GROUND_RECOVERY_FIRST || ground > CITY_GROUND_RECOVERY_LAST) return;
   int kind = tp->kind;
-  bool bridge = IsTileKindBridge(kind);
-  if (tree || bridge) {
+  if (IsTileKindTree(kind) || IsTileKindBridge(kind)) {
+    CityPoint point = MapTilePt(city, tile);
+    u32 cycle = 11 * point.x + 9 * point.y + (city->landscape_tick >> 8);
     if ((cycle & 7) != 7) return;
   } else {
     int counter = ReadGroundRecoveryCounter(tp);
@@ -287,11 +401,11 @@ int CityGroundSpriteForShape(const City *city, TileIndex tile, int zoom, int sha
 // Tree silhouettes remain in the tree module; Drawing owns visibility, clipping, collection and final pixels.
 bool DrawCityGroundSurface(City *city, TileIndex tile, int zoom, int screen_x, int ground_y,
     const CityTileGeometry *tile_geometry) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   const TileInfo *tp = &city->tile[tile];
   int kind = tp->kind;
   CityTileGeometry geometry = *tile_geometry;
-  if (!(city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)) ||
+  if (!(city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) ||
       (kind != TK_CLEAR && !IsTileKindTree(kind))) return false;
   if (IsTileKindShoreTree(kind)) {
     DrawCityMapTerrainTile(city, tile, zoom, -1, screen_x, ground_y, &geometry);
@@ -328,7 +442,7 @@ bool DrawCityGroundTile(City *city, TileIndex tile, int zoom, int screen_x, int 
 // only the placement marker. Geometry and source layout are already projected into the active camera.
 void DrawCityGroundTileFallback(City *city, TileIndex tile, int layout, int zoom, int screen_x, int ground_y,
     const CityTileGeometry *geometry) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   const TileInfo *tp = &city->tile[tile];
   int terrain = CityMapDryGroundShape(city, tile, geometry), zone = ReadCityZoneKind(tp);
   int ground = terrain == CITY_TERRAIN_FLAT && zone != ZONE_NONE ? MapSpriteZoomIndex(290 + zone, zoom) : -1;
@@ -338,7 +452,7 @@ void DrawCityGroundTileFallback(City *city, TileIndex tile, int layout, int zoom
   else DrawCityBuildingSelection(city, tile, CITY_BUILDING_SELECTION_BEFORE, CityMapDrawOptions(drawing));
   if (layout == CITY_MAP_TILE_SPRITE_CLEAR || !details) return;
   int baseline = ground_y - (terrain == CITY_TERRAIN_SHAPE_13 ? CityMapHeightStep(zoom) : 0);
-  if ((city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)) &&
+  if ((city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) &&
       layout >= CITY_MAP_TILE_SPRITE_TREE_FIRST && layout <= CITY_MAP_TILE_SPRITE_TREE_LAST)
     baseline = ground_y - CityTreeGroundOffset(geometry->land_shape, zoom);
   int sprite = MapSpriteZoomIndex(layout, zoom);
@@ -354,8 +468,8 @@ void DrawCityGroundTileFallback(City *city, TileIndex tile, int layout, int zoom
 
 static bool DrawRemainsTile(City *city, TileIndex tile, int zoom, int screen_x, int ground_y,
     const CityTileGeometry *geometry) {
-  Drawing *drawing = city->game->drawing;
-  if (city->tile[tile].kind != TK_RADIOACTIVE_WASTE || !(city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)) ||
+  Drawing *drawing = city->drawing;
+  if (city->tile[tile].kind != TK_RADIOACTIVE_WASTE || !(city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) ||
       !CityMapTileDetailsVisible(drawing) || geometry->water != CITY_WATER_NONE) return false;
   int sprite = MAP_LANDSCAPE_SPRITE_FIRST + zoom * MAP_LANDSCAPE_SPRITES_PER_ZOOM -
       CITY_LANDSCAPE_GROUND_FIRST + CITY_LANDSCAPE_RADIOACTIVE_FIRST + geometry->land_shape;
@@ -367,9 +481,7 @@ static bool DrawRemainsTile(City *city, TileIndex tile, int zoom, int screen_x, 
 static void TickGroundTile(City *city, TileIndex tile) {
   if (FloodCityClearTile(city, tile)) return;
   RefreshCityTileGroundCover(city, tile, false);
-  CityPoint point = MapTilePt(city, tile);
-  u32 cycle = 11 * point.x + 9 * point.y + (city->landscape_tick >> 8);
-  GrowCityGround(city, tile, cycle, false);
+  AdvanceCityGroundRecovery(city, tile);
 }
 
 const TileModule kCityGroundModule = {.tick = TickGroundTile, .draw = DrawCityGroundTile};

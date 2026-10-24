@@ -28,6 +28,22 @@ typedef enum CityUtilityScanStage {
 static const i8 kUtilityNeighborX[4] = {-1, 0, 1, 0};
 static const i8 kUtilityNeighborY[4] = {0, -1, 0, 1};
 
+// Clear visited and the selected service flags in a complete map section. Water resets preserve stored tower water;
+// power resets clear supply on every tile. This does not edit coarse layers; the caller owns layer invalidation.
+static void ClearCityUtilitySection(City *city, int section, bool water) {
+  int width = city->map_width, columns = width / CITY_MAP_SECTION_SIZE;
+  TileIndex first = section / columns * CITY_MAP_SECTION_SIZE * width + section % columns * CITY_MAP_SECTION_SIZE;
+  TileInfo *restrict tiles = city->tile + first;
+  for (int y = 0; y < CITY_MAP_SECTION_SIZE; ++y) {
+    TileInfo *tp = tiles + y * width;
+    for (int x = 0; x < CITY_MAP_SECTION_SIZE; ++x, ++tp) {
+      int clear_flags = TF_VISITED | (water ?
+          (tp->kind == TK_WATER_TOWER ? 0 : TF_WATERED) : TF_POWERED);
+      tp->flags &= ~clear_flags;
+    }
+  }
+}
+
 // Initialize caller-owned component traversal and seed the reusable route queue. The City map, queue and starting
 // coordinate must be valid; the work record must remain alive through subsequent component steps.
 static void BeginCityUtilityTraversal(City *city, CityUtilityTraversal *network, int x, int y) {

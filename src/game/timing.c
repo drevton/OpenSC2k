@@ -1,14 +1,14 @@
-#include "city/engine/clock.h"
-// Host clock sampling and presentation deadlines, separate from City time.
-#include "city/engine/city_types.h"
 #include "game/timing.h"
+
+// Host clock sampling and presentation deadlines, separate from City time.
 
 #include <math.h>
 
-#include "game/state.h"
-#include "city/engine/simulation.h"
+#include "city/engine/city_types.h"
+#include "city/engine/clock.h"
 #include "city/state.h"
 #include "game/observation.h"
+#include "game/state.h"
 #include "ui/state.h"
 
 static u32 ReadGameDelayClock(Game *game, bool poll_timers) {
@@ -29,16 +29,18 @@ bool AdvanceGameDelayFrame(Game *game) {
 u32 ReadCityScreenShakeTime(City *city) {
   u32 value = SimulationFrameTime(city);
   AdvanceCityClock(city, CITY_CLOCK_SCREEN_SHAKE, 1);
-  if (city->game != NULL && city->game->time_sampled != NULL)
-    city->game->time_sampled(city->game, value);
+  Game *game = city->game;
+  if (game != NULL && game->time_sampled != NULL)
+    game->time_sampled(game, value);
   return value;
 }
 
 // Observe animation time without advancing City or sampling the host clock.
 u32 ReadCityAnimationTime(City *city) {
   u32 value = SimulationFrameTime(city);
-  if (city->game != NULL && city->game->time_sampled != NULL)
-    city->game->time_sampled(city->game, value);
+  Game *game = city->game;
+  if (game != NULL && game->time_sampled != NULL)
+    game->time_sampled(game, value);
   return value;
 }
 
@@ -57,9 +59,10 @@ void PumpGameDelayCadence(Game *game) {
 
 void BeginGameDelay(Game *game, GameDelay *delay, int milliseconds, bool poll_timers) {
   delay->saved_idle_gate = game->delay_blocked;
-  delay->saved_input_gate = game->ui->input_loop_active;
+  CityInterfaceState *ui = game->ui;
+  delay->saved_input_gate = ui->input_loop_active;
   game->delay_blocked = true;
-  if (poll_timers) game->ui->input_loop_active = 1;
+  if (poll_timers) ui->input_loop_active = 1;
   delay->active = true;
   delay->poll_timers = poll_timers;
   delay->deadline = ReadGameDelayClock(game, poll_timers) + (u32)milliseconds;
@@ -79,6 +82,7 @@ bool StepGameDelay(Game *game, GameDelay *delay) {
   // supplies only the independently recorded timer message at this boundary.
   if (delay->poll_timers && observer && observer->poll_delay_cadence && observer->poll_delay_cadence(game))
     UpdateCityCadence(game->city);
+  // ReadGameDelayClock selects the live observer after the cadence callback.
   // Unsigned subtraction followed by a signed comparison also handles a wrapped deadline.
   if ((i32)(ReadGameDelayClock(game, delay->poll_timers) - delay->deadline) < 0) return false;
   CancelGameDelay(game, delay);

@@ -6,16 +6,18 @@
 #include "city/economy/state.h"
 #include "city/economy/tables.h"
 #include "city/engine/city_types.h"
+#include "city/engine/clock.h"
 #include "city/engine/input.h"
 #include "city/engine/questions.h"
 #include "city/engine/random.h"
 #include "city/engine/simulation_state.h"
 #include "city/engine/weather.h"
-#include "city/events/events.h"
+#include "city/events/types.h"
 #include "city/events/news.h"
 #include "city/fixes.h"
 #include "city/infrastructure/types.h"
 #include "city/maps/map.h"
+#include "city/maps/labels.h"
 #include "city/maps/map_types.h"
 #include "city/maps/tile_queue.h"
 #include "city/military.h"
@@ -25,6 +27,7 @@
 // Native simulation ownership, independent of the original executable's layout.
 // Pending command contexts are not serialized by the SC2 save format.
 typedef struct Game Game;
+typedef struct Drawing Drawing;
 typedef struct CityTickContinuation CityTickContinuation;
 typedef struct CityFileExtensions CityFileExtensions;
 
@@ -35,6 +38,8 @@ typedef struct City {
   CityQuarterMapStatistics *quarter;
   u16 *scratch;
   Game *game;
+  // Borrowed presentation context, owned by Game. Not saved or part of deterministic state.
+  Drawing *drawing;
   u32 map_cell_count;
   u16 map_width, map_height;
   u8 map_width_shift;
@@ -188,6 +193,7 @@ static SC2K_FORCE_INLINE bool IsMapTileValid(const City *city, TileIndex tile) {
 
 _Static_assert(offsetof(City, tile) == 0, "map layer pointers start the simulation");
 _Static_assert(offsetof(City, game) < 64, "hot subsystem link stays in the first cache line");
+_Static_assert(offsetof(City, drawing) < 64, "borrowed drawing link stays in the first cache line");
 _Static_assert(offsetof(City, statistics) + sizeof(CityStatistics) < 4096,
     "frequently updated tile totals precede cold tables");
 _Static_assert(offsetof(City, questions) < 4096, "ARM64 hot state fits byte-load immediate range");
@@ -226,7 +232,6 @@ void ReleaseSimulation(City *city);
 bool ResizeCityMap(City *city, int width, int height);
 bool ReserveCityEventSlots(City *city, int capacity);
 void InitializeCityDefaults(City *city);
-void InitializeCityHistoryStorage(City *city);
 void InitializeCityStorage(City *city);
 void BindOwnedSimulationMapLayers(City *city);
 

@@ -8,15 +8,14 @@ typedef struct Game Game;
 
 // Resolved requests notify Game's playback observer after the backend returns its actual result.
 bool PlayCityEffect(Game *game, int sound_id, CityEffectPlayback playback);
-bool PlayCitySpatialEffect(Game *game, int sound_id, CityEffectPlayback playback, u8 pan);
 void StopCityPlatformSound(Game *game);
 
 // Playlist changes and accepted interruption/completion attempts refresh the music windows.
 void SetJukeboxPlaying(Game *game, bool playing);
-// Returns zero when an interruption starts; refusals and playback failures return one.
+// Coordinate Audio playback and UI refresh. Return zero when an interruption starts; otherwise return one.
 u32 InterruptJukebox(Game *game, int track);
 // Ignore completions with an old token or a notification other than finished/failed.
-void CompleteJukeboxTrack(Game *game, int notification, u16 device);
+void CompleteJukeboxTrack(Game *game, CityMusicCompletion notification, u16 device);
 
 // Music
 
@@ -26,6 +25,7 @@ i32 MaybePlayCityEventMusic(Game *game, int event_id);
 u32 PlayCityMusicTrack(Game *game, int track);
 bool PlayCityEventMusicById(Game *game, int event_id);
 void StopCityMusicSequence(Game *game);
+// Preserve the raw host notification and observer's result; the native controller rejects unknown values.
 int CompleteCityMusic(Game *game, int notification, int token);
 bool PlayNextCityEventMusicSequence(Game *game);
 // Read Audio's playback gate before selecting music. Selection can consume City RNG, even when music is disabled.
@@ -51,9 +51,6 @@ bool PlayCityAmbientSound(City *city, TileIndex tile, int sound_id);
 // Aircraft cues additionally require a visible plane in the live presentation.
 void PlayCityAirplaneSound(City *city, int slot, int sound_id);
 void PlayCitySoundEvent(City *city, TileIndex tile, int sound_id);
-bool CacheCitySoundResource(Game *game, i32 sound_id);
-// Select a resolved recording for tool playback. A cache hit succeeds; missing/invalid recordings keep the old ID.
-bool PreloadCityToolSound(Game *game, int sound_id);
 bool PlayCitySoundWithDelay(Game *game, i32 sound_id, i32 repetitions);
 void CompleteCitySoundPlayback(Game *game);
 void StopAllCitySound(Game *game);

@@ -12,6 +12,8 @@
 #include "ui/dialogs/dialogs.h"
 #include "ui/map.h"
 #include "ui/news/newspaper.h"
+#include "ui/news/newspaper_capture.h"
+#include "ui/news/newspaper_state.h"
 #include "ui/state.h"
 #include "ui/windows/windows.h"
 
@@ -31,7 +33,7 @@ void DestroyCityNewspaperWindow(City *city, CityNewspaperDialog *dialog) {
 // Prepare picture state and the ranking prefix before the first paint. The caller retains any opening notice.
 CityNewspaperInitialization BeginCityNewspaperDialog(City *city, CityNewspaperDialog *dialog) {
   CityResourceState *resources = city->game->resources;
-  if (resources->facility_resources_unavailable != 0) {
+  if (resources->news_resources_unavailable != 0) {
     CityInterfaceState *ui = city->game->ui;
     if (dialog == ui->initializing_newspaper)
       ui->newspaper_closed_during_initialization = true;
@@ -65,7 +67,7 @@ void PresentCityNewspaperText(Game *game, NativeNewspaperDialog *dialog, const c
     return;
   }
   i32 index = dialog->page.text_run_count;
-  if (index == 32) {
+  if (index == CITY_NEWSPAPER_TEXT_RUN_CAPACITY) {
     SetGameError(game, -3);
     return;
   }
@@ -79,7 +81,7 @@ void DrawCityNewspaperRectangle(Game *game, NativeNewspaperDialog *dialog, const
     return;
   }
   CityCanvasNewspaperPage *page = &dialog->page;
-  if (page->filler_count == (i32)(sizeof(dialog->filler) / sizeof(CityRect))) {
+  if (page->filler_count == CITY_NEWSPAPER_FILLER_CAPACITY) {
     SetGameError(game, -3);
     return;
   }
@@ -94,10 +96,6 @@ i32 MeasureCityNewspaperText(void *context, const char *text, i32 length) {
 
 void ShowRankedCityEventModal(City *city, u32 event_code, u32 event_data) {
   PresentRankedCityEvent(city, event_code, event_data);
-}
-
-void ShowCityNewspaper(City *city, i32 edition_index) {
-  PresentCityNewspaperEdition(city, edition_index);
 }
 
 static i32 RunNewspaperHost(City *city, void *dialog) {

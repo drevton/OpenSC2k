@@ -1,4 +1,4 @@
-#include "drawing/sprites/sprites.h"
+#include "drawing/sprites/surface.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -61,6 +61,21 @@ bool ValidateRunSprite(const RunSprite *sprite) {
   return true;
 }
 
+bool RunSpriteHasOnlyKinds(const RunSprite *sprite, u32 allowed_kinds) {
+  const u32 *rows = RunSpriteRows(sprite);
+  const u8 *data = RunSpriteData(sprite);
+  for (int y = 0; y < sprite->height; ++y) {
+    const u8 *at = data + rows[y], *end = data + rows[y + 1];
+    if (at < end) ReadSpriteInitialSkip(&at);
+    while (at < end) {
+      int kind, length = ReadSpriteRun(&at, &kind);
+      if (!(allowed_kinds & (1 << kind))) return false;
+      at += length * SpriteRunPayloadBytes(kind);
+    }
+  }
+  return true;
+}
+
 SpritePalette *RetainSpritePalette(SpritePalette *palette) {
   if (palette) atomic_fetch_add_explicit(&palette->references, 1, memory_order_relaxed);
   return palette;
@@ -98,8 +113,8 @@ void FreeRunSprite(RunSprite *sprite) {
 static u32 SurfaceIndexedColor(const SpriteSurface *surface, int kind, int index) {
   if (SpriteRunAnimated(kind))
     return ((u32)SpriteAnimationSource(index) << 24) | (surface->animation_palette[index] & 0xFFFFFF);
-  /* The unused display byte retains source identity for selection/water masks.
-   * Only compact animation IDs are stored in the separate animation plane. */
+  // The display ignores the upper byte; global palette colors retain their source index there.
+  // Only compact animation IDs are stored in the separate animation plane.
   return (surface->image_palette ? 0 : (u32)index << 24) | (surface->palette[index] & 0xFFFFFF);
 }
 

@@ -135,7 +135,7 @@ static i32 FindCityTrainExitDirection(City *city, TileIndex tile_index, int dire
 
 // Create an engine and two linked coaches on an eligible plain rail tile.
 // Spawn direction consumes City RNG; failed pool admission leaves no partially allocated train.
-bool TryCreateCityTrain(City *city, TileIndex tile_index) {
+static bool TryCreateCityTrain(City *city, TileIndex tile_index) {
   assert(IsMapTileValid(city, tile_index));
   CityPoint point = MapTilePt(city, tile_index);
   if (!CanSpawnCityVehicle(city, CITY_MAP_EVENT_TRAIN_ENGINE) ||

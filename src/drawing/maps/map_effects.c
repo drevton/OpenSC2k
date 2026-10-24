@@ -1,6 +1,8 @@
 // Drawing owns effect visibility, presentation clocks, cost feedback and the fixed demolition pool.
 // Game supplies clock samples and speed; UI resolves City requests before starting an effect.
 
+#include "drawing/maps/map_sprites.h"
+#include "drawing/sprites/surface.h"
 #include "drawing/maps/map_effects.h"
 
 #include <assert.h>
@@ -140,20 +142,27 @@ bool UpdateCityCostTexts(Drawing *drawing, double now) {
   return dirty;
 }
 
-static CityRect CityCostTextBounds(City *city, const CityCostText *text, int *width, int *height) {
-  Drawing *drawing = city->game->drawing;
-  if (!text->active || !IsMapTileValid(city, text->tile)) return (CityRect){0};
+typedef struct {
+  CityRect bounds;
+  int width, height;
+} CityCostTextLayout;
+
+// Logical label dimensions and physical framebuffer bounds come from the same measurement.
+static CityCostTextLayout LayoutCityCostText(const City *city, const CityCostText *text) {
+  const Drawing *drawing = city->drawing;
+  if (!text->active || !IsMapTileValid(city, text->tile)) return (CityCostTextLayout){0};
   const CityInterfaceFont *font = &city->game->resources->interface_font;
-  *width = IntMin(CITY_COST_TEXT_WIDTH, CityInterfaceTextWidth(font, text->text) + 2);
-  *height = 10;
+  int width = 2, height = 10;
   if (font->ready) {
     const char *character = text->text;
     while (*character) {
-      int code = ReadCityFontCharacter(&character);
-      *height = IntMax(*height, font->glyphs[0][code].height + 1);
+      const CityInterfaceGlyph *glyph = &font->glyphs[0][ReadCityFontCharacter(&character)];
+      width += glyph->advance;
+      height = IntMax(height, glyph->height + 1);
     }
-  }
-  *height = IntMin(CITY_COST_TEXT_HEIGHT, *height);
+  } else width += CanvasTextWidth(text->text);
+  width = IntMin(CITY_COST_TEXT_WIDTH, width);
+  height = IntMin(CITY_COST_TEXT_HEIGHT, height);
   int scale = 1 << drawing->default_map_view->zoom;
   CityPoint camera = CityMapViewTilePoint(city, text->tile);
   int x = camera.x, y = camera.y;
@@ -163,24 +172,25 @@ static CityRect CityCostTextBounds(City *city, const CityCostText *text, int *wi
   int anchor_x = drawing->map_state.origin_x + (y - x + 1) * 4 * scale;
   int anchor_y = drawing->map_state.origin_y + (x + y - 1) * 2 * scale - elevation * 3 * scale;
   int ui_scale = drawing->options.scale;
-  int pixel_width = (*width * ui_scale + 99) / 100;
-  int pixel_height = (*height * ui_scale + 99) / 100;
+  int pixel_width = (width * ui_scale + 99) / 100;
+  int pixel_height = (height * ui_scale + 99) / 100;
   int left = drawing->target_x + anchor_x * drawing->target_scale / 100 - pixel_width / 2;
   // Round only the final physical-pixel position, keeping motion smooth at high UI scales.
   int rise = (text->age_ms * 24 * ui_scale + 50000) / 100000;
   int top = drawing->target_y + anchor_y * drawing->target_scale / 100 - pixel_height - 8 * ui_scale / 100 - rise;
-  return (CityRect){left, top, left + pixel_width, top + pixel_height};
+  return (CityCostTextLayout){.bounds = {left, top, left + pixel_width, top + pixel_height},
+      .width = width, .height = height};
 }
 
 void DrawCityCostTexts(City *city) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   Canvas *canvas = &drawing->map_target.canvas;
   CityRect clip = IntersectCityRects(canvas->clip, (CityRect){0, 0, canvas->width, canvas->height});
   u32 background[CITY_COST_TEXT_WIDTH * 5 * 8];
   for (int i = 0; i < CITY_COST_TEXT_COUNT; ++i) {
     const CityCostText *text = &drawing->cost_texts[i];
-    int width, height;
-    CityRect bounds = CityCostTextBounds(city, text, &width, &height);
+    CityCostTextLayout layout = LayoutCityCostText(city, text);
+    CityRect bounds = layout.bounds;
     CityRect visible = IntersectCityRects(bounds, clip);
     if (visible.left >= visible.right || visible.top >= visible.bottom) continue;
     Canvas label = *canvas;
@@ -191,9 +201,9 @@ void DrawCityCostTexts(City *city) {
     label.raster.offset_x = bounds.left;
     label.raster.offset_y = bounds.top;
     label.raster.clip = visible;
-    label.width = width;
-    label.height = height;
-    label.clip = (CityRect){0, 0, width, height};
+    label.width = layout.width;
+    label.height = layout.height;
+    label.clip = (CityRect){0, 0, layout.width, layout.height};
     label.scalable_font = !drawing->options.sprite_font;
     label.font_antialias = drawing->options.font_antialias;
     int alpha = text->age_ms < CITY_COST_TEXT_DURATION_MS - CITY_COST_TEXT_FADE_MS ? 255 :
@@ -233,7 +243,7 @@ static int DemolitionSpriteId(const Drawing *drawing, const CityDemolitionEffect
 }
 
 static CityRect DemolitionBounds(const City *city, const CityDemolitionEffect *effect) {
-  const Drawing *drawing = city->game->drawing;
+  const Drawing *drawing = city->drawing;
   if (!effect->active || !IsMapTileValid(city, effect->tile)) return (CityRect){0};
   int id = DemolitionSpriteId(drawing, effect), slot = drawing->target_cache;
   const RunSprite *sprite = drawing->sprite_cache.sprites[slot][id];
@@ -252,7 +262,7 @@ static CityRect DemolitionBounds(const City *city, const CityDemolitionEffect *e
 }
 
 void DrawCityDemolitionEffects(City *city) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   for (int i = 0; i < CITY_DEMOLITION_EFFECT_COUNT; ++i) {
     const CityDemolitionEffect *effect = &drawing->demolition_effects[i];
     if (!effect->active) continue;
@@ -284,7 +294,7 @@ static void MarkCityMapEffectDamage(Drawing *drawing, CityRect previous, CityRec
 }
 
 void PrepareCityMapEffectDamage(const CityMapPaint *paint, CityRect viewport) {
-  Drawing *drawing = paint->city->game->drawing;
+  Drawing *drawing = paint->city->drawing;
   int index = paint->view ? (int)(paint->view - drawing->views) + 1 : 0;
   const NativeMapCache *cache = paint->view ? &paint->view->cache : &drawing->main_cache;
   CityPoint scroll = {
@@ -293,8 +303,7 @@ void PrepareCityMapEffectDamage(const CityMapPaint *paint, CityRect viewport) {
       (drawing->map_state.origin_y - cache->origin_y) * drawing->target_scale / 100 +
           drawing->target_y - cache->target_y};
   for (int i = 0; i < CITY_COST_TEXT_COUNT; ++i) {
-    int width, height;
-    CityRect bounds = CityCostTextBounds(paint->city, &drawing->cost_texts[i], &width, &height);
+    CityRect bounds = LayoutCityCostText(paint->city, &drawing->cost_texts[i]).bounds;
     MarkCityMapEffectDamage(drawing, drawing->cost_text_bounds[index][i], bounds, scroll, viewport);
     drawing->cost_text_bounds[index][i] = bounds;
   }

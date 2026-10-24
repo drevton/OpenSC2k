@@ -1,4 +1,6 @@
 #include "city/engine/city_name.h"
+#include "base/text.h"
+#include "city/maps/labels.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
@@ -63,6 +65,12 @@ static void NotifyStartupState(City *city) {
 }
 
 static bool BuildNativeStartupLayout(u32 resource, CityCanvasStartupWindow *layout);
+
+static bool StartupMenuLoadCity(City *city, CityStartupMenuDialog *dialog);
+static bool StartupMenuNewCity(City *city, CityStartupMenuDialog *dialog);
+static bool StartupMenuEditMap(City *city, CityStartupMenuDialog *dialog);
+static bool StartupMenuLoadScenario(City *city, CityStartupMenuDialog *dialog);
+static bool StartupMenuQuit(City *city, CityStartupMenuDialog *dialog);
 
 static Window *CanvasWindow(City *city, u32 id) {
   CityCanvasDesktop *desktop = city->game->ui->startup_desktop;
@@ -588,7 +596,7 @@ static bool RefreshTerrainSetup(City *city) {
   CopyText(window->layout.title, sizeof(window->layout.title), pending->terrain_path ? "New City - Loaded Map" :
       pending->preserve_terrain ? "New City - Edited Terrain" : "New City");
   if (!window->layout.drawing) {
-    window->layout.drawing = (CityTerrainPreviewDrawing *)CreateCityWindowDrawing(city->game->drawing,
+    window->layout.drawing = (CityTerrainPreviewDrawing *)CreateCityWindowDrawing(city->drawing,
         CITY_WINDOW_DRAWING_TERRAIN_PREVIEW, 0);
     if (!window->layout.drawing) {
       SetGameError(city->game, SC2K_ERROR_HOST_ALLOCATION_FAILURE);
@@ -866,7 +874,7 @@ bool OpenCityStartupMenu(City *city) {
     free(pending);
     return false;
   }
-  city->game->drawing->palette.direct_animation = 1;
+  city->drawing->palette.direct_animation = 1;
   return true;
 }
 
@@ -875,7 +883,7 @@ bool TakeCityStartupMenuChoice(City *city, int *choice) {
   if (!pending || !pending->detached) return false;
   if (!pending->answered && CanvasWindow(city, pending->dialog->window_id)) return false;
   *choice = FinishCityStartupMenu(city, pending);
-  city->game->drawing->palette.direct_animation = 0;
+  city->drawing->palette.direct_animation = 0;
   free(pending);
   return true;
 }
@@ -913,7 +921,7 @@ void ClearCityStartupMenuPresentation(City *city) {
   if (ui->startup_menu) {
     CityStartupMenuState *pending = ui->startup_menu;
     FinishCityStartupMenu(city, pending);
-    city->game->drawing->palette.direct_animation = 0;
+    city->drawing->palette.direct_animation = 0;
     free(pending);
   }
   for (int i = 0; i < CITY_STARTUP_WINDOW_LIMIT; ++i)
@@ -1308,10 +1316,6 @@ static void ActivateStartupMenuButton(Game *game, int control) {
   }
 }
 
-void SetCityStartupDialogResource(CityStartupWindow *dialog, u32 resource) {
-  dialog->resource_id = resource;
-}
-
 void InitializeCitySetupName(City *city, CityNewCitySetupDialog *dialog) {
   CopyText(dialog->city_name, sizeof(dialog->city_name), "New City");
 }
@@ -1341,7 +1345,6 @@ CityNewCitySetupDialog *ConstructNewCitySetupDialog(City *city, CityNewCitySetup
   dialog->base = (CityStartupWindow){.resource_id = CITY_DIALOG_RESOURCE_NEW_CITY};
   dialog->city_name[0] = 0;
   dialog->previous_name = (CityName){0};
-  SetCityStartupDialogResource(&dialog->base, CITY_DIALOG_RESOURCE_NEW_CITY);
   dialog->era = CITY_SETUP_ERA_1900;
   dialog->start_year = 0;
   dialog->difficulty = CITY_SETUP_DIFFICULTY_EASY;
@@ -1686,39 +1689,39 @@ static int ChooseStartupMenu(City *city, void *context) {
 // choice and restores the retained presentation lifetime on return.
 int ShowCityStartupMenu(City *city) {
   CityStartupMenuDialog dialog = {CITY_DIALOG_RESOURCE_STARTUP_MENU, 0};
-  city->game->drawing->palette.direct_animation = 1;
+  city->drawing->palette.direct_animation = 1;
   int result = RunPausedCityAction(city, ChooseStartupMenu, &dialog);
-  city->game->drawing->palette.direct_animation = 0;
+  city->drawing->palette.direct_animation = 0;
   return result;
 }
 
-// Complete original button callbacks; return the platform EndDialog BOOL. Requires the live startup interaction;
-// completes its choice without entering terrain editing itself.
-bool StartupMenuEditMap(City *city, CityStartupMenuDialog *dialog) {
+// Complete the startup menu with the terrain-editing choice. Requires the live startup interaction; returns
+// EndCityStartupDialog's completion result.
+static bool StartupMenuEditMap(City *city, CityStartupMenuDialog *dialog) {
   return EndCityStartupDialog(city, dialog->window_id, CITY_STARTUP_EDIT_MAP);
 }
 
 // Complete the startup menu with the load-city choice. Requires the live startup interaction; returns
 // EndCityStartupDialog's completion result and does not load a file itself.
-bool StartupMenuLoadCity(City *city, CityStartupMenuDialog *dialog) {
+static bool StartupMenuLoadCity(City *city, CityStartupMenuDialog *dialog) {
   return EndCityStartupDialog(city, dialog->window_id, CITY_STARTUP_LOAD_CITY);
 }
 
 // Complete the startup menu with the scenario choice. Requires the live startup interaction; actual scenario
 // selection/loading belongs to the caller after the dialog returns.
-bool StartupMenuLoadScenario(City *city, CityStartupMenuDialog *dialog) {
+static bool StartupMenuLoadScenario(City *city, CityStartupMenuDialog *dialog) {
   return EndCityStartupDialog(city, dialog->window_id, CITY_STARTUP_LOAD_SCENARIO);
 }
 
 // Complete the startup menu with the new-city choice. Requires the live startup interaction; returns the dialog
 // completion result without generating terrain here.
-bool StartupMenuNewCity(City *city, CityStartupMenuDialog *dialog) {
+static bool StartupMenuNewCity(City *city, CityStartupMenuDialog *dialog) {
   return EndCityStartupDialog(city, dialog->window_id, CITY_STARTUP_NEW_CITY);
 }
 
 // Complete the startup menu with the quit choice. Requires the live startup interaction; shutdown remains the owning
 // caller's decision after the dialog closes.
-bool StartupMenuQuit(City *city, CityStartupMenuDialog *dialog) {
+static bool StartupMenuQuit(City *city, CityStartupMenuDialog *dialog) {
   return EndCityStartupDialog(city, dialog->window_id, CITY_STARTUP_QUIT);
 }
 

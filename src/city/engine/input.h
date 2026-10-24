@@ -3,12 +3,12 @@
 
 #include <stddef.h>
 
-#include "city/maps/map_types.h"
+#include "city/maps/labels.h"
 #include "city/types.h"
 
 // Shared construction working state. Nested commands retain original overwrites;
 // these fields affect costs and map mutations, not just preview presentation.
-typedef struct {
+typedef struct CityConstructionState {
   u32 terrain_surcharge_count;
   u16 zone_code;
   i16 direction;
@@ -25,6 +25,10 @@ typedef struct CityNameCommandInput {
   CityOverlayName name;
   int length;
 } CityNameCommandInput;
+
+// Copy the active command's resolved name reply into caller-owned outputs. False leaves both outputs unchanged;
+// cancellation writes only the answer. The caller retains the enclosing command's staged input.
+bool ReadCityNameCommandAnswer(City *city, CityNameCommandInput *state, int *answer);
 
 enum {
   CITY_DRAG_INPUT_RELEASE = 1,

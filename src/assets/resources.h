@@ -5,10 +5,6 @@
 
 typedef struct CityNewspaperResources CityNewspaperResources;
 
-// Data
-
-void InitializeCityNewsResources(CityAssets *assets);
-
 // Facility Information
 // ASCII locale text is borrowed. Case-insensitive selection writes only the Assets-owned template references.
 void InitializeCityFacilityInformation(CityAssets *assets, const char *locale);
@@ -21,9 +17,11 @@ extern const char *const kCityTeamNames[5];
 // Borrowed static text; unknown categories and indices return an empty string.
 const char *ReadCityNameResource(int category, int index);
 bool InitializeCityResourceNames(CityAssets *resources);
-bool GenerateCityName(u32 *random, const char *previous, char *name, size_t capacity);
 
 // Newspaper
+
+// Bind immutable native articles and ranking inputs; installed template buffers keep their separate ownership.
+void InitializeCityNewsResources(CityAssets *assets);
 
 enum { CITY_NEWSPAPER_PRICE_ERAS = 5 };
 
@@ -39,6 +37,7 @@ static inline const char *CityNewspaperPriceText(int kind, int era) {
       kCityNewspaperPrices[index / CITY_NEWSPAPER_PRICE_ERAS][index % CITY_NEWSPAPER_PRICE_ERAS] : "";
 }
 
+// Release owned template buffers and drop borrowed article text; topic tables remain unchanged.
 void ReleaseCityNewspaperResources(CityNewspaperResources *resources);
 
 #endif

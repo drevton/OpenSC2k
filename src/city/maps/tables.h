@@ -1,10 +1,14 @@
 #ifndef SC2K_DOMAIN_SRC_CITY_MAPS_TABLES_H
 #define SC2K_DOMAIN_SRC_CITY_MAPS_TABLES_H
 
-#include "city/types.h"
+#include "base/types.h"
 
 // Terrain-operation result: all four corners rise to the next level. Never stored as a tile slope.
 enum { CITY_TERRAIN_RAISE_LEVEL = 50 };
+
+// Cardinal steps in west, south, east, north order. Disaster walks and tile scans retain this order.
+extern const i8 kCardinalNeighborY[4];
+extern const i8 kCardinalNeighborX[4];
 
 // Rotation Tables
 
@@ -30,6 +34,9 @@ const CityMapRotationTables *ReadCityMapRotationTables(void);
 // Terrain Tables
 
 // Immutable numerical data, independent of executable backing and original element widths.
+// Raised-corner bits follow vertex offsets (0,0), (0,1), (1,1), (1,0). Index by terrain shape 0..15.
+// The caller chooses world or camera space. Underground selection shapes have a separate numbering.
+extern const u8 kTerrainRaisedCorners[16];
 extern const i8 kTerrainNeighborYOffsets[9];
 extern const i8 kTerrainNeighborXOffsets[9];
 extern const u8 kTerrainHigherNeighborBits[8];

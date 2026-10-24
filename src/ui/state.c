@@ -1,5 +1,6 @@
 #include "city/presentation.h"
 #include "ui/state.h"
+#include "ui/text/status.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -60,14 +61,10 @@ bool IsCityOutcomeNoticeActive(const City *city) {
 }
 
 bool SetCityDemolitionSuppressed(City *city, bool suppressed) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   bool previous = drawing && drawing->demolition_suppressed;
   if (drawing) drawing->demolition_suppressed = suppressed;
   return previous;
-}
-
-void SetCitySavePromptActive(City *city, bool active) {
-  if (city->game->ui) city->game->ui->save_prompt_active = active;
 }
 
 bool IsCityPresentationMinimized(const City *city) {

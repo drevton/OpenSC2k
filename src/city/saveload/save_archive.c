@@ -1,10 +1,12 @@
 #include "city/saveload/services.h"
+#include "city/saveload/runtime.h"
 #include "city/saveload/state.h"
 #include "city/saveload/types.h"
 #include "game/state.h"
 #include "city/saveload/legacy_text.h"
 #include "city/maps/map.h"
 #include "city/saveload/city_file_internal.h"
+#include "city/saveload/sc2k.h"
 #include "base/text.h"
 #include "base/byte_order.h"
 #include "city/state.h"
@@ -46,14 +48,14 @@ static bool SaveCityArchiveNameChunk(City *city, CityFile *archive) {
 // Reorder known archive chunks into stock order, create missing standard chunks and retain unknown records. May
 // replace the chunk array and release discarded duplicates; false reports size/allocation failure and successful
 // growth invalidates old slot pointers.
-static bool EnsureSaveChunks(CityFile *city) {
+static bool EnsureSaveChunks(CityFile *archive) {
   size_t capacity = CITY_FILE_STANDARD_CHUNKS;
-  for (u32 index = 0; index < city->count; ++index)
-    capacity += city->chunk[index].spec == NULL;
+  for (u32 index = 0; index < archive->count; ++index)
+    capacity += archive->chunk[index].spec == NULL;
   if (capacity > UINT32_MAX || capacity > SIZE_MAX / sizeof(CityFileChunk))
     return false;
   CityFileChunk *ordered = calloc(capacity, sizeof(*ordered));
-  u8 *retained = calloc(city->count != 0 ? city->count : 1u, 1);
+  u8 *retained = calloc(archive->count != 0 ? archive->count : 1u, 1);
   u8 created[CITY_FILE_STANDARD_CHUNKS] = {0};
   if (ordered == NULL || retained == NULL) {
     free(ordered);
@@ -64,12 +66,12 @@ static bool EnsureSaveChunks(CityFile *city) {
   for (size_t spec_index = 0; spec_index < CITY_FILE_STANDARD_CHUNKS; ++spec_index) {
     const CityFileChunkSpec *spec = &kCityFileChunks[spec_index];
     CityFileChunk *chunk = NULL;
-    for (u32 index = 0; index < city->count; ++index)
-      if (memcmp(city->chunk[index].tag, spec->tag, 4) == 0)
-        chunk = &city->chunk[index];
+    for (u32 index = 0; index < archive->count; ++index)
+      if (memcmp(archive->chunk[index].tag, spec->tag, 4) == 0)
+        chunk = &archive->chunk[index];
     if (chunk != NULL) {
       ordered[count] = *chunk;
-      retained[chunk - city->chunk] = 1;
+      retained[chunk - archive->chunk] = 1;
     } else {
       CityFileChunk *added = &ordered[count];
       created[count] = 1;
@@ -81,27 +83,27 @@ static bool EnsureSaveChunks(CityFile *city) {
       if (added->decoded == NULL || added->original == NULL)
         goto fail;
       if (memcmp(spec->tag, "MISC", 4) == 0)
-        WriteBE32(added->decoded, 290);
+        WriteBE32(added->decoded, CITY_MISC_VERSION);
     }
     ++count;
   }
-  for (u32 index = 0; index < city->count; ++index)
-    if (city->chunk[index].spec == NULL) {
-      ordered[count++] = city->chunk[index];
+  for (u32 index = 0; index < archive->count; ++index)
+    if (archive->chunk[index].spec == NULL) {
+      ordered[count++] = archive->chunk[index];
       retained[index] = 1;
     }
   // Canonical save keeps the last known record; release every discarded duplicate.
-  for (u32 index = 0; index < city->count; ++index)
+  for (u32 index = 0; index < archive->count; ++index)
     if (!retained[index]) {
-      free(city->chunk[index].decoded);
-      free(city->chunk[index].original);
-      free(city->chunk[index].encoded);
+      free(archive->chunk[index].decoded);
+      free(archive->chunk[index].original);
+      free(archive->chunk[index].encoded);
     }
-  free(city->chunk);
+  free(archive->chunk);
   free(retained);
-  city->chunk = ordered;
-  city->count = count;
-  city->capacity = (u32)capacity;
+  archive->chunk = ordered;
+  archive->count = count;
+  archive->capacity = (u32)capacity;
   return true;
 fail:
   for (u32 index = 0; index < CITY_FILE_STANDARD_CHUNKS; ++index)
@@ -174,7 +176,7 @@ bool SaveCityArchive(City *city, CityFile *archive) {
         const CityMiscBuffer *buffer = (file->misc_active ? file->misc : NULL);
         for (u32 word = 0; word < CITY_MISC_WORD_COUNT; ++word)
           WriteBE32(chunk->decoded + 4 * word, buffer->words[word]);
-      } else if (!CityFileMiscFields(city, chunk->decoded, 0)) return false;
+      } else if (!CityFileMiscFields(city, chunk->decoded, CITY_FILE_EXPORT)) return false;
       continue;
     }
     if (spec == NULL || spec->storage == CITY_FILE_ONLY)
@@ -183,9 +185,9 @@ bool SaveCityArchive(City *city, CityFile *archive) {
     if (converted == NULL) {
       return false;
     }
-    i32 copied = CityFileStateChunkBytes(city, spec, converted, 0);
+    bool copied = CityFileStateChunkBytes(city, spec, converted, CITY_FILE_EXPORT);
     if (copied) {
-      if (spec->conversion != CITY_FILE_LABELS) CityFileConvertChunk(converted, spec, 0);
+      if (spec->conversion != CITY_FILE_LABELS) CityFileConvertChunk(converted, spec, CITY_FILE_EXPORT);
       memcpy(chunk->decoded, converted, spec->size);
     }
     FreeCityFileScratch(file, converted);

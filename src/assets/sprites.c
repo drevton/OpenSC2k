@@ -1,6 +1,8 @@
+#include "drawing/sprites/sources.h"
 #include "city/maps/trees.h"
 #include "city/maps/tile_storage.h"
 #include "assets/graphics.h"
+#include "assets/catalog.h"
 
 #include <assert.h>
 #include <limits.h>
@@ -11,7 +13,6 @@
 #include "assets/asset_file.h"
 #include "assets/assets.h"
 #include "base/byte_order.h"
-#include "city/maps/layers.h"
 #include "drawing/maps/tables.h"
 #include "drawing/sprites/sprites.h"
 
@@ -69,59 +70,6 @@ static bool IsUnstoredLandscapeSprite(int id) {
       (id >= CITY_LANDSCAPE_UNDERWORLD_ROAD_TUNNEL_FIRST && id < CITY_LANDSCAPE_DIAGONAL_ROAD_FIRST) ||
       (id >= CITY_LANDSCAPE_DIAGONAL_ROAD_SHARED_FIRST && id < CITY_LANDSCAPE_DIAGONAL_RAIL_FIRST) ||
       (id >= CITY_LANDSCAPE_DIAGONAL_RAIL_SHARED_FIRST && id < CITY_LANDSCAPE_BAKED_UNDERWORLD_FIRST);
-}
-
-// Read one native run image with validated dimensions. The caller owns the returned
-// reference; malformed offsets/runs and truncated input fail without retaining an image.
-RunSprite *ReadAssetRunSprite(AssetFile *file, int width, int height, u32 size) {
-  assert(width > 0 && width <= SPRITE_RUN_LIMIT && height > 0 && height <= SPRITE_RUN_LIMIT);
-  u32 row_bytes = 4 * (height + 1);
-  if (size < row_bytes || size > row_bytes + 6 * (u64)width * height) return NULL;
-  RunSprite *sprite = malloc(sizeof(*sprite) + size);
-  if (!sprite) return NULL;
-  *sprite = (RunSprite){.width = width, .height = height, .stream_size = size - row_bytes, .references = 1};
-  bool valid = ReadAssetFile(file, sprite + 1, size) == size;
-  u32 *rows = (u32 *)(sprite + 1);
-  for (int row = 0; valid && row <= height; ++row) rows[row] = ReadLE32((u8 *)rows + 4 * row);
-  if (!valid || !ValidateRunSprite(sprite)) { FreeRunSprite(sprite); return NULL; }
-  return sprite;
-}
-
-// Pictures share the landscape run decoder, with optional image-local colors.
-// Reject animation IDs and palette runs without an image palette at this boundary.
-RunSprite *ReadAssetPicture(AssetFile *file, int id, int width, int height) {
-  u8 record[12], colors[256 * 3];
-  if (ReadAssetFile(file, record, sizeof(record)) != sizeof(record) || ReadLE16(record) != id) return NULL;
-  int w = ReadLE16(record + 2), h = ReadLE16(record + 4), count = ReadLE16(record + 6);
-  if (!w || !h || w > 2048 || h > 2048 || (width && w != width) || (height && h != height) ||
-      (count && count != 256)) return NULL;
-  SpritePalette *palette = NULL;
-  if (count) {
-    if (ReadAssetFile(file, colors, sizeof(colors)) != sizeof(colors)) return NULL;
-    palette = calloc(1, sizeof(*palette));
-    if (!palette) return NULL;
-    palette->references = 1;
-    for (int i = 0; i < 256; ++i)
-      palette->colors[i] = colors[3 * i] << 16 | colors[3 * i + 1] << 8 | colors[3 * i + 2];
-  }
-  RunSprite *sprite = ReadAssetRunSprite(file, w, h, ReadLE32(record + 8));
-  if (!sprite) { FreeSpritePalette(palette); return NULL; }
-  sprite->palette = palette;
-  const u32 *rows = RunSpriteRows(sprite);
-  const u8 *data = RunSpriteData(sprite);
-  for (int y = 0; y < h; ++y) {
-    const u8 *at = data + rows[y], *end = data + rows[y + 1];
-    if (at < end) ReadSpriteInitialSkip(&at);
-    while (at < end) {
-      int kind, length = ReadSpriteRun(&at, &kind);
-      if (SpriteRunAnimated(kind) || (SpriteRunIndexed(kind) && !palette)) {
-        FreeRunSprite(sprite);
-        return NULL;
-      }
-      at += length * SpriteRunPayloadBytes(kind);
-    }
-  }
-  return sprite;
 }
 
 static bool ReadBuildingArtwork(AssetFile *file, const CityLandscapeSprite *sprites,
@@ -399,8 +347,8 @@ static bool ValidateLandscapeSprites(CityLandscapeSprite *sprites,
 
 bool LoadCityDemolitionAssets(CityResourceState *assets) {
   AssetFile file;
-  int opened = OpenAssetSpan(&file, GetAsset(assets, CITY_ASSET_DEMOLITION));
-  if (opened != 1) return false;
+  AssetOpenResult opened = OpenAssetSpan(&file, GetAsset(assets, CITY_ASSET_DEMOLITION));
+  if (opened != ASSET_OPEN_OK) return false;
   u8 header[28], water[20];
   bool valid = ReadAssetFile(&file, header, 12) == 12 && !memcmp(header, "SC2KLAN2", 8);
   int count = valid ? ReadLE32(header + 8) : 0;
@@ -427,16 +375,7 @@ bool LoadCityDemolitionAssets(CityResourceState *assets) {
     if (!valid) break;
     u32 *rows = (u32 *)(sprite + 1);
     for (u32 row = 0; row <= height; ++row) rows[row] = ReadLE32((u8 *)rows + 4 * row);
-    valid = ValidateRunSprite(sprite);
-    for (u32 y = 0; valid && y < height; ++y) {
-      const u8 *at = RunSpriteData(sprite) + rows[y], *end = RunSpriteData(sprite) + rows[y + 1];
-      if (at < end) ReadSpriteInitialSkip(&at);
-      while (valid && at < end) {
-        int kind, pixels = ReadSpriteRun(&at, &kind);
-        valid = !SpriteRunIndexed(kind);
-        at += pixels * SpriteRunPayloadBytes(kind);
-      }
-    }
+    valid = ValidateRunSprite(sprite) && RunSpriteHasOnlyKinds(sprite, SPRITE_RUN_DIRECT_KINDS);
   }
   for (int id = 0; valid && id < CITY_DEMOLITION_FRAME_COUNT; ++id) valid = sprites[id].sprite != NULL;
   valid = valid && ReadAssetByte(&file) == EOF && !file.failed;
@@ -456,8 +395,8 @@ bool LoadCityDemolitionAssets(CityResourceState *assets) {
 static bool LoadCityLandscapeSpriteSet(CityResourceState *assets) {
   int limit = assets->map_group_sprite_first;
   AssetFile file;
-  int opened = OpenAssetSpan(&file, GetAsset(assets, CITY_ASSET_LANDSCAPE));
-  if (opened != 1) return false;
+  AssetOpenResult opened = OpenAssetSpan(&file, GetAsset(assets, CITY_ASSET_LANDSCAPE));
+  if (opened != ASSET_OPEN_OK) return false;
   u8 header[28], palette_bytes[20];
   bool valid = ReadAssetFile(&file, header, 12) == 12 &&
       !memcmp(header, "SC2KGFX3", 8);

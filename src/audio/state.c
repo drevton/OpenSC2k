@@ -1,7 +1,9 @@
 #include "city/engine/clock.h"
 #include "audio/state.h"
 
-#include "audio/backend.h"
+#include <stdlib.h>
+#include <string.h>
+
 #include "audio/types.h"
 #include "base/file.h"
 
@@ -54,13 +56,10 @@ void RefreshCityLoadedMusicPreference(CityAudioState *audio) {
   if (audio->live_open) audio->music_enabled = audio->jukebox.playing != 0;
 }
 
-// The controller checks the current playback flag before requesting a tool sound.
-bool IsCitySoundPlaying(const CityAudioState *audio) {
-  return audio->live_open && audio->overlapping_effects ?
-      IsCityMixedEffectPlaying(audio, CITY_SOUND_NONE) : audio->sound_playing;
-}
-
-bool CanPlayCityToolSound(const CityAudioState *audio, int sound_id) {
-  return audio->live_open && audio->overlapping_effects ?
-      !IsCityMixedEffectPlaying(audio, sound_id) : !audio->sound_playing;
+bool SetCitySoundFontPath(CityAudioState *audio, const char *path) {
+  char *copy = strdup(path);
+  if (!copy) return false;
+  free(audio->soundfont_path);
+  audio->soundfont_path = copy;
+  return true;
 }

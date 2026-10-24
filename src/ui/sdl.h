@@ -3,11 +3,12 @@
 
 #include <stddef.h>
 
-#include "drawing/canvas.h"
+#include "drawing/types.h"
 #include "city/types.h"
 #include "ui/input.h"
 
 typedef struct CanvasSDL CanvasSDL;
+typedef struct Game Game;
 typedef struct DrawingOptions DrawingOptions;
 struct ScreenDamage;
 
@@ -67,7 +68,12 @@ void Sc2kSDLClose(CanvasSDL *display);
 bool Sc2kSDLIsMinimized(CanvasSDL *display);
 const char *Sc2kSDLError(void);
 void Sc2kSDLTitle(CanvasSDL *display, const char *title);
+// Borrow the open display's logical width x height pixels; stride is in u32 pixels and must cover its width.
+// Requires the original logical-canvas mode and expands each source pixel to the fixed 2x texture.
+// Both presentation APIs return zero on success or -1 with an SDL error on failure.
 i32 Sc2kSDLPresent(CanvasSDL *display, const u32 *pixels, i32 stride);
+// Deliver deferred input first. Positive wait_ms waits up to that many milliseconds; other values poll.
+// True means an event was consumed; CANVAS_SDL_NONE can report an event with no native action.
 bool Sc2kSDLEvent(CanvasSDL *display, CanvasSDLEvent *event, i32 wait_ms);
 // Main-loop pacing while a City continuation permits only timer delivery.
 // Keep user input in SDL's existing queue until that caller completes.
@@ -76,9 +82,10 @@ void WaitForCityCanvasFrame(int milliseconds);
 int PollCanvasActivation(CanvasSDL *display, bool *active);
 i32 Sc2kSDLOutputSize(CanvasSDL *display, i32 *width, i32 *height);
 i32 Sc2kSDLPixelScale(CanvasSDL *display);
-// Already rasterized physical pixels; SDL only uploads and presents them.
+// Switch to physical framebuffer presentation and configure cursor/UI scale in 100..500.
 i32 Sc2kSDLConfigureFramebuffer(CanvasSDL *display, i32 ui_scale);
-// NULL damage requests a full upload. Restore also uploads pixels beneath the previous debug overlay.
+// Requires framebuffer configuration. Borrow already rasterized physical pixels for this call; SDL only uploads them.
+// NULL damage requests a full upload. restore also uploads pixels beneath the previous debug overlay.
 i32 Sc2kSDLPresentFramebuffer(CanvasSDL *display, const Canvas *canvas,
     const struct ScreenDamage *damage, CityRect restore);
 // Cached custom native cursors track movement independently of frame rendering.

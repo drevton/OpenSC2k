@@ -10,6 +10,7 @@
 // flags[0] selects salt versus fresh water.
 // Banks use zone[5..7] for their modulo-eight ground recovery counter. Other shared fields follow tile_storage.h.
 
+#include "drawing/maps/map_sprites.h"
 #include "city/infrastructure/lines.h"
 #include "city/saveload/map_format.h"
 #include "city/engine/random.h"
@@ -29,8 +30,8 @@
 #include "city/state.h"
 #include "city/tools/tools.h"
 #include "drawing/maps/map_terrain.h"
+#include "drawing/maps/map_camera.h"
 #include "game/errors.h"
-#include "game/state.h"
 
 // Dry/wet forms share their occupant metadata. Unsupported submerged occupants become exposed water.
 int CityTileKindForWater(int kind, bool water) {
@@ -134,7 +135,7 @@ void ApplyTerrainWaterLevel(City *city, int height) {
       if (ReadCityWaterGroundKind(tp) == TK_RIVER) continue;
       int altitude = tp->altitude;
       int elevation = ReadCityLandHeight(tp);
-      if (city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)) {
+      if (city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) {
         SetCityTerrainWater(city, cell_index, height, ReadTerrainCode(tp), true);
         continue;
       }
@@ -173,7 +174,7 @@ void ApplyTerrainWaterLevel(City *city, int height) {
       }
     }
   }
-  if (city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE))
+  if (city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE))
     for (TileIndex tile = 0; tile < (u32)city->map_cell_count; ++tile) ReclaimCityShorelineBanks(city, tile);
   InitializeCityPowerConnections(city);
   RecountCityTileStatistics(city);
@@ -200,7 +201,7 @@ void CarveTerrainWaterChannel(City *city, TileIndex tile_index, int length) {
   int heading = 1;
   int remaining = length;
   const TileInfo *start = &city->tile[tile_index];
-  if ((city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)) &&
+  if ((city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) &&
       !HasTileWater(start) && ReadTerrainCode(start) > CITY_TERRAIN_SHAPE_4) return;
   CreateCityRiverTile(city, tile_index);
   while (remaining != 0) {
@@ -222,7 +223,7 @@ void CarveTerrainWaterChannel(City *city, TileIndex tile_index, int length) {
       if (next_elevation > elevation)
         continue;
       int terrain_code = ReadTerrainCode(tp);
-      if ((city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)) &&
+      if ((city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) &&
           !HasTileWater(tp) && terrain_code > CITY_TERRAIN_SHAPE_4) continue;
       if (HasTileWater(tp))
         return;
@@ -296,13 +297,13 @@ bool CanPlaceCityCanal(const City *city, TileIndex tile) {
   int overlay = ReadOverlay(city, tile);
   return !HasTileWater(tp) &&
       !(overlay >= CITY_OVERLAY_BORDER_CONNECTION && overlay < 256) &&
-      (!(city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)) || ReadTerrainCode(tp) <= CITY_TERRAIN_SHAPE_4) &&
+      (!(city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) || ReadTerrainCode(tp) <= CITY_TERRAIN_SHAPE_4) &&
       IsTileKindLandscape(tp->kind) && tp->kind != TK_RADIOACTIVE_WASTE;
 }
 
 // Quote raw canal construction over eligible tiles in an inclusive rectangle. Invalid endpoints are rejected;
 // the query neither applies monetary policy nor consumes RNG.
-CityCommandCost GetCityCanalRectangleCost(const City *city, TileIndex start, TileIndex end) {
+static CityCommandCost GetCityCanalRectangleCost(const City *city, TileIndex start, TileIndex end) {
   CityCommandCost quote = {.error = CITY_COMMAND_COST_INVALID, .error_tile = INVALID_TILE};
   if (!IsMapTileValid(city, start) || !IsMapTileValid(city, end)) return quote;
   CityRect bounds = MapTileRectangle(city, start, end);
@@ -327,7 +328,7 @@ i64 ApplyWaterToolAtTile(City *city, TileIndex tile) {
 // endpoints; TEST only quotes the work and execution preserves admission errors and per-cell charging.
 i64 CmdBuildCanalsRect(City *city, u32 flags, TileIndex location, TileIndex end, int options) {
   int invalid = CITY_COMMAND_COST_INVALID;
-  if (options || !(city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE))) return invalid;
+  if (options || !(city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE))) return invalid;
   CityCommandCost quote = GetCityCanalRectangleCost(city, location, end);
   if (flags & CITY_COMMAND_TEST) return CityCommandPriceResult(quote);
   if (quote.error) return quote.error;
@@ -423,7 +424,7 @@ static int FlatWaterSprite(const City *city, TileIndex tile, int zoom) {
 CityRiverSprites ReadCityRiverSprites(const City *city, TileIndex tile, int zoom,
     const CityTileGeometry *geometry) {
   CityRiverSprites sprites = {0};
-  if (!(city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE))) return sprites;
+  if (!(city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE))) return sprites;
   int kind = ReadTile(city, tile);
   int first = MAP_LANDSCAPE_SPRITE_FIRST + zoom * MAP_LANDSCAPE_SPRITES_PER_ZOOM - CITY_LANDSCAPE_GROUND_FIRST;
   if (!geometry->surface_shape && geometry->water == CITY_WATER_FRESH) {
@@ -474,15 +475,15 @@ bool DrawCityWaterBank(City *city, TileIndex tile, int zoom, int screen_x, int g
   CityRiverSprites sprites = ReadCityRiverSprites(city, tile, zoom, geometry);
   if (sprites.count <= 1) return false;
   for (int i = 0; i < sprites.count; ++i)
-    DrawCityMapSpriteAtBaseline(city->game->drawing, sprites.sprite[i], screen_x, ground_y, 0);
+    DrawCityMapSpriteAtBaseline(city->drawing, sprites.sprite[i], screen_x, ground_y, 0);
   return true;
 }
 
 static bool DrawCityRiverTile(City *city, TileIndex tile, int zoom, int screen_x, int ground_y,
     const CityTileGeometry *tile_geometry) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   CityTileGeometry geometry = *tile_geometry;
-  if (!(city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)) || !IsTileKindExposedWater(ReadTile(city, tile)) ||
+  if (!(city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) || !IsTileKindExposedWater(ReadTile(city, tile)) ||
       geometry.water_surface != CITY_WATER_SURFACE_RAPIDS) return false;
   int shape = geometry.surface_shape;
   if (shape < 1 || shape > CITY_LANDSCAPE_RIVER_SLOPES) return false;
@@ -527,7 +528,7 @@ int CityWaterSprite(const City *city, TileIndex tile, int zoom, const CityTileGe
 }
 
 static void TickCityWaterTile(City *city, TileIndex tile) {
-  if (city->tile[tile].kind == TK_WATER_BANK) GrowCityGround(city, tile, 0, false);
+  if (city->tile[tile].kind == TK_WATER_BANK) AdvanceCityGroundRecovery(city, tile);
 }
 
 const TileModule kCityWaterModule = {.tick = TickCityWaterTile, .draw = DrawCityRiverTile};

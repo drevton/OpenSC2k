@@ -3,6 +3,13 @@
 
 #include "city/types.h"
 
+// Shared transport admission data; offset order and zone matching are fixed algorithm inputs.
+typedef struct { i8 x, y; } TransportNeighborOffset;
+typedef struct { TransportNeighborOffset offset[24]; } TransportNeighborOffsets;
+extern const TransportNeighborOffsets kTransportNeighborOffsets;
+
+extern const u16 kZoneCompatibilityMask[16];
+
 // Commuter route states use byte arrays. Bus boarding switches
 // from states 0..3 to 4..7; stations 8/10/11 tally separate facility traffic.
 // Alighting at 9 returns to ordinary road travel. Rail 12 and subway 13 are
@@ -24,13 +31,16 @@ typedef enum CityTransportRouteState {
   CITY_ROUTE_SUBWAY = 13
 } CityTransportRouteState;
 
+// Recount the cached industry bonus from rail/highway border surface tiles. Does not change tiles or route state.
+void RecountCityIndustryConnections(City *city);
+
 // Decay one valid 128x128 map section's half-resolution traffic cells. Returns their sum; the scheduler owns
 // invalidation and city-wide accumulation. Whole-map decay performs both in the same section order.
 u32 DecayTrafficDensitySection(City *city, int section);
 void DecayTrafficDensity(City *city);
 
-// Routing requires exclusive use of City's shared coordinate queue and scratch. It consumes City RNG,
-// applies traffic and usage counters, and returns route success; it does not create moving map events.
+// Routing borrows stable map storage and requires exclusive use of City's shared coordinate queue and scratch.
+// It consumes City RNG, applies traffic and usage counters, and returns success; it does not create moving map events.
 int FindTransportRouteAndApplyTraffic(City *city, int x, int y, int source_zone, int size, int maximum_cost);
 
 #endif

@@ -1,5 +1,8 @@
+#include "city/events/events.h"
 #include "city/infrastructure/lines.h"
+#include "city/infrastructure/surface_lines.h"
 #include "city/maps/terrain.h"
+#include "city/maps/ground.h"
 #include "city/economy/facilities.h"
 #include "city/maps/buildings.h"
 #include "city/infrastructure/bridges.h"
@@ -12,13 +15,11 @@
 #include "city/maps/tile_storage.h"
 #include "city/terrain/terrain.h"
 #include "city/tools/types.h"
-#include "game/state.h"
 #include "city/state.h"
-#include "assets/state.h"
-#include "game/errors.h"
 #include "city/growth/growth.h"
 #include "city/engine/simulation.h"
 #include "city/maps/layers.h"
+#include "city/maps/module.h"
 #include "city/maps/tables.h"
 #include "city/tools/tools.h"
 #include "city/saveload/city_file_internal.h"
@@ -28,8 +29,8 @@
 #include <string.h>
 #include "base/byte_order.h"
 
-// Compact native highway kinds and paired stock artwork IDs are separate namespaces. Input is a stock kind; returns
-// the legacy family base used by projection and does not decode a native footprint.
+// Map a compact native highway family kind to its paired stock artwork base. Kind must be a straight highway family;
+// orientation is projected separately and no footprint is decoded.
 static int LegacyHighwayBase(int kind) {
   static const u8 kKinds[TK_HIGHWAY_POWER - TK_HIGHWAY + 1] = {
     [TK_HIGHWAY - TK_HIGHWAY] = TKL_HIGHWAY_FIRST,
@@ -108,7 +109,7 @@ static bool IsLegacyHighway(int kind) {
 // The stock fifteen ordinary layouts share the line connection table. Slopes store their axis; flat rail transition
 // artwork comes from its adjoining slope. Input is stock artwork; returns its fixed layout mask without reading native
 // geometry or discovering neighbors.
-int LegacyTransportConnectionMask(int kind) {
+static int LegacyTransportConnectionMask(int kind) {
   static const u8 kMasks[] = {5, 10, 10, 5, 10, 5, 3, 6, 12, 9, 11, 7, 14, 13, 15};
   if (kind >= TKL_POWER_LINE_EAST_WEST && kind <= TKL_POWER_LINE_LAST)
     return kMasks[kind - TKL_POWER_LINE_EAST_WEST];
@@ -121,7 +122,7 @@ int LegacyTransportConnectionMask(int kind) {
 
 // Project a valid native transport tile and its decoded connection mask into stock artwork. Base and mask must select
 // the admitted family/layout; returns an artwork kind without changing native storage.
-int LegacyTransportTileKind(const City *city, TileIndex tile, int base, int mask) {
+static int LegacyTransportTileKind(const City *city, TileIndex tile, int base, int mask) {
   base = LegacyBaseKind(base);
   int shape = ReadTerrainCode(&city->tile[tile]);
   if (kLineTerrainOverrideBySlope[shape]) return base + (u8)kLineTileOffsetByTerrain[shape];
@@ -134,7 +135,7 @@ int LegacyTransportTileKind(const City *city, TileIndex tile, int base, int mask
 
 // Decode highway orientation from stock artwork and flag bits. Inputs must use the legacy representation; the returned
 // axis is a value for boundary conversion only.
-int LegacyHighwayAxis(int kind, int flags) {
+static int LegacyHighwayAxis(int kind, int flags) {
   int flipped = (flags & CITY_LEGACY_MAP_FLAG_ROTATED) != 0;
   if (kind >= TKL_HIGHWAY_BRIDGE_FIRST) return flipped;
   return (kind <= TKL_HIGHWAY_LAST ? (kind - TKL_HIGHWAY_FIRST) & 1 : kind & 1) ^ flipped;
@@ -150,20 +151,11 @@ static int CityHydroSpriteKind(const City *city, int zone) {
 // Stock projection for codecs and retained orientation-based algorithms. Native power lines store cardinal connections
 // independently of tower presence. Mask and slope must be supported decoded values; returns only a stock artwork
 // projection, never a native storage edit.
-u8 LegacyPowerTileKind(int mask, int shape) {
+static u8 LegacyPowerTileKind(int mask, int shape) {
   static const u8 kPowerOffsets[] = {0, 0, 1, 6, 0, 0, 7, 11, 1, 9, 1, 10, 8, 13, 12, 14};
   if (shape >= CITY_TERRAIN_SHAPE_1 && shape <= CITY_TERRAIN_SHAPE_4) return 15 + shape;
   if (shape >= CITY_TERRAIN_SHAPE_9 && shape <= CITY_TERRAIN_SHAPE_12) return TKL_POWER_LINE_NORTH_SOUTH;
   return TKL_POWER_LINE_EAST_WEST + kPowerOffsets[mask];
-}
-
-// Classify stock ordinary-line artwork for the requested family. Artwork and family use the codec/artwork namespace;
-// no native map geometry is decoded here.
-bool IsCityOrdinaryLineArtwork(int artwork, int family) {
-  int last = family == TK_POWER_LINE ? TKL_POWER_LINE_LAST :
-      family == TK_ROAD ? TKL_ROAD_LAST : TKL_RAIL_LAST;
-  family = LegacyBaseKind(family);
-  return artwork >= family && artwork <= last;
 }
 
 // Test whether a stock artwork kind belongs to rubble. Input is a legacy kind; this predicate neither reads City
@@ -174,52 +166,21 @@ bool IsLegacyRubbleKind(int kind) {
 
 // Test whether a stock artwork kind is a tunnel entrance. Input uses stock encoding and the result has no map or
 // tunnel-search side effects.
-bool IsLegacyTunnelEntranceKind(int kind) {
+static bool IsLegacyTunnelEntranceKind(int kind) {
   return kind >= TKL_TUNNEL_ENTRANCE_FIRST && kind <= TKL_TUNNEL_ENTRANCE_LAST;
 }
 
 // Test the stock highway-ramp artwork range. Input is a legacy kind; native gameplay uses its own kind and orientation
 // metadata.
-bool IsLegacyHighwayRampKind(int kind) {
+static bool IsLegacyHighwayRampKind(int kind) {
   return kind >= TKL_HIGHWAY_ENTRANCE_93 && kind <= TKL_HIGHWAY_ENTRANCE_LAST;
 }
 
 // Test whether a stock artwork selector represents supported surface transport. Performs classification only and must
 // not be used to decode native tile storage.
-bool IsCitySurfaceTransportArtwork(int artwork) {
+static bool IsCitySurfaceTransportArtwork(int artwork) {
   return artwork >= TKL_ROAD_EAST_WEST && artwork <= TKL_RAIL_TRANSITION_62;
 }
-
-// Test whether a stock artwork selector represents a rail incline. Returns a predicate without consulting neighboring
-// native geometry.
-bool IsCityRailSlopeArtwork(int artwork) {
-  return artwork >= TKL_RAIL_SLOPE_46 && artwork <= TKL_RAIL_SLOPE_49;
-}
-
-// Test whether a stock artwork selector represents a flat rail transition. This is a boundary/artwork classification
-// and does not establish a native connection.
-bool IsCityRailTransitionArtwork(int artwork) {
-  return artwork >= TKL_RAIL_TRANSITION_59 && artwork <= TKL_RAIL_TRANSITION_62;
-}
-
-// Map a supported transport family and native slope shape to stock incline artwork. Inputs must be decoded valid
-// values; no map or connection metadata is modified.
-int CityLineSlopeArtwork(int family, int shape) {
-  family = LegacyBaseKind(family);
-  return family + shape + 1;
-}
-
-// Convert rail-transition artwork to its corresponding flat rail layout. Input must be in the supported artwork
-// namespace; result is a value for projection, not a tile edit.
-int CityRailFlatArtwork(int artwork) {
-  if (IsCityRailSlopeArtwork(artwork)) return TKL_RAIL_FIRST + !(artwork & 1);
-  if (IsCityRailTransitionArtwork(artwork)) return TKL_RAIL_FIRST + (artwork & 1);
-  return artwork;
-}
-
-// Read the positive-axis facing convention from admitted stock ramp artwork. Does not inspect City rotation or write
-// native orientation metadata.
-bool CityRampArtworkFacesPositive(int artwork) { return artwork > TKL_HIGHWAY_ENTRANCE_94; }
 
 // These ranges belong to SC2 files and the stock artwork catalog. Native maps store only the first kind, with its
 // variant in zone bits 4–5. Returns the native base-kind projection for a stock range; input remains a legacy kind
@@ -263,7 +224,7 @@ static int LegacySourceWaterHeight(const City *city, TileIndex tile) {
 // Derive a stock river projection from a valid tile and its decoded geometry. Geometry must describe that tile; the
 // result is used at the file/artwork boundary rather than as native land shape.
 static int LegacyRiverSlope(const City *city, TileIndex tile, CityTileGeometry geometry) {
-  if (!(city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)) || geometry.water_height <= geometry.land_height)
+  if (!(city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) || geometry.water_height <= geometry.land_height)
     return geometry.land_shape <= CITY_TERRAIN_SHAPE_4 ? geometry.land_shape : CITY_TERRAIN_FLAT;
   // Code 62 has no direction bits. Generated rapids store the upper water
   // level and the lower bed; face the lowest cardinal water neighbor.
@@ -283,8 +244,7 @@ static int LegacyRiverSlope(const City *city, TileIndex tile, CityTileGeometry g
 // Derive stock bank artwork from a valid tile and its decoded native shoreline geometry. Uses neighbors without
 // changing water/land records; callers must not feed the result back as a native slope.
 static int LegacyShoreSlope(const City *city, TileIndex tile, CityTileGeometry geometry) {
-  static const u8 kRaisedCorners[] = {0, 9, 3, 6, 12, 11, 7, 14, 13, 1, 2, 4, 8, 15};
-  int shape = geometry.land_shape, corners = kRaisedCorners[shape];
+  int shape = geometry.land_shape, corners = kTerrainRaisedCorners[shape];
   // A shared edge at a flat river mouth belongs to the water plane, even
   // when diagonal land neighbors would otherwise raise its corners.
   for (int direction = 0; direction < 8; direction += 2) {
@@ -300,7 +260,7 @@ static int LegacyShoreSlope(const City *city, TileIndex tile, CityTileGeometry g
         LegacySourceWaterHeight(city, next) == geometry.water_height)
       corners &= ~kTerrainHigherNeighborBits[direction];
   }
-  return corners == kRaisedCorners[shape] ? shape : kTerrainShapeByHigherNeighbors[corners];
+  return corners == kTerrainRaisedCorners[shape] ? shape : kTerrainShapeByHigherNeighbors[corners];
 }
 
 // Decode stock land/water geometry using the supplied stock terrain code and unchanged source records. Tile must be
@@ -329,14 +289,14 @@ static CityTileGeometry DecodeLegacyCityTileGeometry(const City *city, TileIndex
     // for placement: a bridge must never mistake the fallback for level water.
     geometry.water_surface = CITY_WATER_SURFACE_RAPIDS;
     geometry.surface_shape = LegacyRiverSlope(city, tile, geometry);
-    if ((city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)) && geometry.surface_shape)
+    if ((city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) && geometry.surface_shape)
       geometry.surface_height = geometry.land_height;
   } else if (terrain == CITY_TERRAIN_HYDRO_SITE_46) {
     geometry.water_surface = CITY_WATER_SURFACE_RAPIDS;
-  } else if ((city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)) &&
+  } else if ((city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) &&
       (terrain < CITY_TERRAIN_WATER_FIRST || terrain >= CITY_TERRAIN_BANK_END)) {
     geometry.water_surface = CITY_WATER_SURFACE_UNSUPPORTED;
-  } else if ((city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)) && terrain > CITY_TERRAIN_BANK_32 &&
+  } else if ((city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) && terrain > CITY_TERRAIN_BANK_32 &&
       terrain <= CITY_TERRAIN_BANK_32_SHAPE_13 && geometry.land_height == geometry.water_height) {
     geometry.surface_shape = LegacyShoreSlope(city, tile, geometry);
     if (geometry.surface_shape) geometry.water_surface = CITY_WATER_SURFACE_SHORE;
@@ -346,7 +306,7 @@ static CityTileGeometry DecodeLegacyCityTileGeometry(const City *city, TileIndex
 
 // Decode one valid tile while the source map is still in stock representation. Returns a value without publishing
 // native records or mutating source data used by later conversions.
-CityTileGeometry ReadLegacyCityTileGeometry(const City *city, TileIndex tile) {
+static CityTileGeometry ReadLegacyCityTileGeometry(const City *city, TileIndex tile) {
   return city->native_map_storage ? ReadCityTileGeometry(city, tile) :
       DecodeLegacyCityTileGeometry(city, tile, city->tile[tile].terrain & CITY_TERRAIN_KIND_MASK);
 }
@@ -384,7 +344,7 @@ void WriteLegacyCityTerrainCode(City *city, TileIndex tile, int value) {
 
 // Legacy channels omit their bed shape. Resolve it once during import, before publishing any converted record. No
 // native redraw reconstructs this slope.
-void TranslateLegacyCityTerrain(const City *city, TileIndex tile, TileInfo *result) {
+static void TranslateLegacyCityTerrain(const City *city, TileIndex tile, TileInfo *result) {
   assert(IsMapTileValid(city, tile));
   *result = city->tile[tile];
   CityTileGeometry geometry = ReadLegacyCityTileGeometry(city, tile);
@@ -436,8 +396,8 @@ static int LegacyRiverBankFromNeighbors(const City *city, TileIndex tile) {
 // flags and other tile bytes stay put. The pass reads only flags, so its result is independent of traversal order. Run
 // only at import normalization; returns the number of changed derived bank records and does not alter native maps
 // already admitted.
-int RepairLegacyCityRiverBanks(City *city) {
-  if (city->native_map_storage || !(city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE))) return 0;
+static int RepairLegacyCityRiverBanks(City *city) {
+  if (city->native_map_storage || !(city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE))) return 0;
   int changed = 0;
   for (TileIndex tile = 0; tile < city->map_cell_count; ++tile) {
     TileInfo *tp = &city->tile[tile];
@@ -596,7 +556,7 @@ TileInfo TranslateCityTileToLegacy(const City *city, TileIndex tile) {
 
 // Project one valid map cell's schema-selected byte into the stock representation. Spec must describe the admitted map
 // field; no native record is overwritten during export.
-u8 ExportCityMapByte(const City *city, const CityFileChunkSpec *spec, TileIndex tile) {
+static u8 ExportCityMapByte(const City *city, const CityFileChunkSpec *spec, TileIndex tile) {
   TileInfo record = TranslateCityTileToLegacy(city, tile);
   return ((const u8 *)&record)[spec->native_offset];
 }
@@ -611,7 +571,7 @@ void ExportCityMapChunk(City *city, const CityFileChunkSpec *spec, u8 *bytes, u3
       TileInfo record = TranslateCityTileToLegacy(city, tile);
       memcpy(bytes + 2 * tile, &record.altitude, sizeof(record.altitude));
     }
-  } else CopyCityFileChunkBytes(city, spec, bytes, size, false);
+  } else CopyCityFileChunkBytes(city, spec, bytes, size, CITY_FILE_EXPORT);
 }
 
 // Validate native tile discriminators and footprint topology directly, without a stock projection or staging map.
@@ -1171,41 +1131,8 @@ bool ImportCityMapFormat(City *city) {
 
 // Project a valid native bridge cell into its stock artwork kind using stored span metadata. Span must be consistent;
 // this conversion does not change bridge topology or the stored native kind.
-int LegacyCityBridgeKind(const City *city, TileIndex tile) {
+static int LegacyCityBridgeKind(const City *city, TileIndex tile) {
   return IsTileKindBridge(ReadTile(city, tile)) ? ProjectStyledCityBridgeKind(city, tile) : ReadTile(city, tile);
-}
-
-// Map a stock artwork selector to the category used by tile information presentation. Input uses the projection
-// namespace; result is a category value without City edits.
-int CityTileInformationCategory(int artwork) {
-  static const u8 kTileInformationCategoryLimits[CITY_TILE_CATEGORY_COUNT] = {
-      TK_CLEAR + 1,
-      TKL_RUBBLE_LAST + 1,
-      TK_RADIOACTIVE_WASTE + 1,
-      TK_TREE_LAST + 1,
-      TKL_PARK + 1,
-      TKL_POWER_LINE_LAST + 1,
-      TKL_ROAD_LAST + 1,
-      TKL_TUNNEL_ENTRANCE_FIRST,
-      TKL_TUNNEL_ENTRANCE_LAST + 1,
-      TKL_ROAD_RAIL_CROSSING_LAST + 1,
-      TKL_RAIL_POWER_CROSSING_LAST + 1,
-      TKL_HIGHWAY_LAST + 1,
-      TKL_SUSPENSION_BRIDGE_LAST + 1,
-      TKL_BRIDGE_LAST + 1,
-      TKL_POWER_LINE_BRIDGE + 1,
-      TKL_HIGHWAY_ENTRANCE_LAST + 1,
-      TKL_HIGHWAY_JUNCTION + 1,
-      TKL_HIGHWAY_BRIDGE_LAST + 1,
-      TKL_SUBWAY_TO_RAIL_LAST + 1,
-      TK_LOWER_CLASS_HOMES_LAST + 1,
-      TK_MIDDLE_CLASS_HOMES_LAST + 1,
-      TK_LUXURY_HOMES_LAST + 1
-  };
-  if (artwork >= TK_GAS_STATION_1X1_1) return artwork - 102;
-  for (int category = 0; category < CITY_TILE_CATEGORY_COUNT; ++category)
-    if (kTileInformationCategoryLimits[category] > artwork) return category;
-  return artwork;
 }
 
 // Decode the fixed stock tile-count block into caller-owned count storage. Bytes must contain the whole block in its

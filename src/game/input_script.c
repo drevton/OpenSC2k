@@ -1,18 +1,18 @@
-#include "city/engine/clock.h"
+#include "game/application.h"
+
 #include <string.h>
 
-#include "game/audio.h"
 #include "base/text.h"
 #include "base/time.h"
-#include "city/economy/economy.h"
+#include "city/engine/clock.h"
 #include "city/engine/simulation.h"
+#include "city/events/events.h"
 #include "city/events/news.h"
 #include "city/infrastructure/types.h"
-#include "city/maps/map_types.h"
+#include "city/maps/labels.h"
 #include "city/state.h"
-#include "drawing/display.h"
 #include "drawing/state.h"
-#include "game/application.h"
+#include "game/audio.h"
 #include "game/commands.h"
 #include "game/errors.h"
 #include "game/frame.h"
@@ -33,28 +33,25 @@
 #include "ui/tools/tools.h"
 #include "ui/windows/tooltips.h"
 
-static void TrackScriptPlacementDrag(Game *game, const CityCommand *arguments,
-    const CityPointerInput input[2], bool infrastructure) {
+// Local drag options: the low byte selects the construction stage, and bit 8 selects the retained drag view
+// for infrastructure tracking.
+static void TrackScriptPlacementDrag(Game *game, const CityPointerInput input[2],
+    TileIndex start, int cost, int options, bool infrastructure) {
   City *city = game->city;
   CityZoneDragInput samples[2] = {{input[0].point, input[0].flags}, {input[1].point, input[1].flags}};
   // The tracker consumes until release; malformed scripts must not read beyond these two samples.
   if (city->zone_drag_input || input[0].flags || !(input[1].flags & CITY_DRAG_INPUT_MASK) ||
       (input[1].flags & ~CITY_DRAG_INPUT_MASK)) return;
-  TileIndex start = infrastructure ? (TileIndex)arguments->parameter1 :
-      MapTileXYOrInvalid(city, arguments->parameter1, arguments->parameter2);
-  int cost = infrastructure ? arguments->parameter2 : arguments->parameter3;
   if (!IsMapTileValid(city, start) || cost < (infrastructure ? -32768 : 0) || cost > 32767) return;
-  if (infrastructure && ((arguments->parameter3 & ~0x1FF) ||
-      (arguments->parameter3 & 255) > CITY_PLACEMENT_ALLOW_MILITARY)) return;
+  if (infrastructure && ((options & ~0x1FF) || (options & 255) > CITY_PLACEMENT_ALLOW_MILITARY)) return;
   ClearGameError(game);
   city->zone_drag_endpoint = -1;
   city->zone_drag_input = samples;
   city->zone_drag_index = 0;
   if (infrastructure) {
-    city->construction.stage = arguments->parameter3 & 255;
+    city->construction.stage = options & 255;
     city->zone_drag_endpoint = TrackCityPlacementDrag(game,
-        arguments->parameter3 & 256 ? game->drawing->drag_map_view : NULL,
-        start, cost, CITY_DRAG_LINE);
+        options & 256 ? game->drawing->drag_map_view : NULL, start, cost, CITY_DRAG_LINE);
   } else city->zone_drag_endpoint = TrackCityZoneDrag(game, start, cost);
   city->zone_drag_input = NULL;
   city->zone_drag_index = 0;
@@ -125,7 +122,8 @@ bool ApplicationNextScriptAction(Game *game) {
     if (sscanf(line, "idle_timer %u %c", &event_clock, &trailing) == 1) {
       SetSimulationFrameTime(game->city, event_clock);
       UpdateCityCadence(game->city);
-      RunGameIdle(game, (CityIdleInputs){true, true, true});
+      RunGameIdle(game, (GameIdleInputs){.active_view = true, .simulation_enabled = true,
+          .terrain_water_allowed = true});
       return true;
     }
     u32 budget_frames;
@@ -136,44 +134,44 @@ bool ApplicationNextScriptAction(Game *game) {
       return true;
     }
     i32 panel, control, value;
-    CityCommand scalar;
+    int tile_x, tile_y, start, cost, options;
     CityPointerInput zone_input[2];
-    if (sscanf(line, "zone_drag %d %d %d %d %d %u %d %d %u %c", &scalar.parameter1,
-        &scalar.parameter2, &scalar.parameter3, &zone_input[0].point.x, &zone_input[0].point.y,
+    if (sscanf(line, "zone_drag %d %d %d %d %d %u %d %d %u %c", &tile_x,
+        &tile_y, &cost, &zone_input[0].point.x, &zone_input[0].point.y,
         &zone_input[0].flags, &zone_input[1].point.x, &zone_input[1].point.y, &zone_input[1].flags, &trailing) == 9) {
-      TrackScriptPlacementDrag(game, &scalar, zone_input, false);
+      TrackScriptPlacementDrag(game, zone_input, MapTileXYOrInvalid(game->city, tile_x, tile_y), cost, 0, false);
       return true;
     }
-    if (sscanf(line, "infrastructure_drag %d %d %d %d %d %u %d %d %u %c", &scalar.parameter1,
-        &scalar.parameter2, &scalar.parameter3, &zone_input[0].point.x, &zone_input[0].point.y,
+    if (sscanf(line, "infrastructure_drag %d %d %d %d %d %u %d %d %u %c", &start,
+        &cost, &options, &zone_input[0].point.x, &zone_input[0].point.y,
         &zone_input[0].flags, &zone_input[1].point.x, &zone_input[1].point.y, &zone_input[1].flags, &trailing) == 9) {
-      TrackScriptPlacementDrag(game, &scalar, zone_input, true);
+      TrackScriptPlacementDrag(game, zone_input, (TileIndex)start, cost, options, true);
       return true;
     }
-    if (sscanf(line, "command %u %d %d %d %c", &scalar.id, &scalar.parameter1,
-        &scalar.parameter2, &scalar.parameter3, &trailing) == 4) {
+    CityCommand command;
+    if (sscanf(line, "command %u %d %d %d %c", &command.id, &command.parameter1,
+        &command.parameter2, &command.parameter3, &trailing) == 4) {
       // Rejection is a command result, recorded for stock comparison.
-      ExecuteRecordedCityCommandWithInput(game, scalar, NULL, 0);
+      ExecuteRecordedCityCommandWithInput(game, command, NULL, 0);
       return true;
     }
     if (sscanf(line, "chart %d %d %d %c", &panel, &control, &value, &trailing) == 3) {
       SelectCityChartControl(game->city, panel, control, value);
       return true;
     }
-    i32 stadium_x, stadium_y;
     i32 facility;
-    if (sscanf(line, "inspect %d %d %c", &stadium_x, &stadium_y, &trailing) == 2) {
-      PresentCityTileInformationDialog(game->city, MapTileXYOrInvalid(game->city, stadium_x, stadium_y));
+    if (sscanf(line, "inspect %d %d %c", &tile_x, &tile_y, &trailing) == 2) {
+      PresentCityTileInformationDialog(game->city, MapTileXYOrInvalid(game->city, tile_x, tile_y));
       return true;
     }
-    if (sscanf(line, "label %d %d %d %c", &stadium_x, &stadium_y, &facility, &trailing) == 3 &&
+    if (sscanf(line, "label %d %d %d %c", &tile_x, &tile_y, &facility, &trailing) == 3 &&
         (facility == 0 || facility == 1)) {
-      TileIndex tile = MapTileXYOrInvalid(game->city, stadium_x, stadium_y);
+      TileIndex tile = MapTileXYOrInvalid(game->city, tile_x, tile_y);
       if (tile != INVALID_TILE) PresentCityLabelEditor(game->city, tile, facility);
       return true;
     }
-    if (sscanf(line, "stadium %d %d %c", &stadium_x, &stadium_y, &trailing) == 2) {
-      TileIndex tile = MapTileXYOrInvalid(game->city, stadium_x, stadium_y);
+    if (sscanf(line, "stadium %d %d %c", &tile_x, &tile_y, &trailing) == 2) {
+      TileIndex tile = MapTileXYOrInvalid(game->city, tile_x, tile_y);
       if (tile != INVALID_TILE) {
         PresentCityStadiumTeamDialog(game->city, tile);
         return true;

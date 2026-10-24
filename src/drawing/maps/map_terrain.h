@@ -1,10 +1,10 @@
 #ifndef SC2K_DRAWING_MAPS_MAP_TERRAIN_H
 #define SC2K_DRAWING_MAPS_MAP_TERRAIN_H
 
-#include "city/maps/map.h"
-#include "city/maps/terrain.h"
-#include "drawing/maps/map_camera.h"
-#include "drawing/sprites/sprites.h"
+#include "city/types.h"
+
+typedef struct Drawing Drawing;
+typedef struct CityTileGeometry CityTileGeometry;
 
 // The bridge family submits its prepared near-side artwork through Drawing's current depth pass.
 // palette_offset selects a bridge palette independently of the saved BridgeStyle value.

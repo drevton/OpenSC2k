@@ -1,14 +1,9 @@
 #ifndef SC2K_GAME_TYPES_H
 #define SC2K_GAME_TYPES_H
 
-#include "city/types.h"
+#include "base/types.h"
 
 // Game-owned timing and execution inputs.
-
-// Original application and newspaper timer identifiers.
-typedef enum CityTimerId {
-  CITY_TIMER_ID_SIMULATION = 1, CITY_TIMER_ID_NEWSPAPER_CLOSE = 0x8094,
-} CityTimerId;
 
 // Host clocks are presentation inputs, never sources of deterministic City ticks.
 typedef enum GameTimePolicy {
@@ -28,11 +23,11 @@ typedef struct {
   bool active, poll_timers;
 } GameDelay;
 
-// Command-scoped execution inputs. Nested idle commands restore their parent.
+// Local scheduling permissions for one idle pass. Nested passes restore their parent before event delivery.
 typedef struct {
   bool active_view;
   bool simulation_enabled;
   bool terrain_water_allowed;
-} CityIdleInputs;
+} GameIdleInputs;
 
 #endif

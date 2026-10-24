@@ -2,7 +2,6 @@
 
 #include "assets/state.h"
 #include "audio/backend.h"
-#include "audio/state.h"
 #include "base/time.h"
 #include "drawing/raster/canvas_primitives.h"
 #include "drawing/state.h"
@@ -69,7 +68,7 @@ void CancelCityButtonRepeat(Game *game) {
   RaiseCityButton(game);
 }
 
-void HandleCityButtonRepeatInput(Game *game, const CanvasSDLEvent *input) {
+static void HandleCityButtonRepeatInput(Game *game, const CanvasSDLEvent *input) {
   CityButtonFeedback *press = &game->ui->button_feedback;
   if (!press->repeating) return;
   if ((input->kind == CANVAS_SDL_POINTER_UP && input->button == CANVAS_SDL_BUTTON_LEFT) ||
@@ -83,12 +82,12 @@ void HandleCityButtonRepeatInput(Game *game, const CanvasSDLEvent *input) {
   CityCanvasDesktop *desktop = &game->ui->desktop;
   bool inside = false;
   if (input->kind == CANVAS_SDL_POINTER_MOVE) {
-    int px, py, x, y;
+    int px, py;
     CityInterfacePixels(game, input, &px, &py);
     Window *window = FindCityWindowAtPixels(desktop, px, py);
     if (window && window->window_id == press->window_id) {
-      Sc2kCanvasDesktopPixelPointer(desktop, press->window_id, px, py, &x, &y);
-      inside = CanvasPointInRect(press->bounds, x - window->bounds.left, y - window->bounds.top);
+      CityPoint point = CityWindowPointFromPixels(desktop, press->window_id, px, py);
+      inside = CanvasPointInRect(press->bounds, point.x - window->bounds.left, point.y - window->bounds.top);
     }
   }
   if (inside == press->active) return;
@@ -104,7 +103,7 @@ void PlayCityButtonBeep(Game *game) {
   CityButtonFeedback *press = &game->ui->button_feedback;
   if (press->beeped) return;
   press->beeped = true;
-  if (game->audio->live_open) NativeAudioClick(game->audio);
+  NativeAudioClick(game->audio);
 }
 
 void BeginCityButtonFeedback(Game *game, int pixel_x, int pixel_y, double now) {
@@ -115,8 +114,8 @@ void BeginCityButtonFeedback(Game *game, int pixel_x, int pixel_y, double now) {
   // Dropdown entries are activated by their shared selection handler, above the owning window.
   if (desktop->dropdown.items && CanvasPointInRect(CityDropdownPixelBounds(desktop), pixel_x, pixel_y)) return;
   Window *window = FindCityWindowAtPixels(desktop, pixel_x, pixel_y);
-  CityCanvasButtonProbe hit = {0};
-  Sc2kCanvasDesktopPixelPointer(desktop, window ? window->window_id : 0, pixel_x, pixel_y, &hit.x, &hit.y);
+  CityPoint point = CityWindowPointFromPixels(desktop, window ? window->window_id : 0, pixel_x, pixel_y);
+  CityCanvasButtonProbe hit = {.x = point.x, .y = point.y};
   // An empty clip collects control geometry without repainting or allocating a second pixel buffer.
   Canvas probe = game->drawing->framebuffer;
   probe.clip = probe.raster.clip = (CityRect){0};
@@ -234,7 +233,8 @@ bool DispatchCityWindowInput(Game *game, const CanvasSDLEvent *input) {
       desktop->input_capture_window = id;
       desktop->input_capture_button = input->button;
     }
-    Sc2kCanvasDesktopPixelPointer(desktop, id, x, y, &event.x, &event.y);
+    CityPoint point = CityWindowPointFromPixels(desktop, id, x, y);
+    event.x = point.x; event.y = point.y;
     Window *window = FindCityCanvasWindow(desktop, id);
     SendWindowEvent(game, window, &event);
     if (input->kind == CANVAS_SDL_POINTER_DOWN) Sc2kCanvasDesktopBeginPixelDrag(desktop, x, y);

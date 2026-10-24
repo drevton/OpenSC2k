@@ -1,3 +1,4 @@
+#include "city/events/events.h"
 #include "city/maps/labels.h"
 #include "city/infrastructure/utilities.h"
 #include "game/observation.h"
@@ -237,7 +238,7 @@ int CityLineTerrainDirection(int x, int y, int end_x, int end_y) {
 // Reusing infrastructure is a successful, free placement when the repair is enabled. Requires a valid tile and
 // matching placement stage; false includes disabled reuse and execution still owns charging/placement.
 bool CityLineCellAlreadyBuilt(const City *city, TileIndex tile, int stage) {
-  if (!(city->fixes & (1 << CITY_FIX_REUSE_INFRASTRUCTURE))) return false;
+  if (!(city->fixes & (1ull << CITY_FIX_REUSE_INFRASTRUCTURE))) return false;
   const TileInfo *tp = &city->tile[tile];
   if (stage == CITY_PLACEMENT_PIPE) {
     int underground = tp->underground & CITY_UNDERGROUND_KIND_MASK;
@@ -271,7 +272,7 @@ bool PrepareCityLine(const City *city, CityConstructionState *state, int x, int 
       return false;
   } else if (state->stage <= CITY_PLACEMENT_POWER) {
     int terrain_code = ReadLegacyTerrainCode(city, tile_index);
-    if (((city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)) &&
+    if (((city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) &&
             HasTileWater(tp)) ||
         kind == TK_HIGHWAY_ENTRANCE || IsTileKindMultiHighway(kind) ||
         kind == TK_SUBWAY_TO_RAIL || IsTileKindBuilding(kind) ||
@@ -342,7 +343,7 @@ bool AdvanceCityLine(const City *city, CityConstructionState *state, int *x, int
   if (existing_step) state->direction = reuse_direction;
   // Buried utilities can cross a lake bank in either direction. Keep the
   // stored bed geometry; surface slope admission is not a pipe-height model.
-  if ((city->fixes & (1 << CITY_FIX_BURIED_UTILITY_TERRAIN)) &&
+  if ((city->fixes & (1ull << CITY_FIX_BURIED_UTILITY_TERRAIN)) &&
       (state->stage == CITY_PLACEMENT_PIPE || state->stage == CITY_PLACEMENT_SUBWAY)) {
     underwater_step = HasTileWater(tp) || HasTileWater(next_tp);
     if (underwater_step) state->direction = reuse_direction;
@@ -562,7 +563,7 @@ static TileIndex PlaceCityLineCells(City *city, TileIndex tile, TileIndex endpoi
 // live construction state; negative errors leave payment uncommitted and success debits the actual charge once.
 i64 PayCityLineCost(City *city, bool allow_reuse) {
   int cost = city->construction.cost;
-  if (!cost && allow_reuse && (city->fixes & (1 << CITY_FIX_REUSE_INFRASTRUCTURE))) {
+  if (!cost && allow_reuse && (city->fixes & (1ull << CITY_FIX_REUSE_INFRASTRUCTURE))) {
     city->construction.direction = CITY_LINE_WEST;
     return CITY_LINE_PAYMENT_REUSED;
   }
@@ -633,7 +634,7 @@ static i64 PlaceCitySurfaceLine(City *city, TileIndex origin_tile, bool rail) {
         rail ? CITY_INFRASTRUCTURE_RAIL : CITY_INFRASTRUCTURE_ROAD, -1, &span);
     extend_bridge = span.end != INVALID_TILE;
   }
-  if (!extend_bridge && city->construction.cost == 0 && (city->fixes & (1 << CITY_FIX_REUSE_INFRASTRUCTURE))) {
+  if (!extend_bridge && city->construction.cost == 0 && (city->fixes & (1ull << CITY_FIX_REUSE_INFRASTRUCTURE))) {
     city->construction.direction = CITY_LINE_WEST;
     return true;
   }

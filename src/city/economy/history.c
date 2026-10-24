@@ -1,11 +1,10 @@
-#include "city/economy/economy.h"
+#include "city/economy/history.h"
 
 #include <limits.h>
 #include <string.h>
 
 #include "city/economy/tables.h"
 #include "city/engine/city_types.h"
-#include "city/maps/layers.h"
 #include "city/presentation.h"
 #include "city/state.h"
 
@@ -21,18 +20,26 @@ bool BuildCityHistoryPlot(const City *city, int series, int period, int width, i
   int maximum = (int)city->history_maxima.value[series];
   if (maximum == 0)
     return false;
-  int first = period == CITY_HISTORY_PERIOD_YEAR ? 11 : period == CITY_HISTORY_PERIOD_TEN_YEARS ? 31 : 51;
-  plot->count = period == CITY_HISTORY_PERIOD_YEAR ? 12 : 20;
-  int spacing = period == CITY_HISTORY_PERIOD_YEAR ? 66 : 114;
+  const CityHistoryRow *row = &city->history[series];
+  // Plot each band from its oldest sample to its newest.
+  int last = period == CITY_HISTORY_PERIOD_YEAR ? CITY_HISTORY_MONTHLY_FIRST + CITY_HISTORY_MONTHLY_COUNT - 1 :
+      period == CITY_HISTORY_PERIOD_TEN_YEARS ? CITY_HISTORY_HALF_YEAR_FIRST + CITY_HISTORY_HALF_YEAR_COUNT - 1 :
+      CITY_HISTORY_FIVE_YEAR_FIRST + CITY_HISTORY_FIVE_YEAR_COUNT - 1;
+  plot->count = period == CITY_HISTORY_PERIOD_YEAR ? CITY_HISTORY_MONTHLY_COUNT :
+      period == CITY_HISTORY_PERIOD_TEN_YEARS ? CITY_HISTORY_HALF_YEAR_COUNT : CITY_HISTORY_FIVE_YEAR_COUNT;
+  // The final point uses five sixths of the available width.
+  int x_divisor = period == CITY_HISTORY_PERIOD_YEAR ? 6 * (CITY_HISTORY_MONTHLY_COUNT - 1) :
+      period == CITY_HISTORY_PERIOD_TEN_YEARS ? 6 * (CITY_HISTORY_HALF_YEAR_COUNT - 1) :
+      6 * (CITY_HISTORY_FIVE_YEAR_COUNT - 1);
   for (int index = 0; index < plot->count; ++index) {
-    u32 sample = ReadHistorySample(city, series, first - index);
+    u32 sample = row->sample[last - index];
     int product = (int)((u32)(height - 3) * sample);
     if (product == INT_MIN && maximum == -1)
       return false; // Reject division overflow in a malformed graph scale.
     int offset = product / maximum;
-    plot->point[index] = (CityChartPoint){(width - 1) * 5 * index / spacing, height - 2 - offset};
+    plot->point[index] = (CityChartPoint){(width - 1) * 5 * index / x_divisor, height - 2 - offset};
   }
-  plot->latest = ReadHistorySample(city, series, first - plot->count + 1);
+  plot->latest = row->sample[last - plot->count + 1];
   return true;
 }
 
@@ -47,7 +54,7 @@ bool ReadCityDemographicValues(const City *city, int mode, CityDemographicValues
   values->summary = (mode == CITY_DEMOGRAPHIC_POPULATION ? city->indicators.workforce_percent
           : mode == CITY_DEMOGRAPHIC_HEALTH              ? city->indicators.workforce_life_expectancy
                                                          : city->indicators.workforce_education);
-  for (int index = 0; index < 20; ++index) {
+  for (int index = 0; index < CITY_AGE_COHORT_COUNT; ++index) {
     u32 count = city->age_cohorts.value[index];
     u32 value;
     if (mode == CITY_DEMOGRAPHIC_POPULATION) {
@@ -127,9 +134,10 @@ void RebuildCityHistoryMaxima(City *city) {
   CityHistoryMaxima *maxima = &city->history_maxima;
   const CityHistoryMaxima *defaults = &kCityHistoryMaximumDefaults;
   for (int series = 0; series < CITY_HISTORY_SERIES_COUNT; ++series) {
+    const CityHistoryRow *row = &city->history[series];
     u32 maximum = defaults->value[series];
     for (int sample = 0; sample < CITY_HISTORY_SAMPLE_COUNT; ++sample) {
-      u32 value = ReadHistorySample(city, series, sample);
+      u32 value = row->sample[sample];
       if ((int)maximum < (int)value)
         maximum = value;
     }
@@ -139,24 +147,24 @@ void RebuildCityHistoryMaxima(City *city) {
     maxima->value[series] = maxima->value[CITY_HISTORY_CITY_SIZE];
 }
 
-// Menu rescaling uses the recent year, then clips every retained sample.
-// Recompute graph maxima from the stored history and default minimum scales. Requires initialized history arrays;
-// replaces cached maxima rather than changing recorded samples.
+// Set graph scales from the recent year and default minimums, then clamp all retained samples to those scales.
+// Requires initialized history arrays; signed comparisons preserve the stored sample interpretation.
 void RebaseCityHistoryGraphScales(City *city) {
   CityHistoryMaxima *maxima = &city->history_maxima;
   const CityHistoryMaxima *defaults = &kCityHistoryMaximumDefaults;
   for (int series = 0; series < CITY_HISTORY_SERIES_COUNT; ++series) {
+    CityHistoryRow *row = &city->history[series];
     u32 maximum = defaults->value[series];
     for (int sample = 0; sample < CITY_MONTH_COUNT; ++sample) {
-      u32 value = ReadHistorySample(city, series, sample);
+      u32 value = row->sample[sample];
       if ((int)value > (int)maximum)
         maximum = value;
     }
     maxima->value[series] = maximum;
     for (int sample = 0; sample < CITY_HISTORY_SAMPLE_COUNT; ++sample) {
-      u32 value = ReadHistorySample(city, series, sample);
+      u32 value = row->sample[sample];
       if ((int)value > (int)maximum)
-        WriteHistorySample(city, series, sample, maximum);
+        row->sample[sample] = maximum;
     }
   }
   for (int series = CITY_HISTORY_RESIDENTS; series <= CITY_HISTORY_INDUSTRY; ++series)
@@ -167,10 +175,10 @@ void RebaseCityHistoryGraphScales(City *city) {
 // Record the current monthly metrics and advance longer-period series when the calendar requires it.
 // Call once at the scheduled economy boundary; repeated calls would insert extra samples.
 void RecordCityMonthlyHistory(City *city) {
-  CityStatistics *stats = &city->statistics;
-  CityEconomyMonths *economy = &city->economy;
-  CityPopulationSectors *population = &city->population;
-  CityIndustrySectors *sectors = &city->industry_sectors;
+  const CityStatistics *stats = &city->statistics;
+  const CityEconomyMonths *economy = &city->economy;
+  const CityPopulationSectors *population = &city->population;
+  const CityIndustrySectors *sectors = &city->industry_sectors;
   CityHistoryMaxima *maxima = &city->history_maxima;
 
   for (int series = 0; series < CITY_HISTORY_SERIES_COUNT; ++series) {

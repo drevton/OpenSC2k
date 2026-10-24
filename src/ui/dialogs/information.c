@@ -1,7 +1,4 @@
-#include "city/maps/labels.h"
-#include "ui/windows/window_internal.h"
 #include "ui/dialogs/information.h"
-#include "city/maps/terrain.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -12,16 +9,14 @@
 #include "assets/state.h"
 #include "base/text.h"
 #include "city/economy/facilities.h"
+#include "city/events/events.h"
+#include "city/maps/labels.h"
 #include "city/maps/layers.h"
-#include "city/maps/map.h"
-#include "city/saveload/map_format.h"
+#include "city/maps/information.h"
 #include "city/state.h"
 #include "drawing/fonts/fonts.h"
-#include "drawing/maps/map_render.h"
-#include "drawing/maps/map_view.h"
-#include "drawing/maps/tables.h"
+#include "drawing/maps/map_sprites.h"
 #include "drawing/raster/canvas_primitives.h"
-#include "drawing/raster/canvas_raster_internal.h"
 #include "drawing/state.h"
 #include "game/errors.h"
 #include "game/observation.h"
@@ -32,7 +27,12 @@
 #include "ui/sdl.h"
 #include "ui/state.h"
 #include "ui/text/information.h"
+#include "ui/windows/window_internal.h"
 #include "ui/windows/windows.h"
+
+static void CaptureCityTileInformation(City *city, CityTileInformationSnapshot *snapshot);
+static i32 Sc2kCanvasDesktopOpenFacilityInformation(CityCanvasDesktop *desktop, CityRect bounds, i32 facility);
+static i32 Sc2kCanvasDesktopOpenTileInformation(City *city, CityRect bounds, TileIndex tile);
 
 // A snapshot belongs to its inspector window. Hidden windows still retain it; a closed window clears it.
 bool ReconcileCityTileInformationWindow(CityInterfaceState *ui) {
@@ -117,9 +117,8 @@ static void DrawCityFacilityInformationWindow(City *city, Canvas *canvas, const 
     CanvasTextAt(canvas, bounds.left + 12, bounds.top + 48, age, canvas_text);
   }
   int first_line = show_age ? 64 : 48;
-  CityCanvasInformationCursor cursor = {canvas, bounds.left + 12, bounds.top + first_line, 0, 0, 1, canvas_text, 0, 0};
-  CityInformationText text = {.cursor = &cursor};
-  text.city = city;
+  CityCanvasInformationCursor cursor = {.canvas = canvas, .color = canvas_text};
+  CityInformationText text = {.cursor = &cursor, .city = city};
   for (int line = 0; valid && line < CITY_FACILITY_INFO_LINE_COUNT; ++line) {
     cursor.x = bounds.left + 12;
     cursor.y = bounds.top + first_line + line * 16;
@@ -136,7 +135,8 @@ static void DrawCityFacilityInformationWindow(City *city, Canvas *canvas, const 
   DrawCityInterfaceTextCentered(canvas->interface_font, canvas, close, "Close", canvas_text, false, 10);
 }
 
-i32 Sc2kCanvasDesktopOpenTileInformation(City *city, CityRect bounds, TileIndex tile) {
+// Low-level openers return desktop array indices or -1 on failure. A negative facility argument returns zero unopened.
+static i32 Sc2kCanvasDesktopOpenTileInformation(City *city, CityRect bounds, TileIndex tile) {
   bounds.right = bounds.left + CITY_TILE_INFORMATION_WIDTH;
   bounds.bottom = bounds.top + CITY_TILE_INFORMATION_HEIGHT;
   return Sc2kCanvasDesktopOpen(&city->game->ui->desktop,
@@ -144,7 +144,7 @@ i32 Sc2kCanvasDesktopOpenTileInformation(City *city, CityRect bounds, TileIndex 
           .title = "Tile Information", .data_map_selection = tile, .city = city});
 }
 
-i32 Sc2kCanvasDesktopOpenFacilityInformation(CityCanvasDesktop *desktop, CityRect bounds, i32 facility) {
+static i32 Sc2kCanvasDesktopOpenFacilityInformation(CityCanvasDesktop *desktop, CityRect bounds, i32 facility) {
   bounds.bottom = IntMax(bounds.bottom, bounds.top + 176);
   if (facility < 0)
     return 0;
@@ -153,14 +153,14 @@ i32 Sc2kCanvasDesktopOpenFacilityInformation(CityCanvasDesktop *desktop, CityRec
           .title = "Facility Information", .data_map_selection = facility});
 }
 
-// Retain facts and presentation choices at opening; painting does not requery City.
-void CaptureCityTileInformation(City *city, CityTileInformationSnapshot *snapshot) {
+// Uses snapshot->data.tile as input and preserves its window ID while replacing captured facts and artwork choices.
+// Painting does not requery City.
+static void CaptureCityTileInformation(City *city, CityTileInformationSnapshot *snapshot) {
   CityTileInformation *information = &snapshot->data;
   TileIndex tile = information->tile;
   *snapshot = (CityTileInformationSnapshot){.window_id = snapshot->window_id};
   *information = ReadCityTileInformation(city, tile);
   int kind = information->cell.kind;
-  snapshot->sprite_flipped = LegacyCityTileFlip(city, tile);
   char locale[4];
   CopyText(locale, sizeof(locale), (const char *)city->country.character);
   for (int i = 0; locale[i]; ++i)
@@ -169,20 +169,8 @@ void CaptureCityTileInformation(City *city, CityTileInformationSnapshot *snapsho
   int overlay = ReadOverlay(city, tile);
   bool sailboat = IsCityEventOverlay(overlay) &&
       city->events.event[CityEventOverlaySlot(overlay)].type == CITY_MAP_EVENT_SAILBOAT;
-  if (sailboat) snapshot->sprite = 1380;
-  else if (IsTileKindExposedWater(kind) && (city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE))) {
-    CityTileGeometry geometry = ReadCityTileGeometry(city, tile);
-    int rotation = CityMapCameraRotation(city->game->drawing);
-    geometry.surface_shape = CityMapCameraShape(geometry.surface_shape, rotation);
-    snapshot->river = ReadCityRiverSprites(city, tile, CITY_MAP_ZOOM_LARGE, &geometry);
-    snapshot->sprite = CityWaterSprite(city, tile, CITY_MAP_ZOOM_LARGE, &geometry);
-  } else {
-    int terrain_sprite = ProjectCityTerrainToLegacy(city, tile, ReadTerrainCode(&information->cell));
-    snapshot->sprite = kind == TK_CLEAR || IsTileKindExposedWater(kind) ?
-        CityTerrainSprite(terrain_sprite) + CITY_SPRITE_CATALOG_LARGE_BASE :
-        MapSpriteZoomIndex(CityMapTileSpriteIndex(city, tile), CITY_MAP_ZOOM_LARGE);
-  }
-  int name = CityTileInformationCategory(kCityMapKindSprites[kind]);
+  snapshot->preview = ReadCityMapTilePreview(city, tile, sailboat);
+  int name = CityTileInformationCategory(kind);
   if (name == CITY_TILE_CATEGORY_CLEAR) {
     name = CITY_TILE_NAME_CLEAR_TERRAIN;
     if (IsTileKindExposedWater(kind))
@@ -197,37 +185,6 @@ static void DrawTileInformationRow(Canvas *canvas, CityRect content, int label_w
   int y = content.top + 16 + row * 11;
   CanvasTextRight(canvas, content.left + label_width, y, label, canvas_text);
   CanvasTextAt(canvas, content.left + label_width + 6, y, value, color);
-}
-
-// Cache families use different zoom strides; native river images do not use the ordinary map-catalog layout.
-static int TileInformationPreviewSprite(const CityTileInformationSnapshot *snapshot, int piece, int zoom) {
-  int sprite = snapshot->river.count ? snapshot->river.sprite[piece] : snapshot->sprite;
-  if (sprite >= MAP_LANDSCAPE_SPRITE_FIRST)
-    return MAP_LANDSCAPE_SPRITE_FIRST + (sprite - MAP_LANDSCAPE_SPRITE_FIRST) % MAP_LANDSCAPE_SPRITES_PER_ZOOM +
-        zoom * MAP_LANDSCAPE_SPRITES_PER_ZOOM;
-  if (sprite >= MAP_SLOPED_WATER_SPRITE_FIRST)
-    return MAP_SLOPED_WATER_SPRITE_FIRST + (sprite - MAP_SLOPED_WATER_SPRITE_FIRST) % MAP_SELECTION_SPRITE_SHAPES +
-        zoom * MAP_SELECTION_SPRITE_SHAPES;
-  return MapSpriteZoomIndex(sprite % CITY_MAP_SPRITES_PER_ZOOM, zoom);
-}
-
-static CityRect TileInformationSpriteBounds(const MapSpriteCache *cache, int scale, int zoom, int id) {
-  const RunSprite *sprite = cache->sprites[scale][id];
-  int x = cache->offsets_x[scale][id];
-  if (sprite->mirrored) x = (8 << zoom) * cache->scales[scale] / 100 - sprite->width - x;
-  int y = -cache->baselines[scale][id];
-  return (CityRect){x, y, x + sprite->width, y + sprite->height};
-}
-
-static bool TileInformationPreviewBounds(const CityTileInformationSnapshot *snapshot, const MapSpriteCache *cache,
-    int scale, int zoom, CityRect *bounds) {
-  for (int i = 0; i < IntMax(1, snapshot->river.count); ++i) {
-    int id = TileInformationPreviewSprite(snapshot, i, zoom);
-    if (!cache->sprites[scale][id]) return false;
-    CityRect piece = TileInformationSpriteBounds(cache, scale, zoom, id);
-    *bounds = i ? UnionCityRects(*bounds, piece) : piece;
-  }
-  return true;
 }
 
 static void DrawCityTileInformationWindow(Game *game, Canvas *canvas, const Window *window) {
@@ -268,53 +225,7 @@ static void DrawCityTileInformationWindow(Game *game, Canvas *canvas, const Wind
   Drawing *drawing = game->drawing;
   CityRect preview_bounds = {content.left + (content.right - content.left) / 2 + 8,
       content.top + 20, content.right - 4, content.bottom - 4};
-  CityRect box = CanvasRasterImageBounds(canvas, preview_bounds);
-  const MapSpriteCache *cache = &drawing->sprite_cache;
-  int preview_scale = -1, preview_zoom = 0, smallest_scale = -1, smallest_zoom = 0;
-  CityRect preview_bounds_pixels = {0}, smallest_bounds = {0};
-  // Fit every river layer together at a prepared scale, retaining their shared tile origin and baseline.
-  for (int scale = 0; scale < MAP_SPRITE_SCALE_COUNT; ++scale) {
-    for (int zoom = 0; zoom < 3; ++zoom) {
-      CityRect candidate;
-      if (!TileInformationPreviewBounds(snapshot, cache, scale, zoom, &candidate)) continue;
-      int width = candidate.right - candidate.left, height = candidate.bottom - candidate.top;
-      int area = width * height;
-      if (smallest_scale < 0 || area < (smallest_bounds.right - smallest_bounds.left) *
-          (smallest_bounds.bottom - smallest_bounds.top)) {
-        smallest_scale = scale;
-        smallest_zoom = zoom;
-        smallest_bounds = candidate;
-      }
-      if (width <= box.right - box.left && height <= box.bottom - box.top &&
-          (preview_scale < 0 || area > (preview_bounds_pixels.right - preview_bounds_pixels.left) *
-              (preview_bounds_pixels.bottom - preview_bounds_pixels.top))) {
-        preview_scale = scale;
-        preview_zoom = zoom;
-        preview_bounds_pixels = candidate;
-      }
-    }
-  }
-  if (preview_scale < 0) {
-    preview_scale = smallest_scale;
-    preview_zoom = smallest_zoom;
-    preview_bounds_pixels = smallest_bounds;
-  }
-  if (preview_scale >= 0) {
-    CanvasRaster raster = CanvasRasterView(canvas);
-    SpriteSurface surface = drawing->screen_surface;
-    surface.canvas = *canvas;
-    surface.canvas.width = raster.width;
-    surface.canvas.height = raster.height;
-    surface.canvas.clip = CanvasRasterRect(canvas, preview_bounds);
-    surface.canvas.raster = (CanvasRaster){0};
-    int x = box.left + (box.right - box.left - preview_bounds_pixels.right - preview_bounds_pixels.left) / 2;
-    int y = box.top + (box.bottom - box.top - preview_bounds_pixels.bottom - preview_bounds_pixels.top) / 2;
-    for (int i = 0; i < IntMax(1, snapshot->river.count); ++i) {
-      int id = TileInformationPreviewSprite(snapshot, i, preview_zoom);
-      CityRect piece = TileInformationSpriteBounds(cache, preview_scale, preview_zoom, id);
-      DrawRunSprite(&surface, cache->sprites[preview_scale][id], x + piece.left, y + piece.top, SPRITE_COPY, NULL);
-    }
-  }
+  DrawCityMapTilePreview(drawing, canvas, &snapshot->preview, preview_bounds);
   DrawCityInterfaceTextCentered(canvas->interface_font, canvas,
       (CityRect){content.left, content.top, content.right, content.top + 14},
       snapshot->name, canvas_text, false, 10);
@@ -381,7 +292,7 @@ static void DrawCityTileInformationWindow(Game *game, Canvas *canvas, const Wind
   }
   if (window->policy_flags & 1) {
     snprintf(value, sizeof(value), "X=%d  Y=%d%s  Txt=%d", information->y, information->x,
-        snapshot->sprite_flipped ? "flip" : "", information->cell.overlay);
+        snapshot->preview.flipped ? "flip" : "", information->cell.overlay);
     CanvasTextAt(canvas, content.left + 10, content.bottom - 30, value, canvas_text);
   }
   canvas->clip = old_clip;

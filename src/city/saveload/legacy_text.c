@@ -1,4 +1,5 @@
 #include "city/saveload/legacy_text.h"
+#include "base/utf8.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -17,7 +18,7 @@ static const u8 kCityCp437ToAnsi[128] = {
 
 // Decode one byte using the selected stock text encoding, including scenario display substitutions. Returns a Unicode
 // code point; native runtime strings remain UTF-8 outside this codec boundary.
-u32 DecodeLegacyCityCharacter(u8 byte, CityLegacyTextEncoding encoding) {
+static u32 DecodeLegacyCityCharacter(u8 byte, CityLegacyTextEncoding encoding) {
   if (encoding == CITY_TEXT_WINDOWS_1252) return DecodeWindows1252Byte(byte);
   if (encoding == CITY_TEXT_OEM_437) return DecodeOem437Byte(byte);
   static const u8 kDisplaySubstitutions[256] = {

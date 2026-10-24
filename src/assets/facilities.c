@@ -1,6 +1,5 @@
 #include "city/economy/facilities.h"
 #include "assets/resource_types.h"
-#include <stdlib.h>
 
 #include "assets/resources.h"
 
@@ -91,45 +90,6 @@ static const char *const kFacilityTemplates[] = {
   "Turbines in service: #1",
   "Season record: #W",
 };
-const char *const kCityNewspaperTitles[] = {
-  "Times",
-  "Herald",
-  "Gazette",
-  "Chronicle",
-  "Tribune",
-  "Journal",
-};
-const char *const kCityNewspaperWeatherHeadings[] = {
-  "Local forecast",
-  "Weather desk",
-  "Around the city",
-  "Skywatch",
-  "The outlook",
-  "Weather notes",
-};
-const char *const kCityNewspaperEditorialHeadings[] = {
-  "From the editor",
-  "Editorial desk",
-  "Local commentary",
-  "City opinion",
-  "Public survey",
-  "Advice desk",
-};
-const char *const kCityNewspaperStatistics[] = {
-  "Traffic: %d%%",
-  "Pollution: %d%%",
-  "Crime: %d%%",
-  "Tax rate: %d%%",
-  "Unemployment: %d%%",
-  "Education: %d%%",
-  "Health: %d%%",
-};
-const char *const kCityNewspaperPrices[3][CITY_NEWSPAPER_PRICE_ERAS] = {
-  {"1 cent", "5 cents", "25 cents", "1 dollar", "5 dollars"},
-  {"Cover: 1¢", "Cover: 5¢", "Cover: 25¢", "Cover: $1", "Cover: $5"},
-  {"Price: 1¢", "Price: 5¢", "Price: 25¢", "Price: $1", "Price: $5"},
-};
-
 // Facility Information
 
 // Original facility classes and five resource selections per class.
@@ -210,17 +170,4 @@ void InitializeCityFacilityInformation(CityAssets *assets, const char *locale) {
       assets->facility_information[facility][line] = id == -1 ? NULL :
           id < (int)(sizeof(kFacilityTemplates) / sizeof(kFacilityTemplates[0])) ? kFacilityTemplates[id] : "";
     }
-}
-
-
-// Newspaper
-
-void ReleaseCityNewspaperResources(CityNewspaperResources *resources) {
-  free(resources->text);
-  free(resources->offsets);
-  resources->articles = NULL;
-  resources->text = NULL;
-  resources->offsets = NULL;
-  resources->text_capacity = 0;
-  resources->offsets_capacity = 0;
 }

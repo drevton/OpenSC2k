@@ -26,7 +26,6 @@ typedef enum CityViewportControl {
 
 // Logical window geometry shared by viewport painting, hit testing and hover help.
 CityRect CityViewportContentBounds(const Window *window);
-CityRect CityViewportControlBounds(const Window *window, CityViewportControl control);
 CityViewportControl CityViewportControlAt(const Window *window, int x, int y);
 
 // UI map windows coordinate viewport damage and Drawing targets. Map pixel rectangles are view-local
@@ -34,15 +33,16 @@ CityViewportControl CityViewportControlAt(const Window *window, int x, int y);
 void OpenCityMapView(City *city);
 void PublishCityMapChanges(City *city);
 void PublishCityRoadCarDamage(City *city, const RoadCar *previous, const RoadCar *current);
-bool RenderCityMapViews(City *city, bool preserved_source);
+// Paint the main and extra map views using one shared frame-start scroll source.
+// Requires the prepared main target, collected sprite/effect/placement damage and a scoped paint City.
+// Main animation replay must be prepared. Restore main camera/target state and disable its paint clip on all returns.
+// Return false on target-binding or retained Game error; do not clear the error or advance live City state.
+bool RenderCityMapViews(City *city);
 // Synchronous sprite-damage callback. Context is a CityMapPaint; converts map pixels and clips to its window.
 void MarkCityMapSpriteDamage(CityRect rect, void *context);
 void MarkCityMapRect(CityRect rect, void *context);
 // Resolve the viewport's physical content position, scroll and shake before binding Drawing's raster target.
 bool BindCityMapTarget(const CityMapPaint *paint);
-// Paint callback context is a borrowed CityMapPaint. Schedule overlaid toolbar/status controls after map painting.
-void PaintCityMapPixels(CityRect rect, void *context);
-void RepaintCityMapDamage(CityRect screen, void *context);
 bool HandleCityMainMapPan(City *city, const CanvasSDLEvent *event);
 
 // Recompute logical viewport dimensions and constrain the camera after resize, rotation or zoom changes.

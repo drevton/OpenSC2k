@@ -77,7 +77,7 @@ process-local; it does not write macOS preferences or add a separate camera anim
 
 ## Adding an advanced option
 
-Add an entry to `kCitySettings` in `src/game/options.c`. Its label, tooltip, group,
+Add an entry to `kCitySettings` in `src/game/settings_catalog.c`. Its label, tooltip, group,
 config key, default, owner, storage type, offset and value range describe both its UI
 and persistence. The shared descriptor type lives in `src/game/settings.h`.
 `maximum = 1` gives a checkbox. An immutable `choices` array gives a

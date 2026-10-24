@@ -1,3 +1,5 @@
+#include "city/saveload/sc2k.h"
+
 #include "city/engine/city_name.h"
 #include "city/maps/labels.h"
 #include "city/engine/simulation.h"
@@ -5,17 +7,19 @@
 #include "city/events/events.h"
 #include "city/maps/map_types.h"
 #include "city/maps/tile_storage.h"
-#include "city/maps/layers.h"
+#include "city/maps/kinds.h"
 #include "city/tools/types.h"
 #include "city/presentation.h"
+#include "city/state.h"
 #include "game/state.h"
 #include "base/utf8.h"
 #include "city/saveload/legacy_text.h"
 #include "base/byte_order.h"
 #include "base/version.h"
 #include "base/riff.h"
-#include "city/saveload/sc2k.h"
+#include "city/saveload/input.h"
 #include "city/saveload/services.h"
+#include "city/saveload/file.h"
 #include "city/saveload/map_format.h"
 #include <zlib.h>
 #include <stdlib.h>
@@ -497,6 +501,6 @@ bool LoadCitySc2k(City *city, CityFileInput *input) {
     SetCityLoadedViewCenter(city, x, y); InvalidateMap(city);
   }
   if (saved) { ReleaseRiffArchive(&saved->archive); free(saved->metadata); free(saved); }
-  if (!valid) ReportCityChunkError(city->game->file, CITY_NOTICE_INVALID_CITY_CONTENTS, 1);
+  if (!valid) ReportCityFileError(city->game->file, CITY_NOTICE_INVALID_CITY_CONTENTS, CITY_FILE_ERROR_RESOURCE_ONLY);
   return valid;
 }

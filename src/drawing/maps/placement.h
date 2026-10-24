@@ -3,9 +3,15 @@
 
 #include "city/types.h"
 
+typedef struct SpriteSurface SpriteSurface;
+
 // Marker bounds in the main map's logical pixels, including magnification and cached sprite anchors.
 // Requires a valid tile and prepared default view. Reads Drawing resources without changing selection state.
 CityRect CityMapPlacementBounds(const City *city, TileIndex tile, bool point);
+
+// Bind immutable point/diamond colors on a borrowed surface. Styles 0/1 select normal/blocked points,
+// and 2/3 select normal/blocked diamonds. Pixel coverage remains in the source sprite.
+void ApplyCityMapSelectionPalette(SpriteSurface *surface, int style);
 
 // Draw one valid tile's point or diamond marker using the bound target and current depth pass.
 // UI chooses point/diamond and blocked styling; this does not read or change UI selection state.

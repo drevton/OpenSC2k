@@ -2,7 +2,7 @@
 #define SC2K_CITY_ECONOMY_FACILITIES_H
 
 #include "city/maps/tile_storage.h"
-#include "city/maps/map_types.h"
+#include "city/maps/labels.h"
 #include "city/types.h"
 
 // Facility information classes used by the tile lookup table. The byte lookup
@@ -115,24 +115,26 @@ extern const u8 kFacilityClassByTile[TK_COUNT];
 // New-city facility defaults after ResetCityMapAssociations releases old instances. Native records are zeroed;
 // shared records preserve unused payloads. Restore stadium names and clear the annual facility counters.
 void ResetCityFacilityState(City *city);
-// Allocate/aggregate the facility record and copy its asset name into City label storage. Some kinds consume RNG.
-// Returns an overlay association, or zero when no record is needed/available. Full arcology allocation may reuse a slot.
+// Reserve/aggregate a slot and initialize its record and blank/retained-label state. Some kinds consume RNG.
+// Returns an overlay association, or zero when no record is needed/available.
+// Full arcology allocation may reuse a slot.
+// Capacity failure retains earlier reservation/free-slot updates; City owns the resulting records and labels.
 int CreateFacilityInstance(City *city, TileIndex anchor, u8 kind);
 // Select per-facility records or shared records. TEST validates options without conversion or allocation.
 // Execution preserves any partial conversion if allocation fails and returns CITY_COMMAND_COST_BLOCKED.
 i64 CmdSetIndividualFacilities(City *city, u32 flags, int enabled, int reserved1, int reserved2);
 
+// Apply a resolved policy during command execution or loading. A no-op returns true without invalidation.
+// Conversion may allocate; false retains earlier writes. A completed conversion rebuilds associations and invalidates
+// the map.
 bool SetCityIndividualFacilities(City *city, bool individual);
 
 // Before replacing a footprint, restore reward availability or release its live stadium team association.
 // Kind and the valid northeast corner are captured by the caller. Overlay record cleanup follows during removal.
 void PrepareCityFacilityRemoval(City *city, TileIndex anchor, int kind);
 
-// Stock signed-word inputs and unsigned-word result; a zero divisor selects the existing population fallback.
-int ClampAnnualFacilityMetric(City *city, int requested, int divisor);
 // Advance aging, service metrics and arcologies through their existing notices and compensation sequence.
 void AdvanceAnnualFacilityState(City *city);
-int UpdateCityAnnualFacilities(City *city);
 typedef struct CityAnnualFacilityWork {
   u32 arcology_population;
   int average, ratio_divisor;

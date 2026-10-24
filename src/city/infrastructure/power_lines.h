@@ -1,8 +1,9 @@
 #ifndef SC2K_CITY_INFRASTRUCTURE_POWER_LINES_H
 #define SC2K_CITY_INFRASTRUCTURE_POWER_LINES_H
 
-#include "city/maps/tile_storage.h"
 #include "city/types.h"
+
+typedef struct TileInfo TileInfo;
 
 // Ordinary lines retain their mask; crossings and bridge underpasses derive their fixed wire axis.
 int CityPowerConnectionMask(const TileInfo *tp);

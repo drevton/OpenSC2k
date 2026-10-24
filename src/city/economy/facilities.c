@@ -1,27 +1,24 @@
-#include "city/maps/labels.h"
-#include "city/engine/random.h"
 #include "city/economy/facilities.h"
 
 #include <string.h>
 
-#include "assets/state.h"
 #include "assets/resources.h"
 #include "base/text.h"
-#include "game/state.h"
-#include "city/military.h"
 #include "city/economy/types.h"
 #include "city/engine/commands.h"
+#include "city/engine/random.h"
 #include "city/events/events.h"
 #include "city/events/news.h"
-#include "city/maps/tile_storage.h"
 #include "city/maps/buildings.h"
-#include "city/tools/types.h"
-#include "city/presentation.h"
-#include "city/economy/economy.h"
+#include "city/maps/labels.h"
 #include "city/maps/layers.h"
+#include "city/maps/tile_storage.h"
+#include "city/military.h"
+#include "city/presentation.h"
 #include "city/saveload/map_format.h"
 #include "city/state.h"
 #include "city/tools/tools.h"
+#include "city/tools/types.h"
 
 // Unlisted kinds have no specialized facility information template.
 const u8 kFacilityClassByTile[TK_COUNT] = {
@@ -61,6 +58,12 @@ const u8 kFacilityClassByTile[TK_COUNT] = {
   [TK_BRAUN_LLAMA_DOME] = CITY_FACILITY_INFO_LLAMA_DOME,
 };
 
+// Shared facility classes map to slots 1..9 in this order. Slot zero is reserved and repeats the bus-station kind.
+static const u8 kReservedFacilityKinds[CITY_FACILITY_RECORD_RESERVED_COUNT] = {
+  TK_BUS_STATION, TK_BUS_STATION, TK_RAIL_STATION, TK_SUBWAY_STATION, TK_WIND_POWER,
+  TK_HYDRO_POWER, TK_LARGE_PARK, TK_MUSEUM, TK_LIBRARY, TK_MARINA
+};
+
 void ResetCityFacilityState(City *city) {
   for (int index = 0; index < CITY_TEAM_NAME_COUNT; ++index) {
     CityOverlayName *name = &city->overlay_names.entry[index + CITY_TEAM_NAME_FIRST];
@@ -73,15 +76,11 @@ void ResetCityFacilityState(City *city) {
     memset(facilities->record, 0, sizeof(facilities->record));
   } else {
     // Shared records retain unused payloads, including slot zero. Reserved slots 1..9 reset their metrics and names.
-    static const u8 kReservedTypes[CITY_FACILITY_RECORD_RESERVED_COUNT] = {
-      TK_BUS_STATION, TK_BUS_STATION, TK_RAIL_STATION, TK_SUBWAY_STATION, TK_WIND_POWER,
-      TK_HYDRO_POWER, TK_LARGE_PARK, TK_MUSEUM, TK_LIBRARY, TK_MARINA
-    };
     for (int index = 0; index < CITY_FACILITY_RECORD_COUNT; ++index)
       facilities->record[index].type = TK_CLEAR;
-    facilities->record[0].type = kReservedTypes[0];
+    facilities->record[0].type = kReservedFacilityKinds[0];
     for (int index = 1; index < CITY_FACILITY_RECORD_RESERVED_COUNT; ++index) {
-      facilities->record[index] = (CityAnnualFacilityRecord){.type = kReservedTypes[index]};
+      facilities->record[index] = (CityAnnualFacilityRecord){.type = kReservedFacilityKinds[index]};
       city->overlay_names.entry[index + CITY_OVERLAY_FACILITY_FIRST] = (CityOverlayName){0};
     }
   }
@@ -90,12 +89,30 @@ void ResetCityFacilityState(City *city) {
   city->infrastructure.counter_c = 0;
 }
 
-// Initialize a facility record or increment a special kind's counters. Index and kind must select an allocated
+// Bounds annual facility metrics by population, funding, and city statistics. Preserves stock signed-word inputs and
+// unsigned-word output; zero divisor selects its defined fallback and no record is written.
+static int ClampAnnualFacilityMetric(const City *city, int requested, int divisor) {
+  // Stock's signed word arguments and unsigned word result affect arcology growth.
+  requested = ((requested & 0xFFFF) ^ 0x8000) - 0x8000;
+  divisor = ((divisor & 0xFFFF) ^ 0x8000) - 0x8000;
+  const CityTileCounts *statistics = &city->statistics;
+  int total = statistics->count[TK_DARCO_ARCOLOGY] + statistics->count[TK_FOREST_ARCOLOGY] +
+      statistics->count[TK_PLYMOUTH_ARCOLOGY] + statistics->count[TK_LAUNCH_ARCOLOGY];
+  u32 average = (u32)(total / 16);
+  u32 bonus = average > 140 ? 20000 * average - 2800000 : 0;
+  if (divisor == 0)
+    divisor = 100;
+  int maximum = ((city->indicators.population + city->indicators.arcology_population + bonus) /
+      (u32)divisor) & 0xFFFF;
+  return IntMin(requested, maximum) & 0xFFFF;
+}
+
+// Initialize a facility record or increment a special kind's counters. Slot and kind must select an allocated
 // facility record; some categories consume deterministic initialization draws or aggregate shared records.
-static void InitializeFacilityRecord(City *city, int index, u8 tile) {
-  CityAnnualFacilityRecord *record = CityFacilityRecordAt(city, index);
-  if (kFacilityClassByTile[tile] >= CITY_FACILITY_INFO_SHARED_RECORD_FIRST) {
-    switch (tile) {
+static void InitializeFacilityRecord(City *city, int slot, u8 kind) {
+  CityAnnualFacilityRecord *record = CityFacilityRecordAt(city, slot);
+  if (kFacilityClassByTile[kind] >= CITY_FACILITY_INFO_SHARED_RECORD_FIRST) {
+    switch (kind) {
     case TK_HYDRO_POWER:
       ++record->value_02;
       record->value_04 += 20;
@@ -121,7 +138,7 @@ static void InitializeFacilityRecord(City *city, int index, u8 tile) {
   record->value_02 = 0;
   record->value_04 = 0;
   record->value_06 = 0;
-  switch (tile) {
+  switch (kind) {
   case TK_GAS_POWER_PLANT:
   case TK_SOLAR_POWER_PLANT:
     record->value_02 = 50;
@@ -174,8 +191,13 @@ static void InitializeFacilityRecord(City *city, int index, u8 tile) {
   case TK_FOREST_ARCOLOGY:
   case TK_DARCO_ARCOLOGY:
   case TK_LAUNCH_ARCOLOGY: {
-    static const u8 capacities[] = {55, 30, 45, 65};
-    record->value_02 = capacities[tile - TK_PLYMOUTH_ARCOLOGY];
+    static const u8 kArcologyCapacities[TK_LAUNCH_ARCOLOGY - TK_PLYMOUTH_ARCOLOGY + 1] = {
+      [TK_PLYMOUTH_ARCOLOGY - TK_PLYMOUTH_ARCOLOGY] = 55,
+      [TK_FOREST_ARCOLOGY - TK_PLYMOUTH_ARCOLOGY] = 30,
+      [TK_DARCO_ARCOLOGY - TK_PLYMOUTH_ARCOLOGY] = 45,
+      [TK_LAUNCH_ARCOLOGY - TK_PLYMOUTH_ARCOLOGY] = 65,
+    };
+    record->value_02 = kArcologyCapacities[kind - TK_PLYMOUTH_ARCOLOGY];
     record->age = 5;
     record->value_06 = city->geography.start_year + city->clock.year;
     break;
@@ -193,53 +215,54 @@ static void InitializeFacilityRecord(City *city, int index, u8 tile) {
 
 // Allocate a facility label and record for an admitted building kind; returns its
 // overlay association or zero when no facility record is available/needed, with City retaining label storage.
-int CreateFacilityInstance(City *city, TileIndex anchor, u8 tile) {
-  if (!IsTileKindFacility(tile))
+int CreateFacilityInstance(City *city, TileIndex anchor, u8 kind) {
+  if (!IsTileKindFacility(kind))
     return 0;
-  int facility_class = kFacilityClassByTile[tile];
+  int facility_class = kFacilityClassByTile[kind];
   if (!city->individual_facilities && facility_class == CITY_FACILITY_INFO_DEFAULT)
     return 0;
-  int index;
+  int slot;
   if (city->individual_facilities || facility_class < CITY_FACILITY_INFO_SHARED_RECORD_FIRST) {
     int first = CITY_FACILITY_RECORD_FIRST_DYNAMIC;
     if (city->individual_facilities) first = IntMax(city->annual_facilities.free_slot, first);
-    for (index = first; index < CityFacilityRecordLimit(city); ++index)
-      if (CityFacilityRecordAt(city, index)->type == TK_CLEAR)
+    int limit = CityFacilityRecordLimit(city);
+    for (slot = first; slot < limit; ++slot)
+      if (ReadCityFacilityRecord(city, slot)->type == TK_CLEAR)
         break;
   } else {
-    index = facility_class - (CITY_FACILITY_INFO_SHARED_RECORD_FIRST - 1);
+    slot = facility_class - (CITY_FACILITY_INFO_SHARED_RECORD_FIRST - 1);
   }
   if (city->individual_facilities) {
-    if (!ReserveCityFacilities(city, index + 1)) return 0;
-    city->annual_facilities.used = IntMax(city->annual_facilities.used, index + 1);
-  } else if (index >= CITY_FACILITY_RECORD_COUNT) {
-    if (!IsTileKindArcology(tile))
+    if (!ReserveCityFacilities(city, slot + 1)) return 0;
+    city->annual_facilities.used = IntMax(city->annual_facilities.used, slot + 1);
+  } else if (slot >= CITY_FACILITY_RECORD_COUNT) {
+    if (!IsTileKindArcology(kind))
       return 0;
-    for (index = CITY_FACILITY_RECORD_FIRST_DYNAMIC; index < CITY_FACILITY_RECORD_COUNT; ++index)
-      if (!IsTileKindArcology(CityFacilityRecordAt(city, index)->type))
+    for (slot = CITY_FACILITY_RECORD_FIRST_DYNAMIC; slot < CITY_FACILITY_RECORD_COUNT; ++slot)
+      if (!IsTileKindArcology(ReadCityFacilityRecord(city, slot)->type))
         break;
-    if (index >= CITY_FACILITY_RECORD_COUNT)
+    if (slot >= CITY_FACILITY_RECORD_COUNT)
       return 0;
-    ClearOverlayAssociation(city, CityFacilityOverlay(index));
+    ClearOverlayAssociation(city, CityFacilityOverlay(slot));
   }
-  if (index >= CITY_FACILITY_RECORD_FIRST_DYNAMIC) city->annual_facilities.free_slot = index + 1;
-  CityAnnualFacilityRecord *record = CityFacilityRecordAt(city, index);
-  if (!ReserveCityFacilities(city, index + 1)) return 0;
-  CityFacilityDetails *details = &city->annual_facilities.details[index];
+  if (slot >= CITY_FACILITY_RECORD_FIRST_DYNAMIC) city->annual_facilities.free_slot = slot + 1;
+  if (!ReserveCityFacilities(city, slot + 1)) return 0;
+  CityAnnualFacilityRecord *record = CityFacilityRecordAt(city, slot);
+  CityFacilityDetails *details = &city->annual_facilities.details[slot];
   details->tile = anchor;
   details->years = 0;
-  city->annual_facilities.used = IntMax(city->annual_facilities.used, index + 1);
+  city->annual_facilities.used = IntMax(city->annual_facilities.used, slot + 1);
   if (city->individual_facilities) *record = (CityAnnualFacilityRecord){0};
-  record->type = tile;
-  InitializeFacilityRecord(city, index, tile);
-  CityOverlayName *label = CityOverlayNameAt(city, CityFacilityOverlay(index));
+  record->type = kind;
+  InitializeFacilityRecord(city, slot, kind);
+  CityOverlayName *label = CityOverlayNameAt(city, CityFacilityOverlay(slot));
   if (facility_class < CITY_FACILITY_INFO_SHARED_RECORD_FIRST || label->character[0] == 0) {
     // Stock's fallback copies bytes from unrelated live global storage. A
     // nameless facility has a defined blank label instead of arbitrary bytes.
     memset(label->character, 0, sizeof(label->character));
   }
-  LinkCityFacility(city, index);
-  return CityFacilityOverlay(index);
+  LinkCityFacility(city, slot);
+  return CityFacilityOverlay(slot);
 }
 
 // Release reward/team bookkeeping before the footprint cells and their overlays are replaced. Reward notifications
@@ -275,27 +298,30 @@ i64 CmdSetIndividualFacilities(City *city, u32 flags, int enabled, int reserved1
 // conversion writes; success rebuilds association hashes and invalidates the map. Does not charge or advance time.
 bool SetCityIndividualFacilities(City *city, bool individual) {
   if (city->individual_facilities == individual) return true;
+  CityAnnualFacilities *facilities = &city->annual_facilities;
   if (individual) {
+    // Count and reserve before changing policy; a failed reservation leaves shared records active.
     int additional = 0;
-    for (TileIndex tile = 0; tile < (u32)city->map_cell_count; ++tile) {
+    for (TileIndex tile = 0; tile < city->map_cell_count; ++tile) {
       int kind = ReadTile(city, tile);
       if (!IsTileKindFacility(kind) || !kCityBuildings[kind].size ||
           ResolveBulldozeFootprint(city, tile).start != tile) continue;
-      int category = kFacilityClassByTile[kind];
-      if (category >= CITY_FACILITY_INFO_SHARED_RECORD_FIRST || !ReadCityFacilityOverlay(city, tile)) ++additional;
+      int facility_class = kFacilityClassByTile[kind];
+      if (facility_class >= CITY_FACILITY_INFO_SHARED_RECORD_FIRST || !ReadCityFacilityOverlay(city, tile))
+        ++additional;
     }
-    int needed = IntMax(city->annual_facilities.used, CITY_FACILITY_RECORD_COUNT) + additional;
+    int needed = IntMax(facilities->used, CITY_FACILITY_RECORD_COUNT) + additional;
     if (additional && !ReserveCityFacilities(city, IntMin(needed,
         city->map_cell_count + CITY_FACILITY_RECORD_RESERVED_COUNT))) return false;
     city->individual_facilities = true;
-    for (TileIndex tile = 0; tile < (u32)city->map_cell_count; ++tile) {
+    for (TileIndex tile = 0; tile < city->map_cell_count; ++tile) {
       int kind = ReadTile(city, tile);
       if (!IsTileKindFacility(kind) || !kCityBuildings[kind].size ||
           ResolveBulldozeFootprint(city, tile).start != tile || ReadCityFacilityOverlay(city, tile)) continue;
-      int category = kFacilityClassByTile[kind];
+      int facility_class = kFacilityClassByTile[kind];
       CityOverlayName shared_name = {0};
-      if (category >= CITY_FACILITY_INFO_SHARED_RECORD_FIRST) {
-        int shared = category - (CITY_FACILITY_INFO_SHARED_RECORD_FIRST - 1);
+      if (facility_class >= CITY_FACILITY_INFO_SHARED_RECORD_FIRST) {
+        int shared = facility_class - (CITY_FACILITY_INFO_SHARED_RECORD_FIRST - 1);
         shared_name = *ReadCityOverlayName(city, CityFacilityOverlay(shared));
       }
       int overlay = CreateFacilityInstance(city, tile, kind);
@@ -303,76 +329,66 @@ bool SetCityIndividualFacilities(City *city, bool individual) {
       if (shared_name.character[0]) *CityOverlayNameAt(city, overlay) = shared_name;
     }
     for (int slot = 0; slot < CITY_FACILITY_RECORD_RESERVED_COUNT; ++slot)
-      city->annual_facilities.record[slot] = (CityAnnualFacilityRecord){0};
+      facilities->record[slot] = (CityAnnualFacilityRecord){0};
   } else {
-    static const u8 types[CITY_FACILITY_RECORD_RESERVED_COUNT] = {TK_BUS_STATION, TK_BUS_STATION,
-        TK_RAIL_STATION, TK_SUBWAY_STATION, TK_WIND_POWER, TK_HYDRO_POWER,
-        TK_LARGE_PARK, TK_MUSEUM, TK_LIBRARY, TK_MARINA};
     for (int slot = 0; slot < CITY_FACILITY_RECORD_RESERVED_COUNT; ++slot)
-      city->annual_facilities.record[slot] = (CityAnnualFacilityRecord){.type = types[slot]};
-    for (TileIndex tile = 0; tile < (u32)city->map_cell_count; ++tile) {
-      int kind = ReadTile(city, tile), category = kFacilityClassByTile[kind];
+      facilities->record[slot] = (CityAnnualFacilityRecord){.type = kReservedFacilityKinds[slot]};
+    for (TileIndex tile = 0; tile < city->map_cell_count; ++tile) {
+      int kind = ReadTile(city, tile);
       if (!IsTileKindFacility(kind) || !kCityBuildings[kind].size ||
           ResolveBulldozeFootprint(city, tile).start != tile) continue;
+      int facility_class = kFacilityClassByTile[kind];
       int overlay = ReadCityFacilityOverlay(city, tile);
-      if (category != CITY_FACILITY_INFO_DEFAULT && category < CITY_FACILITY_INFO_SHARED_RECORD_FIRST) continue;
+      if (facility_class != CITY_FACILITY_INFO_DEFAULT && facility_class < CITY_FACILITY_INFO_SHARED_RECORD_FIRST)
+        continue;
       if (overlay) ClearOverlayAssociation(city, overlay);
-      if (category != CITY_FACILITY_INFO_DEFAULT) {
+      if (facility_class != CITY_FACILITY_INFO_DEFAULT) {
         city->individual_facilities = false;
         CreateFacilityInstance(city, tile, kind);
         city->individual_facilities = true;
       }
     }
-    for (int slot = CITY_FACILITY_RECORD_COUNT; slot < city->annual_facilities.used; ++slot) {
+    // Move extra records into free fixed slots; records that do not fit are cleared.
+    for (int slot = CITY_FACILITY_RECORD_COUNT; slot < facilities->used; ++slot) {
       CityAnnualFacilityRecord *record = CityFacilityRecordAt(city, slot);
       if (!record->type) continue;
       int free_slot = CITY_FACILITY_RECORD_FIRST_DYNAMIC;
-      while (free_slot < CITY_FACILITY_RECORD_COUNT && city->annual_facilities.record[free_slot].type) ++free_slot;
+      while (free_slot < CITY_FACILITY_RECORD_COUNT && facilities->record[free_slot].type) ++free_slot;
       if (free_slot < CITY_FACILITY_RECORD_COUNT) {
-        city->annual_facilities.record[free_slot] = *record;
-        city->annual_facilities.details[free_slot] = city->annual_facilities.details[slot];
+        facilities->record[free_slot] = *record;
+        facilities->details[free_slot] = facilities->details[slot];
         *CityOverlayNameAt(city, CityFacilityOverlay(free_slot)) = *CityOverlayNameAt(city, CityFacilityOverlay(slot));
       }
       record->type = TK_CLEAR;
-      city->annual_facilities.details[slot].tile = INVALID_TILE;
+      facilities->details[slot].tile = INVALID_TILE;
     }
     city->individual_facilities = false;
   }
-  city->annual_facilities.free_slot = CITY_FACILITY_RECORD_FIRST_DYNAMIC;
+  facilities->free_slot = CITY_FACILITY_RECORD_FIRST_DYNAMIC;
   RebuildCityAssociationHashes(city);
   InvalidateMap(city);
   return true;
 }
 
-// Bounds annual facility metrics by population, funding, and city statistics. Preserves stock signed-word inputs and
-// unsigned-word output; zero divisor selects its defined fallback and no record is written.
-int ClampAnnualFacilityMetric(City *city, int requested, int divisor) {
-  // Stock's signed word arguments and unsigned word result affect arcology growth.
-  requested = ((requested & 0xFFFF) ^ 0x8000) - 0x8000;
-  divisor = ((divisor & 0xFFFF) ^ 0x8000) - 0x8000;
-  CityTileCounts *statistics = &city->statistics;
-  int total = statistics->count[TK_DARCO_ARCOLOGY] + statistics->count[TK_FOREST_ARCOLOGY] +
-      statistics->count[TK_PLYMOUTH_ARCOLOGY] + statistics->count[TK_LAUNCH_ARCOLOGY];
-  u32 average = (u32)(total / 16);
-  u32 bonus = average > 140 ? 20000 * average - 2800000 : 0;
-  if (divisor == 0)
-    divisor = 100;
-  int maximum = ((city->indicators.population + city->indicators.arcology_population + bonus) /
-      (u32)divisor) & 0xFFFF;
-  return IntMin(requested, maximum) & 0xFFFF;
+// Locate a valid annual facility slot on an initialized map. Individual records supply their stored location;
+// shared records use the first row-order match with the stock byte-sized overlay test. Returns INVALID_TILE when
+// no match exists, without changing labels or facility ownership.
+static TileIndex FindAnnualFacilityOverlayTile(const City *city, int slot) {
+  if (city->individual_facilities && city->annual_facilities.details)
+    return city->annual_facilities.details[slot].tile;
+  int overlay = (u8)(slot + CITY_OVERLAY_FACILITY_FIRST);
+  for (TileIndex tile = 0, end = city->map_cell_count; tile < end; ++tile)
+    if (ReadOverlay(city, tile) == overlay) return tile;
+  return INVALID_TILE;
 }
 
-// Locate the overlay tile associated with an annual facility record. Record index must be valid; returns the first
-// matching tile or INVALID_TILE without changing labels or facility ownership.
-static TileIndex FindAnnualFacilityOverlayTile(City *city, int record_index) {
-  if (city->individual_facilities && city->annual_facilities.details)
-    return city->annual_facilities.details[record_index].tile;
-  for (int y = 0; y < city->map_height; ++y)
-    for (int x = 0; x < city->map_width; ++x) {
-      TileIndex tile = MapTileXY(city, x, y);
-      if (ReadOverlay(city, tile) == (u8)(record_index + CITY_OVERLAY_FACILITY_FIRST)) return tile;
-    }
-  return INVALID_TILE;
+// Returns the captured compensation count when an exodus begins, or -1 otherwise. Completes the same annual scan
+// across aging notices; callers must propagate its captured exodus count to the real compensation path.
+static int UpdateCityAnnualFacilities(City *city) {
+  CityAnnualFacilityWork work = BeginCityAnnualFacilities(city);
+  while (!AdvanceCityAnnualFacilities(city, &work))
+    ShowRankedCityEventModal(city, CITY_NEWS_POWER_PLANT_AGING, work.notice_data);
+  return FinishCityAnnualFacilities(city, &work);
 }
 
 // Annual facility updates and large-city award. Requires the annual phase boundary; exodus notices retain their caller
@@ -413,19 +429,10 @@ static void FinishAgingCityPowerPlant(City *city, int index) {
   }
 }
 
-// Returns the captured compensation count when an exodus begins, or -1 otherwise. Completes the same annual scan
-// across aging notices; callers must propagate its captured exodus count to the real compensation path.
-int UpdateCityAnnualFacilities(City *city) {
-  CityAnnualFacilityWork work = BeginCityAnnualFacilities(city);
-  while (!AdvanceCityAnnualFacilities(city, &work))
-    ShowRankedCityEventModal(city, CITY_NEWS_POWER_PLANT_AGING, work.notice_data);
-  return FinishCityAnnualFacilities(city, &work);
-}
-
 // Capture annual facility averages and initialize its resumable scan state. Clears the current facility-ratio flag
 // once; callers must keep the returned work through notices and finish the same scan.
 CityAnnualFacilityWork BeginCityAnnualFacilities(City *city) {
-  CityTileCounts *statistics = &city->statistics;
+  const CityTileCounts *statistics = &city->statistics;
   CityAnnualFacilityWork work = {
       .index = 1,
       .average = (statistics->count[TK_DARCO_ARCOLOGY] + statistics->count[TK_FOREST_ARCOLOGY] +
@@ -676,7 +683,7 @@ bool AdvanceCityAnnualFacilities(City *city, CityAnnualFacilityWork *work) {
 // Commit accumulated annual facility totals and determine any arcology-exodus compensation count. Work must be the
 // completed matching scan; returns that captured count or -1, leaving presentation and deferred exodus to its caller.
 int FinishCityAnnualFacilities(City *city, const CityAnnualFacilityWork *work) {
-  CityTileCounts *statistics = &city->statistics;
+  const CityTileCounts *statistics = &city->statistics;
   city->infrastructure.facility_total = work->value_sum;
   city->indicators.arcology_population = work->arcology_population;
   city->infrastructure.counter_a = 0;

@@ -10,6 +10,7 @@
 #include "ui/map.h"
 #include "ui/sdl.h"
 #include "ui/state.h"
+#include "ui/text/status.h"
 #include "ui/text/text.h"
 #include "ui/tools/types.h"
 

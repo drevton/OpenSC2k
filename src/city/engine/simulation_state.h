@@ -2,15 +2,8 @@
 #define SC2K_CITY_ENGINE_SIMULATION_STATE_H
 
 #include "city/infrastructure/types.h"
-#include "city/maps/map_types.h"
+#include "city/maps/environment.h"
 #include "city/types.h"
-
-// City owns cadence counters independently of host clock reads or presentation frames.
-typedef struct {
-  u32 counter;
-  u16 parity;
-  u32 tick_due;
-} TimerCadenceCounter;
 
 // Pending algorithm state belongs to City. Zero phase means no suspended work.
 // Order-sensitive scans retain the original scan, queue and random draw ordering.

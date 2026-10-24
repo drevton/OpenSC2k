@@ -19,6 +19,7 @@
 #include "city/events/events.h"
 #include "city/growth/growth.h"
 #include "city/maps/layers.h"
+#include "city/maps/tables.h"
 #include "city/tools/tools.h"
 #include "game/state.h"
 #include "assets/state.h"
@@ -29,23 +30,19 @@ enum {
   CITY_TILE_SCAN_SAW_FLOOD = 1 << 2,
   CITY_TILE_SCAN_SAW_FIRE = 1 << 3,
   CITY_TILE_SCAN_SAW_POLLUTION = 1 << 4,
-  CITY_TILE_SCAN_CHEMICAL_BUILDING = 1 << 5,
 };
 
 // Scan the city map and advance transient disaster and growth markers. Requires initialized map and landscape/disaster
 // state; advances transient overlay and tile effects in simulation order.
 i64 UpdateCityMapTileStates(City *city) {
-  static const i8 neighbor_offset[4][2] = {{0, -1}, {-1, 0}, {0, 1}, {1, 0}};
+  static const i8 kNeighborOffset[4][2] = {{0, -1}, {-1, 0}, {0, 1}, {1, 0}};
   u32 flags = 0;
-  int x, y, overlay, direction;
-  TileIndex neighbor_tile, cell_index;
-  CityTileArea chemical_area = {.start = INVALID_TILE};
   if (city->disasters.event_decay_ticks > 0)
     --city->disasters.event_decay_ticks;
 
-  for (y = 0; y < city->map_height; ++y) {
-    for (x = 0; x < city->map_width; ++x) {
-      cell_index = y * city->map_width + x;
+  for (int y = 0; y < city->map_height; ++y) {
+    for (int x = 0; x < city->map_width; ++x) {
+      TileIndex cell_index = y * city->map_width + x;
       // Empty spans have no RNG or mutation effects. Inspect live bytes in scan
       // order so a disaster spreading into a later span is still handled now.
       while (x + 8 <= city->map_width) {
@@ -57,7 +54,7 @@ i64 UpdateCityMapTileStates(City *city) {
       }
       if (x == city->map_width) break;
       TileInfo *tp = &city->tile[cell_index];
-      overlay = ReadOverlay(city, cell_index);
+      int overlay = ReadOverlay(city, cell_index);
       switch (overlay) {
       case CITY_OVERLAY_FIRE: {
         flags |= CITY_TILE_SCAN_SAW_FIRE;
@@ -69,14 +66,14 @@ i64 UpdateCityMapTileStates(City *city) {
           break;
         }
 
-        direction = Sc2kCrtRand(city) & 7;
+        int direction = Sc2kCrtRand(city) & 7;
         switch (direction) {
         case CITY_NEIGHBOR_NORTH:
         case CITY_NEIGHBOR_WEST:
         case CITY_NEIGHBOR_SOUTH:
-        case CITY_NEIGHBOR_EAST:
-          neighbor_tile = GetRelativeTileOrInvalid(city, cell_index,
-              neighbor_offset[direction][0], neighbor_offset[direction][1]);
+        case CITY_NEIGHBOR_EAST: {
+          TileIndex neighbor_tile = GetRelativeTileOrInvalid(city, cell_index,
+              kNeighborOffset[direction][0], kNeighborOffset[direction][1]);
           if (neighbor_tile != INVALID_TILE) {
             if (direction == CITY_NEIGHBOR_NORTH &&
                 ReadOverlay(city, neighbor_tile) != CITY_OVERLAY_FIRE)
@@ -87,22 +84,21 @@ i64 UpdateCityMapTileStates(City *city) {
               flags |= CITY_TILE_SCAN_CHANGED;
           }
           break;
+        }
         case 5: {
-          int tile = tp->kind;
-          if (IsTileKindBuilding(tile)) {
-            flags &= ~CITY_TILE_SCAN_CHEMICAL_BUILDING;
-            if (tile == TK_CHEMICAL_STORAGE || tile == TK_CHEMICAL_PROCESSING_2X2 ||
-                tile == TK_CHEMICAL_PROCESSING_3X3)
-              flags |= CITY_TILE_SCAN_CHEMICAL_BUILDING;
-            chemical_area = flags & CITY_TILE_SCAN_CHEMICAL_BUILDING ?
-                ResolveBulldozeFootprint(city, cell_index) : (CityTileArea){.start = INVALID_TILE};
+          int kind = tp->kind;
+          if (IsTileKindBuilding(kind)) {
+            bool chemical = kind == TK_CHEMICAL_STORAGE || kind == TK_CHEMICAL_PROCESSING_2X2 ||
+                kind == TK_CHEMICAL_PROCESSING_3X3;
+            CityTileArea chemical_area = chemical ? ResolveBulldozeFootprint(city, cell_index) :
+                (CityTileArea){.start = INVALID_TILE};
             flags |= CITY_TILE_SCAN_CHANGED;
             DemolishCityFootprintForDisaster(city, cell_index, 1, 1);
             ResolveDestroyedCityMapCell(city, cell_index);
             if (NextCityMapRandomModulo(city, 16) == 0)
               CreateCityMapEffectEvent(city, cell_index, 0, 0, 1);
 
-            if (flags & CITY_TILE_SCAN_CHEMICAL_BUILDING)
+            if (chemical)
               for (int dy = 0; dy < chemical_area.height; ++dy)
                 for (int dx = chemical_area.width - 1; dx >= 0; --dx)
                   SetCityMapOverlayIfReplaceable(city,
@@ -133,10 +129,10 @@ i64 UpdateCityMapTileStates(City *city) {
         }
 
         WriteTrafficDensity(city, MapTileXY(city, (x / 2) * 2, (y / 2) * 2), 0);
-        direction = Sc2kCrtRand(city) & 0x7F;
+        int direction = Sc2kCrtRand(city) & 0x7F;
         if (direction < 4) {
-          neighbor_tile = GetRelativeTileOrInvalid(city, cell_index,
-              neighbor_offset[direction][0], neighbor_offset[direction][1]);
+          TileIndex neighbor_tile = GetRelativeTileOrInvalid(city, cell_index,
+              kNeighborOffset[direction][0], kNeighborOffset[direction][1]);
           ApplyDisasterCellEffect(city, neighbor_tile, 0);
         }
 
@@ -145,9 +141,8 @@ i64 UpdateCityMapTileStates(City *city) {
         for (int axis = 0; axis < 2; ++axis) {
           TileIndex neighbor = GetRelativeTileOrInvalid(city, cell_index, axis == 1 ? step : 0, axis == 0 ? step : 0);
           if (neighbor == INVALID_TILE) continue;
-          int tile = ReadTile(city, neighbor);
-          bool passable = tile == TK_RUBBLE ||
-              IsTileKindRoadRoute(tile);
+          int kind = ReadTile(city, neighbor);
+          bool passable = kind == TK_RUBBLE || IsTileKindRoadRoute(kind);
           if (passable)
             neighbors |= 1 << axis;
         }
@@ -158,10 +153,11 @@ i64 UpdateCityMapTileStates(City *city) {
           InvalidateTile(city, cell_index);
         } else {
           bool reverse_direction = (Sc2kCrtRand(city) & 7) == 0;
-          WriteOverlay(city, cell_index, reverse_direction ? (overlay == CITY_OVERLAY_RIOTS_NORTH_WEST ?
-              CITY_OVERLAY_RIOTS_SOUTH_EAST
-                                                                            : CITY_OVERLAY_RIOTS_NORTH_WEST)
-                                : CITY_OVERLAY_NONE);
+          int next_overlay = CITY_OVERLAY_NONE;
+          if (reverse_direction)
+            next_overlay = overlay == CITY_OVERLAY_RIOTS_NORTH_WEST ?
+                CITY_OVERLAY_RIOTS_SOUTH_EAST : CITY_OVERLAY_RIOTS_NORTH_WEST;
+          WriteOverlay(city, cell_index, next_overlay);
           InvalidateTile(city, cell_index);
           if (neighbors == 3)
             neighbors = (Sc2kCrtRand(city) & 1) + 1;
@@ -189,12 +185,12 @@ i64 UpdateCityMapTileStates(City *city) {
           continue;
         }
 
-        int tile = CityBuildingConstructionKind(tp);
-        if (!tile) tile = tp->kind;
-        if (IsTileKindZoneBuilding(tile) &&
-            kTileZoneCategory[tile - TK_RESIDENTIAL_FIRST] == CITY_BUILDING_DEVELOPED) {
+        int kind = CityBuildingConstructionKind(tp);
+        if (!kind) kind = tp->kind;
+        if (IsTileKindZoneBuilding(kind) &&
+            kTileZoneCategory[kind - TK_RESIDENTIAL_FIRST] == CITY_BUILDING_DEVELOPED) {
           // A projected construction kind is not a completed building footprint.
-          if (tp->kind != tile) continue;
+          if (tp->kind != kind) continue;
           CityTileArea footprint = ResolveBulldozeFootprint(city, cell_index);
           int size = footprint.width;
           if (!size) continue;
@@ -203,16 +199,16 @@ i64 UpdateCityMapTileStates(City *city) {
           GrowActiveZoneTiles(city, footprint.start + footprint.width - 1, size, 0);
         }
 
-        int lowest_power = ReadCityLandHeight(tp);
+        int lowest_height = ReadCityLandHeight(tp);
         int direction = -1;
         for (int neighbor = 0; neighbor < 4; ++neighbor) {
           TileIndex neighbor_tile = GetRelativeTileOrInvalid(city, cell_index,
               kCardinalNeighborX[neighbor], kCardinalNeighborY[neighbor]);
           if (neighbor_tile != INVALID_TILE) {
-            int power = ReadCityLandHeight(&city->tile[neighbor_tile]);
-            if (power < lowest_power) {
+            int height = ReadCityLandHeight(&city->tile[neighbor_tile]);
+            if (height < lowest_height) {
               direction = neighbor;
-              lowest_power = power;
+              lowest_height = height;
             }
           }
         }
@@ -239,9 +235,9 @@ i64 UpdateCityMapTileStates(City *city) {
               InvalidateTile(city, cell_index);
             }
             if (city->disasters.event_decay_ticks > 0) {
-              direction = Sc2kCrtRand(city) & 3;
-              neighbor_tile = GetRelativeTileOrInvalid(city, cell_index,
-                  neighbor_offset[direction][0], neighbor_offset[direction][1]);
+              int direction = Sc2kCrtRand(city) & 3;
+              TileIndex neighbor_tile = GetRelativeTileOrInvalid(city, cell_index,
+                  kNeighborOffset[direction][0], kNeighborOffset[direction][1]);
               if (neighbor_tile != INVALID_TILE) {
                 SpreadCityMapFireToCell(city, neighbor_tile,
                     ReadCityLandHeight(tp));
@@ -264,7 +260,7 @@ i64 UpdateCityMapTileStates(City *city) {
               (event_type == CITY_MAP_EVENT_POLICE && NextCityMapRandomModulo(city, 16) == 0)) {
             int direction = Sc2kCrtRand(city) & 3;
             TileIndex neighbor_tile = GetRelativeTileOrInvalid(city, cell_index,
-                neighbor_offset[direction][0], neighbor_offset[direction][1]);
+                kNeighborOffset[direction][0], kNeighborOffset[direction][1]);
             if (neighbor_tile != INVALID_TILE) {
               if (ReadOverlay(city, neighbor_tile) == CITY_OVERLAY_FIRE)
                 flags |= CITY_TILE_SCAN_CHANGED;
@@ -274,7 +270,7 @@ i64 UpdateCityMapTileStates(City *city) {
           if (event_type == CITY_MAP_EVENT_POLICE || event_type == CITY_MAP_EVENT_MILITARY) {
             int direction = Sc2kCrtRand(city) & 3;
             TileIndex neighbor = GetRelativeTileOrInvalid(city, cell_index,
-                neighbor_offset[direction][0], neighbor_offset[direction][1]);
+                kNeighborOffset[direction][0], kNeighborOffset[direction][1]);
             ClearTransientCityMapOverlay(city, neighbor);
             flags |= CITY_TILE_SCAN_CHANGED;
             continue;
@@ -296,9 +292,9 @@ i64 UpdateCityMapTileStates(City *city) {
     if ((Sc2kCrtRand(city) & 7) == 0)
       PlayCitySound(city, INVALID_TILE, CITY_SOUND_EARTHQUAKE);
     if (NextCityMapRandomModulo(city, 2) == 0) {
-      y = NextCityMapRandomModulo(city, city->map_height);
-      x = NextCityMapRandomModulo(city, city->map_width);
-      cell_index = MapTileXY(city, x, y);
+      int y = NextCityMapRandomModulo(city, city->map_height);
+      int x = NextCityMapRandomModulo(city, city->map_width);
+      TileIndex cell_index = MapTileXY(city, x, y);
       int kind = ReadTile(city, cell_index);
       // Stock excludes the first house kind from this cleanup draw.
       if (IsTileKindBuilding(kind) && kind != TK_LOWER_CLASS_HOMES_FIRST) {

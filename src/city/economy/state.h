@@ -100,12 +100,10 @@ typedef struct {
 } CityPopulationSectors;
 
 typedef struct {
-  u32 value[20];
+  u32 value[CITY_AGE_COHORT_COUNT];
 } CityAgeCohorts;
-
-typedef struct {
-  u32 value[CITY_HISTORY_SERIES_COUNT];
-} CityHistoryMaxima;
+_Static_assert(sizeof(CityAgeCohorts) == 80 && offsetof(CityAgeCohorts, value) == 0,
+    "age cohort row stores twenty 32-bit values");
 
 // Unlock State
 

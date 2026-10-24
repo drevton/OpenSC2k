@@ -4,6 +4,7 @@
 #include "city/engine/commands.h"
 
 typedef struct Game Game;
+typedef struct CityPointerInput CityPointerInput;
 
 // Host completion data is local to Game. It is not part of the shared City command packet.
 typedef struct CityCommandResult {
@@ -55,9 +56,10 @@ typedef struct {
   const struct CityCommandFeedback *feedback;
 } CityCommandObservationScope;
 
-// Copy into Game's existing retained-command allocation. Success hands scope completion and feedback notices to Game;
-// Requires non-NULL observer and feedback; observer remains borrowed until completion/teardown. Failure leaves Game
-// and errors unchanged so the caller can cancel its live tick before reporting failure. The descriptor is not retained.
+// Allocate a Game-owned record containing a copy of the observation. Success transfers responsibility for ending
+// its scope and consuming feedback notices to Game. Requires non-NULL observer and feedback; observer remains borrowed
+// until completion/teardown. Failure leaves Game and errors unchanged so the caller can cancel its live tick before
+// reporting failure. The descriptor and feedback record are not retained.
 bool RetainCityCommandObservation(Game *game, const CityCommandObservationScope *observation);
 
 // Complete one retained callback, or keep it attached when result.value identifies a live tick continuation.

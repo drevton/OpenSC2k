@@ -36,8 +36,11 @@ typedef struct CityInterfaceFont {
   bool ready;
 } CityInterfaceFont;
 
-// Load retained bytes, or an explicit loose source for diagnostics. Missing or invalid input fails.
+// Load retained bytes, or an explicit loose source for diagnostics. Failure to open the base font preserves it.
+// After opening, clear ready and retain glyph/coverage writes on later failure. Each pixel atlas replaces its
+// previous allocation only after validation; ready requires base glyphs, coverage and publication fonts to load.
 bool LoadCityInterfaceFont(CityAssets *assets, const char *graphics_root);
+// Release both dynamic atlases and clear ready. Inline glyph metadata remains in Assets.
 void ReleaseCityInterfaceFont(CityInterfaceFont *font);
 typedef enum CityPublicationFace {
   CITY_PUBLICATION_BODY,
@@ -65,7 +68,10 @@ typedef struct {
   CityOverlayGlyph glyphs[CITY_OVERLAY_FONT_COUNT * CITY_OVERLAY_GLYPH_COUNT];
 } CityOverlayFont;
 
-bool LoadCityOverlayFont(CityOverlayFont *font, CityAssets *assets, const char *graphics_root);
+// Initialize bounded fallback glyphs before loading. Glyph data belongs to Assets and stays valid until replaced.
+void InitializeCityOverlayFont(CityOverlayFont *font);
+// Missing, malformed or incomplete input preserves prior glyphs. Success replaces the entire inline font.
+bool LoadCityOverlayFont(CityAssets *assets, const char *graphics_root);
 
 enum { kPublicationSizeCount = 22, kPublicationGlyphBytes = 12,
        kPublicationMetadataBytes = 3 * kPublicationSizeCount * 256 * kPublicationGlyphBytes };

@@ -1,6 +1,8 @@
 #ifndef SC2K_CITY_ECONOMY_TYPES_H
 #define SC2K_CITY_ECONOMY_TYPES_H
 
+#include "base/types.h"
+
 enum { CITY_CASH_MENU_BONUS = 500000 };
 
 // Original ordinance bit/index order, shared by cost calculation and controls.
@@ -110,6 +112,15 @@ enum {
   CITY_HISTORY_SAMPLE_COUNT = CITY_HISTORY_FIVE_YEAR_FIRST + CITY_HISTORY_FIVE_YEAR_COUNT
 };
 
+typedef struct {
+  u32 sample[CITY_HISTORY_SAMPLE_COUNT];
+} CityHistoryRow;
+
+// One graph scale for each history series.
+typedef struct {
+  u32 value[CITY_HISTORY_SERIES_COUNT];
+} CityHistoryMaxima;
+
 // Original17 due-year slots; names describe the unlocks performed by RebuildCityUnlockState.
 // Slot6 switches the disaster-choice table. Slot16 emits a building-available
 // article but has no additional branch in the unlock routine.
@@ -186,6 +197,9 @@ typedef enum CityPopulationBucket {
 } CityPopulationBucket;
 
 enum { CITY_ECONOMY_TAX_SECTOR_COUNT = CITY_ECONOMY_INDUSTRIAL + 1 };
+
+// Fixed five-year age groups, from ages 0..4 through 95..99.
+enum CityAgeCohortDimensions { CITY_AGE_COHORT_COUNT = 20 };
 
 // Chart
 

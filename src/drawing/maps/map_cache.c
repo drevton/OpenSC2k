@@ -1,4 +1,5 @@
 #include <string.h>
+#include "drawing/sprites/surface.h"
 
 #include "drawing/maps/map_cache.h"
 #include "drawing/raster/screen_damage.h"

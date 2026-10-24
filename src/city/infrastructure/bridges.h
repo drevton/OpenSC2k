@@ -2,20 +2,54 @@
 #define SC2K_CITY_INFRASTRUCTURE_BRIDGES_H
 
 #include "city/infrastructure/types.h"
-#include "city/maps/terrain.h"
+#include "city/maps/kinds.h"
 #include "city/maps/tile_storage.h"
 
-// Readable tile records suffice for local head/underpass metadata; other kinds have no bridge head/underpass.
-SC2K_PRESERVE_MOST int ReadCityBridgeHead(const TileInfo *tp);
+typedef struct CityTileGeometry CityTileGeometry;
+
+// Native bridge encodings and local record helpers. Head classification accepts any valid tile.
+// Style access interprets the head's altitude field; axis access interprets bridge terrain.
+// Callers choose the kind/style interpretation and own admission, remaining edits and old/new damage.
+enum {
+  CITY_BRIDGE_AXIS_MASK = 0x10, CITY_BRIDGE_HEAD_FACING_MASK = 0x20,
+  CITY_BRIDGE_HIGHWAY_RIGHT = 0x80,
+  CITY_BRIDGE_UNDERPASS_NONE = 0, CITY_BRIDGE_UNDERPASS_RAIL = 1, CITY_BRIDGE_UNDERPASS_ROAD = 2,
+  CITY_BRIDGE_UNDERPASS_POWER = 3,
+  // Head altitude bit: phase of the two alternating highway artwork pieces.
+  CITY_BRIDGE_HIGHWAY_PHASE_MASK = 0x200,
+  CITY_BRIDGE_HEAD_NONE = 0, CITY_BRIDGE_HEAD_NORTH = 1, CITY_BRIDGE_HEAD_SOUTH = 2,
+};
+
+_Static_assert(CITY_BRIDGE_UNDERPASS_NONE == 0 &&
+    CITY_BRIDGE_UNDERPASS_RAIL == (TK_ROAD_BRIDGE_RAIL & 3) &&
+    CITY_BRIDGE_UNDERPASS_ROAD == (TK_ROAD_BRIDGE_ROAD & 3) &&
+    CITY_BRIDGE_UNDERPASS_POWER == (TK_ROAD_BRIDGE_POWER & 3),
+    "bridge kind low bits must match underpass values");
+
+static SC2K_FORCE_INLINE int ReadTileBridgeStyle(const TileInfo *tp) {
+  return (tp->altitude >> CITY_ALTITUDE_WATER_SHIFT) & 15;
+}
+
+static SC2K_FORCE_INLINE void WriteTileBridgeStyle(TileInfo *tp, int style) {
+  tp->altitude = (tp->altitude & ~0x1E0) | style << CITY_ALTITUDE_WATER_SHIFT;
+}
+
+static SC2K_FORCE_INLINE bool IsCityBridgeHead(const TileInfo *tp) {
+  return IsTileKindBridgeHead(tp->kind);
+}
+
+static SC2K_FORCE_INLINE int ReadCityBridgeAxis(const TileInfo *tp) {
+  return (tp->terrain & CITY_BRIDGE_AXIS_MASK) != 0;
+}
+
+// Readable tile records suffice for local underpass metadata; other kinds have no underpass.
 SC2K_PRESERVE_MOST int ReadCityBridgeUnderpass(const TileInfo *tp);
 int ReadCityBridgeUnderpassKind(const TileInfo *tp);
-// Span queries require a valid bridge tile. End searches retain the terminal matching tile for malformed spans;
-// validation rejects missing heads, inconsistent styles and mismatched highway lanes without repairing storage.
-TileIndex FindCityBridgeHead(const City *city, TileIndex tile, int side);
+// Requires a valid bridge tile. Rejects missing heads, inconsistent styles and mismatched highway lanes
+// without repairing storage.
 bool ValidateCityBridgeSpan(const City *city, TileIndex tile);
 // The stored field is BridgeStyle for road/rail heads and HighwayBridgeStyle for highway heads.
 int ReadCityBridgeStyle(const City *city, TileIndex tile);
-int ReadCityBridgePiece(const City *city, TileIndex tile);
 int ReadCityHighwayBridgePiece(const City *city, TileIndex tile);
 int ReadCityBridgeDeckHeight(const City *city, TileIndex tile);
 int CityBridgeHighwayZone(const City *city, TileIndex tile);
@@ -29,7 +63,6 @@ void StoreCityBridgeSpan(City *city, TileIndex first, TileIndex last, int head_k
 // Map an admitted non-power, non-cancel span choice to its saved road/rail style; no City, RNG or presentation effects.
 BridgeStyle CityBridgeStyleFromChoice(int choice);
 int CityNativeRoadBridgeStyles(int length);
-int CityRoadBridgePiece(int north, int south);
 // Command-payload projection only; decoding returns -2 for unsupported encodings.
 int DecodeCityRoadSpanChoice(int value);
 int EncodeCityRoadSpanChoice(int choice);
@@ -46,8 +79,6 @@ void ClearCityBridgeUnderpass(City *city, TileIndex tile);
 // Remove only a native bridge, preserving its ground/water and reconnecting both ends. Origin must be valid.
 bool RemoveCityNativeBridge(City *city, TileIndex origin, bool animate);
 
-// Camera projection never changes stored metadata. Deck artwork preserves custom overrides and native style palettes.
-SC2K_PRESERVE_MOST int CityBridgeViewZone(const City *city, TileIndex tile);
 // The lower middle tile is the moving leaf. Non-road bridges and other styles return INVALID_TILE.
 TileIndex CityDrawbridgeCenter(const City *city, TileIndex tile);
 // True only for an open moving leaf. Queries the existing ship hash, with no saved state or RNG draws.
@@ -57,6 +88,7 @@ bool IsCityDrawbridgeOpen(const City *city, TileIndex tile);
 bool CityBridgeAllowsBoat(const City *city, TileIndex tile);
 // Ship relocation/spawn/removal invalidates only leaves whose open state changes. Either position may be INVALID_TILE.
 void InvalidateCityDrawbridgesForShip(City *city, int slot, TileIndex previous, TileIndex current);
+// Camera projection never changes stored metadata. Deck artwork preserves custom overrides and native style palettes.
 void DrawCityBridgeDeckArtwork(City *city, TileIndex tile, int layout, int zoom, int screen_x, int baseline,
     BridgeStyle style);
 // Caller owns pass selection and supplies the resolved underpass kind (road, rail or power).

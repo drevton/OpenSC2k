@@ -55,9 +55,6 @@ void SetCityTerrainWater(City *city, TileIndex tile, int water_height, int land_
 // point-edit slopes and existing water levels; it does not charge or apply the terrain editor's sea-level policy.
 // Invalid tiles are ignored. The caller also invalidates any old geometry changed before this call.
 void RecalculateTerrainCell(City *city, TileIndex tile);
-// Reconstruct corners from tile minima before recalculation, for generation/disaster callers only.
-// Ordinary point edits must use their stored corners instead. Valid tiles or INVALID_TILE are accepted.
-void RebuildCityTerrainCell(City *city, TileIndex tile);
 // Restore admitted neighboring elevation gradients and refresh their terrain. Invalid input is ignored;
 // recursive edits publish their own old/new damage and do not charge.
 void RebalanceAdjacentTerrainElevations(City *city, TileIndex tile);

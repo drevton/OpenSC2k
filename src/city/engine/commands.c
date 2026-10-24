@@ -1,6 +1,7 @@
 #include "city/saveload/runtime.h"
 #include "city/saveload/state.h"
 #include "city/engine/commands.h"
+#include "city/engine/input.h"
 
 #include <string.h>
 
@@ -22,7 +23,6 @@
 #include "city/infrastructure/tunnels.h"
 #include "city/maps/buildings.h"
 #include "city/maps/labels.h"
-#include "city/maps/layers.h"
 #include "city/maps/map.h"
 #include "city/maps/trees.h"
 #include "city/maps/water.h"
@@ -285,7 +285,7 @@ static bool CityCommandHasSinglePayment(const City *city, CityCommandId id, Tile
   case CITY_COMMAND_RAISE_TERRAIN_TILE:
   case CITY_COMMAND_LOWER_TERRAIN_TILE:
   case CITY_COMMAND_STEP_TERRAIN_HEIGHT:
-    return city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE);
+    return city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE);
   case CITY_COMMAND_PLACE_TRANSPORT_LINE:
     return IsMapTileValid(city, tile) && IsMapTileValid(city, parameter1) &&
         IsCityCompactHighwayLine(city, tile, parameter1);

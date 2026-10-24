@@ -204,7 +204,8 @@ its maximum across every footprint tile, all four views and the applicable const
 All cells of a building therefore use the same height. Damage lookup needs no footprint walk,
 view-specific profile or construction-height selection; snapshots retain the previous height.
 
-`TileKindClasses` defines the `TCLASS_` classification bits. `kCityTileClasses` in `city/maps/layers.c`
+`city/maps/kinds.h` defines `TileKindClasses`, the `TCLASS_` bits and kind-only queries.
+`kCityTileClasses` in `city/maps/kinds.c`
 supplies these overlapping flags in one immutable 256-entry `u32` table (1 KiB).
 Bits 0–13 and 17–18 contain classification flags and bits 14–16 contain
 one of seven layout selectors: fixed, stored variant, highway axis, road/rail connections,
@@ -220,7 +221,7 @@ surface kinds, not stock road/rail/highway artwork IDs. Entrances retain their n
 
 Bits 19–22 of the same immutable class word select a `TileModuleId`; this adds no array or per-tile storage.
 [The module interface](../src/city/maps/module.h) dispatches family drawing with prepared camera geometry and
-scheduled landscape visits through `tick`. The registry lives with the City kind metadata in `maps/layers.c`.
+scheduled landscape visits through `tick`. The registry lives with the immutable kind metadata in `maps/kinds.c`.
 Ground, tree, water, power-line, highway, bridge, remains and building modules declare their callback records beside their
 implementations.
 Ground, tree, surface-line, power/crossing, highway and bridge ticks contain the previous landscape-visit branches.
@@ -423,6 +424,13 @@ for zoned tiles. `WriteTerrainCode` removes zoning when installing a slope, and 
 flat terrain. Wind-power buildings use bit 5 for their construction-era design instead of growth.
 All other occupants leave bits 5–7 clear.
 
+`kTerrainRaisedCorners` in the map tables maps a terrain shape to its four raised
+vertices: bits 0–3 correspond to offsets (0,0), (0,1), (1,1), (1,0). Geometry,
+coast generation, stock projection and tile painters share this immutable lookup;
+rendering uses the same mapping after rotating the shape. This is distinct from
+the underground selection shape numbering, which also includes saddle and steep
+selection artwork.
+
 Gameplay reads these meanings through the accessors. `ReadTileZoneByte` composes the zone and
 occupant metadata from their respective fields for retained algorithms; its result is not the stored
 zone byte. Codecs project complete records into stock XZON. Raw native save planes retain the discriminator.
@@ -533,8 +541,9 @@ non-square building; changing a dimension entry alone does not provide those ass
 `ReadFootprintCorners` returns zero for trees, native rubble, tunnels, ramps, clear tiles, bridges and power-line tiles
 except highway/power crossings, whose bits belong to the highway footprint. Their wire support is always a span
 and is derived rather than stored. Parks and subway/rail transitions synthesize the singleton corner mask when needed.
-Use `ReadTreeSpecies`, `ReadTransportConnections`, `CityPowerLineHasTower` and
-`ReadGroundRecoveryCounter` for their payloads. Tree count changes retain species. Category changes
+Use `ReadTreeSpecies` from `trees.h` and `ReadGroundRecoveryCounter` from `ground.h`
+for their family payloads. `ReadTransportConnections` and `CityPowerLineHasTower`
+remain shared record queries. Tree count changes retain species. Category changes
 initialize the new interpretation explicitly in `ChangeCityLandscapeTile`, called by
 `ReplaceCityTileAndStatistics`. Actual low-nibble zoning remains independent, including under trees.
 Camera rotation transforms connection masks for drawing without changing stored tiles.
@@ -593,6 +602,9 @@ before writes for `CITY_COMMAND_TEST`, and otherwise applies that same plan. Bri
 explicit command options collected by the frontend before execution.
 The native plan records land and water rectangles; previews and the command use those same bounds.
 `FindCityNativeHighwaySpan` keeps the selected axis without stock bank grading or turn inference.
+The highway module exposes shared plan, cost, preview and command entry points. Grade-edge checks,
+alignment admission, reconnection, compact construction and native span/placement helpers are private
+to `highways.c`; onramp execution is reached through `CmdPlaceHighwayOnramp`.
 Land and water share the command's tile-writing loop. Reconnection recognizes
 ordinary water decks and native reinforced bridge heads at their surface height, so neither bank
 is inferred as an unrelated bend or disconnected from a junction.
@@ -839,6 +851,12 @@ water height; the terrain sprite table uses the same flat bank family for 32-ser
 Saltwater shores can clip shared edges against adjoining flat freshwater at river mouths.
 Exposed sides of mixed shore slopes use the same prepared terrain faces as dry slopes.
 
+Shared-edge height sampling reads both land minima once before visiting its two
+endpoints. Shore-slope sampling keeps the existing cardinal neighbor order and
+skips non-river ground before height decoding; each relevant river level is read
+once. These queries use only stable tile records, with no mutation or callbacks.
+Corner masks, water classification and the resulting geometry retain their rules.
+
 `SetCityTerrainWater` is the shared native writer for terrain/water-level edits. It preserves
 existing salinity and water behavior, and borrows neighboring seawater salinity when covering dry
 land. Ordinary water selects `TK_WATER_BANK` when sloping ground reaches the waterline. Partially
@@ -1035,11 +1053,18 @@ when replacing map storage. No callback registry, deferred tile queue or second 
 `ReplaceCityTileAndStatistics` in `city/maps/layers.c` owns category changes: statistics,
 footprint/connection metadata, construction progress, tree initialization and ground recovery.
 It keeps the old kind installed until metadata conversion finishes, then writes the new kind.
+Conversion snapshots the old resolved zone before changing metadata and reuses ground decoding
+only while the record is unchanged. Clearing growth uses `CITY_TILE_GROWTH_MASK`, preserving
+the zone/slope discriminator and low nibble.
 Callers finish their explicit variant/orientation edits and invalidate the resulting extents.
 There is no separate landscape-change call to pair with a kind assignment.
 
 Demolition has two levels in `city/tools/demolition.c`. `ApplyCityBulldozerAtTile` checks
 admission, charges the resolved tool cost and returns success or a negative gameplay error.
+Admission reuses the selected tile's borrowed record for local field reads, retaining the
+underground kind mask independently of tunnel depth. Execution snapshots the surface kind
+before payment and keeps its later live reads and reentrant notice boundaries; it does not
+retain a tile borrow across them.
 `BulldozeCityTile` is the shared structure-removal body used by tools, terrain and disasters;
 it performs no pricing or payment. Tunnel and linked-highway removal live with those infrastructure families;
 connected runway/pier removal lives with buildings. Highway ground recalculation retains the footprint traversal
@@ -1130,6 +1155,8 @@ airport/seaport growth and vehicle spawning; military growth delegates to its ow
 owns interleaved visit order and the shared large-city-effect decision through `ScanCityTileBatch` and
 `ScanQuarterCityTiles`. Reserved-zone underlays, infrastructure maintenance and facility activity retain their
 existing scan positions. The simulation scheduler selects quarters and batch sizes without owning those rules.
+Single-tile growth, immediate footprint selection and large-city church replacement are private to `zoning.c`.
+The public growth header exposes batch scheduling and shared growth operations without importing tile storage.
 Environment calculations remain in [city/maps/environment.c](../src/city/maps/environment.c), with their retained
 `CityEnvironmentScan` declared in `map_types.h`. They own stage transitions and exclusive use of the existing
 scratch array until the pass finishes; no additional workspace is allocated. Each stage processes complete rows
@@ -1171,14 +1198,18 @@ use Drawing's existing terrain, clipping and depth services without importing UI
 
 Highway planning, onramp admission and placement, junctions, footprints and drawing live together in
 [city/infrastructure/highways.c](../src/city/infrastructure/highways.c), with explicit contracts in
-[highways.h](../src/city/infrastructure/highways.h). The module owns ramp views, diagonal joins, deck heights,
-crossing ground/deck separation and sprite reflection. It uses Drawing's terrain and sprite services without
-importing UI or Drawing internals. Shared bridge encoding stays with bridge spans and stock conversion with codecs.
+[highways.h](../src/city/infrastructure/highways.h). Local orientation/axis, ramp-mirror and
+footprint-selector helpers belong to that interface. The module owns ramp views, diagonal joins,
+deck heights, crossing ground/deck separation and sprite reflection. It uses Drawing's terrain and sprite
+services without importing UI or Drawing internals. Shared bridge encoding stays with bridge spans and
+stock conversion with codecs.
 
 Native bridge metadata, validation, construction, underpasses, removal and drawing live together in
 [city/infrastructure/bridges.c](../src/city/infrastructure/bridges.c), with contracts in
-[bridges.h](../src/city/infrastructure/bridges.h). Local packed-axis/head-kind accessors stay in `layers.h`;
-whole-span traversal and view projection belong to the family. The shared span planner retains line tracing,
+[bridges.h](../src/city/infrastructure/bridges.h). Local axis, head/style accessors and
+bridge encoding constants belong to that family interface; the kind-only bridge-head mapping
+lives in `kinds.h`.
+Whole-span traversal and view projection belong to the family. The shared span planner retains line tracing,
 style selection and command continuation order. Water-power span removal belongs to `power_lines.c`;
 demolition tries the power and bridge families in their original order. Ship movement supplies level-water geometry;
 the bridge module decides passage beneath middle pieces, including highway gaps and drawbridge state.

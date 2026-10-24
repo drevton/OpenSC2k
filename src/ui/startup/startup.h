@@ -1,7 +1,6 @@
 #ifndef SC2K_DOMAIN_SRC_UI_STARTUP_STARTUP_H
 #define SC2K_DOMAIN_SRC_UI_STARTUP_STARTUP_H
 
-#include "assets/graphics.h"
 #include "city/engine/city_types.h"
 #include "city/types.h"
 
@@ -90,7 +89,6 @@ typedef struct {
 
 // Startup Canvas
 
-int CityStartupMenuIcon(int control);
 bool PrepareCityStartupIcons(Game *game);
 void Sc2kCanvasDrawStartupWindow(Game *game, Canvas *canvas, const Window *window);
 i32 Sc2kCanvasStartupControlAt(const CityCanvasStartupWindow *layout,
@@ -141,11 +139,11 @@ enum {
 int ShowCityStartupMenu(City *city);
 bool InitializeCityStartupMenuDialog(City *city, CityStartupMenuDialog *dialog);
 bool CenterCityStartupWindow(City *city, u32 window_id);
-bool StartupMenuLoadCity(City *city, CityStartupMenuDialog *dialog);
-bool StartupMenuNewCity(City *city, CityStartupMenuDialog *dialog);
-bool StartupMenuEditMap(City *city, CityStartupMenuDialog *dialog);
-bool StartupMenuLoadScenario(City *city, CityStartupMenuDialog *dialog);
-bool StartupMenuQuit(City *city, CityStartupMenuDialog *dialog);
+
+typedef enum CityIntroStage {
+  CITY_INTRO_LOADING_CITY, CITY_INTRO_LOADING_GRAPHICS, CITY_INTRO_PREPARING_GRAPHICS,
+  CITY_INTRO_PREPARING_SPRITES, CITY_INTRO_STAGE_COUNT
+} CityIntroStage;
 
 // The startup backdrop streams into the caller's canvas; loading also prepares and presents the shared framebuffer.
 void DrawCityStartupBackdrop(Game *game, Canvas *canvas, CityRect area);
@@ -189,7 +187,6 @@ bool AnswerCitySetupDialog(City *city, i32 token, i32 answer);
 
 // Startup Dialog
 
-void SetCityStartupDialogResource(CityStartupWindow *dialog, u32 resource);
 bool CityStartupMenuServiceAvailable(City *city);
 i32 ChooseCityStartupMenuDialog(City *city, CityStartupWindow *dialog);
 bool AnswerCityStartupMenuDialog(City *city, i32 token, i32 choice);

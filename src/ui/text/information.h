@@ -5,17 +5,12 @@
 
 typedef struct Canvas Canvas;
 
-// Caller-owned inspector text layout; no window or global drawing context is retained.
+// Caller-owned facility text cursor. Writing advances x; the caller positions each line.
 typedef struct CityCanvasInformationCursor {
   Canvas *canvas;
   i32 x;
   i32 y;
-  i32 origin_x;
-  i32 origin_y;
-  u32 alignment;
   u32 color;
-  i32 compact_tile;
-  i32 currency_part;
 } CityCanvasInformationCursor;
 
 // UI borrows the inspector cursor and live City; glyph drawing uses Drawing services directly.
@@ -24,17 +19,10 @@ typedef struct CityInformationText {
   City *city;
 } CityInformationText;
 
-bool DrawCityTextLiteral(CityInformationText *text, const char *value);
+// Draw an explicit byte span, including embedded NULs, and advance the borrowed cursor.
 bool DrawCityTextBytes(CityInformationText *text, const char *value, int length);
-bool DrawCityTextCharacter(CityInformationText *text, char value);
-bool DrawCityTextUnsignedWord(CityInformationText *text, u16 value);
-bool DrawCityTextInteger(CityInformationText *text, i32 value);
+// Expand one localized line using live facility data and borrowed Assets strings.
+// Missing lines draw nothing; invalid facility/template substitutions set the Game error.
 void DrawCityFacilityInformationTemplate(CityInformationText *text, int facility, int line);
-
-bool WriteCityInformationText(CityInformationText *text, const char *value, i32 length);
-i32 MeasureCityInformationText(CityInformationText *text, const char *value);
-void ShiftCityInformationText(CityInformationText *text, i32 dx);
-void PositionCityInformationText(CityInformationText *text, i32 x, i32 y, u32 alignment);
-u32 ColorCityInformationText(CityInformationText *text, u32 color);
 
 #endif

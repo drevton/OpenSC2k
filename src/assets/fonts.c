@@ -13,10 +13,11 @@
 #include "assets/canvas_font.inc"
 #include "assets/canvas_heading_font.inc"
 
-static bool LoadCityPublicationFont(CityInterfaceFont *font, CityAssets *assets, const char *root) {
+static bool LoadCityPublicationFont(CityAssets *assets, const char *root) {
+  CityInterfaceFont *font = &assets->interface_font;
   AssetFile file;
-  int opened = OpenAssetSource(&file, assets, CITY_ASSET_NEWSPAPER_FONT, root);
-  if (opened != 1) return false;
+  AssetOpenResult opened = OpenAssetSource(&file, assets, CITY_ASSET_NEWSPAPER_FONT, root);
+  if (opened != ASSET_OPEN_OK) return false;
   u8 header[24], sizes[kPublicationSizeCount];
   bool valid = ReadAssetFile(&file, header, sizeof(header)) == sizeof(header) &&
       memcmp(header, "SC2KNPF1", 8) == 0 && ReadLE32(header + 8) == 3 &&
@@ -43,10 +44,11 @@ static bool LoadCityPublicationFont(CityInterfaceFont *font, CityAssets *assets,
   return true;
 }
 
-static bool LoadCityCoverageFont(CityInterfaceFont *font, CityAssets *assets, const char *graphics_root) {
+static bool LoadCityCoverageFont(CityAssets *assets, const char *graphics_root) {
+  CityInterfaceFont *font = &assets->interface_font;
   AssetFile file;
-  int opened = OpenAssetSource(&file, assets, CITY_ASSET_COVERAGE_FONT, graphics_root);
-  if (opened != 1) return false;
+  AssetOpenResult opened = OpenAssetSource(&file, assets, CITY_ASSET_COVERAGE_FONT, graphics_root);
+  if (opened != ASSET_OPEN_OK) return false;
   u8 header[16];
   bool valid = ReadAssetFile(&file, header, sizeof(header)) == sizeof(header) && memcmp(header, "SC2KAAF1", 8) == 0;
   u32 bytes = valid ? ReadLE32(header + 8) : 0;
@@ -94,8 +96,8 @@ void ReleaseCityInterfaceFont(CityInterfaceFont *font) {
 bool LoadCityInterfaceFont(CityAssets *assets, const char *graphics_root) {
   CityInterfaceFont *font = &assets->interface_font;
   AssetFile file;
-  int opened = OpenAssetSource(&file, assets, CITY_ASSET_INTERFACE_FONT, graphics_root);
-  if (opened != 1) return false;
+  AssetOpenResult opened = OpenAssetSource(&file, assets, CITY_ASSET_INTERFACE_FONT, graphics_root);
+  if (opened != ASSET_OPEN_OK) return false;
   font->ready = false;
   u8 header[8];
   bool valid = ReadAssetFile(&file, header, sizeof(header)) == sizeof(header) && memcmp(header, "SC2KUIF3", 8) == 0;
@@ -114,10 +116,8 @@ bool LoadCityInterfaceFont(CityAssets *assets, const char *graphics_root) {
       CityInterfaceGlyph *glyph = &font->glyphs[variant][code];
       *glyph = (CityInterfaceGlyph){.width = width, .height = height, .advance = advance};
       for (int row = 0; row < height; ++row) {
-        for (int byte = 0; byte < 8; ++byte) {
-          glyph->ink[row] |= (u64)rows[row * 16 + byte] << (byte * 8);
-          glyph->shadow[row] |= (u64)rows[row * 16 + 8 + byte] << (byte * 8);
-        }
+        glyph->ink[row] = ReadLE64(rows + row * 16);
+        glyph->shadow[row] = ReadLE64(rows + row * 16 + 8);
         if (width < 64 && ((glyph->ink[row] | glyph->shadow[row]) >> width)) valid = false;
         if (glyph->ink[row] & glyph->shadow[row]) valid = false;
       }
@@ -125,15 +125,32 @@ bool LoadCityInterfaceFont(CityAssets *assets, const char *graphics_root) {
   }
   valid = valid && ReadAssetByte(&file) == EOF && !file.failed;
   if (!CloseAssetFile(&file)) valid = false;
-  font->ready = valid && LoadCityCoverageFont(font, assets, graphics_root) &&
-      LoadCityPublicationFont(font, assets, graphics_root);
+  font->ready = valid && LoadCityCoverageFont(assets, graphics_root) &&
+      LoadCityPublicationFont(assets, graphics_root);
   return font->ready;
 }
 
-bool LoadCityOverlayFont(CityOverlayFont *font, CityAssets *assets, const char *graphics_root) {
+// Empty boxes cover unavailable characters until validated packaged glyphs replace them.
+void InitializeCityOverlayFont(CityOverlayFont *font) {
+  memset(font, 0, sizeof(*font));
+  for (int size = 0; size < CITY_OVERLAY_FONT_COUNT; ++size) {
+    for (int index = 0; index < CITY_OVERLAY_GLYPH_COUNT; ++index) {
+      CityOverlayGlyph *glyph = &font->glyphs[size * CITY_OVERLAY_GLYPH_COUNT + index];
+      glyph->advance = glyph->paint_advance = 6 + size;
+      if (index == 0) continue; // Space has no ink.
+      int width = 4 + size, height = 8 + size * 2;
+      for (int row = 2; row < height + 2; ++row)
+        glyph->rows[row] = row == 2 || row == height + 1 ?
+            (1 << width) - 1 : 1 | (1 << (width - 1));
+    }
+  }
+}
+
+bool LoadCityOverlayFont(CityAssets *assets, const char *graphics_root) {
+  CityOverlayFont *font = &assets->overlay_font;
   AssetFile file;
-  int opened = OpenAssetSource(&file, assets, CITY_ASSET_OVERLAY_FONT, graphics_root);
-  if (opened != 1) return false;
+  AssetOpenResult opened = OpenAssetSource(&file, assets, CITY_ASSET_OVERLAY_FONT, graphics_root);
+  if (opened != ASSET_OPEN_OK) return false;
   u8 header[SC2K_OVERLAY_FONT_HEADER_SIZE];
   bool valid = ReadAssetFile(&file, header, sizeof(header)) == sizeof(header) &&
       memcmp(header, SC2K_OVERLAY_FONT_ASSET_MAGIC, 8) == 0 &&

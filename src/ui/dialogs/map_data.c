@@ -1,4 +1,6 @@
+#include "base/text.h"
 #include "ui/windows/window_internal.h"
+#include "city/maps/information.h"
 #include "ui/map.h"
 #include "ui/dialogs/map_data.h"
 
@@ -7,9 +9,9 @@
 
 #include "assets/state.h"
 #include "city/economy/economy.h"
-#include "city/maps/layers.h"
 #include "city/presentation.h"
 #include "city/state.h"
+#include "drawing/sprites/preparation.h"
 #include "drawing/bitmaps.h"
 #include "drawing/fonts/fonts.h"
 #include "drawing/maps/map_render.h"
@@ -19,12 +21,14 @@
 #include "drawing/state.h"
 #include "game/errors.h"
 #include "game/state.h"
-#include "ui/dialogs/budget.h"
 #include "ui/sdl.h"
 #include "ui/state.h"
 #include "ui/windows/windows.h"
 
 // Data-layer preview, controls, overlay selection and land-use windows.
+
+static void Sc2kCanvasDesktopUpdateMapData(CityCanvasDesktop *desktop, i32 selection,
+    const u32 *map_preview);
 
 enum { MAP_CATEGORY_SIZE = 20, MAP_CONTROL_GROUP_GAP = 10,
   MAP_MAX_OPTIONS = CITY_MAP_BITMAP_OPTIONS, MAP_RESIZE_WIDTH = 12 };
@@ -113,7 +117,7 @@ static bool IsIsometricMap(const Window *window) {
   return window->city && window->city->game->ui->map_data.isometric;
 }
 
-CityRect Sc2kCanvasMapDataPreviewRect(const Window *window) {
+static CityRect Sc2kCanvasMapDataPreviewRect(const Window *window) {
   if (window->shaded) return (CityRect){0};
   CityRect area = {window->bounds.left + 4, window->bounds.top + 18,
       window->bounds.right - 4, window->bounds.bottom - MapButtonSize(window) - 4};
@@ -145,7 +149,7 @@ static TileIndex MapTileAt(const Window *window, CityRect rect, int x, int y) {
   return MapTileXYOrInvalid(city, v, u);
 }
 
-static u32 BuildMapPreview(Canvas *pixels, const void *context) {
+static void BuildMapPreview(Canvas *pixels, const void *context) {
   const Window *window = context;
   CityRect bounds = {0, 0, pixels->width, pixels->height};
   for (int y = 0; y < pixels->height; ++y)
@@ -156,18 +160,17 @@ static u32 BuildMapPreview(Canvas *pixels, const void *context) {
           window->map_preview[(MapTileX(window->city, tile) * 128 / window->city->map_width) * 128 +
               MapTileY(window->city, tile) * 128 / window->city->map_height];
     }
-  return 0;
 }
 
-static void DrawMapPreview(Canvas *canvas, const Window *window, CityBitmapCache *cache) {
+static void DrawMapPreview(Canvas *canvas, const Window *window, SpriteBitmapCache *cache) {
   if (!window->map_preview) return;
-  CityBitmapPaint paint = {.bounds = Sc2kCanvasMapDataPreviewRect(window),
+  CanvasBitmapPaint paint = {.bounds = Sc2kCanvasMapDataPreviewRect(window),
       .build = BuildMapPreview, .context = window};
-  if (!DrawCityCachedBitmap(canvas, cache, &paint))
+  if (!DrawCachedCanvasBitmap(canvas, cache, &paint))
     window->city->game->execution_failed = true;
 }
 
-static bool DrawMapButton(Canvas *canvas, CitySpriteImage *cache, const CityInterfaceIcons *icons, CityRect rect,
+static bool DrawMapButton(Canvas *canvas, SpriteImage *cache, const CityInterfaceIcons *icons, CityRect rect,
     int icon, bool selected) {
   selected |= DrawCanvasButtonBox(canvas, rect.left, rect.top, rect.right, rect.bottom, canvas_title, !selected);
   return !icons || DrawCityInterfaceIcon(canvas, cache,
@@ -243,7 +246,7 @@ static void Sc2kCanvasDrawLandUse(Canvas *canvas, const Window *window) {
         canvas_light, 0);
     char acres[16];
     char percent[8];
-    CanvasBudgetAmount(acres, sizeof(acres), window->land_use_acres[index]);
+    FormatGroupedInteger(acres, sizeof(acres), window->land_use_acres[index]);
     snprintf(percent, sizeof(percent), "%u%%", window->land_use_percent[index]);
     CanvasTextRight(canvas, bounds.left + 253, top + 6, acres, canvas_text);
     CanvasTextRight(canvas, bounds.right - 14, top + 6, percent, canvas_text);
@@ -277,7 +280,7 @@ void Sc2kCanvasDesktopUpdateLandUse(CityCanvasDesktop *desktop, const CityStatis
 }
 
 void UpdateCityMapDataWindows(City *city) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   i32 open = 0;
   for (i32 index = 0; index < city->game->ui->desktop.count; ++index)
     open |= city->game->ui->desktop.windows[index].kind == CITY_CANVAS_MAP_DATA;
@@ -290,7 +293,7 @@ void UpdateCityMapDataWindows(City *city) {
 }
 
 bool InvalidateCityMapDataPreview(City *city) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   if (!drawing->map_navigation_enabled || city->game->ui == NULL) {
     return false;
   }
@@ -326,7 +329,8 @@ i32 Sc2kCanvasDesktopOpenMapData(CityCanvasDesktop *desktop, CityRect bounds, i3
           .title = "Map Data", .data_map_selection = selection});
 }
 
-void Sc2kCanvasDesktopUpdateMapData(CityCanvasDesktop *desktop, i32 selection,
+// Attach the borrowed Drawing-owned preview to every map-data window and publish its damage.
+static void Sc2kCanvasDesktopUpdateMapData(CityCanvasDesktop *desktop, i32 selection,
     const u32 *map_preview) {
   for (i32 index = 0; index < desktop->count; ++index) {
     Window *window = &desktop->windows[index];
@@ -351,7 +355,7 @@ void SetCityMapDataPresentation(City *city, CityCanvasDesktop *desktop) {
 int ReadCityMapDataSelection(const CityMapDataState *state) {
   return state->group * CITY_DATA_SELECTION_STRIDE + state->option;
 }
-void SetCityMapDataSelection(City *city, int selection) {
+static void SetCityMapDataSelection(City *city, int selection) {
   CityMapDataState *state = &city->game->ui->map_data;
   if (ReadCityMapDataSelection(state) != selection && state->drawing)
     InvalidateCityWindowBitmaps(&state->drawing->base);
@@ -374,7 +378,7 @@ void HideCityMapDataDialog(City *city) {
   state->visible = false;
   state->refresh_enabled = false;
   state->window_id = 0;
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   drawing->map_state.data_overlay_enabled = false;
   RefreshCityMapViews(city->game);
 }
@@ -394,7 +398,7 @@ bool ToggleCityMapDataDialog(City *city) {
     }
     Window *window = &state->desktop->windows[index];
     window->city = city;
-    state->drawing = (CityMapDataWindowDrawing *)CreateCityWindowDrawing(city->game->drawing,
+    state->drawing = (CityMapDataWindowDrawing *)CreateCityWindowDrawing(city->drawing,
         CITY_WINDOW_DRAWING_MAP_DATA, 0);
     if (!state->drawing || !AttachCityWindowCallback(window, ReleaseMapDataDrawing, state->drawing)) {
       if (state->drawing) ReleaseCityWindowDrawing(&state->drawing->base);
@@ -410,7 +414,7 @@ bool ToggleCityMapDataDialog(City *city) {
         rect.right - window->bounds.left, rect.bottom - window->bounds.top};
   }
   state->refresh_enabled = state->visible;
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   RefreshCityMapViews(city->game);
   return state->visible;
 }
@@ -418,7 +422,7 @@ bool ToggleCityMapDataDialog(City *city) {
 // Map Data Window
 
 void ToggleCityMapDataOverlay(City *city) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   drawing->map_state.data_overlay_enabled = !drawing->map_state.data_overlay_enabled;
   CityMapDataState *state = &city->game->ui->map_data;
   if (state->desktop)
@@ -430,7 +434,7 @@ void ToggleCityMapDataOverlay(City *city) {
   RefreshCityMapViews(city->game);
 }
 void CityMapDataDialogOnOverlaySelectionChanged(City *city, int selection) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   SetCityMapDataSelection(city, selection);
   ApplyCityMapDataModeSelection(drawing, selection);
   drawing->map_state.data_overlay_enabled = 0;
@@ -438,7 +442,7 @@ void CityMapDataDialogOnOverlaySelectionChanged(City *city, int selection) {
 }
 void CityMapDataDialogOnListSelectionChanged(City *city, int selection) {
   SetCityMapDataSelection(city, selection);
-  ApplyCityMapDataModeSelection(city->game->drawing, selection);
+  ApplyCityMapDataModeSelection(city->drawing, selection);
 }
 // Default entries (including selection52) leave the main-map mode unchanged.
 void ApplyCityMapDataModeSelection(Drawing *drawing, int selection) {

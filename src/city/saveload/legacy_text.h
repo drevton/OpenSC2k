@@ -1,12 +1,11 @@
 #ifndef SC2K_LEGACY_TEXT_H
 #define SC2K_LEGACY_TEXT_H
 
-#include "base/utf8.h"
+#include "base/types.h"
 
 typedef enum CityLegacyTextEncoding {
   CITY_TEXT_WINDOWS_1252, CITY_TEXT_OEM_437, CITY_TEXT_SCENARIO,
 } CityLegacyTextEncoding;
-u32 DecodeLegacyCityCharacter(u8 byte, CityLegacyTextEncoding encoding);
 // Decode stock bytes at import. Output truncates only between complete UTF-8 characters.
 size_t DecodeLegacyCityText(char *output, size_t capacity, const void *bytes, size_t length,
     CityLegacyTextEncoding encoding);

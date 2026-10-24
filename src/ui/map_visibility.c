@@ -20,7 +20,7 @@
 bool IsCityMainMapInteractiveAt(City *city, int x, int y) {
   if (!city->game->city_active) return false;
   CityInterfaceState *ui = city->game->ui;
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   if (NativeSpanDialogWaiting(ui) || CityConnectionQuestionWaiting(ui) || CityMissionNoticeWaiting(ui) ||
       ui->startup_waiting ||
       NativeScenarioDialogWaiting(ui)) return false;
@@ -150,7 +150,7 @@ static void RoadCarVisibleFragment(CityRect rect, void *context) {
 
 bool IsCityRoadCarInView(const City *city, TileIndex tile, int height, CityMapCamera view, int view_index) {
   if (view.zoom < CITY_MAP_ZOOM_LARGE || view.width <= 0 || view.height <= 0) return false;
-  const Drawing *drawing = city->game->drawing;
+  const Drawing *drawing = city->drawing;
   u32 window_id = view_index ? drawing->views[view_index - 1].window_id : 0;
   if (view_index) {
     const Window *window = FindCityCanvasWindow(&city->game->ui->desktop, window_id);
@@ -187,7 +187,7 @@ CityRect ClipCityMapViewportPixels(CityRect rect, const CityMapPaint *paint) {
 
 CityRect CityMapScreenRect(CityRect rect, const CityMapPaint *paint) {
   City *city = paint->city;
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   CityInterfaceState *ui = city->game->ui;
   CityExtraMapView *view = paint->view;
   if (view == NULL) {

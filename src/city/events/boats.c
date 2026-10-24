@@ -51,7 +51,7 @@ static const i8 kBorderWaterTileXOffsets[4] = {
 // Small boats need a level water surface, including beneath water infrastructure. Their pier/marina rules are
 // handled by the route caller. Stock comparison retains its broader water-presence check.
 static bool IsCitySailboatWaterTile(const City *city, TileIndex tile) {
-  if (city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE))
+  if (city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE))
     return ReadCityTileGeometry(city, tile).water_surface == CITY_WATER_SURFACE_LEVEL;
   return HasTileWater(&city->tile[tile]);
 }
@@ -81,7 +81,7 @@ static bool CheckCityEventAdjacentTile(City *city, int slot, int direction) {
 void UpdateCityMapSailboat(City *city, int slot) {
   CityMapEvent *event = &city->events.event[slot];
   ++city->disasters.tile248_count;
-  if (!(city->fixes & (1 << CITY_FIX_EXPANDED_EVENTS)) && city->disasters.tile248_count > 4) {
+  if (!(city->fixes & (1ull << CITY_FIX_EXPANDED_EVENTS)) && city->disasters.tile248_count > 4) {
     ClearCityMapEventSlot(city, slot);
     return;
   }
@@ -91,7 +91,7 @@ void UpdateCityMapSailboat(City *city, int slot) {
     return;
   }
   // A terrain edit or imported boat can leave a sailing record on a bank. Remove it before another movement step.
-  if ((city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)) &&
+  if ((city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) &&
       (event->tile == INVALID_TILE || !IsCitySailboatWaterTile(city, event->tile))) {
     ClearCityMapEventSlot(city, slot);
     return;
@@ -306,9 +306,9 @@ void SpawnBorderWaterEvent(City *city, TileIndex source) {
 }
 
 // Create a sailboat on an unoccupied exposed water tile. Native landscape behavior excludes banks and rapids.
-void TryCreateCitySailboat(City *city, TileIndex tile_index) {
+static void TryCreateCitySailboat(City *city, TileIndex tile_index) {
   assert(IsMapTileValid(city, tile_index));
-  if ((city->fixes & (1 << CITY_FIX_EXPANDED_EVENTS)) && !CanSpawnCityVehicle(city, CITY_MAP_EVENT_SAILBOAT))
+  if ((city->fixes & (1ull << CITY_FIX_EXPANDED_EVENTS)) && !CanSpawnCityVehicle(city, CITY_MAP_EVENT_SAILBOAT))
     return;
   int slot = FindFreeCityEventSlot(city);
   if (slot == CITY_OVERLAY_NONE || !IsTileKindExposedWater(ReadTile(city, tile_index)) ||

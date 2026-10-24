@@ -7,10 +7,9 @@ enum {
   CITY_DIALOG_RESOURCE_STARTUP_MENU = 103,
 };
 
-// Setup/progress resources and frame control identifiers.
+// Setup dialog resources.
 enum {
   CITY_DIALOG_RESOURCE_NEW_CITY = 101,
-  CITY_FRAME_CONTROL_120 = 120,
 };
 
 // Resource
@@ -23,27 +22,6 @@ typedef enum CityNameResourceCategory {
   CITY_NAME_CATEGORY_ZONE = 2100,
   CITY_NAME_CATEGORY_RATING = 2200,
 } CityNameResourceCategory;
-
-// DATA_USA.IDX/DAT IDs used by LoadCityNewspaperAndFacilityResources.
-typedef enum CityDataResourceId {
-  CITY_DATA_RESOURCE_NEWSPAPER_GROUP_STARTS = 1000,
-  CITY_DATA_RESOURCE_NEWSPAPER_GROUP_COUNTS = 1001,
-  CITY_DATA_RESOURCE_NEWSPAPER_TEMPLATE_OFFSETS = 1002,
-  CITY_DATA_RESOURCE_NEWSPAPER_TEMPLATE_BLOB = 1003,
-  CITY_DATA_RESOURCE_EVENT_SEVERITY = 1004,
-  CITY_DATA_RESOURCE_FACILITY_BASELINES = 1005,
-} CityDataResourceId;
-
-// Load order and owner/size slots, distinct from the DATA resource IDs.
-typedef enum CityDataResourceSlot {
-  CITY_DATA_SLOT_NEWSPAPER_TEMPLATE_BLOB = 0,
-  CITY_DATA_SLOT_NEWSPAPER_GROUP_STARTS = 1,
-  CITY_DATA_SLOT_NEWSPAPER_GROUP_COUNTS = 2,
-  CITY_DATA_SLOT_NEWSPAPER_TEMPLATE_OFFSETS = 3,
-  CITY_DATA_SLOT_EVENT_SEVERITY = 4,
-  CITY_DATA_SLOT_FACILITY_BASELINES = 5,
-  CITY_DATA_SLOT_COUNT = 6,
-} CityDataResourceSlot;
 
 // Tile-description indices are distinct from surface tile kinds.
 enum {
@@ -68,8 +46,5 @@ enum { CITY_ADVISOR_PORTRAIT_FIRST = 197, CITY_ADVISOR_PORTRAIT_COUNT = 8,
 enum { CITY_NEIGHBOR_ART_WIDTH = 512, CITY_NEIGHBOR_ART_HEIGHT = 256, CITY_NEIGHBOR_ART_COUNT = 8,
     CITY_NEIGHBOR_ART_SCALE = 4, CITY_NEIGHBOR_ART_EMPTY = 0, CITY_NEIGHBOR_ART_HUGE_CITY = 6,
     CITY_NEIGHBOR_ART_MEGACITY = 7 };
-
-// Original menu resources: application menu and all city-tool popup menus.
-typedef enum CityMenuResourceId { CITY_MENU_RESOURCE_MAIN = 3, CITY_MENU_RESOURCE_TOOLS = 136 } CityMenuResourceId;
 
 #endif

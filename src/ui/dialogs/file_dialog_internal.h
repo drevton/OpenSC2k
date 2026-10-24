@@ -4,7 +4,7 @@
 #include "ui/dialogs/file_browser.h"
 #include "ui/dialogs/file_dialog.h"
 
-// Window state and lifecycle shared with the optional retained-caller adapter.
+// File-choice state is shared by browser controls, completion and the optional retained-caller adapter.
 typedef struct NativeFileDialog {
   struct NativeFileDialog *parent;
   NativeSaveScope *scope;

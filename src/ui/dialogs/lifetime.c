@@ -1,12 +1,12 @@
+#include "ui/dialogs/dialogs.h"
+
 #include <stdio.h>
-#include <stdlib.h>
 
 #include "game/audio.h"
 #include "audio/types.h"
 #include "city/disasters/disasters.h"
 #include "city/presentation.h"
 #include "city/state.h"
-#include "game/commands.h"
 #include "game/observation.h"
 #include "game/state.h"
 #include "ui/windows/window_internal.h"
@@ -14,7 +14,6 @@
 #include "ui/commands.h"
 #include "ui/dialogs/alerts.h"
 #include "ui/dialogs/budget.h"
-#include "ui/dialogs/dialogs.h"
 #include "ui/dialogs/file_dialog.h"
 #include "ui/dialogs/information.h"
 #include "ui/dialogs/messages.h"
@@ -24,7 +23,6 @@
 #include "ui/map.h"
 #include "ui/sdl.h"
 #include "ui/state.h"
-#include "ui/text/text.h"
 #include "ui/tools/tools.h"
 #include "ui/windows/windows.h"
 
@@ -132,7 +130,8 @@ void SetCityCanvasPaletteDialogState(City *city, bool paused) {
   SetCityPaletteDialogState(city, paused);
 }
 
-i32 ChooseCityCanvasDialog(City *city, void *dialog) {
+// Only the observation adapter answers this retained request; absent input remains unanswered.
+static i32 ChooseCityCanvasDialog(City *city, void *dialog) {
   const GameObservation *observer = city->game->observation;
   if (observer && observer->choose_canvas_dialog) return observer->choose_canvas_dialog(city, dialog);
   return CITY_DIALOG_UNANSWERED;
@@ -300,53 +299,4 @@ void ApplicationUpdateDialogPause(City *city) {
       NativeScenarioDialogWaiting(ui);
   ApplicationSyncDialogPause(city);
   CancelClosedCityNameEditors(city->game, &cancelled);
-}
-
-bool AttachCityWindowCallback(Window *window, CityWindowCallback *callback, void *context) {
-  if (!callback) return false;
-  CityWindowCompletion *completion = malloc(sizeof(*completion));
-  if (!completion) return false;
-  *completion = (CityWindowCompletion){window->completion, callback, context};
-  window->completion = completion;
-  return true;
-}
-
-bool OpenCityNoticeWithCallback(City *city, const char *title, const char *text, u32 flags,
-    CityWindowCallback *callback, void *context) {
-  int slot = Sc2kCanvasDesktopOpenNotice(&city->game->ui->desktop, (CityRect){70, 65, 530, 395},
-      title, text, flags);
-  if (slot < 0) return false;
-  Window *window = &city->game->ui->desktop.windows[slot];
-  if (!AttachCityWindowCallback(window, callback, context)) {
-    Sc2kCanvasDesktopDismissWindow(&city->game->ui->desktop, window->window_id);
-    return false;
-  }
-  window->owned_message = DuplicateText(text);
-  window->message = window->owned_message;
-  ApplicationUpdateDialogPause(city);
-  return true;
-}
-
-void CompleteCityWindowCallbacks(City *city) {
-  if (city->game->command_depth) return;
-  CityInterfaceState *ui = city->game->ui;
-  while (ui->closed_windows) {
-    CityWindowCompletion *closed = ui->closed_windows, *pending = NULL;
-    ui->closed_windows = NULL;
-    // Resume in dismissal order, including windows closed together by replacement.
-    while (closed) {
-      CityWindowCompletion *next = closed->next;
-      closed->next = pending;
-      pending = closed;
-      closed = next;
-    }
-    while (pending) {
-      CityWindowCompletion *next = pending->next;
-      CityWindowCallback *callback = pending->callback;
-      void *context = pending->context;
-      free(pending);
-      callback(city, context);
-      pending = next;
-    }
-  }
 }

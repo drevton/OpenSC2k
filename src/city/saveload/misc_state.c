@@ -1,4 +1,5 @@
 #include "city/saveload/state.h"
+#include "city/economy/history.h"
 #include "city/engine/city_name.h"
 #include "city/saveload/map_format.h"
 #include "city/saveload/types.h"
@@ -9,9 +10,9 @@
 #include "audio/state.h"
 #include "game/state.h"
 #include "city/presentation.h"
-#include "city/maps/layers.h"
 #include "city/state.h"
 #include "city/saveload/city_file_internal.h"
+#include "city/saveload/sc2k.h"
 #include "assets/catalog.h"
 #include "base/byte_order.h"
 #include <string.h>
@@ -181,10 +182,9 @@ static bool EncodeCityMiscFields(City *city, u8 *misc) {
       value = (u32)(int)(i16)value;
     WriteBE32(misc + 4u * field->file_index, value);
   }
-  int packed_position, mode;
-  ReadCitySavedView(city, &packed_position, &mode);
-  WriteBE32(misc + 4u * CITY_MISC_WORD_SAVED_VIEW_POSITION, (u32)(int)packed_position);
-  WriteBE32(misc + 4u * CITY_MISC_WORD_SAVED_VIEW_MODE, (u32)(int)mode);
+  CitySavedViewFields view = ReadCitySavedView(city);
+  WriteBE32(misc + 4u * CITY_MISC_WORD_SAVED_VIEW_POSITION, (u32)(int)view.position);
+  WriteBE32(misc + 4u * CITY_MISC_WORD_SAVED_VIEW_MODE, (u32)(int)view.mode);
   if (city->history == NULL)
     return false;
   u32 value = ReadHistorySample(city, CITY_HISTORY_RESIDENTS, 1);
@@ -286,8 +286,8 @@ static void ApplyCityMiscWord(City *city, u32 index, u32 value) {
 
 // Encode or apply a complete stock MISC record in the selected direction. Requires initialized City/file owners and
 // full record bytes; load effects follow original word order and are not transactionally rolled back.
-bool CityFileMiscFields(City *city, u8 *misc, int load) {
-  if (!load) return EncodeCityMiscFields(city, misc);
+bool CityFileMiscFields(City *city, u8 *misc, CityFileDirection direction) {
+  if (direction == CITY_FILE_EXPORT) return EncodeCityMiscFields(city, misc);
   if (ReadBE32(misc) != CITY_MISC_VERSION) return false;
   ResetCitySaveExtensionState(city);
   for (u32 index = 1; index <= CITY_MISC_WORD_LAST_SAVED; ++index)

@@ -3,6 +3,7 @@
 
 #include "city/engine/command_types.h"
 #include "city/infrastructure/types.h"
+#include "city/saveload/types.h"
 
 typedef struct Game Game;
 typedef struct CityPointerInput CityPointerInput;
@@ -18,7 +19,6 @@ struct CityNoticeRequest;
 struct CityStartupWindow;
 struct CityNewCitySetupDialog;
 typedef struct CityMapViewConfig CityMapViewConfig;
-typedef struct NativeSaveIOOutcome NativeSaveIOOutcome;
 
 typedef enum CityPresentationEvent {
   CITY_PRESENTATION_STADIUM_OPEN, CITY_PRESENTATION_STADIUM_ANSWER,
@@ -53,6 +53,7 @@ typedef struct GameObservation {
   // Stock fixture IDs are translated only by optional diagnostic input adapters.
   u32 (*stock_command_id)(u32 id);
   bool (*script_action)(Game *game, const char *line);
+  // Write result on every normal return when supplied, including rejected or shortcut commands.
   i64 (*execute_command)(Game *game, CityCommand packet, const CityPointerInput *input, u32 count,
       const u8 *text, u32 length, const CityCreationOptions *creation, const CityCommandArguments *arguments,
       CityCommandResult *result);
@@ -65,7 +66,7 @@ typedef struct GameObservation {
   void (*command_executed)(void *scope);
   void (*end_command)(Game *game, void *scope, i64 result, int error, u32 before_tick);
   void (*file_operation_finished)(Game *game, const CityFileRuntime *file);
-  void (*file_io)(Game *game, const NativeSaveIOOutcome *outcome);
+  void (*file_io)(Game *game, const CityFileIOOutcome *outcome);
   void (*presentation)(Game *game, CityPresentationEvent event, int token,
       int first, int second, int answer, const char *text);
   void (*startup_choice)(Game *game, u32 kind, int token, int choice);
@@ -130,7 +131,7 @@ typedef struct GameObservation {
 
 void ObserveCityPresentation(Game *game, CityPresentationEvent event, int token,
     int first, int second, int answer, const char *text);
-void ObserveCityFileIO(CityFileRuntime *file, int operation, u32 requested, u32 result, int error,
+void ObserveCityFileIO(CityFileRuntime *file, CityFileIOOperation operation, u32 requested, u32 result, int error,
     const void *bytes, u32 size);
 
 #endif

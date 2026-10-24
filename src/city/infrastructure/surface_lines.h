@@ -1,8 +1,9 @@
 #ifndef SC2K_CITY_INFRASTRUCTURE_SURFACE_LINES_H
 #define SC2K_CITY_INFRASTRUCTURE_SURFACE_LINES_H
 
-#include "city/maps/map.h"
-#include "city/maps/terrain.h"
+#include "city/types.h"
+
+typedef struct CityTileGeometry CityTileGeometry;
 
 // Resolved transport surface, derived from TileInfo rather than retained drawing state.
 // shape is camera-relative for view queries; raised is a lift in map levels. layout names source artwork,
@@ -23,6 +24,14 @@ typedef struct { u8 kind, rotation; } CitySurfaceLinePath;
 CitySurfaceLinePath ResolveCitySurfaceLinePath(const City *city, TileIndex tile, int entry, int exit, bool rail);
 
 typedef struct Drawing Drawing;
+
+// Read-only topology queries for a valid tile; these do not reconnect neighbors or alter stored terrain.
+// Ordinary flat line axis, or -1 for slopes, bends, junctions and rail transitions.
+// Pass the family when crossing another network; zero accepts any ordinary line.
+int ReadCityStraightLineAxis(const City *city, TileIndex tile, int family);
+// Adjacent incline in north/south/west/east order, or -1.
+int FindCityRailTransition(const City *city, TileIndex tile);
+bool IsCityLineBendOrJunction(const City *city, TileIndex tile);
 
 // Read stored ordinary-road connections; crossings derive their eligible directions without changing topology.
 int CityRoadConnectionMask(const City *city, TileIndex tile);
@@ -45,12 +54,8 @@ i64 PlaceCitySubwayRailConnection(City *city, TileIndex tile);
 // View rotation is explicit and never changes world storage. Heights and lifts are in map levels.
 CityMapSurface ResolveCitySurfaceLineGround(const City *city, TileIndex tile);
 CityMapSurface ResolveCitySurfaceLineViewGround(const City *city, TileIndex tile, int rotation);
-// Source artwork (without zoom) to cardinal connections; independent of native tile-kind encoding.
-int CitySurfaceLineConnections(int layout);
 // Return a Drawing cache slot including zoom. Its diagonal layout also defines the decorative cars' centreline.
 int CitySurfaceLineSprite(const City *city, TileIndex tile, int layout, int zoom, int rotation);
-// Return the two-bit variant that omits foundation walls covered by adjacent ground.
-int CitySurfaceLineFoundationBlock(const City *city, TileIndex tile, CityMapSurface surface);
 // Composite prepared diagonal halves through the normal sprite API; ordinary sprites use the same direct blit.
 bool DrawCitySurfaceLineSprite(Drawing *drawing, int sprite, int x, int baseline, int flipped);
 

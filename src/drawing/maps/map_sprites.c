@@ -1,4 +1,5 @@
-#include <string.h>
+#include "drawing/maps/map_sprites.h"
+#include "drawing/sprites/surface.h"
 
 #include "assets/graphics.h"
 #include "assets/state.h"
@@ -9,10 +10,16 @@
 #include "city/maps/buildings.h"
 #include "city/maps/layers.h"
 #include "city/maps/tables.h"
+#include "city/maps/terrain.h"
 #include "city/maps/tile_storage.h"
+#include "city/saveload/map_format.h"
 #include "city/tools/types.h"
-#include "drawing/maps/map_render.h"
+#include "drawing/maps/map_depth.h"
+#include "drawing/maps/map_camera.h"
+#include "drawing/maps/map_terrain.h"
+#include "drawing/maps/placement.h"
 #include "drawing/maps/tables.h"
+#include "drawing/raster/canvas_raster_internal.h"
 #include "drawing/state.h"
 #include "game/state.h"
 
@@ -93,12 +100,108 @@ int CityMapTileSpriteIndex(const City *city, TileIndex tile) {
 }
 
 int CityMapViewTileSpriteIndex(const City *city, TileIndex tile) {
-  return ResolveCityMapTileSprite(city, tile, CityMapCameraRotation(city->game->drawing));
+  return ResolveCityMapTileSprite(city, tile, CityMapCameraRotation(city->drawing));
+}
+
+MapTilePreview ReadCityMapTilePreview(const City *city, TileIndex tile, bool sailboat) {
+  const TileInfo *tp = &city->tile[tile];
+  int kind = tp->kind;
+  MapTilePreview preview = {.flipped = LegacyCityTileFlip(city, tile)};
+  if (sailboat) preview.sprite = 1380;
+  else if (IsTileKindExposedWater(kind) && (city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE))) {
+    CityTileGeometry geometry = ReadCityTileGeometry(city, tile);
+    int rotation = CityMapCameraRotation(city->drawing);
+    geometry.surface_shape = CityMapCameraShape(geometry.surface_shape, rotation);
+    preview.river = ReadCityRiverSprites(city, tile, CITY_MAP_ZOOM_LARGE, &geometry);
+    preview.sprite = CityWaterSprite(city, tile, CITY_MAP_ZOOM_LARGE, &geometry);
+  } else {
+    int terrain_sprite = ProjectCityTerrainToLegacy(city, tile, ReadTerrainCode(tp));
+    preview.sprite = kind == TK_CLEAR || IsTileKindExposedWater(kind) ?
+        CityTerrainSprite(terrain_sprite) + CITY_SPRITE_CATALOG_LARGE_BASE :
+        MapSpriteZoomIndex(CityMapTileSpriteIndex(city, tile), CITY_MAP_ZOOM_LARGE);
+  }
+  return preview;
+}
+
+// Keep all river pieces at the selected preview zoom.
+static int MapTilePreviewSprite(const MapTilePreview *preview, int piece, int zoom) {
+  int sprite = preview->river.count ? preview->river.sprite[piece] : preview->sprite;
+  return MapSpriteCacheZoomIndex(sprite, zoom);
+}
+
+static CityRect MapTilePreviewSpriteBounds(const MapSpriteCache *cache, int scale, int zoom, int id) {
+  const RunSprite *sprite = cache->sprites[scale][id];
+  int x = cache->offsets_x[scale][id];
+  if (sprite->mirrored) x = (8 << zoom) * cache->scales[scale] / 100 - sprite->width - x;
+  int y = -cache->baselines[scale][id];
+  return (CityRect){x, y, x + sprite->width, y + sprite->height};
+}
+
+static bool MapTilePreviewBounds(const MapTilePreview *preview, const MapSpriteCache *cache,
+    int scale, int zoom, CityRect *bounds) {
+  for (int i = 0; i < IntMax(1, preview->river.count); ++i) {
+    int id = MapTilePreviewSprite(preview, i, zoom);
+    if (!cache->sprites[scale][id]) return false;
+    CityRect piece = MapTilePreviewSpriteBounds(cache, scale, zoom, id);
+    *bounds = i ? UnionCityRects(*bounds, piece) : piece;
+  }
+  return true;
+}
+
+void DrawCityMapTilePreview(Drawing *drawing, Canvas *canvas, const MapTilePreview *preview,
+    CityRect preview_bounds) {
+  CityRect box = CanvasRasterImageBounds(canvas, preview_bounds);
+  const MapSpriteCache *cache = &drawing->sprite_cache;
+  int preview_scale = -1, preview_zoom = 0, smallest_scale = -1, smallest_zoom = 0;
+  CityRect preview_bounds_pixels = {0}, smallest_bounds = {0};
+  // Fit every river layer together at a prepared scale, retaining their shared tile origin and baseline.
+  for (int scale = 0; scale < MAP_SPRITE_SCALE_COUNT; ++scale) {
+    for (int zoom = 0; zoom < 3; ++zoom) {
+      CityRect candidate;
+      if (!MapTilePreviewBounds(preview, cache, scale, zoom, &candidate)) continue;
+      int width = candidate.right - candidate.left, height = candidate.bottom - candidate.top;
+      int area = width * height;
+      if (smallest_scale < 0 || area < (smallest_bounds.right - smallest_bounds.left) *
+          (smallest_bounds.bottom - smallest_bounds.top)) {
+        smallest_scale = scale;
+        smallest_zoom = zoom;
+        smallest_bounds = candidate;
+      }
+      if (width <= box.right - box.left && height <= box.bottom - box.top &&
+          (preview_scale < 0 || area > (preview_bounds_pixels.right - preview_bounds_pixels.left) *
+              (preview_bounds_pixels.bottom - preview_bounds_pixels.top))) {
+        preview_scale = scale;
+        preview_zoom = zoom;
+        preview_bounds_pixels = candidate;
+      }
+    }
+  }
+  if (preview_scale < 0) {
+    preview_scale = smallest_scale;
+    preview_zoom = smallest_zoom;
+    preview_bounds_pixels = smallest_bounds;
+  }
+  if (preview_scale >= 0) {
+    CanvasRaster raster = CanvasRasterView(canvas);
+    SpriteSurface surface = drawing->screen_surface;
+    surface.canvas = *canvas;
+    surface.canvas.width = raster.width;
+    surface.canvas.height = raster.height;
+    surface.canvas.clip = CanvasRasterRect(canvas, preview_bounds);
+    surface.canvas.raster = (CanvasRaster){0};
+    int x = box.left + (box.right - box.left - preview_bounds_pixels.right - preview_bounds_pixels.left) / 2;
+    int y = box.top + (box.bottom - box.top - preview_bounds_pixels.bottom - preview_bounds_pixels.top) / 2;
+    for (int i = 0; i < IntMax(1, preview->river.count); ++i) {
+      int id = MapTilePreviewSprite(preview, i, preview_zoom);
+      CityRect piece = MapTilePreviewSpriteBounds(cache, preview_scale, preview_zoom, id);
+      DrawRunSprite(&surface, cache->sprites[preview_scale][id], x + piece.left, y + piece.top, SPRITE_COPY, NULL);
+    }
+  }
 }
 
 int CityMapViewTileFlip(const City *city, TileIndex tile) {
   const TileInfo *tp = &city->tile[tile];
-  int rotation = CityMapCameraRotation(city->game->drawing), kind = tp->kind;
+  int rotation = CityMapCameraRotation(city->drawing), kind = tp->kind;
   if (kind == TK_HIGHWAY_ENTRANCE) return CityHighwayRampView(city, tile, rotation) >> 2;
   if (IsCityWaterPowerLine(tp))
     return ((ReadTransportConnections(tp) & CONN_NS) != 0) ^ (rotation & 1);
@@ -130,7 +233,7 @@ i32 CityMapBridgeArtworkDepth(const City *city, TileIndex tile, bool foreground)
 }
 
 void DrawCityBridgeTrafficForeground(City *city, TileIndex tile, int sprite, int x, int baseline, int palette_offset) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   if (!drawing->map_depth.preparing) return;
   i32 depth = drawing->map_depth.depth;
   drawing->map_depth.depth = CityMapBridgeArtworkDepth(city, tile, true);
@@ -148,7 +251,7 @@ static const u32 *MapSpritePalette(const Drawing *drawing, int palette) {
   return palette ? paint->bridge_palettes[palette - MAP_PALETTE_BRIDGE_FIRST] : NULL;
 }
 
-bool PrepareCityMapSprite(Drawing *drawing, int sprite, int x, int y, u32 flags, int palette) {
+bool SubmitCityMapSprite(Drawing *drawing, int sprite, int x, int y, u32 flags, int palette) {
   _Static_assert(MAP_SPRITE_COUNT <= 65536, "Prepared sprite IDs fit in sixteen bits");
   DrawingMapDepth *paint = &drawing->map_depth;
   const RunSprite *image = drawing->sprite_cache.sprites[drawing->target_cache][sprite];
@@ -216,7 +319,7 @@ static bool DrawCachedMapSprite(Drawing *drawing, int id, i64 x_q8, i64 y_q8, u3
     return true;
   }
   if (drawing->map_depth.preparing)
-    return PrepareCityMapSprite(drawing, id, px, py, flags, palette);
+    return SubmitCityMapSprite(drawing, id, px, py, flags, palette);
   CityRect clip = drawing->map_target.canvas.clip;
   if ((i64)px + sprite->width <= clip.left || px >= clip.right ||
       (i64)py + sprite->height <= clip.top || py >= clip.bottom) return false;
@@ -246,25 +349,4 @@ bool DrawCityMapPaletteSpriteAtBaseline(Drawing *drawing, int id, int x, int bas
 
 bool DrawCityMapSprite(Drawing *drawing, int id, int x, int y, int flipped) {
   return DrawCachedMapSprite(drawing, id, (i64)x * 256, (i64)y * 256, flipped ? SPRITE_FLIPPED : 0, false, 0);
-}
-
-static bool DecodeNativeMapIcon(const RunSprite *sprite, const u32 palette[256],
-    const u32 *animation_palette, u32 *icon, int size) {
-  if (!sprite) return false;
-  memset(icon, 0, size * size * sizeof(*icon));
-  int divisor = IntMax(sprite->width, sprite->height);
-  int width = IntMax(1, sprite->width * (size - 4) / divisor);
-  int height = IntMax(1, sprite->height * (size - 4) / divisor);
-  RunSprite *prepared = ResizeRunSprite(sprite, width, height);
-  if (!prepared) return false;
-  bool copied = CopyRunSpriteRgba(prepared, icon + (size - height) / 2 * size + (size - width) / 2,
-      size, palette, animation_palette);
-  FreeRunSprite(prepared);
-  return copied;
-}
-
-// Decode already-loaded sprites for cursor and construction presentation.
-bool DecodeCityMapIcon(const Drawing *drawing, int sprite_id, const u32 palette[256], u32 *icon, int size) {
-  if ((unsigned)sprite_id >= MAP_SPRITE_COUNT || size <= 4) return false;
-  return DecodeNativeMapIcon(drawing->sprite_cache.base[sprite_id], palette, drawing->animation_palette, icon, size);
 }

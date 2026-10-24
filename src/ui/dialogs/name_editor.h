@@ -1,15 +1,21 @@
 #ifndef SC2K_UI_NAME_EDITOR_H
 #define SC2K_UI_NAME_EDITOR_H
 
-#include "city/engine/commands.h"
-#include "city/maps/map_types.h"
+#include "city/engine/command_types.h"
+#include "city/maps/labels.h"
 #include "city/types.h"
 
-typedef struct Window Window;
 typedef struct Game Game;
 typedef struct CityInterfaceState CityInterfaceState;
 
 enum { CITY_NAME_EDITOR_CAPACITY = 16 };
+
+// Retained name callers distinguish sign and facility replies within their editor slot.
+typedef enum CityCanvasLabelContinuation {
+  CITY_CANVAS_LABEL_CONTINUATION_NONE = 0,
+  CITY_CANVAS_LABEL_CONTINUATION_SIGN = 1,
+  CITY_CANVAS_LABEL_CONTINUATION_FACILITY = 2,
+} CityCanvasLabelContinuation;
 
 // Retained editor state lives in UI's fixed slots.
 // Name buffers belong to these records; windows borrow them while open.
@@ -49,15 +55,9 @@ void CancelClosedCityNameEditors(Game *game, const CityEditorCancellations *canc
 // Opening an editor collects local choices. Committed names/team choices execute through City commands.
 void PresentCityLabelEditor(City *city, TileIndex tile, bool facility);
 // Capture reply text before closing/reconciling the editor can reuse its fixed slot.
-void AnswerCityLabelEditor(City *city, NativeLabelDialog *pending, i32 accept);
-void SelectCityStadiumTeam(City *city, NativeStadiumDialog *pending, Window *window, int team);
+void AnswerCityLabelEditor(City *city, NativeLabelDialog *pending, bool accept);
 // Capture the submitted choice and update/close only the same window after command callbacks return.
 void AnswerCityStadiumEditor(City *city, NativeStadiumDialog *pending, bool accept);
 void PresentCityStadiumTeamDialog(City *city, TileIndex tile);
-void PresentCityStadiumPlacementDialog(City *city, TileIndex tile);
-
-// Retained diagnostic name callers answer only the matching token. The shared command owns name-table writes.
-i32 ChooseCityOverlayNameDialog(City *city, int slot, CityNameCommandInput *state);
-bool AnswerCityOverlayNameDialog(City *city, i32 token, i32 answer, const u8 *text, u32 length);
 
 #endif

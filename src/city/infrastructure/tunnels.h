@@ -2,15 +2,13 @@
 #define SC2K_CITY_INFRASTRUCTURE_TUNNELS_H
 
 #include "city/infrastructure/types.h"
-#include "city/maps/map.h"
-#include "city/maps/terrain.h"
+
+typedef struct CityTileGeometry CityTileGeometry;
 
 enum { CITY_ROAD_TUNNEL_COST = 150 };
 
 // Read-only entrance/exit search. An unsupported tunnel returns INVALID_TILE with the existing notice code.
 CityInfrastructureSpan FindCityRoadTunnel(const City *city, TileIndex origin);
-// Native commands provide the resolved confirmation. Execution charges once and returns success or a negative error.
-i64 PlaceCityRoadTunnel(City *city, TileIndex tile, bool accept);
 // Retained comparison callers keep their confirmation continuation; execution uses the live construction cost.
 bool PlaceCityRoadTerrainSpan(City *city, TileIndex tile);
 // Remove a complete admitted tunnel without charging. Returns the far entrance for the caller's final cleanup area.
@@ -20,7 +18,7 @@ TileIndex RemoveCityRoadTunnel(City *city, TileIndex tile, bool animate);
 void DrawCityRoadTunnelEntrance(City *city, TileIndex tile, int sprite, int zoom, int screen_x, int ground_y,
     const CityTileGeometry *geometry);
 
-// Shared command admission is read-only in TEST mode; execution retains the family placement/payment order.
+// TEST quotes without mutation. Execution uses the resolved confirmation, charges once and returns success or an error.
 i64 CmdPlaceRoadTerrainSpan(City *city, u32 flags, TileIndex tile, int options);
 
 #endif

@@ -17,9 +17,6 @@ enum {
 typedef struct CityInterfaceState CityInterfaceState;
 typedef struct Game Game;
 
-// Apply focus changes to UI, audio and palette presentation without advancing simulation phases.
-void HandleApplicationActivation(Game *game, int active);
-
 // Printable keys use uppercase ASCII; named keys and modifiers have stable integer codes.
 typedef u32 CityHotkey;
 enum {
@@ -38,6 +35,19 @@ enum {
 // Strings exist only at display, script and preference boundaries. No allocation.
 char *CityHotkeyToString(CityHotkey key, char *text, size_t capacity);
 CityHotkey CityHotkeyFromString(const char *text);
+
+enum { CITY_KEY_BINDING_CAPACITY = 64 };
+typedef struct CityKeyBinding { CityHotkey key, action; } CityKeyBinding;
+
+// Parse two whitespace-separated hotkeys, rejecting reserved source keys. Failure leaves binding unchanged.
+bool ParseCityKeyBinding(const char *text, CityKeyBinding *binding);
+// Parse and replace the first binding for its key, or append one. Invalid text/full capacity leaves UI unchanged.
+// This updates UI only; the caller decides when to store configuration.
+bool BindCityKey(CityInterfaceState *ui, const char *text);
+// Remove the first matching binding; an unbound key is unchanged.
+void UnbindCityKey(CityInterfaceState *ui, CityHotkey key);
+// Apply the first matching override; unbound keys retain their original action.
+CityHotkey RemapCityKey(const CityInterfaceState *ui, CityHotkey key);
 
 enum {
   CITY_KEY_MODIFIER_ALT = 1,

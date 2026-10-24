@@ -1,4 +1,6 @@
 #include "city/engine/simulation.h"
+#include "city/engine/clock.h"
+#include "city/maps/environment.h"
 
 #include <assert.h>
 
@@ -11,8 +13,6 @@
 #include "city/maps/map.h"
 #include "city/presentation.h"
 #include "city/state.h"
-#include "game/state.h"
-#include "game/update.h"
 
 // Scheduling and bounded City work shared by native and comparison dispatch.
 
@@ -82,14 +82,14 @@ i16 UpdateCityCadence(City *city) {
   bool tick_due = (speed == CITY_SPEED_PAUSED && counter == 0) || (speed == CITY_SPEED_SLOW && counter % 4 == 0) ||
       (speed == CITY_SPEED_NORMAL && counter % 2 == 0) || speed == CITY_SPEED_FAST || speed == CITY_SPEED_UNLIMITED;
   if (tick_due)
-    city->cadence_counter.tick_due = 1;
-  u32 result = city->cadence_counter.tick_due;
+    cadence->tick_due = 1;
+  u32 result = cadence->tick_due;
   if (result != 0 && city->settings.timer_mode == CITY_TIMER_EVENT && speed != CITY_SPEED_UNLIMITED) {
     int parity = cadence->parity;
     result = (result & 0xFFFF0000u) | (u16)(parity + 1);
     cadence->parity = result;
     if (parity & 1)
-      city->cadence_counter.tick_due = 0;
+      cadence->tick_due = 0;
   }
   return (i16)result;
 }

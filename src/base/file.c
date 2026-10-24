@@ -1,3 +1,5 @@
+#include "base/file.h"
+
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -21,7 +23,6 @@
 #include <mach-o/dyld.h>
 #endif
 
-#include "base/file.h"
 #include "base/text.h"
 
 bool IsPathSeparator(int character) {
@@ -91,9 +92,15 @@ char *ReadExecutableDirectory(void) {
   _NSGetExecutablePath(NULL, &capacity);
   char *path = malloc(capacity);
   if (!path) return NULL;
-  if (_NSGetExecutablePath(path, &capacity)) { free(path); return NULL; }
+  if (_NSGetExecutablePath(path, &capacity)) {
+    free(path);
+    return NULL;
+  }
   char *name = (char *)PathFilename(path);
-  if (name == path) { free(path); return NULL; }
+  if (name == path) {
+    free(path);
+    return NULL;
+  }
   name[-1] = 0;
   return path;
 #elif defined(_WIN32)
@@ -103,7 +110,10 @@ char *ReadExecutableDirectory(void) {
     DWORD length = GetModuleFileNameA(NULL, path, capacity);
     if (length && length < capacity) {
       char *name = (char *)PathFilename(path);
-      if (name != path) { name[-1] = 0; return path; }
+      if (name != path) {
+        name[-1] = 0;
+        return path;
+      }
     }
     free(path);
     if (!length) return NULL;
@@ -117,7 +127,10 @@ char *ReadExecutableDirectory(void) {
     if (length > 0 && (size_t)length < capacity - 1) {
       path[length] = 0;
       char *name = (char *)PathFilename(path);
-      if (name != path) { name[-1] = 0; return path; }
+      if (name != path) {
+        name[-1] = 0;
+        return path;
+      }
     }
     free(path);
     if (length < 0) return NULL;
@@ -184,7 +197,10 @@ bool VisitDirectory(const char *path,
   while (ok) {
     errno = 0;
     entry = readdir(directory);
-    if (!entry) { ok = errno == 0; break; }
+    if (!entry) {
+      ok = errno == 0;
+      break;
+    }
     FormatText(&filename, "%s/%s", path, entry->d_name);
     HostFileInfo info;
     if (ReadHostFileInfo(filename, &info)) ok = visit(entry->d_name, &info, context);
@@ -214,7 +230,10 @@ int RedirectErrorLog(const char *path) {
   if (fd < 0) return -1;
   int saved = dup(fileno(stderr));
   fflush(stderr);
-  if (saved >= 0 && dup2(fd, fileno(stderr)) < 0) { close(saved); saved = -1; }
+  if (saved >= 0 && dup2(fd, fileno(stderr)) < 0) {
+    close(saved);
+    saved = -1;
+  }
   close(fd);
   return saved;
 }
@@ -312,19 +331,22 @@ i64 FileByteLength(FILE *file) {
   return length;
 }
 
-bool WriteFileAtomically(const char *path, bool (*write)(FILE *file, void *context), void *context) {
+bool WriteFileAtomically(const char *path, bool (*write_contents)(FILE *file, void *context), void *context) {
   errno = 0;
   char *temporary = NULL;
   FormatText(&temporary, "%s.XXXXXX", path);
 #ifdef _WIN32
-  if (_mktemp_s(temporary, strlen(temporary) + 1)) { free(temporary); return false; }
+  if (_mktemp_s(temporary, strlen(temporary) + 1)) {
+    free(temporary);
+    return false;
+  }
   FILE *file = fopen(temporary, "wx");
 #else
   int descriptor = mkstemp(temporary);
   FILE *file = descriptor >= 0 ? fdopen(descriptor, "wb") : NULL;
   if (!file && descriptor >= 0) close(descriptor);
 #endif
-  bool ok = file && write(file, context);
+  bool ok = file && write_contents(file, context);
   if (file && ok && fflush(file)) ok = false;
 #ifdef _WIN32
   if (file && ok && _commit(_fileno(file))) ok = false;
@@ -336,7 +358,10 @@ bool WriteFileAtomically(const char *path, bool (*write)(FILE *file, void *conte
 #ifdef _WIN32
   if (ok && !MoveFileExA(temporary, path, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) ok = false;
 #else
-  if (ok && rename(temporary, path)) { ok = false; error = errno; }
+  if (ok && rename(temporary, path)) {
+    ok = false;
+    error = errno;
+  }
 #endif
   if (!ok) remove(temporary);
   free(temporary);
@@ -344,7 +369,8 @@ bool WriteFileAtomically(const char *path, bool (*write)(FILE *file, void *conte
   return ok;
 }
 
-static bool CopyFileContents(FILE *output, void *context) {
+// Consume the source when invoked. BackupFile closes it if temporary-file creation fails before this callback.
+static bool CopyAndCloseFileSource(FILE *output, void *context) {
   FILE **stream = context;
   FILE *source = *stream;
   u8 buffer[65536];
@@ -363,7 +389,7 @@ bool BackupFile(const char *path) {
   if (!source) return errno == ENOENT;
   char *backup = NULL;
   FormatText(&backup, "%s.bak", path);
-  bool ok = WriteFileAtomically(backup, CopyFileContents, &source);
+  bool ok = WriteFileAtomically(backup, CopyAndCloseFileSource, &source);
   int error = errno;
   if (source) fclose(source);
   free(backup);

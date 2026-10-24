@@ -1,7 +1,9 @@
 #include <string.h>
+#include "base/text.h"
 
 #include "assets/state.h"
 #include "game/audio.h"
+#include "audio/backend.h"
 #include "audio/state.h"
 #include "city/engine/city_types.h"
 #include "city/engine/simulation.h"
@@ -79,13 +81,13 @@ int GetCityToolPlacementSoundId(const CityInterfaceState *ui, bool terrain_edito
 bool PreloadSelectedCityToolSound(Game *game) {
   bool terrain_editor = game->city->settings.timer_mode == CITY_TIMER_STOPPED;
   int sound_id = GetCityToolPlacementSoundId(game->ui, terrain_editor, game->audio->preloaded_sound_id);
-  return PreloadCityToolSound(game, sound_id);
+  return PreloadCityToolSound(game->audio, sound_id);
 }
 
 // Save outgoing map flags and restore the surface/underground bank.
 // Every caller discards EAX; only the MFC button presentation is a host service.
 void SwitchCityMapOverlayFlagBank(City *city, int refresh_button) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   bool underground = drawing->map_state.events_suppressed != 0;
   if (refresh_button != 0)
     SetCityToolToolbarStyle(city, CITY_TOOLBAR_BUTTON_UNDERGROUND,
@@ -337,7 +339,7 @@ void RestoreCityToolbarAfterDialog(CityInterfaceState *ui) {
 
 void RefreshCityToolbarButtonStyles(City *city, bool reset_display_flags) {
   CityInterfaceState *ui = city->game->ui;
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   const CityMapViewConfig *view = drawing->default_map_view;
   for (int index = 0; index < CITY_TOOLBAR_BUTTON_COUNT; ++index) {
     bool visible = false;
@@ -495,7 +497,7 @@ void ShowCityMapControls(City *city, bool visible) {
 }
 
 void RestoreCityMapControls(City *city) {
-  if (city->game->drawing->map_state.scroll_redraw) ShowCityMapControls(city, true);
+  if (city->drawing->map_state.scroll_redraw) ShowCityMapControls(city, true);
 }
 
 // Format tool help or the selected name and construction cost.

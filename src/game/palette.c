@@ -37,6 +37,12 @@ bool RefreshActiveCityPalette(Game *game) {
   return true;
 }
 
+// Forward Drawing's physical interface damage synchronously; no window procedure runs here.
+static void MarkPaletteWindowDamage(CityRect rect, void *context) {
+  Game *game = context;
+  Sc2kDirtyMarkRect(&game->ui->desktop.window_damage, rect);
+}
+
 // The caller supplies presentation time; ordinary frames use the unpaused clock. No City ticks are advanced.
 bool AnimateCityCanvasPalette(Game *game, double now) {
   enum { kWaterPaletteTickMilliseconds = 27 };
@@ -45,23 +51,6 @@ bool AnimateCityCanvasPalette(Game *game, double now) {
   u32 intervals = PollGameInterval(now, kWaterPaletteTickMilliseconds / 1000.0, &drawing->next_water_palette_tick);
   DrawingPaletteChanges changes = AdvanceDrawingAnimationPalette(drawing,
       game->resources->landscape_water_colors, intervals);
-  u32 palette_changed = changes.global_buckets;
-  // Water cycles only update opaque indexed pixels. Blended map edges remain
-  // fixed RGB; interface bitmaps retain their ordinary global-palette dependencies.
-  if (palette_changed && drawing->animation_composite_rows) {
-    for (int y = 0; y < drawing->framebuffer.height;) {
-      if (!(drawing->animation_composite_rows[y] & palette_changed)) { ++y; continue; }
-      int first = y, left = drawing->framebuffer.width, right = 0;
-      do {
-        u32 bounds = drawing->animation_composite_bounds[y];
-        left = IntMin(left, bounds >> 16);
-        right = IntMax(right, bounds & 65535);
-        drawing->animation_composite_rows[y++] = 0;
-      } while (y < drawing->framebuffer.height && (drawing->animation_composite_rows[y] & palette_changed));
-      CityRect rect = {left, first, right, y};
-      MarkScreenDirty(&drawing->screen_damage, rect);
-      Sc2kDirtyMarkRect(&game->ui->desktop.window_damage, rect);
-    }
-  }
+  ConsumeDrawingPaletteDamage(drawing, changes, MarkPaletteWindowDamage, game);
   return ApplyDrawingAnimationPalette(drawing, changes);
 }

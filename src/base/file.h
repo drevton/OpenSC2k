@@ -17,18 +17,24 @@ bool IsPathSeparator(int character);
 bool IsPathAbsolute(const char *path);
 const char *PathFilename(const char *path);
 void NormalizeFilePath(char *path);
+// Copy nonempty path text, allowing overlap, and normalize separators. Failure leaves output unchanged.
 bool CopyFilePath(const char *path, char *output, size_t capacity);
+// Replace caller-owned text on success; an empty path fails without changing it. directory must be non-NULL.
+// Initialize *owned to NULL or an allocation released with free. These helpers do not require the path to exist.
 bool ResolveFilePath(const char *path, const char *directory, char **owned);
 // Configured paths can use ~/; a NULL directory resolves relative to the host working directory.
 bool ResolveUserPath(const char *path, const char *directory, char **owned);
 bool CreateDirectories(const char *path);
 FILE *OpenHostFile(const char *path, const char *mode);
+// The caller owns each returned path; NULL means host/allocation failure.
 char *ReadWorkingDirectory(void);
 // Executable directory when the host exposes it; the caller owns the result.
 char *ReadExecutableDirectory(void);
 bool SetWorkingDirectory(const char *path);
+// The caller owns the result of the host's canonical/absolute path resolution.
 char *ResolveExistingPath(const char *path);
 bool RemoveFile(const char *path);
+// Replace path.bak atomically. A missing source succeeds without changing an existing backup.
 bool BackupFile(const char *path);
 typedef struct {
   i64 modified;
@@ -40,11 +46,16 @@ bool ReadHostFileInfo(const char *path, HostFileInfo *info);
 bool VisitDirectory(const char *path,
     bool (*visit)(const char *name, const HostFileInfo *info, void *context), void *context);
 bool ReadDirectoryFreeBytes(const char *path, u64 *bytes);
+// Append stderr to path and return its saved descriptor, or -1 on failure.
 int RedirectErrorLog(const char *path);
+// Consume a valid descriptor returned by RedirectErrorLog after restoring stderr.
 void RestoreErrorLog(int descriptor);
-// Rewinds to the start; returns -1 on host I/O failure.
+// On success leave the stream at its start. Failure returns -1 and may leave its position changed.
 i64 FileByteLength(FILE *file);
-bool WriteFileAtomically(const char *path, bool (*write)(FILE *file, void *context), void *context);
+// Create a sibling temporary file and call write_contents once if it opens. The callback borrows the stream;
+// it must return normally without closing it. Replace path only after writing, flushing, syncing and closing succeed.
+// Failure attempts to remove the temporary file. The parent directory is not synced.
+bool WriteFileAtomically(const char *path, bool (*write_contents)(FILE *file, void *context), void *context);
 
 // File Status
 

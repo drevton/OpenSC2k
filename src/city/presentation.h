@@ -3,11 +3,6 @@
 
 #include "city/types.h"
 
-// Button sets requested by presentation callers.
-enum {
-  CITY_PROMPT_YES_NO_CANCEL = 3, CITY_PROMPT_YES_NO = 4,
-};
-
 // Military-offer and result notices queued by OfferDisasterUnlockBonus.
 enum {
   CITY_NOTICE_MILITARY_BASE_OFFER = 240,
@@ -93,7 +88,7 @@ typedef struct Game Game;
 typedef struct CityNameCommandInput CityNameCommandInput;
 typedef struct CityMapViewConfig CityMapViewConfig;
 
-// Direct presentation hooks are implemented by UI. They must not choose shared command options.
+// Direct presentation hooks are implemented by UI or Game. They must not choose shared command options.
 // Semantic changes to City information, independent of window kinds and widgets.
 // Windows subscribe by ORing categories into their 32-bit update_categories mask.
 typedef enum CityUpdateCategory {
@@ -116,12 +111,14 @@ typedef enum CityUpdateCategory {
 // A Game without UI simply discards presentation notifications.
 void InvalidateCityInformation(Game *game, u32 categories);
 
+// Deliver palette work and sound-delay completion for the captured cadence counter. animate is false only when
+// the increment itself wrapped; counter already includes the separate eight-cadence reset. May notify observers.
+void AdvanceGameCadencePresentation(Game *game, u32 counter, bool animate);
+
 // Command feedback is collected locally; the numerical execution result remains City-owned.
 void ReportCityResourceNotice(City *city, int bitmap, int text);
 void ReportCityStadiumPlacement(City *city, TileIndex tile);
 void ReportCityTileInspection(City *city, TileIndex tile);
-// The command supplies both the reason and the location; UI only presents them.
-void ReportCityCommandFailure(City *city, i64 error, TileIndex error_tile);
 void ReportCityCommandBlocker(City *city, TileIndex blocker);
 void CancelCityCommandFeedback(City *city);
 
@@ -148,7 +145,6 @@ int SelectInfrastructureSpan(City *city, int distance, int enabled_styles);
 void ShowCityResourceAlertDialog(City *city, i32 bitmap_id, i32 text_id);
 void ShowRankedCityEventModal(City *city, u32 event_code, u32 event_data);
 void PresentCityDisasterUnlockOffer(City *city);
-void ShowCityLoadWarnings(City *city);
 const char *CityNoticeText(int notice);
 void RefreshCitySpeedStatus(City *city, i32 mode);
 void ShowCityMessage(City *city, u32 resource_id);
@@ -177,8 +173,11 @@ void SetCityTileScanPresentation(City *city, int direction_mask);
 void RestoreCityVolcanoPresentation(City *city, u32 labels);
 void StartCityEarthquakePresentation(City *city);
 
-// Host view state is read or applied at the codec's existing boundaries.
-void ReadCitySavedView(City *city, int *position, int *mode);
+// Host view state is read or applied at the codec's existing boundaries. UI owns the saved-view implementation.
+// Read/apply position and mode preserve the stock packed fields; explicit x/y set the pending loaded center.
+typedef struct { i32 position, mode; } CitySavedViewFields;
+_Static_assert(sizeof(CitySavedViewFields) == 8, "Saved-view fields are two signed words");
+CitySavedViewFields ReadCitySavedView(const City *city);
 void ApplyCitySavedViewPosition(City *city, int position);
 void ApplyCitySavedViewMode(City *city, int mode);
 void SetCityLoadedViewCenter(City *city, int x, int y);
@@ -187,7 +186,6 @@ void RestoreCityLoadedView(City *city);
 // same view back in after serialization. Neither call allocates or transfers view ownership.
 CityMapViewConfig *BeginCitySaveView(City *city);
 void EndCitySaveView(City *city, CityMapViewConfig *view);
-void SetCitySavePromptActive(City *city, bool active);
 
 typedef enum CityNewspaperInitialization {
   CITY_NEWSPAPER_INITIALIZATION_SKIPPED,
@@ -203,8 +201,6 @@ void DrawCityMapPlacementTile(City *city, TileIndex tile);
 // Synchronously project one valid tile into every visible map view, without changing City map-change flags.
 // Missing Game/Drawing/UI or disabled tile-damage presentation has no drawing effect. City owns batch bookkeeping.
 void PublishCityMapTileDamage(City *city, TileIndex tile);
-
-void ResetCityReplacementPresentation(City *city);
 
 void CenterCityMapOnEvent(City *city, int x, int y);
 void InvalidateCityMapEvent(City *city, int slot);

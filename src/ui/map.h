@@ -6,22 +6,6 @@
 
 typedef struct Drawing Drawing;
 typedef struct CityMapViewConfig CityMapViewConfig;
-typedef struct CityCanvasDesktop CityCanvasDesktop;
-
-// UI owns the committed selection and reusable scratch. Cells use City TileIndex values; UI resolves the
-// sorted selection during tile painting and Drawing supplies marker bounds and pixels.
-typedef struct {
-  TileIndex tile;
-} CityCanvasPlacementCell;
-
-typedef struct {
-  CityCanvasPlacementCell *cells, *scratch; // Committed cells are sorted by TileIndex.
-  int count, capacity;
-  CityRect bounds;
-  int origin_x, origin_y;
-  u32 zoom, magnified, underground;
-  bool point;
-} CityCanvasPlacementSelection;
 
 // Map Cursor
 
@@ -66,6 +50,16 @@ void SetCityMapCursorPosition(CityInterfaceState *ui, int x, int y);
 // Map Navigation
 
 void SetCityMapNavigationPresentation(Game *game, bool enabled, bool interactive);
+// Initialize/reset the main camera's client geometry and origin; initialization then applies the requested zoom
+// and centers on a valid tile. Both update presentation only; initialization invalidates the map caches.
+void InitializeCityMapView(Game *game, TileIndex location, int zoom);
+void RecalculateCityMapClientOrigins(Game *game);
+// Clear the main view's command drag state and release host capture. Pan completion also restores its saved
+// origin through the normal scroll/damage path before clearing pan capture; neither executes a City tool.
+void ReleaseCityMapMouseCapture(Game *game);
+void EndCityMapPan(Game *game);
+// Raw host bounds for navigation/input. Update the supplied storage synchronously;
+// diagnostic host reads may run callbacks, including when storage is a view's rectangle.
 void ReadCityMapClientRect(Drawing *drawing, CityRect *rect);
 // Read the host client area without scrollbar strips; return the resulting bottom coordinate.
 i32 GetCityMapClientRect(Drawing *drawing, CityRect *rect);
@@ -91,14 +85,6 @@ void RotateFocusedCityMapView(City *city, bool clockwise);
 
 // Presentation
 
-// Ensure capacity for the UI-owned selection and scratch without changing retained cells. False means allocation failed.
-bool ReserveCityPlacementCells(CityCanvasDesktop *desktop, int count);
-// Replace the sorted selection using Drawing's bounds. True means the visible selection changed;
-// City and its RNG remain read-only.
-// Input may be unordered and contain duplicates. External input is copied;
-// the desktop's scratch may be sorted in place.
-bool SetCityCanvasPlacementCells(const City *city, CityCanvasDesktop *desktop, const CityCanvasPlacementCell *cells,
-    int count, bool point);
 // Retained command drag between valid tile endpoints: prepare its drawing clip, delegate counts/damage to City,
 // then reset the clip. Admission and City updates keep their original order; this does not place any infrastructure.
 void UpdateInfrastructureLinePlacementPreview(City *city, CityMapViewConfig *view, TileIndex start, TileIndex end);

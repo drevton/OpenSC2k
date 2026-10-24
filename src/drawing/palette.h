@@ -1,7 +1,7 @@
 #ifndef SC2K_DRAWING_PALETTE_H
 #define SC2K_DRAWING_PALETTE_H
 
-#include "base/types.h"
+#include "drawing/types.h"
 
 typedef struct Drawing Drawing;
 
@@ -49,9 +49,16 @@ typedef struct {
 } DrawingPaletteChanges;
 
 // Advance integer palette phases and compare animation colors. water_colors borrows SPRITE_WATER_COLORS entries.
-// Game consumes alpha-composite dependencies between advancing colors and applying them to the prepared framebuffer.
+// Consume alpha-composite dependencies before applying colors to the prepared framebuffer.
 DrawingPaletteChanges AdvanceDrawingAnimationPalette(Drawing *drawing, const u32 *water_colors, u32 intervals);
-// Invalidate dependent cached bitmaps, save resolved colors and recolor opaque indexed pixels in place.
+// Consume global-palette dependencies of blended interface pixels in the prepared framebuffer.
+// Mark Drawing screen damage, then synchronously report each physical rectangle through mark.
+// mark is required. The callback must not change Drawing's buffers/dependencies;
+// neither callback nor context is retained.
+// Water-only changes leave these rows untouched. Opaque indexed recoloring follows in ApplyDrawingAnimationPalette.
+void ConsumeDrawingPaletteDamage(Drawing *drawing, DrawingPaletteChanges changes,
+    CityCanvasVisiblePaint mark, void *context);
+// Save resolved colors and recolor opaque indexed pixels in place.
 // Water changes never repaint blended map pixels. Return whether indexed pixels were changed.
 bool ApplyDrawingAnimationPalette(Drawing *drawing, DrawingPaletteChanges changes);
 

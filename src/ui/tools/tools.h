@@ -56,24 +56,22 @@ void RestoreCityToolbarAfterDialog(CityInterfaceState *ui);
 
 typedef enum CityPlacementDragKind { CITY_DRAG_ZONE, CITY_DRAG_LINE, CITY_DRAG_TRANSPORT } CityPlacementDragKind;
 
-i32 Sc2kCanvasFacilityVariant(i32 tool);
 extern const u8 kCityToolVariantCounts[CITY_TOOL_GROUP_COUNT];
 
 // Native map input and shared endpoint placement.
-CityZoneDragInput Sc2kNextCityMapZoneInput(Game *game);
 void UpdateCityMapToolPreview(Game *game);
+
+// Consume the staged drag through release or cancellation, updating preview and construction counters.
+// A supplied command endpoint bypasses polling. NULL view uses the main map; a supplied view is borrowed.
+// Returns the endpoint, or INVALID_TILE for rejection/cancellation. Nested commands retain their live overwrites.
 TileIndex TrackCityPlacementDrag(Game *game, CityMapViewConfig *view, TileIndex start,
     int unit_cost, CityPlacementDragKind kind);
 
 void BeginCityMapPointerInput(Game *game, CityPoint point);
 
-// Recorded construction input and camera controls enter at the UI boundary.
-
+// Project a valid endpoint into main-map input coordinates and confirm that picking returns the same tile.
+// Return a release sample on success, or a cancellation sample if the bounded search finds no matching point.
 CityZoneDragInput Sc2kZoneDragEndpointInput(Game *game, TileIndex tile);
-void InitializeCityMapView(Game *game, TileIndex location, int zoom);
-void RecalculateCityMapClientOrigins(Game *game);
-void ReleaseCityMapMouseCapture(Game *game);
-void EndCityMapPan(Game *game);
 
 // Resolved local tool intent; no City mutations or cached admission results.
 typedef struct {
@@ -101,20 +99,24 @@ enum {
   CITY_POINTER_UNDERGROUND = 1 << 17
 };
 
+// Translate a canvas tool ID into group bits 0..7, variant bits 8..15 and demolition variant bits 16..23.
+// Return -1 for an unsupported tool. road_variant applies only to CITY_CANVAS_TOOL_ROAD and accepts
+// CITY_ROAD_ROAD through CITY_ROAD_BUS_DEPOT; explicit bridge tools have their own IDs.
 i32 Sc2kCanvasMapPointerTools(i32 tool, i32 road_variant);
 // Pure UI tool-to-kind translation for building/facility artwork. Other tools return TK_CLEAR, never sprite IDs.
 TileKind CityToolBuildingKind(int tool);
 u32 Sc2kCurrentCityMapPointerTools(CityInterfaceState *ui);
+
+// The enclosing command keeps staged samples/points alive; index must be below its count.
+// Reading the point does not advance the cursor. Modifier application changes local UI key state only.
 CityPoint ReadCityCommandPointer(City *city, u32 index);
 void ApplyCityCommandPointerModifiers(City *city, u32 index);
-CityZoneDragInput Sc2kNextZoneDragInput(City *city);
 
 bool RunCityPointerGesture(Game *game, const CityPointerInput *input, u32 count, int options, int tools);
 
 bool SelectCityToolWithModifiers(Game *game, int group, int variant, u32 modifiers);
 
 void UpdateCityToolStatus(City *city);
-void UpdateCityPlacementPreview(City *city);
 
 TileIndex TrackCityZoneDrag(Game *game, TileIndex start, int unit_cost);
 

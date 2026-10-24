@@ -7,6 +7,7 @@
 #include "city/presentation.h"
 #include "game/state.h"
 #include "city/saveload/city_file_internal.h"
+#include "city/saveload/input.h"
 
 #include "city/economy/economy.h"
 
@@ -16,8 +17,6 @@
 #include <string.h>
 
 // Load
-
-static void DestroyLoadFile(void *context);
 
 // Apply an in-memory stock archive to the supplied City using the shared chunk codecs. Returns false on failure with
 // actual partial writes retained; success-only map conversion and rebuilding must follow the admitted load path.
@@ -33,7 +32,7 @@ bool LoadCityArchive(City *city, const CityFile *archive) {
   file->scratch = &scratch;
   file->misc = NULL;
   file->misc_active = file->misc_owned = false;
-  bool loaded = LoadCityChunksFromInput(city, &input, archive->source_path, 1);
+  bool loaded = LoadCityChunksFromInput(city, &input, archive->source_path, true);
   ReleaseCityMiscWorkspace(file);
   file->scratch = previous_scratch;
   file->misc = previous_misc;
@@ -62,15 +61,22 @@ static void DestroyLoadFile(void *context) {
     CloseCityLoadStream(*stream);
 }
 
-// Stream lifetime and map restoration. Returns success only after admitted decode/conversion; read exceptions unwind
-// registered resources while preserving actual partial City writes.
+// Decode City chunks from an already opened load stream using the common input adapter. Caller owns and closes the
+// stream; failure retains partial writes and does not run successful-load rebuilding.
+static bool LoadCityFileChunks(City *city, void *stream, const char *path) {
+  CityFileInput input = {.kind = CITY_FILE_INPUT_PLATFORM, .stream = stream};
+  return LoadCityChunksFromInput(city, &input, path, false);
+}
+
+// Own the host stream through decoding. Every normal decode return closes it, then restores the view and unlocks,
+// including a false result. Throwing reads/closes instead follow the operation's cleanup stack with partial writes.
 bool LoadCityFile(City *city, const char *path) {
   CityFileRuntime *file = city->game->file;
   void *input = OpenCityLoadStream(file, path);
   if (input == NULL) {
     FillCityLoadOpenError(file, &file->error);
     ShowCityFileException(city, CITY_NOTICE_ERROR_OPENING_FILE, (&file->error), path);
-    return 0;
+    return false;
   }
   void *owned_stream = input;
   CityFileCleanup cleanup = {DestroyLoadFile, &owned_stream, NULL};
@@ -82,7 +88,7 @@ bool LoadCityFile(City *city, const char *path) {
     return false;
   }
   SetCityPathBytes(city->game, &city->game->city_path, (int)strlen(path), path);
-  int loaded = LoadCityFileChunks(city, input, path);
+  bool loaded = LoadCityFileChunks(city, input, path);
   owned_stream = NULL;
   CloseCityLoadStream(input);
   PopCityFileCleanup(city->game->file, &cleanup);
@@ -92,13 +98,6 @@ bool LoadCityFile(City *city, const char *path) {
 }
 
 // Chunks
-
-// Decode City chunks from an already opened load stream using the common input adapter. Caller owns and closes the
-// stream; failure retains partial writes and does not run successful-load rebuilding.
-bool LoadCityFileChunks(City *city, void *stream, const char *path) {
-  CityFileInput input = {.kind = CITY_FILE_INPUT_PLATFORM, .stream = stream};
-  return LoadCityChunksFromInput(city, &input, path, 0);
-}
 
 // Read and discard one chunk payload through the configured input. Returns whether any bytes were read; throwing
 // input failures retain their normal unwind semantics and the scratch allocation is registered for cleanup.
@@ -131,7 +130,7 @@ bool ReadCityCompressedChunkStrided(CityFileRuntime *file, CityFileInput *input,
   CityFileCleanup cleanup = {ReleaseCityFileScratchBuffer, &buffer, NULL};
   PushCityFileCleanup(file, &cleanup);
   if (CityFileInputRead(input, encoded, encoded_size) == 0) {
-    ReportCityChunkError(file, CITY_NOTICE_ERROR_READING_FILE, 0);
+    ReportCityFileError(file, CITY_NOTICE_ERROR_READING_FILE, CITY_FILE_ERROR_WITH_CAUSE);
     PopCityFileCleanup(file, &cleanup);
     FreeCityFileScratch(file, encoded);
     return false;
@@ -149,7 +148,7 @@ bool ReadCityCompressedChunkStrided(CityFileRuntime *file, CityFileInput *input,
   PopCityFileCleanup(file, &cleanup);
   FreeCityFileScratch(file, encoded);
   if (!bounded || source != encoded_size) {
-    ReportCityChunkError(file, CITY_NOTICE_ERROR_DECOMPRESSING_FILE, 1);
+    ReportCityFileError(file, CITY_NOTICE_ERROR_DECOMPRESSING_FILE, CITY_FILE_ERROR_RESOURCE_ONLY);
     return false;
   }
   return true;
@@ -172,16 +171,16 @@ bool CityFileValidateCityFileContainer(City *city, CityFileInput *input, const c
     tag = input->first_tag;
     input->has_first_tag = false;
   } else if (CityFileInputRead(input, &tag, 4) == 0) {
-    ReportCityChunkError(file, CITY_NOTICE_ERROR_READING_FILE, 0);
+    ReportCityFileError(file, CITY_NOTICE_ERROR_READING_FILE, CITY_FILE_ERROR_WITH_CAUSE);
     return false;
   }
   tag = ReadBE32((const u8 *)&tag);
   if (tag != ReadBE32((const u8 *)"FORM")) {
-    ReportCityChunkError(file, CITY_NOTICE_UNRECOGNIZED_CITY_FORMAT, 1);
+    ReportCityFileError(file, CITY_NOTICE_UNRECOGNIZED_CITY_FORMAT, CITY_FILE_ERROR_RESOURCE_ONLY);
     return false;
   }
   if (CityFileInputRead(input, length, 4) == 0) {
-    ReportCityChunkError(file, CITY_NOTICE_ERROR_READING_FILE, 0);
+    ReportCityFileError(file, CITY_NOTICE_ERROR_READING_FILE, CITY_FILE_ERROR_WITH_CAUSE);
     return false;
   }
   *length = ReadBE32((const u8 *)length);
@@ -199,19 +198,19 @@ bool CityFileValidateCityFileContainer(City *city, CityFileInput *input, const c
       if (CityFileInputSeek(input, position, SEEK_SET) != 0) size = -1;
     }
     if (size < 12) {
-      ReportCityChunkError(file, CITY_NOTICE_ERROR_READING_FILE, 0);
+      ReportCityFileError(file, CITY_NOTICE_ERROR_READING_FILE, CITY_FILE_ERROR_WITH_CAUSE);
       return false;
     }
     *length = size - 8;
     fprintf(stderr, "Recovered zero-length FORM header in %s using %d bytes; source file unchanged.\n", path, size);
   }
   if (CityFileInputRead(input, &tag, 4) == 0) {
-    ReportCityChunkError(file, CITY_NOTICE_ERROR_READING_FILE, 0);
+    ReportCityFileError(file, CITY_NOTICE_ERROR_READING_FILE, CITY_FILE_ERROR_WITH_CAUSE);
     return false;
   }
   tag = ReadBE32((const u8 *)&tag);
   if (tag != ReadBE32((const u8 *)"SCDH")) {
-    ReportCityChunkError(file, CITY_NOTICE_INVALID_CITY_CONTENTS, 1);
+    ReportCityFileError(file, CITY_NOTICE_INVALID_CITY_CONTENTS, CITY_FILE_ERROR_RESOURCE_ONLY);
     return false;
   }
   return true;

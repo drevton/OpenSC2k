@@ -27,16 +27,16 @@ void BulldozeCityTile(City *city, TileIndex tile, bool animate);
 // Tool execution checks admission and pays once before applying demolition. Returns success or a negative error;
 // an error after payment retains the original partial effects (for example a tree-removal protest).
 i64 ApplyCityBulldozerAtTile(City *city, TileIndex tile, int options);
+// Read-only admission uses resolved layer/alt choices; invalid tiles are rejected as nothing to remove.
 bool CanBulldozeCityTile(const City *city, TileIndex tile, bool underground, bool alt);
 int GetCityBulldozeTileError(const City *city, TileIndex tile, bool underground, bool alt);
-bool IsCityBulldozeGroundNoop(const TileInfo *tp, bool underground);
+// Quote a valid tile without mutation, payment, RNG or invalidation. Admission is checked separately.
 i64 GetCityBulldozeTileCost(const City *city, TileIndex tile, bool underground);
 
 // Rectangle quoting inspects each current cell; execution checks and pays each edit against live state.
 // If no cells are admitted, the quote retains the last specific blocker in row order,
 // or CITY_COMMAND_COST_NOTHING_TO_REMOVE when there is none.
 // Command TEST calls are read-only. Invalid endpoints or option bits return a negative gameplay error.
-CityCommandCost GetCityBulldozeRectangleCost(const City *city, TileIndex start, TileIndex end, int options);
 i64 CmdBulldoze(City *city, u32 flags, TileIndex tile, int animate);
 i64 CmdApplyBulldozerTool(City *city, u32 flags, TileIndex tile, int options);
 i64 CmdBulldozeRect(City *city, u32 flags, TileIndex start, TileIndex end, int options);
@@ -49,13 +49,9 @@ CityInfrastructureSpan GetCityConstructionSpan(const City *city, TileIndex start
 // Placement/terrain operations returning i64 use negative gameplay errors and nonnegative success values.
 
 extern const i16 kCityZoneCosts[ZONE_RESERVED_FIRST];
-// Shared zoning admission, including flat dry trees. Does not remove trees or modify their local metadata.
-bool CanZoneCityTile(const TileInfo *tp);
 // Retained command drag over valid tile endpoints. Reset surcharge/count, count eligible new zoning cells and
 // invalidate cells entering or leaving the rectangle. Uses the live construction zone; no payment, map writes or RNG.
 void UpdateCityZoneRectanglePreview(City *city, TileIndex origin, TileIndex previous, TileIndex next);
-CityCommandCost GetCityZoneRectangleCost(const City *city, TileIndex start, TileIndex end, int zone);
-i64 PlaceCityZoneRectangleAt(City *city, TileIndex start, TileIndex end, int zone);
 // Validate resolved zoning endpoints and quote in TEST mode; execution preserves the prepared zoning/payment path.
 i64 CmdPlaceZoneRect(City *city, u32 flags, TileIndex tile, int zone, TileIndex end);
 // Apply prepared City.construction.zone_code/cost to valid endpoints, using its live values after any callbacks.
@@ -69,7 +65,6 @@ i64 ApplyPreparedCityZoneRectangle(City *city, TileIndex start, TileIndex end);
 bool CanPlaceCityToolCell(const City *city, TileIndex tile, int group, int variant, int terrain_options);
 int CityToolZoneCode(int group, int variant);
 i64 CalculateCityZoneCost(const City *city, TileIndex start, TileIndex end, int zone, int unit_cost);
-bool CityZoneRectangleContainsZone(const City *city, TileIndex start, TileIndex end, int zone);
 int GetCityFacilityTile(int group, int variant);
 
 // Tables

@@ -1,6 +1,9 @@
-#include "city/saveload/services.h"
-#include "city/saveload/city_file_internal.h"
+#include "city/saveload/input.h"
+
+#include <stdio.h>
 #include <string.h>
+
+#include "city/saveload/services.h"
 
 // Read up to size bytes through the stdio, bounded-memory or observed-load input backend. Destination must provide
 // size writable bytes; returns actual bytes read and preserves the backend's throwing-error behavior.

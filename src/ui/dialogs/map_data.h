@@ -27,7 +27,6 @@ enum { CITY_MAP_DATA_MIN_WIDTH = 250, CITY_MAP_DATA_MIN_HEIGHT = 160,
 void SetCityMapDataPresentation(City *city, CityCanvasDesktop *desktop);
 // Combined group/option index; reading the selection does not refresh its preview.
 int ReadCityMapDataSelection(const CityMapDataState *state);
-void SetCityMapDataSelection(City *city, int selection);
 void HideCityMapDataDialog(City *city);
 bool ToggleCityMapDataDialog(City *city);
 void ToggleCityMapDataOverlay(City *city);
@@ -41,12 +40,10 @@ void UpdateCityMapDataWindows(City *city);
 // Queue preview damage. Refresh respects the dialog's gate; Invalidate bypasses it. Neither rebuilds the pixels.
 bool RefreshCityMapDataPreview(City *city);
 bool InvalidateCityMapDataPreview(City *city);
-CityRect Sc2kCanvasMapDataPreviewRect(const Window *window);
-// Window openers return the desktop array index or -1. UpdateMapData borrows the supplied preview pixels.
+// Window openers return the desktop array index or -1.
 i32 Sc2kCanvasDesktopOpenMapData(CityCanvasDesktop *desktop, CityRect bounds, i32 selection);
 i32 Sc2kCanvasDesktopOpenLandUse(CityCanvasDesktop *desktop, CityRect bounds, const CityStatistics *statistics);
 void Sc2kCanvasDesktopUpdateLandUse(CityCanvasDesktop *desktop, const CityStatistics *statistics);
-void Sc2kCanvasDesktopUpdateMapData(CityCanvasDesktop *desktop, i32 selection, const u32 *map_preview);
 // Paint an attached map-data window with its Drawing-owned caches already prepared.
 void DrawCityMapDataWindow(Drawing *drawing, Canvas *canvas, const Window *window);
 const char *CityMapTooltipAt(const Window *window, int x, int y);

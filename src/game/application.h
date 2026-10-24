@@ -48,6 +48,9 @@ typedef struct {
 void RequestCityApplicationExit(Game *game);
 
 int RunGameApplication(int argc, char **argv, const GameApplicationHooks *hooks, void *context);
+// Read/dispatch one bounded script line, borrowing Game's stream and city path.
+// Blank/comment and handled lines return true, including actions that set execution_failed or request close.
+// False stops on EOF/read failure, an existing stop flag, or an unknown action. The caller owns stream closure.
 bool ApplicationNextScriptAction(Game *game);
 
 #endif

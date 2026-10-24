@@ -16,7 +16,6 @@
 #include <string.h>
 
 #include "game/observation.h"
-#include "game/errors.h"
 #include "city/disasters/disasters.h"
 #include "city/engine/commands.h"
 #include "city/economy/economy.h"
@@ -620,11 +619,3 @@ void SelectCityMeltdownDisaster(City *city) {
 // Tables
 
 const CityDisasterPeriods kCityDefaultDisasterPeriods = {{0, 100, 60, 30}};
-
-const i8 kCardinalNeighborY[4] = {
-  0, 1, 0, -1,
-};
-
-const i8 kCardinalNeighborX[4] = {
-  -1, 0, 1, 0,
-};

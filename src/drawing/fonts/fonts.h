@@ -1,7 +1,7 @@
 #ifndef SC2K_DOMAIN_SRC_DRAWING_FONTS_FONTS_H
 #define SC2K_DOMAIN_SRC_DRAWING_FONTS_FONTS_H
 
-#include "drawing/canvas.h"
+#include "drawing/types.h"
 #include "city/types.h"
 #include "assets/fonts.h"
 
@@ -49,8 +49,6 @@ void DrawCityPublicationText(const CityInterfaceFont *font, Canvas *canvas, int 
 
 // Overlay Font
 
-// Initialize Drawing's overlay glyphs with empty boxes before loaded artwork replaces them.
-void InitializeCityOverlayFont(CityOverlayFont *font);
 const CityOverlayGlyph *CityOverlayFontGlyphs(const CityOverlayFont *font, int zoom);
 
 

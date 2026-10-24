@@ -3,7 +3,8 @@
 
 #include "city/engine/command_types.h"
 #include "city/maps/tile_storage.h"
-#include "city/maps/terrain.h"
+
+typedef struct CityTileGeometry CityTileGeometry;
 
 // Buildings are identified by their actual tile kind, independent of toolbar layout.
 typedef struct {
@@ -41,11 +42,9 @@ void SetCityBuildingFootprintStage(City *city, TileIndex tile, int stage);
 void AdvanceCityBuildingConstruction(City *city, TileIndex tile);
 // Design cutoff for newly placed wind turbines; stored tiles retain their selected era.
 enum { CITY_WIND_MODERN_YEAR = 1980 };
-// Square footprint admission: zero is allowed, one is blocked, other values identify a rejection notice.
-// For sizes 1/2 the picked tile is the top-left; sizes 3/4 extend one tile north and west of it.
-int GetCityFacilityPlacementError(const City *city, TileIndex tile, int kind, int size);
 // Requires a valid tile. Checks and installs the footprint without payment, updating records, metadata and damage.
-// Returns success or a negative gameplay error; uses the same picked-tile convention as the admission query.
+// Sizes 1/2 use the picked tile as top-left; sizes 3/4 extend one tile north and west of it.
+// Returns success or a negative gameplay error.
 i64 PlaceSpecialZoneFootprint(City *city, TileIndex tile, u8 kind, int size);
 // Quote admission without RNG or callbacks. Placement remains unpaid; the command pays before the finishing phase.
 CityCommandCost GetCityBuildingCost(const City *city, TileIndex tile, int kind);

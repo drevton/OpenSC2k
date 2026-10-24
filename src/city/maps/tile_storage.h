@@ -280,20 +280,6 @@ typedef enum HighwayBridgeStyle {
 } HighwayBridgeStyle;
 _Static_assert(HIGHWAY_BRIDGE_STYLE_REINFORCED < 16, "highway bridge style fits the head's four-bit field");
 
-static SC2K_FORCE_INLINE bool IsTileKindShoreTree(int kind) {
-  return kind >= TK_SHORE_TREE_FIRST && kind <= TK_SHORE_TREE_LAST;
-}
-
-// These kinds retain bank ground cover rather than an underlying-water payload.
-static SC2K_FORCE_INLINE bool IsTileKindShoreBank(int kind) {
-  return kind == TK_WATER_BANK || IsTileKindShoreTree(kind);
-}
-
-// Exposed water has no occupant; water infrastructure and buildings are excluded.
-static SC2K_FORCE_INLINE bool IsTileKindExposedWater(int kind) {
-  return kind >= TK_WATER && kind <= TK_WATER_BANK;
-}
-
 _Static_assert(TK_HIGHWAY_RAIL == TK_HIGHWAY + 1 && TK_HIGHWAY_ROAD == TK_HIGHWAY + 2 &&
     TK_HIGHWAY_POWER == TK_HIGHWAY + 3, "native highway kind layout");
 _Static_assert(TK_RESIDENTIAL_FIRST == 112 && TK_HYDRO_POWER == 198 && TK_WIND_POWER == 200 &&
@@ -445,6 +431,23 @@ typedef enum TileConnMask {
 // Upper zone/slope timing payload on wind-power buildings only.
 enum { CITY_WIND_MODERN_MASK = 0x20 };
 enum { CITY_TILE_SLOPED = 0x10, CITY_TILE_GROWTH_MASK = 0xE0, CITY_TILE_GROWTH_SHIFT = 5 };
+
+// Ground/coverage in terrain's low nibble. Transport paving shares the rough-ground value.
+typedef enum TileGroundKind {
+  CITY_GROUND_GRASS = 0,
+  CITY_GROUND_SNOW_FIRST = 1, CITY_GROUND_SNOW_LAST = 4,
+  CITY_GROUND_ROUGH = 5, CITY_TRANSPORT_GROUND_PAVED = CITY_GROUND_ROUGH,
+  CITY_GROUND_ROCKS = 6,
+  CITY_GROUND_RECOVERY_FIRST = 7, CITY_GROUND_RECOVERY_GRASS_FIRST = 8,
+  CITY_GROUND_RECOVERY_LAST = 10,
+  CITY_GROUND_DESERT_HALF = 11, CITY_GROUND_DESERT_FULL = 12, CITY_GROUND_SHORE = 13,
+} TileGroundKind;
+
+// Tree growth in zone bits 5..7. Clear ground uses those bits for its recovery counter instead.
+typedef enum TileTreeGrowth {
+  CITY_TREE_GROWING_1 = 0, CITY_TREE_GROWING_2 = 1, CITY_TREE_GROWING_3 = 2,
+  CITY_TREE_GROWN = 3, CITY_TREE_DYING_1 = 4, CITY_TREE_DYING_2 = 5, CITY_TREE_DEAD = 6,
+} TileTreeGrowth;
 
 // ALTM tunnel-depth field after shifting, distinct from XUND infrastructure.
 typedef enum CityTunnelDepth { CITY_TUNNEL_DEPTH_NONE = 0, CITY_TUNNEL_DEPTH_ENTRANCE = 1 } CityTunnelDepth;

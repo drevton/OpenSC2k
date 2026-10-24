@@ -11,7 +11,6 @@
 #include "city/economy/types.h"
 #include "city/events/events.h"
 #include "city/maps/tile_storage.h"
-#include "city/maps/layers.h"
 #include "city/state.h"
 
 #include <stdlib.h>
@@ -218,7 +217,7 @@ void ReleaseSimulation(City *city) {
 
 // Initialization effects, using the City's existing backing. Requires bound history storage; replaces initial
 // samples/maxima without allocating or retaining transport pointers.
-void InitializeCityHistoryStorage(City *city) {
+static void InitializeCityHistoryStorage(City *city) {
   memset(city->history, 0, sizeof(CityHistoryRow) * CITY_HISTORY_SERIES_COUNT);
   for (int series = 0; series < CITY_HISTORY_SERIES_COUNT; ++series)
     city->history_maxima.value[series] = 1;

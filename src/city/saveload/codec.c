@@ -7,7 +7,6 @@
 #include "base/byte_order.h"
 #include "city/state.h"
 #include "city/saveload/city_file_internal.h"
-#include "city/maps/layers.h"
 
 // Object locations and train next tiles must be in bounds. Other target pairs are offsets; destination pairs can be
 // off-map aircraft waypoints. Event must be writable with its type already decoded; positions/train targets are
@@ -255,8 +254,8 @@ void ByteSwapCityFacilityRecords(u8 *data, int size) {
 }
 
 // Convert a complete staged stock chunk's byte order or label encoding in place. Data must hold spec->size bytes;
-// from_file selects label direction and City state is not implicitly imported/exported.
-void CityFileConvertChunk(u8 *data, const CityFileChunkSpec *spec, i32 from_file) {
+// direction selects label conversion and City state is not implicitly imported/exported.
+void CityFileConvertChunk(u8 *data, const CityFileChunkSpec *spec, CityFileDirection direction) {
   switch (spec->conversion) {
   case CITY_FILE_WORDS16:
     CityFileConvertWords(data, spec->size, 2);
@@ -268,7 +267,7 @@ void CityFileConvertChunk(u8 *data, const CityFileChunkSpec *spec, i32 from_file
     ByteSwapCityFacilityRecords(data, spec->size);
     break;
   case CITY_FILE_LABELS:
-    if (from_file)
+    if (direction != CITY_FILE_EXPORT)
       ConvertLabelsFromFile(data);
     else
       ConvertLabelsToFile(data);
@@ -283,12 +282,13 @@ void CityFileConvertChunk(u8 *data, const CityFileChunkSpec *spec, i32 from_file
 // Copy a bounded schema chunk between staging bytes and native strided fields in the selected direction. Size must fit
 // both representations; export of overlays uses effective events, while load deliberately preserves direct partial
 // writes.
-void CopyCityFileChunkBytes(City *city, const CityFileChunkSpec *spec, u8 *bytes, u32 size, bool load) {
+void CopyCityFileChunkBytes(City *city, const CityFileChunkSpec *spec, u8 *bytes, u32 size,
+    CityFileDirection direction) {
   if (spec->conversion == CITY_FILE_LABELS) {
     for (u32 byte = 0; byte < size; ++byte) {
       u8 *value = city->overlay_names.entry[byte / CITY_OVERLAY_LEGACY_NAME_BYTES].character +
           byte % CITY_OVERLAY_LEGACY_NAME_BYTES;
-      if (load) *value = bytes[byte];
+      if (direction != CITY_FILE_EXPORT) *value = bytes[byte];
       else bytes[byte] = *value;
     }
     return;
@@ -296,13 +296,13 @@ void CopyCityFileChunkBytes(City *city, const CityFileChunkSpec *spec, u8 *bytes
   u8 *field = CityFileChunkData(city, spec);
   if (spec->storage != CITY_FILE_TILE && spec->storage != CITY_FILE_HALF_MAP &&
       spec->storage != CITY_FILE_QUARTER_MAP) {
-    if (load) memcpy(field, bytes, size);
+    if (direction != CITY_FILE_EXPORT) memcpy(field, bytes, size);
     else memcpy(bytes, field, size);
     return;
   }
   for (u32 byte = 0; byte < size; ++byte) {
     u8 *value = field + CityFileChunkByteOffset(spec, byte);
-    if (load) *value = bytes[byte];
+    if (direction != CITY_FILE_EXPORT) *value = bytes[byte];
     else if (!memcmp(spec->tag, "XTXT", 4)) bytes[byte] = ReadOverlay(city, byte);
     else bytes[byte] = *value;
   }
@@ -311,15 +311,15 @@ void CopyCityFileChunkBytes(City *city, const CityFileChunkSpec *spec, u8 *bytes
 // Import/export a complete schema chunk, including event/label boundary conversions. Data must hold the schema size
 // and City storage must be bound; false means unsupported or unavailable state, without rolling back preceding
 // effects.
-bool CityFileStateChunkBytes(City *city, const CityFileChunkSpec *spec, u8 *data, i32 load) {
-  if (spec->conversion == CITY_FILE_LABELS && !load) {
+bool CityFileStateChunkBytes(City *city, const CityFileChunkSpec *spec, u8 *data, CityFileDirection direction) {
+  if (spec->conversion == CITY_FILE_LABELS && direction == CITY_FILE_EXPORT) {
     ExportStockCityOverlayNames(city, data);
     return true;
   }
   if (spec->conversion == CITY_FILE_EVENTS) {
-    if (load) memset(city->events.buckets, 0, CITY_EVENT_HASH_BUCKETS * sizeof(u16));
+    if (direction != CITY_FILE_EXPORT) memset(city->events.buckets, 0, CITY_EVENT_HASH_BUCKETS * sizeof(u16));
     for (int slot = 0; slot < CITY_STOCK_EVENT_SLOT_COUNT; ++slot) {
-      if (load) {
+      if (direction != CITY_FILE_EXPORT) {
         u8 record[CITY_STOCK_EVENT_BYTES];
         memcpy(record, data + slot * CITY_STOCK_EVENT_BYTES, sizeof(record));
         if (!IsCityMapEventTrain(record[0])) {
@@ -339,7 +339,7 @@ bool CityFileStateChunkBytes(City *city, const CityFileChunkSpec *spec, u8 *data
     u8 *target = CityFileChunkData(city, spec);
     if (target == NULL)
       return false;
-    if (load) CopyCityFileChunkBytes(city, spec, data, spec->size, true);
+    if (direction != CITY_FILE_EXPORT) CopyCityFileChunkBytes(city, spec, data, spec->size, CITY_FILE_IMPORT);
     else ExportCityMapChunk(city, spec, data, spec->size);
     return true;
   }

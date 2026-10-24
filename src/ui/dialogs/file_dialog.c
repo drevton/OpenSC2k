@@ -1,21 +1,17 @@
 #include "city/saveload/state.h"
+#include "base/text.h"
+#include "base/utf8.h"
 #include "base/file.h"
-#include <SDL.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "assets/catalog.h"
-#include "assets/state.h"
-#include "city/engine/command_types.h"
 #include "city/engine/city_name.h"
-#include "city/maps/layers.h"
 #include "city/presentation.h"
 #include "city/saveload/file.h"
 #include "city/saveload/runtime.h"
 #include "city/saveload/services.h"
 #include "city/state.h"
-#include "drawing/raster/canvas_primitives.h"
 #include "game/application.h"
 #include "game/errors.h"
 #include "game/observation.h"
@@ -32,8 +28,6 @@
 #include "ui/sdl.h"
 #include "ui/state.h"
 #include "ui/text/text.h"
-#include "ui/tools/tools.h"
-#include "ui/windows/controls.h"
 #include "ui/windows/windows.h"
 
 // File choices own presentation state; callbacks dispatch the accepted operation.
@@ -41,8 +35,6 @@
 static void RecordCityFileDialogCheckpoint(City *city, u32 kind, i32 token, i32 answer, const char *path) {
   ObserveCityPresentation(city->game, kind, token, 0, 0, answer, path);
 }
-
-static WindowProcedure FileBrowserConfirmationWindowProcedure;
 
 struct NativeSaveScope {
   NativeSaveScope *parent;
@@ -53,24 +45,9 @@ struct NativeSaveScope {
   i32 opened_path;
   u8 picker;
 };
-static Window *FileBrowserWindow(City *city, const NativeFileDialog *dialog) {
-  return FindCityCanvasWindow(city->game->ui->file_dialog.desktop, dialog->window_id);
-}
-
-static void DirtyFileBrowser(City *city, NativeFileDialog *dialog) {
-  Window *window = FileBrowserWindow(city, dialog);
-  if (!window) return;
-  CityFileBrowser *browser = &dialog->browser;
-  int focus = browser->focus == 1 ? 1 : 0;
-  CityRect input = CityFileBrowserBounds(window, focus ? CITY_FILE_NAME : CITY_FILE_FILTER);
-  browser->text_scroll[focus] = CityTextBoxScroll(&city->game->resources->interface_font, input,
-      focus ? browser->filename : browser->filter, browser->caret[focus], browser->text_scroll[focus]);
-  browser->first = IntClamp(browser->first, 0, browser->visible_count - CityFileBrowserRows(window));
-  Sc2kDirtyMarkRect(&city->game->ui->file_dialog.desktop->dirty, window->bounds);
-}
 
 void RememberCityFileDialogSize(City *city, NativeFileDialog *dialog) {
-  Window *window = FileBrowserWindow(city, dialog);
+  Window *window = FindCityCanvasWindow(city->game->ui->file_dialog.desktop, dialog->window_id);
   if (!window) return;
   CityFilePresentation *files = &city->game->ui->file_dialog;
   files->browser_width = window->bounds.right - window->bounds.left;
@@ -110,68 +87,6 @@ bool AnswerCityFileDialog(City *city, i32 token, i32 answer, const u8 *path, u32
   Sc2kCanvasDesktopDismissWindow(files->desktop, dialog->window_id);
   dialog->overwrite_id = dialog->window_id = 0;
   return true;
-}
-
-void SubmitCityFileDialog(City *city, NativeFileDialog *dialog, i32 accept, i32 overwrite) {
-  CityFilePresentation *files = &city->game->ui->file_dialog;
-  if (!accept) {
-    if (!AnswerCityFileDialog(city, dialog->token, CITY_DIALOG_CANCEL, (const u8 *)"", 0))
-      PresentCityFileNotice(city, "The file choice could not be cancelled.", true);
-    return;
-  }
-  bool absolute = IsPathAbsolute(dialog->browser.filename);
-  char *entered = NULL;
-  FormatText(&entered, "%s%s", absolute ? "" : dialog->browser.directory, dialog->browser.filename);
-  char *destination = DuplicateText(entered);
-  free(entered);
-  NormalizeFilePath(destination);
-  if (!dialog->browser.open) {
-    const char *extension = CityUsesSc2k(city) ? ".sc2k" : ".sc2";
-    size_t length = strlen(destination), suffix = strlen(extension);
-    if (length < suffix || strcasecmp(destination + length - suffix, extension))
-      FormatText(&destination, "%s%s", destination, extension);
-  }
-  char *directory = DuplicateText(destination);
-  char *separator = directory + (PathFilename(directory) - directory);
-  if (separator > directory) {
-    --separator;
-    // Keep POSIX, drive and UNC roots intact when checking the parent directory.
-    if (separator == directory || (separator == directory + 2 && directory[1] == ':')) separator[1] = 0;
-    else *separator = 0;
-  } else separator = NULL;
-  HostFileInfo info;
-  if (separator == NULL || !ReadHostFileInfo(directory[0] ? directory : "/", &info) || !info.directory) {
-    PresentCityFileNotice(city, "The selected directory does not exist.", true);
-    free(directory);
-    free(destination);
-    return;
-  }
-  free(directory);
-  if (dialog->browser.open && (!ReadHostFileInfo(destination, &info) || !info.regular)) {
-    PresentCityFileNotice(city, "The selected city file does not exist.", true);
-    free(destination);
-    return;
-  }
-  if (!dialog->browser.open && !overwrite && ReadHostFileInfo(destination, &info)) {
-    if (!info.regular) {
-      PresentCityFileNotice(city, "Choose a file name, rather than a directory.", true);
-      free(destination);
-      return;
-    }
-    Window window = {0};
-    window.kind = CITY_CANVAS_CONFIRM;
-    window.procedure = FileBrowserConfirmationWindowProcedure;
-    window.bounds = (CityRect){150, 130, 450, 230};
-    window.title = "Replace city file?";
-    window.message = "This file already exists. Replace it?";
-    i32 index = OpenCityMessageBox(files->desktop, window, CITY_MESSAGE_ERROR | CITY_MESSAGE_YES_NO);
-    if (index >= 0) dialog->overwrite_id = files->desktop->windows[index].window_id;
-    free(destination);
-    return;
-  }
-  if (!AnswerCityFileDialog(city, dialog->token, CITY_DIALOG_OK, (const u8 *)destination, (u32)strlen(destination)))
-    PresentCityFileNotice(city, "The file choice could not be accepted.", true);
-  free(destination);
 }
 
 bool BeginCityFileDialog(City *city, NativeFileDialog *dialog, const CityFilePickerOptions *options) {
@@ -264,7 +179,7 @@ bool OpenCityFileDialog(City *city, const CityFilePickerOptions *options) {
   return opened;
 }
 
-bool OpenCitySaveDialog(City *city, CityFileChoiceCallback *callback, void *context) {
+static bool OpenCitySaveDialog(City *city, CityFileChoiceCallback *callback, void *context) {
   char name[CITY_NAME_LIMIT + sizeof(".sc2")];
   int length = Utf8PrefixBytes(CityNameText(&city->name), CITY_NAME_LIMIT);
   memcpy(name, CityNameText(&city->name), length);
@@ -371,10 +286,51 @@ void CompleteCityFileDialogs(City *city) {
   free(selected);
 }
 
-void PublishCityTitle(City *city, const char *title) {
-  snprintf(city->game->ui->status.city_title, CITY_STATUS_TEXT_CAPACITY, "%s", title);
-  SetCityHostWindowTitle(city, title);
+// Resolve a file error's resource text into a borrowed string or caller-provided fallback buffer. Truncated must
+// provide 256 bytes; the returned pointer must not outlive the resource owner or that buffer.
+static const char *ReadFileErrorText(u32 resource, char truncated[256]) {
+  const char *message = CityNoticeText(resource);
+  if (message == NULL)
+    return "";
+  if (strlen(message) <= 255)
+    return message; // Immutable literals outlive every dialog.
+  CopyText(truncated, 256, message);
+  return truncated;
 }
+
+// Native file errors use the host's description rather than stock MFC resource text. Requires attached presentation
+// owners; temporary formatted text is released by this function after the notice call returns.
+void ShowCityFileException(City *city, u32 resource, const CityFileExceptionState *exception, const char *path) {
+  char prefix_storage[256];
+  const char *prefix = ReadFileErrorText(resource, prefix_storage);
+  char *cause = exception && exception->os_error ? FormatCityErrorReason(strerror(exception->os_error)) : NULL;
+  const char *cause_text = cause ? cause : "";
+  const char *filename = path != NULL ? path : "";
+  size_t size = strlen(prefix) + strlen(filename) + strlen(cause_text) + 3;
+  char *message = malloc(size);
+  if (message == NULL) {
+    free(cause);
+    SetGameError(city->game, SC2K_ERROR_HOST_ALLOCATION_FAILURE);
+    return;
+  }
+  snprintf(message, size, "%s%s%s%s%s", prefix, *filename ? "\n" : "", filename,
+      *cause_text ? "\n" : "", cause_text);
+  ReportCityLoadError(city, resource, message);
+  free(cause);
+  free(message);
+}
+
+// Report the current operation's error without repairing or reloading partial City data.
+void ReportCityFileError(CityFileRuntime *file, u32 resource, CityFileErrorDetail detail) {
+  City *city = file->game->city;
+  if (detail == CITY_FILE_ERROR_WITH_CAUSE) {
+    ShowCityFileException(city, resource, &file->error, NULL);
+  } else {
+    char text[256];
+    ReportCityLoadError(city, resource, ReadFileErrorText(resource, text));
+  }
+}
+
 void ReportCitySaveError(CityFileRuntime *file, i32 id, const char *path) {
   City *city = file->game->city;
   CityFileExceptionState caught = {0};
@@ -502,244 +458,9 @@ void NativeSaveDialogEnd(City *city, NativeSaveScope *scope) {
   free(scope);
 }
 
-static void NavigateFileBrowser(City *city, NativeFileDialog *dialog, const char *directory) {
-  if (!ReadCityFileBrowserDirectory(&dialog->browser, directory))
-    PresentCityFileNotice(city, "The selected directory could not be opened completely.", true);
-  DirtyFileBrowser(city, dialog);
-}
-
-static void ActivateFileBrowserSelection(City *city, NativeFileDialog *dialog) {
-  CityFileBrowser *browser = &dialog->browser;
-  if (browser->selected >= 0 && browser->selected < browser->visible_count) {
-    const CityFileBrowserEntry *entry = &browser->entries[browser->visible[browser->selected]];
-    if (entry->directory) {
-      char *path = NULL;
-      FormatText(&path, "%s%s", browser->directory, entry->name);
-      NavigateFileBrowser(city, dialog, path);
-      free(path);
-      return;
-    }
-  }
-  if (browser->filename[0] && (!browser->open || browser->selected >= 0)) SubmitCityFileDialog(city, dialog, 1, 0);
-}
-
-static void AnswerFileBrowserConfirmation(City *city, NativeFileDialog *dialog, bool accept) {
-  CityFilePresentation *files = &city->game->ui->file_dialog;
-  Sc2kCanvasDesktopDismissWindow(files->desktop, dialog->overwrite_id);
-  dialog->overwrite_id = 0;
-  bool deleting = dialog->deleting;
-  dialog->deleting = false;
-  if (!accept) return;
-  if (!deleting) { SubmitCityFileDialog(city, dialog, 1, 1); return; }
-  if (!RemoveFile(dialog->delete_path)) {
-    PresentCityFileNotice(city, "The selected file could not be deleted.", true);
-    return;
-  }
-  NavigateFileBrowser(city, dialog, dialog->browser.directory);
-}
-
-static void ConfirmFileBrowserDelete(City *city, NativeFileDialog *dialog) {
-  CityFileBrowser *browser = &dialog->browser;
-  if (browser->selected < 0 || browser->selected >= browser->visible_count) return;
-  const CityFileBrowserEntry *entry = &browser->entries[browser->visible[browser->selected]];
-  if (entry->directory) return;
-  char *path = NULL;
-  FormatText(&path, "%s%s", browser->directory, entry->name);
-  free(dialog->delete_path);
-  dialog->delete_path = DuplicateText(path);
-  free(path);
-  Window window = {0};
-  window.kind = CITY_CANVAS_CONFIRM;
-  window.procedure = FileBrowserConfirmationWindowProcedure;
-  window.bounds = (CityRect){150, 130, 450, 230};
-  window.title = "Delete Game";
-  window.message = "Delete the selected saved game?";
-  CityCanvasDesktop *desktop = city->game->ui->file_dialog.desktop;
-  int index = OpenCityMessageBox(desktop, window, CITY_MESSAGE_ERROR | CITY_MESSAGE_YES_NO);
-  if (index >= 0) {
-    dialog->overwrite_id = desktop->windows[index].window_id;
-    dialog->deleting = true;
-  }
-}
-
-static void EditFileBrowser(City *city, NativeFileDialog *dialog) {
-  CityFileBrowser *browser = &dialog->browser;
-  if (browser->focus == 0) FilterCityFileBrowser(browser);
-  else {
-    browser->selected = -1;
-    browser->detail_count = 0;
-    browser->last_click_row = -1;
-  }
-  DirtyFileBrowser(city, dialog);
-}
-
 bool NativeSaveDialogOpen(const City *city) {
   CityFilePresentation *files = &city->game->ui->file_dialog;
   return files->dialog != NULL || files->prompt != NULL;
-}
-
-// Handles this window's painting and input; paint coordinates are local to the window.
-bool FileWindowProcedure(Game *game, const Window *window, const WindowEvent *event) {
-  if (event->kind == WINDOW_PAINT) {
-    DrawCityFileBrowser(event->canvas, window);
-    return true;
-  }
-  if (event->kind != WINDOW_INPUT) return false;
-  City *city = game->city;
-  const CanvasSDLEvent *input = event->input;
-  NativeFileDialog *dialog = game->ui->file_dialog.dialog;
-  while (dialog && dialog->window_id != window->window_id) dialog = dialog->parent;
-  if (!dialog) return false;
-  if (dialog->overwrite_id &&
-      input->kind != CANVAS_SDL_FOCUS_LOST && input->kind != CANVAS_SDL_POINTER_UP) return true;
-  switch (input->kind) {
-  case CANVAS_SDL_POINTER_DOWN: {
-    if (input->button != CANVAS_SDL_BUTTON_LEFT) return false;
-    int x = event->x, y = event->y;
-    CityFilePresentation *files = &city->game->ui->file_dialog;
-    Window *target = FileBrowserWindow(city, dialog);
-    CityFileBrowser *browser = &dialog->browser;
-    if (CanvasCloseAt(target->bounds, x, y)) { SubmitCityFileDialog(city, dialog, 0, 0); return true; }
-    for (int control = 0; control < CITY_FILE_CONTROL_COUNT; ++control) {
-      if (browser->open &&
-          (control == CITY_FILE_NAME || control == CITY_FILE_CLEAR_NAME || control == CITY_FILE_DELETE))
-        continue;
-      CityRect b = CityFileBrowserBounds(target, control);
-      if (!CanvasPointInRect(b, x, y)) continue;
-      if (control == CITY_FILE_FILTER || control == CITY_FILE_NAME) {
-        int field = control == CITY_FILE_NAME;
-        browser->focus = field;
-        browser->caret[field] = CityTextBoxCaretAt(&city->game->resources->interface_font, b,
-            field ? browser->filename : browser->filter, browser->caret[field], &browser->text_scroll[field], x);
-        browser->select_all[field] = 0;
-      } else if (control == CITY_FILE_CLEAR_FILTER || control == CITY_FILE_CLEAR_NAME) {
-        int field = control == CITY_FILE_CLEAR_NAME;
-        browser->focus = field;
-        (field ? browser->filename : browser->filter)[0] = 0;
-        browser->caret[field] = browser->text_scroll[field] = browser->select_all[field] = 0;
-        EditFileBrowser(city, dialog);
-      } else if (control == CITY_FILE_SORT_NAME || control == CITY_FILE_SORT_DATE) {
-        bool date = control == CITY_FILE_SORT_DATE;
-        browser->descending = browser->sort_date == date ? !browser->descending : date;
-        browser->sort_date = date;
-        SortCityFileBrowser(browser);
-      } else if (control == CITY_FILE_HOME) NavigateFileBrowser(city, dialog, browser->home);
-      else if (control == CITY_FILE_LIST) {
-        int first = IntMin(browser->first, IntMax(0, browser->visible_count - CityFileBrowserRows(target)));
-        int row = first + (y - b.top) / CITY_FILE_BROWSER_ROW_HEIGHT;
-        if (row < browser->visible_count) {
-          u32 now = SDL_GetTicks();
-          bool activate = browser->last_click_row == row && now - browser->last_click_time < 500;
-          SelectCityFileBrowserEntry(browser, row);
-          browser->focus = 2;
-          browser->last_click_row = row;
-          browser->last_click_time = now;
-          const CityFileBrowserEntry *entry = &browser->entries[browser->visible[row]];
-          if (activate || entry->directory) { ActivateFileBrowserSelection(city, dialog); return true; }
-        }
-      } else if (control == CITY_FILE_SCROLL_UP) --browser->first;
-      else if (control == CITY_FILE_SCROLL_DOWN) ++browser->first;
-      else if (control == CITY_FILE_SCROLL_TRACK) {
-        CityRect thumb = CityFileBrowserThumb(target);
-        if (y >= thumb.top && y < thumb.bottom) {
-          browser->dragging_scroll = true;
-          browser->scrollbar_grab = y - thumb.top;
-        } else browser->first += (y < thumb.top ? -1 : 1) * CityFileBrowserRows(target);
-      } else if (control == CITY_FILE_DELETE) { ConfirmFileBrowserDelete(city, dialog); return true; }
-      else if (control == CITY_FILE_ACCEPT) {
-        if (browser->filename[0] && (!browser->open || (browser->selected >= 0 &&
-            !browser->entries[browser->visible[browser->selected]].directory)))
-          SubmitCityFileDialog(city, dialog, 1, 0);
-        return true;
-      }
-      else if (control == CITY_FILE_DEFAULT_SIZE) {
-        Sc2kDirtyMarkRect(&files->desktop->dirty, target->bounds);
-        target->bounds.right = target->bounds.left + CITY_FILE_BROWSER_WIDTH;
-        target->bounds.bottom = target->bounds.top + CITY_FILE_BROWSER_HEIGHT;
-      } else Sc2kCanvasDesktopPointerDown(files->desktop, x, y);
-      DirtyFileBrowser(city, dialog);
-      return true;
-    }
-    Sc2kCanvasDesktopPointerDown(files->desktop, x, y);
-    return true;
-  }
-  case CANVAS_SDL_KEY_DOWN: {
-    CityHotkey key = input->key;
-    CityFileBrowser *browser = &dialog->browser;
-    if (key == CITY_KEY_ESCAPE) SubmitCityFileDialog(city, dialog, 0, 0);
-    else if (key == CITY_KEY_RETURN) ActivateFileBrowserSelection(city, dialog);
-    else if (key == CITY_KEY_TAB) {
-      browser->focus = browser->open ? (browser->focus == 0 ? 2 : 0) : (browser->focus + 1) % 3;
-      DirtyFileBrowser(city, dialog);
-    } else if (key == CITY_KEY_UP || key == CITY_KEY_DOWN || key == CITY_KEY_PAGE_UP || key == CITY_KEY_PAGE_DOWN) {
-      Window *window = FileBrowserWindow(city, dialog);
-      int rows = CityFileBrowserRows(window);
-      int delta = key == CITY_KEY_UP ? -1 : key == CITY_KEY_DOWN ? 1 : key == CITY_KEY_PAGE_UP ? -rows : rows;
-      int selected = browser->selected < 0 ? 0 : browser->selected + delta;
-      selected = IntClamp(selected, 0, browser->visible_count - 1);
-      if (browser->visible_count) SelectCityFileBrowserEntry(browser, selected);
-      browser->first = IntClamp(browser->first, selected - rows + 1, selected);
-      browser->focus = 2;
-      DirtyFileBrowser(city, dialog);
-    } else if (browser->focus <= 1) {
-      int field = browser->focus;
-      char *text = field ? browser->filename : browser->filter;
-      bool changed = key == CITY_KEY_BACKSPACE || key == CITY_KEY_DELETE;
-      if (HandleCityTextEditKey(text, &browser->caret[field], &browser->select_all[field], key)) {
-        if (changed) EditFileBrowser(city, dialog);
-        else DirtyFileBrowser(city, dialog);
-      }
-    } else if (key == CITY_KEY_BACKSPACE) {
-      char *path = NULL;
-      FormatText(&path, "%s..", browser->directory);
-      NavigateFileBrowser(city, dialog, path);
-      free(path);
-    }
-    // A focused picker owns keyboard input, including keys that are map shortcuts.
-    return true;
-  }
-  case CANVAS_SDL_TEXT_INPUT: {
-    const char *text = input->text;
-    CityFileBrowser *browser = &dialog->browser;
-    if (browser->focus > 1) return true;
-    int field = browser->focus;
-    InsertCityTextInput(field ? browser->filename : browser->filter,
-        field ? sizeof(browser->filename) : sizeof(browser->filter),
-        &browser->caret[field], &browser->select_all[field], text, false);
-    EditFileBrowser(city, dialog);
-    return true;
-  }
-  case CANVAS_SDL_SCROLL: {
-    int delta = input->y;
-    if (!dialog->overwrite_id) {
-      CityFileBrowser *browser = &dialog->browser;
-      browser->wheel_remainder += delta;
-      browser->first -= browser->wheel_remainder / 1024 * 3;
-      browser->wheel_remainder %= 1024;
-      DirtyFileBrowser(city, dialog);
-    }
-    return true;
-  }
-  case CANVAS_SDL_POINTER_MOVE:
-  case CANVAS_SDL_POINTER_UP:
-  case CANVAS_SDL_FOCUS_LOST: {
-    CityFileBrowser *browser = &dialog->browser;
-    Window *target = FileBrowserWindow(city, dialog);
-    int y = event->y;
-    bool dragging = input->kind == CANVAS_SDL_POINTER_MOVE;
-    if (!browser->dragging_scroll) return false;
-    browser->dragging_scroll = dragging;
-    if (dragging && target && !dialog->overwrite_id) {
-      CityRect track = CityFileBrowserBounds(target, CITY_FILE_SCROLL_TRACK);
-      CityScrollbar scrollbar = ReadCityScrollbar(track, browser->visible_count,
-          CityFileBrowserRows(target), browser->first, 8);
-      browser->first = CityScrollbarPosition(&scrollbar, y, browser->scrollbar_grab, CITY_SCROLLBAR_DRAG);
-      DirtyFileBrowser(city, dialog);
-    }
-    return true;
-  }
-  default: return false;
-  }
 }
 
 // Replacement questions are bound when opened, so browser input never probes them.
@@ -815,37 +536,10 @@ void HandleSaveCityAsCommand(City *city) {
         SetCityPathBytes(city->game, &city->game->city_path, path.length, CityPathText(&path));
       }
     }
-    SetCitySavePromptActive(city, false);
+    if (city->game->ui) city->game->ui->save_prompt_active = false;
     FreeCityPathStorage(&directory);
   }
   FreeCityPathStorage(&path);
-}
-
-// File replacement and deletion questions answer their owning browser. Capture
-// the answer before closing the question: submitting it can close both windows.
-static bool FileBrowserConfirmationWindowProcedure(Game *game, const Window *window, const WindowEvent *event) {
-  if (event->kind == WINDOW_PAINT) {
-    DrawCityMessageBox(event->canvas, window);
-    return true;
-  }
-  if (event->kind != WINDOW_INPUT) return false;
-  NativeFileDialog *dialog = game->ui->file_dialog.dialog;
-  while (dialog && dialog->overwrite_id != window->window_id) dialog = dialog->parent;
-  if (!dialog) return false;
-  const CanvasSDLEvent *input = event->input;
-  if (input->kind == CANVAS_SDL_KEY_DOWN) {
-    if (input->key == CITY_KEY_RETURN || input->key == CITY_KEY_ESCAPE)
-      AnswerFileBrowserConfirmation(game->city, dialog, input->key == CITY_KEY_RETURN);
-    return true;
-  }
-  if (input->kind == CANVAS_SDL_POINTER_DOWN && input->button == CANVAS_SDL_BUTTON_LEFT) {
-    int answer = CityMessageAnswerAt(window, event->x, event->y);
-    if (answer == CITY_DIALOG_YES || answer == CITY_DIALOG_NO) {
-      AnswerFileBrowserConfirmation(game->city, dialog, answer == CITY_DIALOG_YES);
-      return true;
-    }
-  }
-  return false;
 }
 
 static void SaveCityFileChoice(City *city, const char *path, void *context) {
@@ -890,7 +584,7 @@ void PresentCityFileNotice(City *city, const char *text, bool error) {
   } else {
     size_t length = strlen(text) + 1;
     char *message = malloc(length);
-    if (!message) { city->game->execution_failed = true; return; }
+    if (!message) { SetGameError(city->game, SC2K_ERROR_HOST_ALLOCATION_FAILURE); return; }
     memcpy(message, text, length);
     index = OpenCityMessageBox(&ui->desktop, (Window){.kind = CITY_CANVAS_NOTICE,
         .bounds = {110, 90, 490, 210}, .title = "City file", .message = message, .owned_message = message},

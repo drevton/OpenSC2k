@@ -15,6 +15,51 @@
 #include "city/tools/tools.h"
 #include <assert.h>
 
+// Map a military-zone occupant to its dedicated counter; unlisted kinds share OTHER.
+static CitySpecialTileStatistic MilitaryTileStatistic(u8 kind) {
+  switch (kind) {
+  case TK_RUNWAY_FIRST:
+    return CITY_SPECIAL_TILE_RUNWAY_FIRST;
+  case TK_RUNWAY_LAST:
+    return CITY_SPECIAL_TILE_RUNWAY_LAST;
+  case TK_CRANE:
+    return CITY_SPECIAL_TILE_CRANE;
+  case TK_CONTROL_TOWER_1X1_2:
+    return CITY_SPECIAL_TILE_CONTROL_TOWER;
+  case TK_WAREHOUSE_1X1_4:
+    return CITY_SPECIAL_TILE_WAREHOUSE;
+  case TK_BUILDING_1X1_1:
+    return CITY_SPECIAL_TILE_BUILDING_FIRST;
+  case TK_BUILDING_1X1_2:
+    return CITY_SPECIAL_TILE_BUILDING_SECOND;
+  case TK_F_15B:
+    return CITY_SPECIAL_TILE_F_15B;
+  case TK_HANGAR_1X1:
+    return CITY_SPECIAL_TILE_HANGAR_SMALL;
+  case TK_RADAR:
+    return CITY_SPECIAL_TILE_RADAR;
+  case TK_PARKING_LOT_2X2_2:
+    return CITY_SPECIAL_TILE_PARKING_LOT;
+  case TK_TOP_SECRET:
+    return CITY_SPECIAL_TILE_TOP_SECRET;
+  case TK_CARGO_YARD:
+    return CITY_SPECIAL_TILE_CARGO_YARD;
+  case TK_HANGAR_3X3:
+    return CITY_SPECIAL_TILE_HANGAR_LARGE;
+  case TK_MISSILE_SILO:
+    return CITY_SPECIAL_TILE_MISSILE_SILO;
+  default:
+    return CITY_SPECIAL_TILE_OTHER;
+  }
+}
+
+// Transfer one military-zone occupant between counter buckets. This updates counts only; the shared tile replacement
+// operation owns the kind write, metadata conversion and invalidation. Keep removal before insertion, even for a match.
+void UpdateCityMilitaryTileCounts(City *city, u8 previous, u8 kind) {
+  --city->special_tile_counts.count[MilitaryTileStatistic(previous)];
+  ++city->special_tile_counts.count[MilitaryTileStatistic(kind)];
+}
+
 // Stage an explicit answer for OfferDisasterUnlockBonus. Rejects unsupported answers and reserved input;
 // TEST leaves the pending choice unchanged, while execution stores the answer for the retained caller.
 i64 CmdSetMilitaryRewardAnswer(City *city, u32 flags, int answer, int reserved1, int reserved2) {
@@ -221,7 +266,7 @@ CityMilitaryPlacement BeginCityMilitaryPlacement(City *city, bool accept) {
     city->unlocks.military_base = CITY_MILITARY_BASE_UNAVAILABLE;
     return (CityMilitaryPlacement){0};
   }
-  if (city->fixes & (1 << CITY_FIX_MILITARY_PLACEMENT)) {
+  if (city->fixes & (1ull << CITY_FIX_MILITARY_PLACEMENT)) {
     int notice = PlaceRestoredMilitaryBase(city);
     return (CityMilitaryPlacement){.notice = notice,
         .after_notice = notice == CITY_NOTICE_MILITARY_BASE_UNSUITABLE ? CITY_MILITARY_FINISH_UNAVAILABLE :
@@ -257,7 +302,7 @@ CityMilitaryPlacement BeginCityMilitaryPlacement(City *city, bool accept) {
       for (int attempt = 0; attempt < 40 && selected_count < 6; ++attempt) {
         int y0 = NextEventOrientationRandom(city, city->map_height - 4);
         int x0 = NextEventOrientationRandom(city, city->map_width - 4);
-        bool repaired_silos = city->fixes & (1 << CITY_FIX_SILO_PLOTS);
+        bool repaired_silos = city->fixes & (1ull << CITY_FIX_SILO_PLOTS);
         int site_elevation = repaired_silos ?
             ReadCityLandHeight(&city->tile[MapTileXY(city, x0, y0)]) : elevation;
         bool overlaps = false;
@@ -341,7 +386,7 @@ void FinishCityMilitaryPlacement(City *city, CityMilitaryPlacement placement) {
 bool GrowSpecialZoneSilos(City *city, TileIndex origin, int zone_kind) {
   assert(IsMapTileValid(city, origin));
   CityPoint point = MapTilePt(city, origin);
-  if (city->fixes & (1 << CITY_FIX_MILITARY_GROWTH)) {
+  if (city->fixes & (1ull << CITY_FIX_MILITARY_GROWTH)) {
     while (point.y > 0 && ReadCityZoneKind(&city->tile[MapTileXY(city, point.x, point.y - 1)]) == zone_kind)
       --point.y;
     while (point.x > 0 && ReadCityZoneKind(&city->tile[MapTileXY(city, point.x - 1, point.y)]) == zone_kind)
@@ -375,7 +420,7 @@ bool GrowSpecialZoneSilos(City *city, TileIndex origin, int zone_kind) {
       TileIndex tile = MapTileXY(city, cell_x, cell_y);
       ReplaceCityTileAndStatistics(city, tile, TK_MISSILE_SILO);
       SetUndergroundTile(city, tile, TUK_MISSILE_SILO);
-      if (city->fixes & (1 << CITY_FIX_MILITARY_GROWTH)) {
+      if (city->fixes & (1ull << CITY_FIX_MILITARY_GROWTH)) {
         city->tile[tile].flags &= ~(TF_WATERED | TF_PIPED | TF_POWERED | TF_POWERABLE);
         RefreshCityPowerConnections(city, tile);
       }
@@ -395,7 +440,7 @@ void GrowCityMilitaryBaseTile(City *city, TileIndex tile_index) {
   if (city->unlocks.military_base == CITY_MILITARY_BASE_ARMY) {
     if ((Sc2kCrtRand(city) & 3) != 0)
       return;
-    if (city->fixes & (1 << CITY_FIX_MILITARY_GROWTH)) {
+    if (city->fixes & (1ull << CITY_FIX_MILITARY_GROWTH)) {
       int parking_lots = counts->count[CITY_SPECIAL_TILE_PARKING_LOT] / 4;
       replacement = TK_PARKING_LOT_2X2_2;
       if (counts->count[CITY_SPECIAL_TILE_TOP_SECRET] / 4 < parking_lots) {

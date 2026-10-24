@@ -4,6 +4,9 @@
 #include "base/types.h"
 #include "base/version.h"
 
+// Shared admission limit for native scalar and ground extension packets carried by stock archives.
+enum { CITY_SAVE_EXTENSION_LIMIT = 128 * 1024 * 1024 };
+
 typedef enum CityFileReleaseStage {
   CITY_FILE_RELEASE_DEVELOPMENT, CITY_FILE_RELEASE_ALPHA, CITY_FILE_RELEASE_BETA, CITY_FILE_RELEASE_STABLE
 } CityFileReleaseStage;
@@ -22,9 +25,8 @@ enum {
   CITY_SCENARIO_INSTRUCTION_BYTES = 768,
 };
 
-// Original CFileException cause IDs, selecting string resources531..545 in
-// ShowCityFileException. Fields remain i32. OsErrorToException
-// maps Win32 error5 to ACCESS_DENIED5 and error2 to FILE_NOT_FOUND2.
+// Original file exception cause IDs, retained at import/comparison boundaries. Native error dialogs use
+// CityFileExceptionState.os_error for the host's description; comparison selects the original cause text.
 typedef enum CityFileExceptionCause {
   CITY_FILE_CAUSE_NONE = 0,
   CITY_FILE_CAUSE_GENERIC = 1,
@@ -71,5 +73,30 @@ enum {
   CITY_MISC_WORD_RESERVED_FIRST = CITY_MISC_WORD_LAST_SAVED + 1,
   CITY_MISC_WORD_COUNT = 1200,
 };
+
+// Host file I/O observations; these records are not saved City state.
+typedef enum CityFileIOOperation {
+  NATIVE_SAVE_OPEN = 1,
+  NATIVE_SAVE_WRITE = 2,
+  NATIVE_SAVE_SEEK = 3,
+  NATIVE_SAVE_CLOSE = 4,
+  NATIVE_SAVE_REMOVE = 5,
+  NATIVE_LOAD_OPEN = 6,
+  NATIVE_LOAD_READ = 7,
+  NATIVE_LOAD_SEEK = 8,
+  NATIVE_LOAD_CLOSE = 9,
+  NATIVE_LOAD_DIRECTORY = 10
+} CityFileIOOperation;
+
+// Platform observations, not guest mutations. Write result is the byte count;
+// other results are 0/1. Input is valid only for the duration of the call.
+typedef struct CityFileIOOutcome {
+  CityFileIOOperation operation;
+  u32 requested;
+  u32 result;
+  i32 error;
+  const u8 *input;
+  u32 input_size;
+} CityFileIOOutcome;
 
 #endif

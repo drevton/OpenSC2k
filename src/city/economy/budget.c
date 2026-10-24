@@ -28,7 +28,7 @@ void RefreshBudgetDialogEstimates(City *city) {
 
 // Adjust all eleven industry tax baselines and recompute their rounded mean. A zero direction refreshes the mean
 // after an individual rate edit; each stored rate is normalized to the 0..20 range.
-void AdjustIndustryTaxRates(City *city, int direction) {
+static void AdjustIndustryTaxRates(City *city, int direction) {
   CityIndustryDemand *baseline = &city->industry_baseline;
   int total = 0;
   for (int index = 0; index < CITY_INDUSTRY_COUNT; ++index) {
@@ -279,6 +279,11 @@ i64 CmdToggleAutoBudget(City *city, u32 flags, TileIndex location,
 // Estimate city assets from tile statistics for bond limits and rates. Requires consistent tile counters; returns the
 // live unsigned valuation and leaves its cached City field unchanged.
 static u64 CalculateCityAssetValue(const City *city) {
+  typedef struct {
+    u8 statistic;
+    u8 divisor;
+    u16 multiplier;
+  } CityAssetValueRule;
   static const CityAssetValueRule kAssetValues[] = {{TK_HYDRO_POWER, 1, 400},
       {TK_WIND_POWER, 1, 6600},
       {TK_GAS_POWER_PLANT, 16, 6600}, {TK_OIL_POWER_PLANT, 16, 2000},
@@ -297,7 +302,7 @@ static u64 CalculateCityAssetValue(const City *city) {
       {TK_CARGO_YARD, 1, 150}, {TK_WATER_TREATMENT_PLANT, 9, 500}, {TK_LIBRARY, 4, 500},
       {TK_HANGAR_3X3, 1, 250}, {TK_MARINA, 9, 1000}, {TK_DESALINATION_PLANT, 9, 1000}};
   const CityStatistics *statistics = &city->statistics;
-  bool repaired = city->fixes & (1 << CITY_FIX_ASSET_VALUES);
+  bool repaired = city->fixes & (1ull << CITY_FIX_ASSET_VALUES);
   u64 asset_value = repaired ? (u64)kCityToolCosts[CITY_TOOL_GROUP_RAIL * CITY_TOOL_VARIANT_CAPACITY + 1] *
       city->infrastructure.subway_tiles : 0 - (u32)(i16)city->infrastructure.subway_tiles;
 
@@ -325,7 +330,7 @@ static u64 CalculateCityAssetValue(const City *city) {
     const CityAssetValueRule *rule = &kAssetValues[i];
     int statistic = rule->statistic;
     int divisor = statistic == TK_WATER_TREATMENT_PLANT &&
-        (city->fixes & (1 << CITY_FIX_TREATMENT_VALUE)) ? 4 : rule->divisor;
+        (city->fixes & (1ull << CITY_FIX_TREATMENT_VALUE)) ? 4 : rule->divisor;
     u32 multiplier = rule->multiplier;
     if (repaired && statistic >= TK_HYDRO_POWER && statistic <= TK_COAL_POWER_PLANT) {
       int variant = statistic == TK_HYDRO_POWER ? CITY_POWER_HYDRO :
@@ -364,7 +369,7 @@ static int CityBondCreditScore(const City *city) {
 
 // Check the live bond count and credit score without updating the City's valuation cache. Returns admission only;
 // issuing the bond and its cash effects require a command.
-bool CanCityIssueBond(const City *city) {
+static bool CanCityIssueBond(const City *city) {
   return city->indicators.bond_count < 50 && CityBondCreditScore(city) < 6;
 }
 
@@ -438,7 +443,7 @@ i64 CmdIssueBond(City *city, u32 flags, TileIndex location,
   if (parameter2 == CITY_BOND_ASK)
     return flags & CITY_COMMAND_TEST ? CITY_COMMAND_NEEDS_CONFIRMATION : CITY_COMMAND_COST_REJECTED;
   if (flags & CITY_COMMAND_TEST) return 0;
-  ApplyCityBondIssue(city, city->fixes & (1 << CITY_FIX_BOND_RATING) ? CityBondInterestRate(city) : parameter1);
+  ApplyCityBondIssue(city, city->fixes & (1ull << CITY_FIX_BOND_RATING) ? CityBondInterestRate(city) : parameter1);
   return 1;
 }
 

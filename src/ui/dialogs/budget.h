@@ -40,13 +40,15 @@ enum { CITY_ADVISOR_BUTTON_SIZE = 22, CITY_ADVISOR_WINDOW_WIDTH = 280,
     CITY_ADVISOR_CONTENT_MARGIN = 10, CITY_ADVISOR_PORTRAIT_GAP = 6 };
 
 const char *CityAdvisorName(CityBudgetCategory category);
-CityRect CityAdvisorButtonBounds(const Window *window, CityBudgetCategory category);
 int CityAdvisorButtonAt(const Window *window, int x, int y);
 
-// Open helpers return a desktop array index, or -1 on failure. Refresh helpers update retained window data.
+// Return a desktop array index, or -1 on failure.
 i32 Sc2kCanvasDesktopOpenPolicies(CityCanvasDesktop *desktop, CityRect bounds, u32 policy_flags);
-i32 Sc2kCanvasDesktopOpenBonds(CityCanvasDesktop *desktop, CityRect bounds, int issue_rate);
-void UpdateCityPolicyWindows(City *city, CityCanvasDesktop *desktop, u32 policy_flags);
+// Copy costs from City and group totals from its attached UI into policy windows on the supplied desktop.
+// The desktop is an independent destination; policy_flags supplies the displayed checks. City is unchanged.
+void UpdateCityPolicyWindows(const City *city, CityCanvasDesktop *desktop, u32 policy_flags);
+// Copy the prepared panel into budget windows, clamp bond scrolling from its loan total, and mark their damage.
+// The panel descriptor is not retained; its immutable credit-rating text remains borrowed in the window copy.
 void Sc2kCanvasDesktopUpdateBudget(CityCanvasDesktop *desktop, const CityBudgetPanel *budget);
 
 // Nonnegative ordinance hits are persistent policy indices.
@@ -54,7 +56,10 @@ typedef enum CityCanvasPolicyHit {
   CITY_CANVAS_POLICY_HIT_NONE = -1,
 } CityCanvasPolicyHit;
 
-void Sc2kCanvasBudgetFromCity(City *city, CityBudgetPanel *budget);
+// Copy current financial values into caller-owned presentation storage, without City mutation, allocation or RNG.
+// The credit rating borrows an immutable literal. Rate, to-date and estimate arrays use CityBudgetRow,
+// which is distinct from the command's CityBudgetCategory namespace.
+void Sc2kCanvasBudgetFromCity(const City *city, CityBudgetPanel *budget);
 enum { CITY_BUDGET_WINDOW_WIDTH = 432, CITY_BUDGET_WINDOW_HEIGHT = 276 };
 typedef enum CityBudgetControl {
   CITY_BUDGET_CONTROL_CATEGORY, CITY_BUDGET_CONTROL_RATE,
@@ -63,7 +68,8 @@ typedef enum CityBudgetControl {
   CITY_BUDGET_CONTROL_BORROW, CITY_BUDGET_CONTROL_REPAY, CITY_BUDGET_CONTROL_SHOW_BONDS,
   CITY_BUDGET_CONTROL_TIMER, CITY_BUDGET_CONTROL_OPEN_ORDINANCES
 } CityBudgetControl;
-CityRect CityBudgetControlBounds(CityRect bounds, CityBudgetControl control, int category);
+CityRect CityBudgetControlBounds(CityRect bounds, CityBudgetControl control, int row);
+// Convert a display row to CityBudgetRateKind; noneditable or invalid rows return -1.
 int CityBudgetRateKindForRow(int row);
 int CityBudgetRateMaximum(int row);
 int Sc2kCanvasBudgetRateAt(const Window *window, int x, int y);
@@ -75,13 +81,13 @@ CityRect CityBudgetQueryBounds(CityRect bounds, CityBudgetQueryControl control);
 void DrawCityBudgetRateEditor(Canvas *canvas, const Window *window);
 // Return -1 outside an arrow, otherwise budget row * 2 plus one for increase.
 i32 Sc2kCanvasBudgetStepAt(const Window *window, i32 x, i32 y);
+// Advisor hits return CityBudgetCategory, not a display row; -1 means no hit.
 i32 Sc2kCanvasBudgetAdviceAt(const Window *window, i32 x, i32 y);
 enum {
   CITY_POLICY_WINDOW_WIDTH = 460, CITY_POLICY_WINDOW_HEIGHT = 236,
   CITY_POLICY_PANEL_MARGIN = 4, CITY_POLICY_PANEL_GAP = 4, CITY_POLICY_PANEL_HEIGHT = 68,
   CITY_POLICY_ROWS_TOP = 14, CITY_POLICY_ROW_PITCH = 12, CITY_POLICY_ROW_HEIGHT = 12
 };
-CityRect CityPolicyPanelBounds(CityRect bounds, int panel);
 // Returns a policy index or a CityCanvasPolicyHit sentinel.
 i32 Sc2kCanvasPolicyAt(const Window *window, i32 x, i32 y);
 bool IsCityTransitUnderfunded(const City *city);
@@ -91,7 +97,6 @@ void Sc2kCanvasDrawPolicies(Game *game, Canvas *canvas, const Window *window);
 // Bond painting, scrolling and rate controls share the window's current geometry.
 enum { CITY_BOND_WINDOW_WIDTH = 360, CITY_BOND_WINDOW_HEIGHT = 204, CITY_BOND_WINDOW_MIN_HEIGHT = 132 };
 void DrawCityBonds(const City *city, Canvas *canvas, const Window *window);
-CityRect CityBondResizeGripBounds(const Window *window);
 int CityBondVisibleRows(const Window *window);
 int CityBondContentRows(int count);
 
@@ -100,17 +105,13 @@ int CityBondContentRows(int count);
 // Finish the detached manual caller before city replacement or host teardown.
 void CloseCityManualBudget(City *city);
 void OpenCityBudget(City *city);
-const CityBudgetState *ReadCityBudgetWindowState(const City *city);
 const CityBudgetState *FindCityBudgetWindowState(const City *city, int id);
 void AdvanceCityBudgetHelper(City *city, int window);
 // Returns a desktop array index, or -1 on allocation failure; does not begin the retained budget caller.
 int OpenCityBudgetWindow(City *city);
 void ApplicationBudgetBegin(City *city, u32 window, bool manual);
 void ApplicationBudgetEnd(City *city, u32 window);
-void ApplicationBudgetAdvisor(City *city, u32 window, CityBudgetCategory category);
 void OpenCityAdvisor(City *city, CityBudgetCategory category);
-void ApplyCityBudgetWindowRate(City *city, u32 window, int row, int rate);
-void OpenCityBudgetRateEditor(City *city, u32 window, int row);
 void ApplicationBudgetSync(City *city);
 void ReleaseCityBudgetPresentation(CityInterfaceState *ui);
 void ApplicationBudgetPoll(City *city);
@@ -118,9 +119,6 @@ void ApplicationBudgetPoll(City *city);
 // Budget presentation. The annual entry retains its preparation and paused-host lifetime; manual opening uses UI.
 void ShowAnnualBudgetDialog(City *city);
 void ShowBudgetDialogManually(City *city);
-
-// Format a signed amount with grouped thousands into the caller's bounded buffer.
-void CanvasBudgetAmount(char *output, size_t size, i64 value);
 
 // Returns borrowed hover help for these controls, or null when no help applies.
 const char *CityBudgetTooltipAt(const Window *window, int x, int y);

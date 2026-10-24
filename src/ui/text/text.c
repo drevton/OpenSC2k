@@ -1,26 +1,15 @@
-#include "city/engine/commands.h"
-#include "city/disasters/types.h"
-#include "city/engine/city_types.h"
-#include "city/presentation.h"
-#include "city/tools/types.h"
 #include "ui/text/text.h"
+#include "base/text.h"
+#include "base/utf8.h"
 
 #include <ctype.h>
-#include <stdarg.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
+#include "city/presentation.h"
 #include "city/state.h"
-#include "city/tools/tools.h"
 #include "game/errors.h"
 #include "game/state.h"
-#include "audio/state.h"
-#include "drawing/state.h"
-#include "assets/state.h"
-#include "ui/state.h"
-#include "assets/catalog.h"
-#include "ui/input.h"
 
 const char *CityNoticeText(int notice) {
   switch (notice) {
@@ -112,7 +101,7 @@ char *FormatCityErrorReason(const char *reason) {
   return text;
 }
 
-int CityTextPrevious(const char *text, int caret) {
+static int CityTextPrevious(const char *text, int caret) {
   const char *position = text;
   int previous = 0;
   while (*position && position - text < caret) {
@@ -333,16 +322,6 @@ char *FormatCityNumber(Game *game, char *text, const char *mask, int width, doub
   return text;
 }
 
-// Trim in place; overlapping movement does not need a temporary allocation.
-void TrimCityNumberText(char *text) {
-  size_t length = strlen(text);
-  if (length < 2)
-    return;
-  size_t leading = strspn(text, " ");
-  if (leading != 0)
-    memmove(text, text + leading, length - leading + 1);
-}
-
 // Group integer currency without losing precision or separating the sign from its prefix.
 void FormatCityCurrencyForCountry(char text[CITY_CURRENCY_TEXT_CAPACITY], i64 value, const char *language) {
   // Format integers directly: double cannot preserve all 64 treasury bits.
@@ -367,97 +346,4 @@ void FormatCityCurrencyForCountry(char text[CITY_CURRENCY_TEXT_CAPACITY], i64 va
 
 void FormatCityCurrency(Game *game, char text[CITY_CURRENCY_TEXT_CAPACITY], i64 value) {
   FormatCityCurrencyForCountry(text, value, (const char *)game->city->country.character);
-}
-
-// Store a legend string/color and invalidate its original three-column rectangle.
-bool SetCityMapLegendColumn(Game *game, CityStatusState *status, int column, const char *text, u32 color) {
-  CityStatusLegend *legend = &status->legend;
-  // Original ignores this argument and always invalidates with erase=true.
-  if (column >= 0 && column < CITY_STATUS_COLUMN_COUNT) {
-    size_t length = strlen(text);
-    if (length >= CITY_STATUS_TEXT_CAPACITY) {
-      SetGameError(game, SC2K_ERROR_GUEST_BUFFER_TOO_SMALL);
-      return false;
-    }
-    if (legend->color[column] == color && !strcmp(legend->text[column], text)) return IsCityStatusAvailable(status);
-    memmove(legend->text[column], text, length + 1);
-    legend->color[column] = color;
-  }
-  if (column < 0 || column >= CITY_STATUS_COLUMN_COUNT) {
-    SetGameError(game, SC2K_ERROR_GUEST_BUFFER_TOO_SMALL);
-    return false; // Defined correction for original invalid rectangle stack indexing.
-  }
-  return InvalidateCityStatus(status);
-}
-
-// Tool/cost, city problem or disaster, and weather status strings.
-void RefreshCityStatusPanel(City *city, CityStatusState *status, int speed, int force) {
-  Game *game = city->game;
-  CityInterfaceState *ui = game->ui;
-  Drawing *drawing = game->drawing;
-  if (force == 0 && status->minimized)
-    return;
-  int group, variant;
-  if (IsCtrlKeyPressed(ui)) {
-    group = CITY_TOOL_GROUP_CENTER;
-    variant = CITY_TOOL_VARIANT_DEFAULT;
-  } else if (IsShiftKeyPressed(ui)) {
-    group = CITY_TOOL_GROUP_QUERY;
-    variant = CITY_TOOL_VARIANT_DEFAULT;
-  } else {
-    group = ui->tool_group;
-    if (group < 0 || group >= CITY_TOOL_GROUP_COUNT) {
-      SetGameError(city->game, SC2K_ERROR_GUEST_BUFFER_TOO_SMALL);
-      return;
-    }
-    variant = (i16)ui->selection.value[group];
-  }
-  if (variant < 0 || variant >= CITY_TOOL_VARIANT_CAPACITY) {
-    SetGameError(city->game, SC2K_ERROR_GUEST_BUFFER_TOO_SMALL);
-    return;
-  }
-  const char *name = game->resources->tool_names.name[group][variant];
-  int cost = (int)kCityToolCosts[group * CITY_TOOL_VARIANT_CAPACITY + variant];
-  char tool_text[CITY_STATUS_TEXT_CAPACITY];
-  if (cost != 0) {
-    char currency[CITY_CURRENCY_TEXT_CAPACITY];
-    FormatCityCurrency(game, currency, cost);
-    if (currency[0] == 0)
-      return;
-    int length = snprintf(tool_text, sizeof(tool_text), "%s  %s", name, currency);
-    if (length < 0 || length >= (int)sizeof(tool_text)) {
-      SetGameError(city->game, SC2K_ERROR_GUEST_BUFFER_TOO_SMALL);
-      return;
-    }
-  } else {
-    int length = snprintf(tool_text, sizeof(tool_text), "%s", name);
-    if (length < 0 || length >= (int)sizeof(tool_text)) {
-      SetGameError(city->game, SC2K_ERROR_GUEST_BUFFER_TOO_SMALL);
-      return;
-    }
-  }
-  u32 color = cost > 0 && AffordableCityCommandCost(city, cost) < 0 ?
-      drawing->map_state.zone_cost_unaffordable_color : drawing->map_state.zone_cost_affordable_color;
-  SetCityMapLegendColumn(game, status, CITY_STATUS_COLUMN_TOOL_COST, tool_text, color);
-
-  const char *issue = "";
-  if (speed == CITY_SPEED_PAUSED)
-    issue = "Paused";
-  else if (city->disasters.map_update_pending != 0) {
-    int disaster = city->disasters.last_type;
-    if (disaster >= CITY_DISASTER_NONE && disaster <= CITY_DISASTER_HURRICANE)
-      issue = kCityDisasterText[disaster];
-  } else {
-    issue = ui->status.problem_description;
-  }
-  if (issue[0] != 0)
-    color = speed == CITY_SPEED_PAUSED ? 25600 : city->disasters.map_update_pending != 0 ?
-        drawing->map_state.zone_cost_unaffordable_color : drawing->map_state.zone_cost_affordable_color;
-  SetCityMapLegendColumn(game, status, CITY_STATUS_COLUMN_ISSUE, issue, color);
-
-  int weather = city->disasters.map_update_pending != 0 ? CITY_WEATHER_COUNT : city->weather.state;
-  const char *weather_text = weather < CITY_WEATHER_COUNT ?
-      kCityWeatherText[weather] : "";
-  SetCityMapLegendColumn(game, status, CITY_STATUS_COLUMN_WEATHER, weather_text,
-      drawing->map_state.zone_cost_affordable_color);
 }

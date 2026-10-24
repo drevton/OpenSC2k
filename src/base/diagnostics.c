@@ -1,3 +1,5 @@
+#include "base/diagnostics.h"
+
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -5,7 +7,13 @@
 #include <unistd.h>
 
 #include "base/file.h"
-#include "base/diagnostics.h"
+
+static const int kFatalSignals[] = {SIGSEGV, SIGILL, SIGABRT, SIGFPE,
+#ifndef _WIN32
+  SIGBUS,
+#endif
+};
+enum { kFatalSignalCount = sizeof(kFatalSignals) / sizeof(kFatalSignals[0]) };
 
 // The owner releases installed handlers and its saved stderr descriptor. The signal
 // handler uses only its arguments and stderr, with no mutable globals or unsafe stdio.
@@ -13,17 +21,11 @@ struct Diagnostics {
   int stderr_copy;
   bool handlers_installed;
 #ifdef _WIN32
-  void (*previous[4])(int);
+  void (*previous[kFatalSignalCount])(int);
 #else
-  struct sigaction previous[5];
+  struct sigaction previous[kFatalSignalCount];
 #endif
 };
-static const int kFatalSignals[] = {SIGSEGV, SIGILL, SIGABRT, SIGFPE,
-#ifndef _WIN32
-  SIGBUS,
-#endif
-};
-enum { kFatalSignalCount = sizeof(kFatalSignals) / sizeof(kFatalSignals[0]) };
 
 #ifdef _WIN32
 static void ReportFatalSignal(int signal_number) {
@@ -50,7 +52,7 @@ static void ReportFatalSignal(int signal_number, siginfo_t *info, void *context)
   signal(signal_number, SIG_DFL);
   raise(signal_number);
 #else
-  // SA_RESETHAND restores the host crash reporter and its complete stack trace.
+  // Send the signal again after SA_RESETHAND resets its disposition.
   kill(getpid(), signal_number);
 #endif
 }
@@ -80,7 +82,10 @@ u32 OpenDiagnostics(Diagnostics **owned, const char *log_path, u32 flags) {
   if (flags & DIAGNOSTICS_LOG) {
     state->stderr_copy = RedirectErrorLog(log_path);
     if (state->stderr_copy >= 0) fprintf(stderr, "\nDiagnostics: %s\n", log_path);
-    else { flags &= ~DIAGNOSTICS_LOG; fprintf(stderr, "Could not open the diagnostic log.\n"); }
+    else {
+      flags &= ~DIAGNOSTICS_LOG;
+      fprintf(stderr, "Could not open the diagnostic log.\n");
+    }
   }
   if (flags & DIAGNOSTICS_CRASH) {
     int installed = 0;

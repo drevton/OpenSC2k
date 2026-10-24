@@ -5,6 +5,8 @@
 #include "ui/dialogs/file_dialog.h"
 #include "ui/startup/startup.h"
 
+typedef struct Canvas Canvas;
+typedef struct Window Window;
 typedef struct CityInterfaceState CityInterfaceState;
 
 // Scenario Dialog
@@ -32,8 +34,6 @@ enum {
 };
 CityScenarioSelectionDialog *ConstructCityScenarioSelectionDialog(CityScenarioSelectionDialog *dialog, u32 parent);
 void DestroyCityScenarioSelectionDialog(CityScenarioSelectionDialog *dialog);
-void CancelCityScenarioSelection(City *city, CityScenarioSelectionDialog *dialog);
-void AcceptCityScenarioSelection(City *city, CityScenarioSelectionDialog *dialog);
 int ShowCityTextMessageDialog(City *city, const char *text, int option, u32 parent);
 
 // Scenario Window
@@ -41,7 +41,6 @@ bool OpenCityScenarioSelection(City *city, CityFileChoiceCallback *callback, voi
 void CompleteCityScenarioSelection(City *city);
 void ClearCityScenarioSelection(City *city);
 int RunCityScenarioSelectionDialog(City *city, CityScenarioSelectionDialog *dialog);
-int ChooseCityScenarioDialog(City *city, CityScenarioSelectionDialog *dialog);
 int ShowCityScenarioTextDialog(CityTextMessageDialog *dialog, const char *text);
 void CloseCityScenarioSelectionDialog(City *city, CityScenarioSelectionDialog *dialog, int result);
 bool EditCityScenarioSelectionControl(City *city, int token, int control, int value);

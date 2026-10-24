@@ -1,3 +1,5 @@
+#include "city/saveload/file.h"
+
 #include "city/saveload/city_file_internal.h"
 #include "base/byte_order.h"
 #include <stdio.h>
@@ -6,43 +8,50 @@
 
 // Container
 
+// Drop the optional editing index while preserving retained file bytes and path. Each slot owns its three payloads.
+static void ReleaseCityFileChunkIndex(CityFile *archive) {
+  for (u32 index = 0; index < archive->count; ++index) {
+    free(archive->chunk[index].decoded);
+    free(archive->chunk[index].original);
+    free(archive->chunk[index].encoded);
+  }
+  free(archive->chunk);
+  archive->chunk = NULL;
+  archive->count = archive->capacity = 0;
+  archive->metadata_complete = false;
+}
+
 // Release an in-memory stock archive and all owned chunk payloads. NULL is accepted; no pointers into the archive
 // remain valid after release.
-void CityFileFree(CityFile *city) {
-  if (city == NULL)
+void CityFileFree(CityFile *archive) {
+  if (archive == NULL)
     return;
-  free(city->source_path);
-  free(city->source);
-  for (u32 index = 0; index < city->count; ++index) {
-    free(city->chunk[index].decoded);
-    free(city->chunk[index].original);
-    free(city->chunk[index].encoded);
-  }
-  free(city->chunk);
-  free(city);
+  free(archive->source_path);
+  free(archive->source);
+  ReleaseCityFileChunkIndex(archive);
+  free(archive);
 }
 
 // Grow an archive's chunk array and initialize its next slot. Returns a borrowed slot or NULL on allocation failure;
 // growth can invalidate earlier pointers into that array.
-static CityFileChunk *AppendCityFileChunk(CityFile *city) {
-  if (city->count == city->capacity) {
-    u32 capacity = city->capacity != 0 ? city->capacity * 2 : 32u;
-    if (capacity <= city->capacity || (u64)capacity * sizeof(CityFileChunk) > SIZE_MAX)
+static CityFileChunk *AppendCityFileChunk(CityFile *archive) {
+  if (archive->count == archive->capacity) {
+    u32 capacity = archive->capacity != 0 ? archive->capacity * 2 : 32u;
+    if (capacity <= archive->capacity || (u64)capacity * sizeof(CityFileChunk) > SIZE_MAX)
       return NULL;
-    CityFileChunk *chunks = realloc(city->chunk, (size_t)capacity * sizeof(*chunks));
+    CityFileChunk *chunks = realloc(archive->chunk, (size_t)capacity * sizeof(*chunks));
     if (chunks == NULL)
       return NULL;
-    city->chunk = chunks;
-    city->capacity = capacity;
+    archive->chunk = chunks;
+    archive->capacity = capacity;
   }
-  CityFileChunk *chunk = &city->chunk[city->count++];
+  CityFileChunk *chunk = &archive->chunk[archive->count++];
   memset(chunk, 0, sizeof(*chunk));
   return chunk;
 }
 
 // Consume and close an opened stock file, retaining its original bytes and any parsed chunk metadata. Returns NULL on
-// resource/I/O failure; a returned archive may have metadata_complete false and must be checked before loading or
-// saving.
+// resource/I/O failure. The optional editing index may be incomplete; loading still uses the retained original bytes.
 static CityFile *CityFileReadOpened(const char *path, FILE *input) {
   if (fseek(input, 0, SEEK_END) != 0) {
     fclose(input);
@@ -60,13 +69,14 @@ static CityFile *CityFileReadOpened(const char *path, FILE *input) {
     return NULL;
   }
   fclose(input);
-  CityFile *city = calloc(1, sizeof(*city));
-  if (city == NULL)
+  CityFile *archive = calloc(1, sizeof(*archive));
+  if (archive == NULL)
     goto fail;
-  city->source_path = malloc(strlen(path) + 1);
-  if (city->source_path == NULL)
+  size_t path_size = strlen(path) + 1;
+  archive->source_path = malloc(path_size);
+  if (archive->source_path == NULL)
     goto fail;
-  memcpy(city->source_path, path, strlen(path) + 1);
+  memcpy(archive->source_path, path, path_size);
   if (length < 12 || memcmp(source, "FORM", 4) != 0 || ReadBE32(source + 4) != (u32)length - 8 ||
       memcmp(source + 8, "SCDH", 4) != 0)
     goto metadata_incomplete;
@@ -80,7 +90,7 @@ static CityFile *CityFileReadOpened(const char *path, FILE *input) {
     if (encoded_size > (u32)length - position)
       goto metadata_incomplete;
     // Scenario files legitimately repeat TEXT chunks; preserve file order.
-    CityFileChunk *chunk = AppendCityFileChunk(city);
+    CityFileChunk *chunk = AppendCityFileChunk(archive);
     if (chunk == NULL)
       goto fail;
     memcpy(chunk->tag, header, 4);
@@ -105,31 +115,24 @@ static CityFile *CityFileReadOpened(const char *path, FILE *input) {
     memcpy(chunk->original, chunk->decoded, chunk->size);
     position += encoded_size;
   }
-  city->metadata_complete = 1;
-  city->source = source;
-  city->source_size = (u32)length;
-  return city;
+  archive->metadata_complete = true;
+  archive->source = source;
+  archive->source_size = (u32)length;
+  return archive;
 metadata_incomplete:
   // Loading uses the retained bytes, not this optional round-trip index.
-  for (u32 index = 0; index < city->count; ++index) {
-    free(city->chunk[index].decoded);
-    free(city->chunk[index].original);
-    free(city->chunk[index].encoded);
-  }
-  free(city->chunk);
-  city->chunk = NULL;
-  city->count = city->capacity = 0;
-  city->source = source;
-  city->source_size = (u32)length;
-  return city;
+  ReleaseCityFileChunkIndex(archive);
+  archive->source = source;
+  archive->source_size = (u32)length;
+  return archive;
 fail:
   free(source);
-  CityFileFree(city);
+  CityFileFree(archive);
   return NULL;
 }
 
 // Open a host path and return an owned archive with original bytes and available chunk metadata. NULL reports
-// open/resource/I/O failure; callers also inspect metadata_complete before using parsed contents and release results
+// open/resource/I/O failure. Loading uses retained bytes even when the editing index is incomplete; release the result
 // with CityFileFree.
 CityFile *CityFileRead(const char *path) {
   FILE *input = fopen(path, "rb");
@@ -140,21 +143,21 @@ CityFile *CityFileRead(const char *path) {
 
 // Check whether an in-memory archive contains a four-byte chunk tag. Inputs must be valid; the query neither decodes
 // nor mutates its payloads.
-bool CityFileHasChunk(const CityFile *city, const char tag[4]) {
-  for (u32 index = 0; index < city->count; ++index)
-    if (memcmp(city->chunk[index].tag, tag, 4) == 0)
+bool CityFileHasChunk(const CityFile *archive, const char tag[4]) {
+  for (u32 index = 0; index < archive->count; ++index)
+    if (memcmp(archive->chunk[index].tag, tag, 4) == 0)
       return true;
   return false;
 }
 
 // Serialize an in-memory stock archive into an owned byte buffer and report its length. Returns NULL on failure;
 // caller frees a successful result and archive ownership remains unchanged.
-u8 *BuildCityFileBytes(const CityFile *city, u32 *size) {
-  if (city == NULL)
+u8 *BuildCityFileBytes(const CityFile *archive, u32 *size) {
+  if (archive == NULL)
     return NULL;
-  const u8 **data = calloc(city->count != 0 ? city->count : 1u, sizeof(*data));
-  u8 **generated = calloc(city->count != 0 ? city->count : 1u, sizeof(*generated));
-  u32 *length = calloc(city->count != 0 ? city->count : 1u, sizeof(*length));
+  const u8 **data = calloc(archive->count != 0 ? archive->count : 1u, sizeof(*data));
+  u8 **generated = calloc(archive->count != 0 ? archive->count : 1u, sizeof(*generated));
+  u32 *length = calloc(archive->count != 0 ? archive->count : 1u, sizeof(*length));
   if (data == NULL || generated == NULL || length == NULL) {
     free(data);
     free(generated);
@@ -163,8 +166,8 @@ u8 *BuildCityFileBytes(const CityFile *city, u32 *size) {
   }
   u64 body_size = 4;
   u8 *result = NULL;
-  for (u32 index = 0; index < city->count; ++index) {
-    const CityFileChunk *chunk = &city->chunk[index];
+  for (u32 index = 0; index < archive->count; ++index) {
+    const CityFileChunk *chunk = &archive->chunk[index];
     if (chunk->encoded != NULL &&
         (chunk->size == 0 || memcmp(chunk->decoded, chunk->original, chunk->size) == 0)) {
       data[index] = chunk->encoded;
@@ -190,15 +193,15 @@ u8 *BuildCityFileBytes(const CityFile *city, u32 *size) {
   WriteBE32(result + 4, (u32)body_size);
   memcpy(result + 8, "SCDH", 4);
   u32 position = 12;
-  for (u32 index = 0; index < city->count; ++index) {
-    memcpy(result + position, city->chunk[index].tag, 4);
+  for (u32 index = 0; index < archive->count; ++index) {
+    memcpy(result + position, archive->chunk[index].tag, 4);
     WriteBE32(result + position + 4, length[index]);
     memcpy(result + position + 8, data[index], length[index]);
     position += 8 + length[index];
   }
   *size = (u32)body_size + 8;
 finish:
-  for (u32 index = 0; index < city->count; ++index)
+  for (u32 index = 0; index < archive->count; ++index)
     free(generated[index]);
   free(data);
   free(generated);
@@ -208,16 +211,16 @@ finish:
 
 // Serialize an in-memory stock archive to the supplied host path. Returns false on serialization or I/O failure;
 // archive storage remains caller-owned and output may be partial.
-bool CityFileWrite(const CityFile *city, const char *path) {
-  if (city == NULL) return false;
-  u32 size = city->source_size;
-  u8 *generated = city->metadata_complete ? BuildCityFileBytes(city, &size) : NULL;
-  const u8 *bytes = city->metadata_complete ? generated : city->source;
+bool CityFileWrite(const CityFile *archive, const char *path) {
+  if (archive == NULL) return false;
+  u32 size = archive->source_size;
+  u8 *generated = archive->metadata_complete ? BuildCityFileBytes(archive, &size) : NULL;
+  const u8 *bytes = archive->metadata_complete ? generated : archive->source;
   if (bytes == NULL) return false;
   FILE *output = fopen(path, "wb");
   if (output == NULL) { free(generated); return false; }
-  i32 success = fwrite(bytes, 1, size, output) == size;
-  if (fclose(output) != 0) success = 0;
+  bool success = fwrite(bytes, 1, size, output) == size;
+  if (fclose(output) != 0) success = false;
   free(generated);
   return success;
 }

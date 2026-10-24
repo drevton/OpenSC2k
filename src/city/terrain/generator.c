@@ -1,4 +1,4 @@
-#include "city/maps/tile_storage.h"
+#include "city/maps/kinds.h"
 #include <limits.h>
 
 #include "city/maps/map_types.h"
@@ -521,7 +521,6 @@ enum {
 static const int kStreamDx[4] = {-1, 0, 1, 0}, kStreamDy[4] = {0, 1, 0, -1};
 static const u8 kStreamDownhillSlopes[] = {4, 1, 2, 3};
 static const i8 kStreamDownhillDirections[] = {-1, 1, 2, 3, 0};
-static const u8 kRiverRaisedCorners[] = {0, 9, 3, 6, 12};
 
 // Return the adjacent column-major cell in the selected cardinal direction within the search rectangle. Index and
 // direction must be valid; returns -1 when the neighbor leaves the admitted search bounds.
@@ -930,8 +929,8 @@ static int GeneratedWaterEdgeLimit(int direction, int shape, int other, int adja
   int limit = 32;
   for (int corner = 0; corner < 2; ++corner) {
     int own_corner = (direction + corner) & 3, far_corner = (direction + 3 - corner) & 3;
-    bool own_drop = shape && !(kRiverRaisedCorners[shape] & (1 << own_corner));
-    bool far_drop = other && !(kRiverRaisedCorners[other] & (1 << far_corner));
+    bool own_drop = shape && !(kTerrainRaisedCorners[shape] & (1 << own_corner));
+    bool far_drop = other && !(kTerrainRaisedCorners[other] & (1 << far_corner));
     limit = IntMin(limit, adjacent - far_drop + own_drop);
   }
   return limit;
@@ -1025,7 +1024,7 @@ static void ContainGeneratedFreshwater(TerrainWork *work) {
       int next = nx * work->height + ny;
       if ((work->flags[next] & kWater) || work->heights[next] >= water) continue;
       if (shape == -2) shape = CachedGeneratedRiverSlope(work, at);
-      if (GeneratedBankWaterLimit(work, next, d, shape > 0 ? kRiverRaisedCorners[shape] : 15) < water) {
+      if (GeneratedBankWaterLimit(work, next, d, shape > 0 ? kTerrainRaisedCorners[shape] : 15) < water) {
         exposed = true;
         break;
       }
@@ -1055,7 +1054,7 @@ static void ContainGeneratedFreshwater(TerrainWork *work) {
         if (!(work->flags[next] & kWater)) {
           if (work->heights[next] >= water) continue;
           target = IntMin(target,
-              GeneratedBankWaterLimit(work, next, d, shape > 0 ? kRiverRaisedCorners[shape] : 15));
+              GeneratedBankWaterLimit(work, next, d, shape > 0 ? kTerrainRaisedCorners[shape] : 15));
           continue;
         }
         int adjacent = ReadGeneratedWaterHeight(work, next);

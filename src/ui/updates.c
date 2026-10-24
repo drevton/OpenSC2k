@@ -1,6 +1,7 @@
 #include "ui/updates.h"
 
 #include "city/state.h"
+#include "drawing/bitmaps.h"
 #include "game/audio.h"
 #include "game/state.h"
 #include "ui/charts/charts.h"
@@ -10,9 +11,23 @@
 #include "ui/music/jukebox.h"
 #include "ui/news/newspaper.h"
 #include "ui/state.h"
+#include "ui/text/status.h"
 #include "ui/text/text.h"
 #include "ui/windows/tooltips.h"
 #include "ui/windows/windows.h"
+
+// A successful framebuffer resize requires repainting the whole current UI canvas.
+void InvalidateCityDesktop(CityInterfaceState *ui) {
+  CityCanvasDesktop *desktop = &ui->desktop;
+  Sc2kDirtyMarkRect(&desktop->dirty, (CityRect){0, 0, desktop->canvas_width, desktop->canvas_height});
+}
+
+void InvalidateCityMapSpritePreviews(CityInterfaceState *ui) {
+  if (ui->tree_picker.drawing) InvalidateCityWindowBitmaps(&ui->tree_picker.drawing->base);
+  for (int i = 0; i < CITY_STARTUP_WINDOW_LIMIT; ++i)
+    if (ui->startup_windows[i].layout.drawing)
+      InvalidateCityWindowBitmaps(&ui->startup_windows[i].layout.drawing->base);
+}
 
 void InvalidateCityInformation(Game *game, u32 categories) {
   if (game && game->ui) game->ui->desktop.information_updates |= categories;

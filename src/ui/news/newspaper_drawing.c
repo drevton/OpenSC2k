@@ -6,30 +6,26 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "assets/catalog.h"
-#include "assets/resources.h"
-#include "assets/state.h"
-#include "city/events/news.h"
-#include "city/state.h"
 #include "drawing/bitmaps.h"
 #include "drawing/newspaper.h"
 #include "drawing/raster/canvas_primitives.h"
 #include "drawing/raster/canvas_raster_internal.h"
 #include "drawing/state.h"
-#include "game/errors.h"
+#include "game/state.h"
 #include "ui/input.h"
-#include "ui/news/newspaper_text.h"
+#include "ui/news/newspaper_capture.h"
+#include "ui/news/newspaper_state.h"
 #include "ui/sdl.h"
 #include "ui/state.h"
 #include "ui/windows/state.h"
 #include "ui/windows/controls.h"
 #include "ui/windows/windows.h"
 
-// Newspaper page capture, layout, animation and software painting.
+// Newspaper publication layout, animation, software painting and window input.
 
-enum { kNewspaperOpeningFrames = 45, kNewspaperOpeningRate = 60, kNewspaperColorStartYear = 1990 };
+enum { kNewspaperOpeningRate = 60 };
 
-void Sc2kCanvasTrimNewspaperHeadline(char *text, i32 width, i32 font_size, i32 page_scale) {
+static void TrimCanvasNewspaperHeadline(char *text, i32 width, i32 font_size, i32 page_scale) {
   i32 scale = font_size * page_scale / 8000;
   scale = IntClamp(scale, 1, 3);
   TrimNewspaperHeadlineToWidth(text, width, &scale);
@@ -119,7 +115,7 @@ static void CanvasDrawNewspaperPage(Canvas *canvas, const Window *window) {
     char headline[2048];
     if (index < 5 && text != NULL) {
       snprintf(headline, sizeof(headline), "%s", text);
-      Sc2kCanvasTrimNewspaperHeadline(headline, cell.right - cell.left, panel->font_size, scale);
+      TrimCanvasNewspaperHeadline(headline, cell.right - cell.left, panel->font_size, scale);
       text = headline;
     }
     CanvasNewspaperText(canvas, cell, text, panel->font_size, scale, 0);
@@ -129,8 +125,7 @@ static void CanvasDrawNewspaperPage(Canvas *canvas, const Window *window) {
   CanvasTextAt(canvas, bounds.right - 43, bounds.bottom - 20, "CLOSE", canvas_text);
 }
 
-void Sc2kCanvasDrawNewspaper(Canvas *canvas, CityRect bounds,
-    const char *headline, const char *article) {
+static void CanvasDrawNewspaperFallback(Canvas *canvas, CityRect bounds, const char *article) {
   CanvasPanelFrame(canvas, bounds, "City Newspaper");
   CanvasBeveledBox(canvas, bounds.left + 9, bounds.top + 27, bounds.right - 9,
       bounds.bottom - 28, canvas_light, 0);
@@ -141,130 +136,6 @@ void Sc2kCanvasDrawNewspaper(Canvas *canvas, CityRect bounds,
   CanvasTextAt(canvas, bounds.right - 43, bounds.bottom - 20, "CLOSE", canvas_text);
 }
 
-i32 Sc2kCanvasNewspaperLayoutStyle(City *city, int edition_index) {
-  return city->newspaper_editions.edition[edition_index].layout_style;
-}
-
-void Sc2kCanvasNewspaperPageLayout(const Drawing *drawing, CityCanvasNewspaperPage *page, i32 layout_style,
-    const char *const *text) {
-  static const u8 layout_panel_index[7] = {4, 7, 8, 9, 10, 6, 5};
-  const CityNewspaperLayout *layout = &drawing->newspaper.layouts.style[layout_style];
-  const CityNewspaperFonts *fonts = &drawing->newspaper.fonts.style[layout_style];
-  page->picture_bounds = layout->panel[3];
-  page->masthead_bounds = layout->panel[0];
-  page->picture_visible = fonts->size[3] <= 0;
-  page->picture = NULL;
-  page->filler = NULL;
-  page->filler_count = 0;
-  page->text_runs = NULL;
-  page->text_run_count = 0;
-  for (i32 index = 0; index < 7; ++index) {
-    int panel_index = layout_panel_index[index];
-    page->panel[index].bounds = layout->panel[panel_index];
-    page->panel[index].font_size = fonts->size[panel_index];
-    page->panel[index].text = text[index];
-  }
-}
-
-// Newspaper Capture
-// Host capture of one authoritative newspaper paint; no cloned city or guessed bitmap selection.
-
-void NativeReleaseNewspaperPage(NativeNewspaperDialog *dialog) {
-  FreeRunSprite(dialog->picture);
-  dialog->picture = NULL;
-  dialog->page.picture = NULL;
-}
-
-// Keep full text outside City. Re-expansion uses only scalar preview state and
-// restores Drawing's shared choices; clicking a story never advances simulation RNG.
-static void CaptureReadableNewspaper(City *city, int edition_index, NativeNewspaperDialog *dialog) {
-  City preview = *city;
-  Drawing *drawing = city->game->drawing;
-  CityNewspaperSharedChoices saved = drawing->newspaper.choices;
-  const CityNewspaperEdition *edition = &city->newspaper_editions.edition[edition_index];
-  static const u8 kReportTypes[] = {CITY_NEWS_FREDS_OPINION, CITY_NEWS_EDITOR_COMMENTARY,
-      CITY_NEWS_EDITOR_COMMENTARY, CITY_NEWS_OPINION_SURVEY, CITY_NEWS_OPINION_SURVEY, CITY_NEWS_ADVICE};
-  static const u8 kSlots[] = {0, 1, 2, 3, 4, 7, 8};
-  static const u8 kSeeds[] = {28, 49, 56, 63, 70, 42, 35};
-  preview.news_records.record[7].id = CITY_NEWS_WEATHER;
-  preview.news_records.record[7].event_data = city->weather.state;
-  preview.news_records.record[8].id = kReportTypes[edition->report_kind];
-  preview.news_records.record[8].event_data = city->newspaper.problems.category_order[0];
-  u32 seed = city->newspaper.random_base_seed + city->clock.tick / 25 + 500 * edition_index;
-  int next_ranked = 0;
-  for (int i = 0; i < 7; ++i) {
-    bool selected = false;
-    int first = i < 5 ? next_ranked : kSlots[i], end = i < 5 ? 7 : first + 1;
-    for (int slot = first; slot < end && !selected; ++slot) {
-      if (i < 5) next_ranked = slot + 1;
-      preview.random.crt = seed + kSeeds[i];
-      ComposeCityNewspaperArticle(&preview, &city->game->resources->newspaper, slot, dialog->articles[i].headline);
-      preview.random.crt = seed + kSeeds[i];
-      ComposeCityNewspaperArticleBody(&preview, &city->game->resources->newspaper, slot, dialog->articles[i].body);
-      selected = true;
-      // Different ranked topics can resolve to the same authored story. Compare the rendered text too.
-      for (int previous = 0; previous < i; ++previous)
-        if ((dialog->articles[i].headline[0] &&
-                !strcmp(dialog->articles[i].headline, dialog->articles[previous].headline)) ||
-            (dialog->articles[i].body[0] &&
-                !strcmp(dialog->articles[i].body, dialog->articles[previous].body))) selected = false;
-    }
-    if (!selected) dialog->articles[i].headline[0] = dialog->articles[i].body[0] = 0;
-  }
-  CopyText(dialog->articles[5].heading, sizeof(dialog->articles[5].heading),
-      kCityNewspaperWeatherHeadings[edition->subtitle_kind]);
-  CopyText(dialog->articles[6].heading, sizeof(dialog->articles[6].heading),
-      kCityNewspaperEditorialHeadings[edition->report_kind]);
-  drawing->newspaper.choices = saved;
-  dialog->reading = dialog->hovered = -1;
-  dialog->opening_frame = kNewspaperOpeningFrames;
-}
-
-bool NativeCaptureNewspaper(City *city, CityNewspaperDialog *paint, NativeNewspaperDialog *dialog) {
-  Drawing *drawing = city->game->drawing;
-  NativeReleaseNewspaperPage(dialog);
-  const char *text[7] = {0};
-  Sc2kCanvasNewspaperPageLayout(drawing, &dialog->page,
-      Sc2kCanvasNewspaperLayoutStyle(city, paint->edition_index), text);
-  dialog->page.filler = dialog->filler;
-  dialog->page.text_runs = dialog->text_runs;
-  PaintCityNewspaperDialog(city, dialog, paint);
-  if (GetGameError(city->game))
-    return false;
-  CaptureReadableNewspaper(city, paint->edition_index, dialog);
-  if (!paint->picture) return true;
-  // Preserve the issue's color choice without copying image pixels. Grayscale
-  // issues own only a palette and a reference to the immutable source rows.
-  bool monochrome = city->geography.start_year + city->clock.year < kNewspaperColorStartYear;
-  if (monochrome) {
-    SpritePalette *palette = calloc(1, sizeof(*palette));
-    if (!palette) { SetGameError(city->game, SC2K_ERROR_HOST_ALLOCATION_FAILURE); return false; }
-    palette->references = 1;
-    for (int i = 0; i < 256; ++i) {
-      u32 rgb = paint->picture->palette->colors[i];
-      int gray = ((rgb >> 16 & 255) * 77 + (rgb >> 8 & 255) * 150 + (rgb & 255) * 29) / 256;
-      palette->colors[i] = gray * 0x010101;
-    }
-    dialog->picture = ReferenceRunSprite(paint->picture, palette, false);
-    FreeSpritePalette(palette);
-    if (!dialog->picture) { SetGameError(city->game, SC2K_ERROR_HOST_ALLOCATION_FAILURE); return false; }
-  } else dialog->picture = RetainRunSprite(paint->picture);
-  dialog->page.picture = dialog->picture;
-  return true;
-}
-
-// Manual previews use isolated scalar City state and borrow map layers for reads.
-bool ComposeCityNewspaperPreview(const City *city, int edition, NativeNewspaperDialog *dialog) {
-  City preview = *city;
-  Drawing *drawing = city->game->drawing;
-  CityNewspaperSharedChoices previous_choices = drawing->newspaper.choices;
-  CityNewspaperDialog paint = {0};
-  paint.edition_index = edition;
-  ClearGameError(city->game);
-  bool captured = NativeCaptureNewspaper(&preview, &paint, dialog);
-  drawing->newspaper.choices = previous_choices;
-  return captured;
-}
 // Native publication layout: retain text, wrap at the current window size, and
 // draw coverage glyphs into the same framebuffer as the other canvas windows.
 typedef struct {
@@ -426,7 +297,7 @@ static void DrawNewspaperArticleReader(Canvas *canvas, const Window *window) {
       "< Back to newspaper", -1, CITY_PUBLICATION_BODY, 11, kPublicationInk);
 }
 
-void DrawCityNewspaperWindow(Canvas *canvas, const Window *window) {
+static void DrawCityNewspaperWindow(Canvas *canvas, const Window *window) {
   const NativeNewspaperDialog *dialog = window->newspaper;
   if (!dialog || !dialog->articles[0].headline[0]) {
     CanvasDrawNewspaperPage(canvas, window);
@@ -496,13 +367,13 @@ void DrawCityNewspaperWindow(Canvas *canvas, const Window *window) {
 
 bool CityNewspaperOpening(const Window *window) {
   return window->newspaper && window->newspaper->articles[0].headline[0] &&
-      window->newspaper->opening_frame < kNewspaperOpeningFrames;
+      window->newspaper->opening_frame < CITY_NEWSPAPER_OPENING_FRAMES;
 }
 
 // A short spin followed by two settling steps. Only host presentation time advances it.
 static void NewspaperOpeningTransform(const Window *window, double *scale, double *angle) {
   static const double kKeys[][3] = {{0, 0.03, -720}, {0.76, 1.04, 8}, {0.9, 0.98, -3}, {1, 1, 0}};
-  double progress = (double)window->newspaper->opening_frame / kNewspaperOpeningFrames;
+  double progress = (double)window->newspaper->opening_frame / CITY_NEWSPAPER_OPENING_FRAMES;
   int step = progress <= kKeys[1][0] ? 0 : progress <= kKeys[2][0] ? 1 : 2;
   double t = (progress - kKeys[step][0]) / (kKeys[step + 1][0] - kKeys[step][0]);
   double rest = 1 - t, eased = 1 - rest * rest * rest;
@@ -542,8 +413,8 @@ bool UpdateCityNewspaperOpening(Game *game, double now) {
     if (!CityNewspaperOpening(window)) continue;
     double elapsed = now - window->newspaper->opening_started;
     double frames = elapsed * kNewspaperOpeningRate;
-    int frame = window->newspaper->opening_skipped || frames >= kNewspaperOpeningFrames ?
-        kNewspaperOpeningFrames : IntMax(0, (int)frames);
+    int frame = window->newspaper->opening_skipped || frames >= CITY_NEWSPAPER_OPENING_FRAMES ?
+        CITY_NEWSPAPER_OPENING_FRAMES : IntMax(0, (int)frames);
     if (frame != window->newspaper->opening_frame) {
       SetNewspaperOpeningFrame(game, window, frame);
       dirty = true;
@@ -558,7 +429,7 @@ bool UpdateCityNewspaperOpening(Game *game, double now) {
   return dirty;
 }
 
-bool DrawCityNewspaperOpening(Drawing *drawing, Canvas *canvas, const Window *window) {
+static bool DrawCityNewspaperOpening(Drawing *drawing, Canvas *canvas, const Window *window) {
   if (!CityNewspaperOpening(window)) return false;
   CanvasRaster raster = CanvasRasterView(canvas);
   CityRect b = window->bounds;
@@ -626,7 +497,7 @@ bool NewspaperWindowProcedure(Game *game, const Window *window, const WindowEven
       if (window->newspaper) DrawCityNewspaperWindow(canvas, window);
       else if (window->newspaper_page.text_runs || window->newspaper_page.panel[0].text)
         CanvasDrawNewspaperPage(canvas, window);
-      else Sc2kCanvasDrawNewspaper(canvas, window->bounds, window->title, window->message);
+      else CanvasDrawNewspaperFallback(canvas, window->bounds, window->message);
     }
     return true;
   }
@@ -644,7 +515,7 @@ bool NewspaperWindowProcedure(Game *game, const Window *window, const WindowEven
     int x = event->x, y = event->y;
     if (desktop->dragging != CITY_CANVAS_DRAG_NONE) return false;
     if (CityNewspaperOpening(window)) {
-      if (pressed) SetNewspaperOpeningFrame(game, window, kNewspaperOpeningFrames);
+      if (pressed) SetNewspaperOpeningFrame(game, window, CITY_NEWSPAPER_OPENING_FRAMES);
       return pressed;
     }
     if (dialog->reading >= 0) {
@@ -685,7 +556,7 @@ bool NewspaperWindowProcedure(Game *game, const Window *window, const WindowEven
     CityHotkey key = input->key;
     if (CityNewspaperOpening(window)) {
       if (key != CITY_KEY_ESCAPE && key != CITY_KEY_RETURN && key != CITY_KEY_SPACE) return false;
-      SetNewspaperOpeningFrame(game, window, kNewspaperOpeningFrames);
+      SetNewspaperOpeningFrame(game, window, CITY_NEWSPAPER_OPENING_FRAMES);
       return true;
     }
     if (dialog->reading < 0) return false;

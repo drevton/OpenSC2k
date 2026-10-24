@@ -2,6 +2,7 @@
 #define SC2K_UI_WINDOW_INTERNAL_H
 
 #include "ui/windows/windows.h"
+#include "ui/windows/state.h"
 
 // Class policy and registered procedures belong to window implementations.
 enum {
@@ -12,6 +13,7 @@ typedef struct {
   WindowProcedure *procedure;
   u32 update_categories;
   u8 flags;
+  u8 picture_images; // Default prepared-image capacity; zero still permits a single explicit portrait.
   u16 minimum_width, minimum_height, default_width, default_height;
 } CityWindowTraits;
 const CityWindowTraits *ReadCityWindowTraits(WindowKind kind);
@@ -46,8 +48,7 @@ WindowProcedure ConsoleWindowProcedure;
 WindowProcedure LeaveWindowProcedure;
 WindowProcedure ToolStatusWindowProcedure;
 
-// Internal input housekeeping shared by dispatch and window lifetime.
-void HandleCityButtonRepeatInput(Game *game, const CanvasSDLEvent *input);
+// Cancel held-button repeat when capture or the owning window ends.
 void CancelCityButtonRepeat(Game *game);
 
 // Focus a visible window and preserve the drag index when reordering the stack.

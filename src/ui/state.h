@@ -20,7 +20,7 @@
 #include "ui/music/jukebox.h"
 #include "ui/signs.h"
 #include "ui/startup/startup.h"
-#include "ui/text/text.h"
+#include "ui/text/status.h"
 #include "ui/tools/types.h"
 #include "ui/windows/state.h"
 
@@ -101,7 +101,7 @@ typedef struct CityInterfaceState {
     u8 history_count, history_cursor;
     bool output_dragging;
     u8 binding_count;
-    struct { CityHotkey key, action; } bindings[64];
+    CityKeyBinding bindings[CITY_KEY_BINDING_CAPACITY];
   } console;
   u32 viewport_pressed_window, viewport_release_time, map_view_focus_window;
   bool viewport_press_released;

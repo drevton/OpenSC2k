@@ -22,6 +22,12 @@ enum {
   JUKEBOX_PLAY_TRACK = 900
 };
 
+// Identifies the volume slider currently holding pointer capture.
+typedef enum CityCanvasVolumeSlider {
+  CITY_CANVAS_VOLUME_SLIDER_NONE = 0,
+  CITY_CANVAS_VOLUME_SLIDER_MUSIC = 1, CITY_CANVAS_VOLUME_SLIDER_EFFECTS = 2,
+} CityCanvasVolumeSlider;
+
 typedef struct CityMusicPress {
   u32 window_id, release_time;
   i32 x, y, start_x, start_y;

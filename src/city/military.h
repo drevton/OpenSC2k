@@ -15,7 +15,7 @@ typedef enum CityMilitaryBaseKind {
   CITY_MILITARY_BASE_COUNT = 6
 } CityMilitaryBaseKind;
 
-// Military-zone counters have their own sixteen-entry ordering (ReplaceCityTileAndStatistics).
+// Military-zone counters have their own sixteen-entry ordering.
 // OTHER is incremented/decremented for all unlisted surface IDs.
 typedef enum CitySpecialTileStatistic {
   CITY_SPECIAL_TILE_OTHER = 0, CITY_SPECIAL_TILE_RUNWAY_FIRST = 1,
@@ -32,6 +32,10 @@ typedef enum CitySpecialTileStatistic {
 typedef struct {
   u32 count[CITY_SPECIAL_TILE_COUNT];
 } CitySpecialTileCounts;
+
+// Update counter buckets for an existing military-zone occupant's replacement, removing previous before adding kind.
+// This changes only counts. The caller owns kind/zone writes, metadata conversion and invalidation.
+void UpdateCityMilitaryTileCounts(City *city, u8 previous, u8 kind);
 
 // Stage the legacy reward offer's answer (UNANSWERED/YES/NO) without opening or dismissing presentation.
 // Reserved fields must be zero; TEST leaves the pending choice unchanged. The command ignores map location.

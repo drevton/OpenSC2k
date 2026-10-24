@@ -1,32 +1,11 @@
 #include "city/saveload/services.h"
+#include "city/saveload/runtime.h"
 #include "game/state.h"
 #include "city/presentation.h"
-#include <strings.h>
 
 #include "city/saveload/sc2k.h"
 #include "city/saveload/city_file_internal.h"
-#include <string.h>
 #include "city/state.h"
-#include "game/errors.h"
-
-// Append the requested extension without rewriting the host filename. Path must be initialized and extension
-// terminated; may grow path-owned storage and returns whether the normalized path is ready.
-bool EnsureCitySaveExtension(Game *game, CityPath *path, const char *extension) {
-  size_t suffix_length = strlen(extension) + 1;
-  if ((suffix_length != 4 && suffix_length != 5) || path->length > INT32_MAX - 6) {
-    SetGameError(game, SC2K_ERROR_GUEST_BUFFER_TOO_SMALL);
-    return false;
-  }
-  char suffix[6]; snprintf(suffix, sizeof(suffix), ".%s", extension);
-  int length = path->length;
-  char *text = ReserveCityPath(game, path, length + suffix_length);
-  if (text == NULL) return false;
-  if (length < (int)suffix_length || strcasecmp(text + length - suffix_length, suffix) != 0) {
-    memcpy(text + length, suffix, suffix_length + 1);
-  }
-  path->length = (int)strlen(text);
-  return true;
-}
 
 // File-dialog cancellation occurs outside this function. Requires an active file operation and initialized path; false
 // preserves the failure/partial output and does not commit a successful host-path transition.

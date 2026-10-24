@@ -1,8 +1,8 @@
+#include "drawing/maps/map_terrain.h"
 #include "city/maps/labels.h"
 #include <stdio.h>
 
 #include "assets/state.h"
-#include "city/engine/random.h"
 #include "city/events/events.h"
 #include "city/growth/growth.h"
 #include "city/maps/buildings.h"
@@ -12,11 +12,12 @@
 #include "drawing/fonts/fonts.h"
 #include "drawing/maps/map_animation.h"
 #include "drawing/maps/map_events.h"
+#include "drawing/maps/map_depth.h"
+#include "drawing/maps/map_labels.h"
 #include "drawing/maps/map_render.h"
 #include "drawing/maps/map_view.h"
 #include "drawing/maps/tables.h"
 #include "drawing/state.h"
-#include "game/errors.h"
 #include "game/state.h"
 
 static bool Intersects(CityRect a, CityRect b) {
@@ -34,10 +35,10 @@ static int CeilDivide(int value, int divisor) {
 // Sprite extents depend on assets/graphics configuration, never map edits or
 // camera position. Bounds-only callers must not prepare or sort moving events.
 static void PrepareCityMapTileBounds(const City *city, int zoom, bool labels) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   MapTileTraversal *traversal = &drawing->tile_traversal;
   const MapSpriteMetrics *catalog = drawing->map_state.sprite_metrics;
-  bool native = (city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)) != 0;
+  bool native = (city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) != 0;
   u32 revision = city->game->resources->sprite_revision;
   if (traversal->extent_metrics != catalog || traversal->extent_revision != revision ||
       traversal->extent_native != native) {
@@ -77,7 +78,7 @@ static void PrepareCityMapTileBounds(const City *city, int zoom, bool labels) {
     traversal->width = IntMax(traversal->width, (width + 1) / 2 + 4 * scale + 2);
     traversal->height = IntMax(traversal->height, height + 2 * scale + 2);
   } else if (labels && drawing->map_state.label_display) {
-    const CityOverlayGlyph *font = CityOverlayFontGlyphs(&drawing->overlay_font, zoom);
+    const CityOverlayGlyph *font = CityOverlayFontGlyphs(&city->game->resources->overlay_font, zoom);
     int advance = 0;
     for (int glyph = 0; glyph < CITY_OVERLAY_GLYPH_COUNT; ++glyph)
       advance = IntMax(advance, font[glyph].advance);
@@ -98,7 +99,7 @@ static void PrepareCityMapTileBounds(const City *city, int zoom, bool labels) {
 
 // Retain sprite bounds and event anchors, without a map-wide index or rebuild after tile edits.
 static void PrepareMapTileTraversal(City *city, const CityMapViewConfig *view, int zoom) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   MapTileTraversal *traversal = &drawing->tile_traversal;
   // Object collection also paints ground and captures signs in this traversal.
   bool labels = drawing->animation.mode != ANIMATION_CAPTURE;
@@ -134,7 +135,7 @@ static void PrepareMapTileTraversal(City *city, const CityMapViewConfig *view, i
 }
 
 CityRect VisibleCityMapTileBounds(const City *city, int origin_x, int origin_y, int zoom, int rotation, CityRect area) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   PrepareCityMapTileBounds(city, zoom, true);
   const MapTileTraversal *traversal = &drawing->tile_traversal;
   int scale = 1 << zoom;
@@ -173,7 +174,7 @@ static CityRect TilePaintBounds(City *city, Drawing *drawing, int zoom, TileInde
     extra = CapturedCityMapAnimationBounds(drawing, cell);
   } else if (IsCityEventOverlay(overlay)) {
     for (int slot = CityEventOverlaySlot(overlay); slot >= 0; slot = NextCityMapEventOnTile(city, slot)) {
-      CityRect event = CityMapEventSpriteBounds(city, zoom, x, y, slot);
+      CityRect event = CityMapEventSpriteBounds(city, cell, zoom, slot);
       if (event.left < event.right && event.top < event.bottom)
         extra = extra.left < extra.right && extra.top < extra.bottom ? UnionCityRects(extra, event) : event;
     }
@@ -193,8 +194,8 @@ static CityRect TilePaintBounds(City *city, Drawing *drawing, int zoom, TileInde
           city->geography.neighbor_names.name[(direction + city->geography.rotation) & 3]);
       text = border_name;
     }
-    CityRect sign_bounds = CitySignMapBounds(city, zoom, screen_x,
-        screen_y - elevation * CITY_MAP_HEIGHT_UNIT * scale, text);
+    CityRect sign_bounds = CitySignMapBounds(city, zoom,
+        (CityPoint){screen_x, screen_y - elevation * CITY_MAP_HEIGHT_UNIT * scale}, text);
     extra = extra.left < extra.right && extra.top < extra.bottom ? UnionCityRects(extra, sign_bounds) : sign_bounds;
     extra.left -= 4; extra.top -= 4; extra.right += 4; extra.bottom += 4;
   }
@@ -206,7 +207,7 @@ static CityRect TilePaintBounds(City *city, Drawing *drawing, int zoom, TileInde
 }
 
 void PaintVisibleCityMapTiles(City *city, const CityMapViewConfig *view, int zoom) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   bool capture = drawing->animation.mode == ANIMATION_CAPTURE;
   CityRect area = capture ? drawing->map_state.scan_clip : drawing->map_state.paint_rect;
   if (area.left >= area.right || area.top >= area.bottom) return;
@@ -253,7 +254,7 @@ void PaintVisibleCityMapTiles(City *city, const CityMapViewConfig *view, int zoo
       int screen_y = drawing->map_state.origin_y + current * 2 * scale;
       if (capture) {
         if (!IsCityMapOverlayAnimated(city, ReadOverlay(city, cell)) &&
-            (!(city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)) ||
+            (!(city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) ||
                 (CityBuildingSmokeIndex(ReadTile(city, cell)) < 0 &&
                     ReadTile(city, cell) != TK_WIND_POWER))) continue;
       } else if (!(screen_x >= area.left && screen_x < area.right &&
@@ -277,144 +278,4 @@ void PaintVisibleCityMapTiles(City *city, const CityMapViewConfig *view, int zoo
     }
     if (current == diagonal) ++diagonal;
   }
-}
-
-// Camera depth uses the footprint centre, with one elevation step contributing
-// a quarter tile. Sprite height never shifts a building towards the viewer.
-i32 CityMapObjectDepth(int x, int y, int height) {
-  return x + y + height / 4;
-}
-
-// Unique keys preserve submission order even though the radix partition itself is not stable.
-static inline u32 PreparedSpriteKey(const MapSpriteWork *work, u16 index) {
-  return (u32)work->sprites[index].depth << 16 | index;
-}
-
-// In-place MSD radix sorting touches at most four key bytes. Tiny buckets avoid
-// histogram setup; their insertion loop uses the same direct integer key.
-static void SortPreparedSpriteRange(MapSpriteWork *work, int first, int end, int shift) {
-  if (end - first <= 24) {
-    for (int i = first + 1; i < end; ++i) {
-      u16 index = work->order[i];
-      u32 key = PreparedSpriteKey(work, index);
-      int at = i;
-      while (at > first && PreparedSpriteKey(work, work->order[at - 1]) > key) {
-        work->order[at] = work->order[at - 1];
-        --at;
-      }
-      work->order[at] = index;
-    }
-    return;
-  }
-  u16 ends[256] = {0}, next[256];
-  for (int i = first; i < end; ++i) ++ends[(PreparedSpriteKey(work, work->order[i]) >> shift) & 255];
-  int total = first;
-  for (int bucket = 0; bucket < 256; ++bucket) {
-    next[bucket] = total;
-    total += ends[bucket];
-    ends[bucket] = total;
-  }
-  for (int bucket = 0; bucket < 256; ++bucket) {
-    while (next[bucket] < ends[bucket]) {
-      int at = next[bucket];
-      u16 index = work->order[at];
-      int destination = (PreparedSpriteKey(work, index) >> shift) & 255;
-      if (destination == bucket) ++next[bucket];
-      else {
-        int target = next[destination]++;
-        work->order[at] = work->order[target];
-        work->order[target] = index;
-      }
-    }
-  }
-  if (!shift) return;
-  int start = first;
-  for (int bucket = 0; bucket < 256; ++bucket) {
-    if (ends[bucket] - start > 1) SortPreparedSpriteRange(work, start, ends[bucket], shift - 8);
-    start = ends[bucket];
-  }
-}
-
-static void PaintGroundAndCollectDepthObjects(City *city, const CityMapViewConfig *view, int zoom) {
-  Drawing *drawing = city->game->drawing;
-  DrawingMapDepth *paint = &drawing->map_depth;
-  paint->phase = MAP_DEPTH_COLLECT;
-  paint->count = 0;
-  paint->overflow = false;
-  paint->preparing = true;
-  paint->clip = drawing->map_target.canvas.clip;
-  PaintVisibleCityMapTiles(city, view, zoom);
-  CollectCityRoadTraffic(city, zoom);
-  paint->preparing = false;
-}
-
-static void PaintDepthArea(City *city, const CityMapViewConfig *view, int zoom, CityRect area, CityRect clip);
-
-static bool SubdivideDepthArea(City *city, const CityMapViewConfig *view, int zoom, CityRect area, CityRect clip) {
-  Drawing *drawing = city->game->drawing;
-  int width = area.right - area.left, height = area.bottom - area.top;
-  bool horizontal = width >= height;
-  for (int attempt = 0; attempt < 2; ++attempt, horizontal = !horizontal) {
-    int length = horizontal ? width : height;
-    if (length <= 1) continue;
-    int middle = (horizontal ? area.left : area.top) + length / 2;
-    int boundary = (horizontal ? drawing->target_x : drawing->target_y) +
-        FloorDivide(middle * drawing->target_scale, 100);
-    int low = horizontal ? clip.left : clip.top, high = horizontal ? clip.right : clip.bottom;
-    if (boundary <= low || boundary >= high) continue;
-    CityRect first = area, second = area, first_clip = clip, second_clip = clip;
-    if (horizontal) {
-      first.right = second.left = middle;
-      first_clip.right = second_clip.left = boundary;
-    } else {
-      first.bottom = second.top = middle;
-      first_clip.bottom = second_clip.top = boundary;
-    }
-    PaintDepthArea(city, view, zoom, first, first_clip);
-    if (!city->game->execution_failed) PaintDepthArea(city, view, zoom, second, second_clip);
-    return true;
-  }
-  return false;
-}
-
-static void PaintDepthArea(City *city, const CityMapViewConfig *view, int zoom, CityRect area, CityRect clip) {
-  if (clip.left >= clip.right || clip.top >= clip.bottom) return;
-  Drawing *drawing = city->game->drawing;
-  DrawingMapDepth *paint = &drawing->map_depth;
-  // The queue holds map objects, so magnifying framebuffer pixels must not
-  // multiply its subdivision cost. Keep coordinate limits in physical pixels.
-  // Our zoom enum grows towards the nearest view; OpenTTD's grows towards the furthest.
-  i64 pixels = (i64)(area.right - area.left) * (area.bottom - area.top) * (1 << (2 - zoom));
-  if ((pixels > CITY_MAP_DEPTH_PIXEL_LIMIT || clip.right - clip.left > 16000 || clip.bottom - clip.top > 16000) &&
-      SubdivideDepthArea(city, view, zoom, area, clip)) return;
-  drawing->map_state.paint_rect = area;
-  drawing->map_target.canvas.clip = clip;
-  SimulationRandomState random = city->random;
-  PaintGroundAndCollectDepthObjects(city, view, zoom);
-  if (paint->overflow) {
-    city->random = random;
-    if (!SubdivideDepthArea(city, view, zoom, area, clip)) {
-      SetGameError(city->game, SC2K_ERROR_MAP_SPRITE_CAPACITY);
-      city->game->execution_failed = true;
-    }
-    return;
-  }
-  if (drawing->frame_stats.calls.active) ++drawing->frame_stats.repaint_regions;
-  SortPreparedSpriteRange(&drawing->map_sprite_work, 0, paint->count, 24);
-  paint->phase = MAP_DEPTH_OBJECTS;
-  DrawPreparedCityMapSprites(drawing);
-}
-
-void DrawDepthSortedCityMap(City *city, const CityMapViewConfig *view, int zoom) {
-  Drawing *drawing = city->game->drawing;
-  DrawingMapDepth previous = drawing->map_depth;
-  CityRect area = drawing->map_state.paint_rect;
-  CityRect clip = drawing->map_target.canvas.clip;
-  drawing->map_depth = (DrawingMapDepth){.bridge_palettes = city->game->resources->bridge_palettes,
-      .underworld_palettes = city->game->resources->underworld_palettes,
-      .car_palettes = city->game->resources->road_vehicle_palettes};
-  PaintDepthArea(city, view, zoom, area, clip);
-  drawing->map_depth = previous;
-  drawing->map_state.paint_rect = area;
-  drawing->map_target.canvas.clip = clip;
 }

@@ -53,14 +53,8 @@ static const char *WindowTooltipAt(Game *game, const Window *window, int x, int 
       }
     }
     if (window->kind == CITY_CANVAS_SIGN_EDIT || window->kind == CITY_CANVAS_SIGN_LIST) {
-      switch (CitySignControlAt(window, x, y)) {
-      case CITY_SIGN_LOCATION: return "Center the main view on this sign.";
-      case CITY_SIGN_SHADE: return window->shaded ? "Expand this window." : "Shade this window to its title bar.";
-      case CITY_SIGN_DEFAULT_SIZE: return "Restore the default window size.";
-      case CITY_SIGN_STICKY: return window->sticky ?
-          "Unpin this window so Escape can close it." : "Pin this window to keep it open when pressing Escape.";
-      default: break;
-      }
+      const char *help = CitySignTooltipAt(game, window, x, y);
+      if (help) return help;
     }
     if (window->kind == CITY_CANVAS_JUKEBOX || window->kind == CITY_CANVAS_MUSIC_PROGRAMME) {
       switch (Sc2kCanvasJukeboxActionAt(game->ui, window, x, y)) {
@@ -156,7 +150,6 @@ static const char *WindowTooltipAt(Game *game, const Window *window, int x, int 
 static u32 ResolveCityTooltip(Game *game, char *text, size_t size) {
   CityCanvasDesktop *desktop = &game->ui->desktop;
   CityTooltip *tip = &desktop->tooltip;
-  int x, y;
   int scale = game->drawing->options.scale;
   int global_x = tip->pointer_x * 100 / scale, global_y = tip->pointer_y * 100 / scale;
   text[0] = 0;
@@ -168,8 +161,8 @@ static u32 ResolveCityTooltip(Game *game, char *text, size_t size) {
     const Window *window = &desktop->windows[i];
     if (!window->visible || !CanvasPointInRect(Sc2kCanvasDesktopPixelBounds(desktop, window->window_id),
         tip->pointer_x, tip->pointer_y)) continue;
-    Sc2kCanvasDesktopPixelPointer(desktop, window->window_id, tip->pointer_x, tip->pointer_y, &x, &y);
-    const char *help = WindowTooltipAt(game, window, x, y, text, size);
+    CityPoint point = CityWindowPointFromPixels(desktop, window->window_id, tip->pointer_x, tip->pointer_y);
+    const char *help = WindowTooltipAt(game, window, point.x, point.y, text, size);
     if (help && help != text) CopyText(text, size, help);
     return window->window_id;
   }

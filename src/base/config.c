@@ -19,7 +19,10 @@ struct ConfigLine {
 
 static char *CopyConfigSpan(const char *start, size_t length) {
   char *text = malloc(length + 1);
-  if (text) { memcpy(text, start, length); text[length] = 0; }
+  if (text) {
+    memcpy(text, start, length);
+    text[length] = 0;
+  }
   return text;
 }
 
@@ -101,9 +104,13 @@ static bool ParseConfigLine(ConfigLine *line) {
     }
     if (*text++ != '"') return false;
     *out = 0;
-  } else if (!strncmp(text, "true", 4)) { line->integer = 1; text += 4; }
-  else if (!strncmp(text, "false", 5)) { line->integer = 0; text += 5; }
-  else {
+  } else if (!strncmp(text, "true", 4)) {
+    line->integer = 1;
+    text += 4;
+  } else if (!strncmp(text, "false", 5)) {
+    line->integer = 0;
+    text += 5;
+  } else {
     const char *digits = text;
     if (*digits == '-' || *digits == '+') ++digits;
     if (*digits < '0' || *digits > '9') return false;
@@ -122,10 +129,30 @@ void FreeConfig(Config *config) {
   ConfigLine *line = config->first;
   while (line) {
     ConfigLine *next = line->next;
-    free(line->source); free(line->key); free(line->string); free(line->replacement); free(line);
+    free(line->source);
+    free(line->key);
+    free(line->string);
+    free(line->replacement);
+    free(line);
     line = next;
   }
   *config = (Config){0};
+}
+
+// Transfer source only after allocation succeeds. Keep a linked line even when parsing fails;
+// the caller releases the incomplete document with FreeConfig.
+static bool AppendConfigLine(Config *config, char **source) {
+  ConfigLine *line = calloc(1, sizeof(*line));
+  if (!line) return false;
+  line->source = *source;
+  *source = NULL;
+  if (config->last) config->last->next = line;
+  else config->first = line;
+  config->last = line;
+  if (!ParseConfigLine(line)) return false;
+  for (const ConfigLine *other = config->first; other != line; other = other->next)
+    if (line->key && other->key && !strcmp(line->key, other->key)) return false;
+  return true;
 }
 
 bool LoadConfig(Config *config, const char *path) {
@@ -137,39 +164,33 @@ bool LoadConfig(Config *config, const char *path) {
   int c;
   bool ok = true;
   while ((c = fgetc(file)) != EOF) {
-    if (!c || total++ == 1024 * 1024) { ok = false; break; }
+    if (!c || total++ == 1024 * 1024) {
+      ok = false;
+      break;
+    }
     if (length + 2 > capacity) {
       size_t size = capacity ? capacity * 2 : 256;
       char *allocation = realloc(source, size);
-      if (!allocation) { ok = false; break; }
-      source = allocation; capacity = size;
+      if (!allocation) {
+        ok = false;
+        break;
+      }
+      source = allocation;
+      capacity = size;
     }
     source[length++] = c;
     if (c != '\n') continue;
     source[length] = 0;
-    ConfigLine *line = calloc(1, sizeof(*line));
-    if (!line) { ok = false; break; }
-    line->source = source; source = NULL; length = capacity = 0;
-    if (next.last) next.last->next = line; else next.first = line;
-    next.last = line;
-    if (!ParseConfigLine(line)) { ok = false; break; }
-    for (ConfigLine *other = next.first; other != line; other = other->next)
-      if (line->key && other->key && !strcmp(line->key, other->key)) { ok = false; break; }
-    if (!ok) break;
+    if (!AppendConfigLine(&next, &source)) {
+      ok = false;
+      break;
+    }
+    length = capacity = 0;
     ++number;
   }
   if (ok && length) {
     source[length] = 0;
-    ConfigLine *line = calloc(1, sizeof(*line));
-    if (!line) ok = false;
-    else {
-      line->source = source; source = NULL;
-      if (next.last) next.last->next = line; else next.first = line;
-      next.last = line;
-      ok = ParseConfigLine(line);
-      for (ConfigLine *other = next.first; ok && other != line; other = other->next)
-        if (line->key && other->key && !strcmp(line->key, other->key)) ok = false;
-    }
+    ok = AppendConfigLine(&next, &source);
   }
   free(source);
   if (ferror(file)) ok = false;
@@ -188,21 +209,38 @@ static bool ReplaceConfigValue(Config *config, const char *key, char *encoded, c
   if (!encoded) return false;
   ConfigLine *line = FindConfigLine(config, key);
   if (line && line->is_string == (string != NULL) &&
-      (string ? !strcmp(line->string, string) : line->integer == integer)) { free(encoded); return true; }
+      (string ? !strcmp(line->string, string) : line->integer == integer)) {
+    free(encoded);
+    return true;
+  }
   char *copy = string ? strdup(string) : NULL;
-  if (string && !copy) { free(encoded); return false; }
+  if (string && !copy) {
+    free(encoded);
+    return false;
+  }
   if (!line) {
     line = calloc(1, sizeof(*line));
-    if (line) { line->key = strdup(key); line->source = strdup(""); }
+    if (line) {
+      line->key = strdup(key);
+      line->source = strdup("");
+    }
     if (!line || !line->key || !line->source) {
-      if (line) { free(line->key); free(line->source); free(line); }
-      free(copy); free(encoded); return false;
+      if (line) {
+        free(line->key);
+        free(line->source);
+        free(line);
+      }
+      free(copy);
+      free(encoded);
+      return false;
     }
     if (config->last) config->last->next = line; else config->first = line;
     config->last = line;
   }
-  free(line->replacement); line->replacement = encoded;
-  free(line->string); line->string = copy;
+  free(line->replacement);
+  line->replacement = encoded;
+  free(line->string);
+  line->string = copy;
   line->is_string = string != NULL;
   line->integer = integer;
   config->changed = true;
@@ -228,13 +266,19 @@ bool SetConfigString(Config *config, const char *key, const char *value) {
   char *out = text;
   *out++ = '"';
   for (const unsigned char *p = (const unsigned char *)value; *p; ++p) {
-    if (*p == '"' || *p == '\\') { *out++ = '\\'; *out++ = *p; }
-    else if (*p == '\n' || *p == '\r' || *p == '\t') {
-      *out++ = '\\'; *out++ = *p == '\n' ? 'n' : *p == '\r' ? 'r' : 't';
-    } else if (*p < 32 || *p == 127) { free(text); return false; }
-    else *out++ = *p;
+    if (*p == '"' || *p == '\\') {
+      *out++ = '\\';
+      *out++ = *p;
+    } else if (*p == '\n' || *p == '\r' || *p == '\t') {
+      *out++ = '\\';
+      *out++ = *p == '\n' ? 'n' : *p == '\r' ? 'r' : 't';
+    } else if (*p < 32 || *p == 127) {
+      free(text);
+      return false;
+    } else *out++ = *p;
   }
-  *out++ = '"'; *out = 0;
+  *out++ = '"';
+  *out = 0;
   return ReplaceConfigValue(config, key, text, value, 0);
 }
 

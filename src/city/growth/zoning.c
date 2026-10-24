@@ -33,6 +33,46 @@
 #include "city/tools/tools.h"
 #include "city/maps/map_types.h"
 
+static void GrowCityZonedTile(City *city, TileIndex tile, bool large_city_effect_enabled);
+static void PlaceGrowthTiles(City *city, TileIndex tile_index, int size, int growth_type);
+static void LargeCityTileEffect(City *city, TileIndex tile_index);
+
+// Growth selection tables
+
+enum { CITY_GROWTH_TRANSPORT_WEIGHT_COUNT = 515 };
+
+static const u8 kGrowthDivisorTable[21] = {
+  196, 12, 4, 4, 4, 8, 5, 5, 10, 4, 4, 4, 6, 2, 2, 2,
+  2, 2, 2, 2, 2
+};
+
+static const i8 kSpecialZoneCorridorYStep[4] = {
+  0, 1, 0, -1
+};
+
+static const i8 kSpecialZoneCorridorXStep[4] = {
+  1, 0, -1, 0
+};
+
+// The stock scan can select adjacent constant words for unusual zoned tiles.
+// Include every size admitted by the population/category lookups. Unselected
+// holes are zero; they are not snapshots of adjacent mutable UI state.
+static const u16 kTransportValueBySize[CITY_GROWTH_TRANSPORT_WEIGHT_COUNT] = {
+  [0] = 0,
+  [1] = 1,
+  [2] = 8,
+  [3] = 12,
+  [4] = 36,
+  [140] = 313,
+  [148] = 305,
+  [158] = 315,
+  [174] = 315,
+  [178] = 318,
+  [188] = 305,
+  [257] = 12849,
+  [514] = 3341,
+};
+
 // Scheduled growth and maintenance
 
 // Read the low 16 bits of an initialized sector's funding rate for maintenance compatibility. Sector must index the
@@ -174,16 +214,76 @@ void ScanCityTileBatch(City *city, int quarter_x, int quarter_y,
 // Scan the selected interleaved quarter of City tiles for growth and decline. Quarter offsets must be supported; this
 // executes simulation effects and cannot be substituted for a read-only map query.
 void ScanQuarterCityTiles(City *city, int quarter_x, int quarter_y) {
-  bool large_city_effect = ((city->fixes & (1 << CITY_FIX_RESTORED_CHEATS)) && city->cheats.church == 2) ||
+  bool large_city_effect = ((city->fixes & (1ull << CITY_FIX_RESTORED_CHEATS)) && city->cheats.church == 2) ||
       (u32)(2500 * city->statistics.count[TK_CHURCH]) < city->indicators.population;
   ScanCityTileBatch(city, quarter_x, quarter_y, 0, city->map_cell_count / 16, large_city_effect);
 }
 
 // Zoning
 
+// Read-only admission queries for a valid tile; preserve the transport probe order and power edge rules.
+// Neither changes tiles, consumes RNG nor calls presentation.
+// 24-neighbor road, rail and highway access probe.
+static bool TileHasTransportAccess(const City *city, TileIndex tile_index) {
+  assert(IsMapTileValid(city, tile_index));
+  CityPoint point = MapTilePt(city, tile_index);
+  for (int i = 0; i < 24; ++i) {
+    int nx = point.x + kTransportNeighborOffsets.offset[i].x;
+    int ny = point.y + kTransportNeighborOffsets.offset[i].y;
+    if (!IsMapCoordinateValid(city, nx, ny)) continue;
+    TileIndex neighbor = MapTileXY(city, nx, ny);
+    int kind = ReadTile(city, neighbor);
+    if (IsTileKindRoadRoute(kind) ||
+        kind == TK_BUS_STATION || kind == TK_RAIL_STATION || kind == TK_SUBWAY_STATION)
+      return true;
+  }
+  return false;
+}
+
+// A powered cell at the given position or immediately beside it.
+static bool TileHasNearbyPower(const City *city, TileIndex tile_index) {
+  assert(IsMapTileValid(city, tile_index));
+  CityPoint point = MapTilePt(city, tile_index);
+  const TileInfo *tp = &city->tile[tile_index];
+  int width = city->map_width, height = city->map_height;
+  return (tp->flags & TF_POWERED) != 0 ||
+      (point.y > 1 && (tp[-width].flags & TF_POWERED) != 0) ||
+      (point.x > 1 && (tp[-1].flags & TF_POWERED) != 0) ||
+      (point.y < height - 1 && (tp[width].flags & TF_POWERED) != 0) ||
+      (point.x < width - 1 && (tp[1].flags & TF_POWERED) != 0);
+}
+
+// Select a seaport kind from current counts without mutation or RNG. The growth caller places its footprint.
+static int SelectCitySeaportGrowthKind(const CityTileCounts *counts) {
+  int existing = counts->count[TK_CRANE];
+  if (counts->count[TK_CARGO_YARD] / 4 >= existing)
+    return TK_CRANE;
+  if (counts->count[TK_LOADING_BAY] / 4 < existing)
+    return TK_LOADING_BAY;
+  return counts->count[TK_WAREHOUSE_1X1_4] / 3 >= existing ? TK_CARGO_YARD : TK_WAREHOUSE_1X1_4;
+}
+
+// Select an airport kind, including runway tiles, from current counts. Placement stays with the growth caller.
+static int SelectCityAirportGrowthKind(const CityTileCounts *counts) {
+  int target = (counts->count[TK_RUNWAY_FIRST] + counts->count[TK_RUNWAY_LAST]) / 5;
+  if (counts->count[TK_PARKING_LOT_2X2_1] / 4 >= target)
+    return TK_RUNWAY_FIRST;
+  if (2 * counts->count[TK_CONTROL_TOWER_1X1_1] < target)
+    return TK_CONTROL_TOWER_1X1_1;
+  if (2 * counts->count[TK_RADAR] < target)
+    return TK_RADAR;
+  if (counts->count[TK_TARMAC] < target)
+    return TK_TARMAC;
+  if (counts->count[TK_BUILDING_1X1_1] / 2 < target)
+    return TK_BUILDING_1X1_1;
+  if (counts->count[TK_BUILDING_1X1_2] / 2 < target)
+    return TK_BUILDING_1X1_2;
+  return counts->count[TK_HANGAR_3X3] / 4 >= target ? TK_PARKING_LOT_2X2_1 : TK_HANGAR_3X3;
+}
+
 // Process one admitted zone tile. Military growth stays in its own domain; airport and seaport growth also
 // schedule their vehicles. Ordinary zones account population and apply construction, growth or decline.
-void GrowCityZonedTile(City *city, TileIndex tile, bool large_city_effect_enabled) {
+static void GrowCityZonedTile(City *city, TileIndex tile, bool large_city_effect_enabled) {
   TileInfo *tp = &city->tile[tile];
   int kind = tp->kind, zone = ReadCityZoneKind(tp);
   if (zone == ZONE_MILITARY) {
@@ -193,7 +293,7 @@ void GrowCityZonedTile(City *city, TileIndex tile, bool large_city_effect_enable
   if (zone == ZONE_SEAPORT) {
     if ((Sc2kCrtRand(city) & 3) == 0) {
       if (TileHasNearbyPower(city, tile)) {
-        int replacement = SelectZone9Replacement(&city->statistics);
+        int replacement = SelectCitySeaportGrowthKind(&city->statistics);
         if (!ReplaceSpecialZoneTile(city, tile, replacement, zone))
           ReplaceSpecialZoneTile(city, tile, TK_WAREHOUSE_1X1_4, zone);
       }
@@ -207,7 +307,7 @@ void GrowCityZonedTile(City *city, TileIndex tile, bool large_city_effect_enable
   if (zone == ZONE_AIRPORT) {
     if ((Sc2kCrtRand(city) & 3) == 0) {
       if (TileHasNearbyPower(city, tile)) {
-        ReplaceSpecialZoneTile(city, tile, SelectZone8Replacement(&city->statistics), zone);
+        ReplaceSpecialZoneTile(city, tile, SelectCityAirportGrowthKind(&city->statistics), zone);
       }
       return;
     }
@@ -232,10 +332,10 @@ void GrowCityZonedTile(City *city, TileIndex tile, bool large_city_effect_enable
     int size = building ? kTilePopulationSize[kind - TK_RESIDENTIAL_FIRST] : 0;
     bool has_route = false;
     bool powered = (tp->flags & TF_POWERED) ||
-        (y > 1 && (city->tile[(y - 1) * width + x].flags & TF_POWERED)) ||
-        (x > 1 && (city->tile[y * width + (x - 1)].flags & TF_POWERED)) ||
-        (y < height - 1 && (city->tile[(y + 1) * width + x].flags & TF_POWERED)) ||
-        (x < width - 1 && (city->tile[y * width + (x + 1)].flags & TF_POWERED));
+        (y > 1 && (tp[-width].flags & TF_POWERED)) ||
+        (x > 1 && (tp[-1].flags & TF_POWERED)) ||
+        (y < height - 1 && (tp[width].flags & TF_POWERED)) ||
+        (x < width - 1 && (tp[1].flags & TF_POWERED));
     // The route search itself returns without consuming RNG when no access exists.
     if (powered)
       has_route = FindTransportRouteAndApplyTraffic(city, x, y, zone, size, 100);
@@ -261,7 +361,7 @@ void GrowCityZonedTile(City *city, TileIndex tile, bool large_city_effect_enable
         }
         if (CityBuildingConstructionKind(tp)) {
           AdvanceCityBuildingConstruction(city, tile);
-        } else if (city->fixes & (1 << CITY_FIX_BUILDING_CONSTRUCTION)) {
+        } else if (city->fixes & (1ull << CITY_FIX_BUILDING_CONSTRUCTION)) {
           PlaceGrowthTiles(city, tile, size, 3);
         } else {
           int growth_type = (zone - 1) / 2;
@@ -298,13 +398,13 @@ void GrowCityZonedTile(City *city, TileIndex tile, bool large_city_effect_enable
 
 // Choose one growth tile and place a single cell or shared-tile footprint. Economic growth admission happens in its
 // callers. Types 0..2 place completed R/C/I buildings.
-void PlaceGrowthTiles(City *city, TileIndex tile_index, int size, int growth_type) {
+static void PlaceGrowthTiles(City *city, TileIndex tile_index, int size, int growth_type) {
   assert(IsMapTileValid(city, tile_index));
   CityPoint point = MapTilePt(city, tile_index);
   int zone = ReadCityZoneKind(&city->tile[tile_index]);
   bool construction = growth_type == 3 && zone >= ZONE_RESIDENTIAL_LOW && zone <= ZONE_INDUSTRIAL_HIGH &&
       !HasTileWater(&city->tile[tile_index]) &&
-      (city->fixes & (1 << CITY_FIX_BUILDING_CONSTRUCTION));
+      (city->fixes & (1ull << CITY_FIX_BUILDING_CONSTRUCTION));
   if (construction) growth_type = (zone - 1) / 2;
   int new_tile;
   if (size == 1) {
@@ -391,8 +491,8 @@ void GrowActiveZoneTiles(City *city, TileIndex tile_index, int size, i32 rotated
   }
 }
 
-// Replace the 2x2 zone with tile 247 in a large city.
-void LargeCityTileEffect(City *city, TileIndex tile_index) {
+// Replace an interior 2x2 zone with TK_CHURCH, retaining its facing and reconnecting power.
+static void LargeCityTileEffect(City *city, TileIndex tile_index) {
   assert(IsMapTileValid(city, tile_index));
   CityPoint point = MapTilePt(city, tile_index);
   if (point.y < 1 || point.x < 1 || point.y >= city->map_height - 1 || point.x >= city->map_width - 1)
@@ -532,66 +632,6 @@ void GrowZoneFromTraffic(City *city, TileIndex tile_index, int size, u8 zone) {
   }
 }
 
-// 24-neighbor road, rail and highway access probe.
-bool TileHasTransportAccess(City *city, TileIndex tile_index) {
-  assert(IsMapTileValid(city, tile_index));
-  CityPoint point = MapTilePt(city, tile_index);
-  for (int i = 0; i < 24; ++i) {
-    int nx = point.x + kTransportNeighborOffsets.offset[i].x;
-    int ny = point.y + kTransportNeighborOffsets.offset[i].y;
-    if (!IsMapCoordinateValid(city, nx, ny)) continue;
-    TileIndex neighbor = MapTileXY(city, nx, ny);
-    int tile = ReadTile(city, neighbor);
-    if (IsTileKindRoadRoute(tile) ||
-        tile == TK_BUS_STATION || tile == TK_RAIL_STATION || tile == TK_SUBWAY_STATION)
-      return true;
-  }
-  return false;
-}
-
-// A powered cell at the given position or immediately beside it.
-bool TileHasNearbyPower(City *city, TileIndex tile_index) {
-  assert(IsMapTileValid(city, tile_index));
-  CityPoint point = MapTilePt(city, tile_index);
-  return (city->tile[tile_index].flags & TF_POWERED) != 0 ||
-      (point.y > 1 && (city->tile[tile_index - city->map_width].flags & TF_POWERED) != 0) ||
-      (point.x > 1 && (city->tile[tile_index - 1].flags & TF_POWERED) != 0) ||
-      (point.y < city->map_height - 1 &&
-          (city->tile[tile_index + city->map_width].flags & TF_POWERED) != 0) ||
-      (point.x < city->map_width - 1 &&
-          (city->tile[tile_index + 1].flags & TF_POWERED) != 0);
-}
-
-// Choose the next zone-9 special building from its current counters and deterministic selection state. Counter storage
-// must contain the expected categories; returns a kind without placing its footprint.
-int SelectZone9Replacement(const CityTileCounts *counts) {
-  int existing = counts->count[TK_CRANE];
-  if (counts->count[TK_CARGO_YARD] / 4 >= existing)
-    return TK_CRANE;
-  if (counts->count[TK_LOADING_BAY] / 4 < existing)
-    return TK_LOADING_BAY;
-  return counts->count[TK_WAREHOUSE_1X1_4] / 3 >= existing ? TK_CARGO_YARD : TK_WAREHOUSE_1X1_4;
-}
-
-// Choose the next zone-8 special building from the supplied category counters. Requires the complete counter set; the
-// returned kind is applied by the growth caller, not by this selector.
-int SelectZone8Replacement(const CityTileCounts *counts) {
-  int target = (counts->count[TK_RUNWAY_FIRST] + counts->count[TK_RUNWAY_LAST]) / 5;
-  if (counts->count[TK_PARKING_LOT_2X2_1] / 4 >= target)
-    return TK_RUNWAY_FIRST;
-  if (2 * counts->count[TK_CONTROL_TOWER_1X1_1] < target)
-    return TK_CONTROL_TOWER_1X1_1;
-  if (2 * counts->count[TK_RADAR] < target)
-    return TK_RADAR;
-  if (counts->count[TK_TARMAC] < target)
-    return TK_TARMAC;
-  if (counts->count[TK_BUILDING_1X1_1] / 2 < target)
-    return TK_BUILDING_1X1_1;
-  if (counts->count[TK_BUILDING_1X1_2] / 2 < target)
-    return TK_BUILDING_1X1_2;
-  return counts->count[TK_HANGAR_3X3] / 4 >= target ? TK_PARKING_LOT_2X2_1 : TK_HANGAR_3X3;
-}
-
 // Remove an existing special-zone tile or footprint. Requires valid footprint geometry; clears its statistics,
 // power and zone metadata in row order before the caller installs the replacement.
 static void ClearSpecialZoneFootprint(City *city, TileIndex tile) {
@@ -616,7 +656,7 @@ static void ClearSpecialZoneFootprint(City *city, TileIndex tile) {
 static bool GrowSpecialZoneRunway(City *city, TileIndex origin, int zone_kind) {
   assert(IsMapTileValid(city, origin));
   CityPoint origin_point = MapTilePt(city, origin);
-  int runways = zone_kind == ZONE_MILITARY && (city->fixes & (1 << CITY_FIX_MILITARY_RUNWAYS)) ?
+  int runways = zone_kind == ZONE_MILITARY && (city->fixes & (1ull << CITY_FIX_MILITARY_RUNWAYS)) ?
       city->special_tile_counts.count[CITY_SPECIAL_TILE_RUNWAY_FIRST] : city->statistics.count[TK_RUNWAY_FIRST];
   // Even/even starts are excluded; odd/odd starts alternate orientation with the runway count.
   if (!((origin_point.x | origin_point.y) & 1)) return false;
@@ -631,7 +671,7 @@ static bool GrowSpecialZoneRunway(City *city, TileIndex origin, int zone_kind) {
     const TileInfo *tp = &city->tile[probe];
     if (ReadCityZoneKind(tp) != zone_kind) return false;
     int kind = tp->kind;
-    if (zone_kind == ZONE_MILITARY && (city->fixes & (1 << CITY_FIX_MILITARY_GROWTH)) &&
+    if (zone_kind == ZONE_MILITARY && (city->fixes & (1ull << CITY_FIX_MILITARY_GROWTH)) &&
         (kind == TK_ROAD || IsTileKindBridge(kind) || kind == TK_CRANE || kind == TK_MISSILE_SILO ||
             ReadTerrainCode(tp) || ReadUnderground(city, probe) || HasTileWater(tp)))
       return false;
@@ -691,7 +731,7 @@ static bool GrowSpecialZonePier(City *city, TileIndex tile_index, int zone_kind)
   if (!IsTileKindUnbuilt(ReadTile(city, tile_index)))
     ClearSpecialZoneFootprint(city, tile_index);
   if (PlaceSpecialZoneFootprint(city, tile_index, TK_CRANE, 1) < 0 &&
-      (city->fixes & (1 << CITY_FIX_MILITARY_GROWTH)))
+      (city->fixes & (1ull << CITY_FIX_MILITARY_GROWTH)))
     return false;
   WriteZoneByte(city, tile_index, (ReadZoneByte(city, tile_index) & CITY_ZONE_METADATA_MASK) | zone_kind);
   if (zone_kind == ZONE_MILITARY) {
@@ -741,7 +781,7 @@ bool ReplaceSpecialZoneTile(City *city, TileIndex tile, int replacement, int zon
       for (TileIndex cell = tile + row * city->map_width, end = cell + 2; cell < end; ++cell) {
         const TileInfo *tp = &city->tile[cell];
         int kind = tp->kind;
-        if (zone_kind == ZONE_MILITARY && (city->fixes & (1 << CITY_FIX_MILITARY_GROWTH)) &&
+        if (zone_kind == ZONE_MILITARY && (city->fixes & (1ull << CITY_FIX_MILITARY_GROWTH)) &&
             (kind == TK_ROAD || IsTileKindBridge(kind) || kind == TK_MISSILE_SILO || ReadUnderground(city, cell)))
           return false;
         if (kind == TK_RUNWAY_FIRST || kind == TK_RUNWAY_LAST || kind == TK_CRANE || ReadCityZoneKind(tp) != zone_kind)
@@ -754,7 +794,8 @@ bool ReplaceSpecialZoneTile(City *city, TileIndex tile, int replacement, int zon
 
   // Single-cell military growth restores the pre-placement flags; larger footprints keep each cell's live flags.
   int single_cell_flags = size == 1 ? city->tile[tile].flags : 0;
-  if (PlaceSpecialZoneFootprint(city, tile, replacement, size) < 0 && (city->fixes & (1 << CITY_FIX_MILITARY_GROWTH)))
+  if (PlaceSpecialZoneFootprint(city, tile, replacement, size) < 0 &&
+      (city->fixes & (1ull << CITY_FIX_MILITARY_GROWTH)))
     return false;
   for (int row = 0; row < size; ++row)
     for (TileIndex cell = tile + row * city->map_width, end = cell + size; cell < end; ++cell) {
@@ -771,16 +812,6 @@ bool ReplaceSpecialZoneTile(City *city, TileIndex tile, int replacement, int zon
 
 // Tables
 
-// Original startup initializer order, stored as native x/y byte pairs.
-const TransportNeighborOffsets kTransportNeighborOffsets = {{
-  {1, 0}, {0, 1}, {-1, 0}, {0, -1},
-  {2, 0}, {0, 2}, {-2, 0}, {0, -2},
-  {3, 0}, {0, 3}, {-3, 0}, {0, -3},
-  {1, 1}, {1, -1}, {-1, 1}, {-1, -1},
-  {1, 2}, {1, -2}, {-1, 2}, {-1, -2},
-  {2, 1}, {2, -1}, {-2, 1}, {-2, -1}
-}};
-
 const u8 kGrowthBaseTable[21] = {
   TK_CLEAR, TK_LOWER_CLASS_HOMES_FIRST,
   TK_CHEAP_APARTMENTS, TK_NICE_APARTMENTS_2X2_2,
@@ -795,46 +826,6 @@ const u8 kGrowthBaseTable[21] = {
   TK_ABANDONED_BUILDING_3X3_1,
 };
 
-const u8 kGrowthDivisorTable[21] = {
-  196, 12, 4, 4, 4, 8, 5, 5, 10, 4, 4, 4, 6, 2, 2, 2,
-  2, 2, 2, 2, 2
-};
-
-const u8 kGrowthCornerPatterns[16] = {
-  16, 32, 64, 128, 32, 64, 128, 16, 64, 128, 16, 32, 128, 16, 32, 64
-};
-
-const u16 kZoneCompatibilityMask[16] = {
-  65535, 65528, 65528, 65510, 65510, 65438, 65438, 0, 1, 1, 3, 6, 12, 0, 1803, 3342
-};
-
 const u8 kTileScanMaskTable[4] = {
   128, 16, 32, 64
-};
-
-const i8 kSpecialZoneCorridorYStep[4] = {
-  0, 1, 0, -1
-};
-
-const i8 kSpecialZoneCorridorXStep[4] = {
-  1, 0, -1, 0
-};
-
-// The stock scan can select adjacent constant words for unusual zoned tiles.
-// Include every size admitted by the population/category lookups. Unselected
-// holes are zero; they are not snapshots of adjacent mutable UI state.
-const u16 kTransportValueBySize[CITY_GROWTH_TRANSPORT_WEIGHT_COUNT] = {
-  [0] = 0,
-  [1] = 1,
-  [2] = 8,
-  [3] = 12,
-  [4] = 36,
-  [140] = 313,
-  [148] = 305,
-  [158] = 315,
-  [174] = 315,
-  [178] = 318,
-  [188] = 305,
-  [257] = 12849,
-  [514] = 3341,
 };

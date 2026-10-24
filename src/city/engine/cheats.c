@@ -84,7 +84,7 @@ i64 CmdCheat(City *city, u32 flags, int cheat, int options, int reserved) {
   int allowed = demolish ? CITY_CHEAT_CONFIRM_DEMOLITION :
       military ? CITY_CHEAT_ACCEPT_MILITARY | CITY_CHEAT_DECLINE_MILITARY : 0;
   if ((options & ~allowed) || (military && options == allowed)) return CITY_COMMAND_COST_INVALID;
-  if (!(city->fixes & (1 << CITY_FIX_RESTORED_CHEATS)))
+  if (!(city->fixes & (1ull << CITY_FIX_RESTORED_CHEATS)))
     return CITY_COMMAND_COST_BLOCKED;
   if ((demolish || military) && !options)
     return flags & CITY_COMMAND_TEST ? CITY_COMMAND_NEEDS_CONFIRMATION : CITY_COMMAND_COST_REJECTED;
@@ -171,7 +171,7 @@ i64 CmdEnableDebugCity(City *city, u32 flags, int reserved1, int reserved2, int 
 // Unlock the supported invention state when its gameplay fix permits the action. Reserved payload values must be zero;
 // TEST has no effects and execution preserves the handler's result.
 i64 CmdAllInventions(City *city, u32 flags, int reserved1, int reserved2, int reserved3) {
-  if (!(city->fixes & (1 << CITY_FIX_ALL_INVENTIONS)) || reserved1 || reserved2 ||
+  if (!(city->fixes & (1ull << CITY_FIX_ALL_INVENTIONS)) || reserved1 || reserved2 ||
       reserved3) return CITY_COMMAND_COST_INVALID;
   if (flags & CITY_COMMAND_TEST) return 0;
   memset(&city->economic_tables.milestone_years, 0, sizeof(city->economic_tables.milestone_years));

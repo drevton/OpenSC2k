@@ -1,7 +1,6 @@
-#include "city/saveload/state.h"
 #include "game/observation.h"
 
-#include "city/saveload/runtime.h"
+#include "city/saveload/state.h"
 #include "game/state.h"
 
 void ObserveCityPresentation(Game *game, CityPresentationEvent event, int token,
@@ -11,11 +10,11 @@ void ObserveCityPresentation(Game *game, CityPresentationEvent event, int token,
 }
 
 // Reference file I/O supplies its independently configured observer.
-void ObserveCityFileIO(CityFileRuntime *file, int operation, u32 requested, u32 result, int error,
+void ObserveCityFileIO(CityFileRuntime *file, CityFileIOOperation operation, u32 requested, u32 result, int error,
     const void *bytes, u32 size) {
   Game *game = file->game;
   if (game->observation && game->observation->file_io) {
-    NativeSaveIOOutcome outcome = {operation, requested, result, error, bytes, size};
+    CityFileIOOutcome outcome = {operation, requested, result, error, bytes, size};
     game->observation->file_io(game, &outcome);
   }
 }

@@ -17,18 +17,28 @@ typedef struct AssetFile {
   u64 compressed_remaining, decoded_total;
 } AssetFile;
 
-// Returns 1 when opened, 0 when missing, -1 for unreadable or invalid input.
+// Missing optional data permits a caller's fallback; unreadable/invalid data must remain an error.
+typedef enum AssetOpenResult {
+  ASSET_OPEN_ERROR = -1, ASSET_OPEN_MISSING = 0, ASSET_OPEN_OK = 1
+} AssetOpenResult;
+
+// Only ASSET_OPEN_OK opens need CloseAssetFile. Failed disk opens release their own temporary resources.
 // A successful open owns the file and decoder until CloseAssetFile.
-int OpenAssetFile(AssetFile *asset, const char *path);
+AssetOpenResult OpenAssetFile(AssetFile *asset, const char *path);
 // Opening a span does no I/O, decoding or allocation, and does not take ownership.
-int OpenAssetSpan(AssetFile *asset, ByteSpan span);
+AssetOpenResult OpenAssetSpan(AssetFile *asset, ByteSpan span);
+// A null root borrows retained Assets bytes. An explicit root selects a loose startup/diagnostic source;
+// absence and invalid input keep their distinct results, without selecting another source here.
+AssetOpenResult OpenAssetSource(AssetFile *file, CityAssets *assets, u32 id, const char *root);
 bool SeekAssetFile(AssetFile *asset, u64 position);
 size_t ReadAssetFile(AssetFile *asset, void *destination, size_t size);
 int ReadAssetByte(AssetFile *asset);
 // Also reports truncation, checksum errors, trailing data and close errors.
 bool CloseAssetFile(AssetFile *asset);
 
-// Read at most limit bytes. The caller owns the returned allocation; failure returns NULL and clears size.
+// Read the remaining decoded bytes, at most limit. Known-length sources allocate once; compressed input grows
+// within that bound. The caller owns the returned allocation; failure returns NULL and clears size.
+// Leaves the cursor open; CloseAssetFile must still report any final stream/close error before publishing the data.
 u8 *ReadAllAssetFile(AssetFile *asset, size_t limit, size_t *size);
 // Decode one bounded Zstandard frame. The caller retains the FILE; only decoder scratch is released here.
 bool DecodeAssetSection(FILE *file, u64 offset, u64 compressed, u8 *data, size_t size);

@@ -1,4 +1,5 @@
 #include "city/saveload/services.h"
+#include "city/saveload/runtime.h"
 #include "city/saveload/state.h"
 #include "city/saveload/events_format.h"
 #include "city/saveload/map_format.h"
@@ -6,10 +7,11 @@
 #include "city/maps/tile_storage.h"
 #include "game/state.h"
 #include "city/presentation.h"
+#include "city/state.h"
 #include "city/saveload/legacy_text.h"
 #include "city/maps/map.h"
 #include "city/saveload/city_file_internal.h"
-#include "city/maps/layers.h"
+#include "city/saveload/sc2k.h"
 #include "base/text.h"
 #include "base/byte_order.h"
 #include "game/errors.h"
@@ -66,7 +68,7 @@ static bool SaveCityCompressedChunk(City *city, void *stream, const char tag[4],
   const CityFileChunkSpec *spec = FindCityFileChunkSpec(tag);
   if (spec && spec->storage == CITY_FILE_TILE) ExportCityMapChunk(city, spec, input, size);
   else if (spec && (spec->storage == CITY_FILE_HALF_MAP || spec->storage == CITY_FILE_QUARTER_MAP))
-    CopyCityFileChunkBytes(city, spec, input, size, false);
+    CopyCityFileChunkBytes(city, spec, input, size, CITY_FILE_EXPORT);
   else if (conversion == CITY_FILE_LABELS) ExportStockCityOverlayNames(city, input);
   else memcpy(input, source, size);
 
@@ -127,7 +129,7 @@ bool SaveCityFileChunks(City *city, void *stream, CityPath *path) {
     const u8 *source = CityFileChunkData(city, spec);
     u8 event_bytes[CITY_STOCK_EVENT_BYTES * CITY_STOCK_EVENT_SLOT_COUNT];
     if (spec->conversion == CITY_FILE_EVENTS) {
-      CityFileStateChunkBytes(city, spec, event_bytes, 0);
+      CityFileStateChunkBytes(city, spec, event_bytes, CITY_FILE_EXPORT);
       source = event_bytes;
     }
     i32 result = SaveCityCompressedChunk(city, stream, spec->tag, source, spec->size, spec->conversion);

@@ -3,6 +3,7 @@
 #include "city/saveload/legacy_text.h"
 #include "city/saveload/summary.h"
 #include "base/byte_order.h"
+#include "base/file.h"
 #include "base/text.h"
 
 #include <stdio.h>
@@ -110,6 +111,16 @@ bool ReadCityFileSummary(const char *native_path, CityFileSummary *summary) {
       ReadExtendedSummary(stream, summary) : ReadLegacySummary(stream, summary);
   fclose(stream);
   return valid;
+}
+
+// The creation date chooses the post-1993 thumbnail transparency convention. Path must be a terminated host path; an
+// unreadable creation date returns false instead of using uninitialized file-status data.
+bool CityFileUsesTransparentThumbnail(const char *path) {
+  FileLocalDate date;
+  if (!ReadFileCreationDate(path, &date))
+    return false; // Defined replacement for stock uninitialized CFileStatus after a failed query.
+  u32 packed_date = (u32)date.year * 10000 + (u32)date.month * 100 + (u32)date.day;
+  return (int)packed_date >= 19931231;
 }
 
 // Preview sampling writes directly into the generator's existing five-plane allocation.

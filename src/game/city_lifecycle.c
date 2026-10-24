@@ -1,6 +1,8 @@
 #include "city/saveload/state.h"
+#include "base/text.h"
 #include "city/engine/city_name.h"
 #include "game/city_lifecycle.h"
+#include "ui/dialogs/file_dialog.h"
 
 #include <stddef.h>
 #include <stdio.h>
@@ -20,7 +22,6 @@
 #include "city/engine/simulation.h"
 #include "city/events/events.h"
 #include "city/events/news.h"
-#include "city/maps/layers.h"
 #include "city/maps/map_types.h"
 #include "city/maps/tile_storage.h"
 #include "city/military.h"
@@ -46,6 +47,7 @@
 #include "ui/dialogs/dialogs.h"
 #include "ui/map.h"
 #include "ui/state.h"
+#include "ui/text/status.h"
 #include "ui/text/text.h"
 #include "ui/tools/tools.h"
 
@@ -55,7 +57,7 @@ static bool OpenCityPath(City *city, const char *path);
 
 bool ApplyCityTerrainMap(City *city, const CityTerrainMap *map, const CityTerrainSettings *settings) {
   if (!InstallCityTerrainMap(city, map, settings)) return false;
-  city->game->drawing->scroll_pixels = (CityPoint){0};
+  city->drawing->scroll_pixels = (CityPoint){0};
   CenterCityMapViewAndResetOverlays(city, city->map_width / 2, city->map_height / 2, 0);
   RefreshCityMapViews(city->game);
   return true;
@@ -164,7 +166,7 @@ void PrepareCityFileOpen(City *city) {
   Game *game = city->game;
   game->city_active = false;
   InvalidateLoadedCityCanvas(city);
-  city->game->drawing->palette.direct_animation = 0;
+  city->drawing->palette.direct_animation = 0;
   game->idle_state = CITY_IDLE_LOAD_CITY;
   game->idle_entry = 1;
   CloseCityAuxiliaryPresentation(city);
@@ -316,7 +318,7 @@ bool InitializeCityDocumentForIdleMode(City *city) {
 // Reset only the original fields, then clear ALTM marker bits.
 void ResetCitySimulationState(City *city) {
   CloseCityWindowsForReplacement(city->game);
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   CityInterfaceState *ui = city->game->ui;
   city->disasters.pending_type = CITY_DISASTER_NONE;
   city->indicators.event_flag = 0;
@@ -396,13 +398,13 @@ bool LoadCityScenarioInstructions(City *city, CityScenarioInput *input,
   Game *game = city->game;
   input->stream = CityFileOpenStream(game->file, input->path);
   if (!input->stream) {
-    ReportCityChunkError(game->file, CITY_NOTICE_ERROR_OPENING_FILE, 1);
+    ReportCityFileError(game->file, CITY_NOTICE_ERROR_OPENING_FILE, CITY_FILE_ERROR_RESOURCE_ONLY);
     if (input->from_path) game->path_open_flag = 0;
     return false;
   }
   if (!CityFileReadTaggedStream(input->stream, "TEXT", CITY_SCENARIO_INSTRUCTIONS_VERSION,
       (u8 *)text, CITY_SCENARIO_INSTRUCTION_BYTES + 1)) {
-    ReportCityChunkError(game->file, CITY_NOTICE_ERROR_EXTRACTING_SCENARIO_RESOURCE, 1);
+    ReportCityFileError(game->file, CITY_NOTICE_ERROR_EXTRACTING_SCENARIO_RESOURCE, CITY_FILE_ERROR_RESOURCE_ONLY);
     if (input->from_path) game->path_open_flag = 0;
     if (!game->ui->restore_frame_tools) {
       game->idle_state = CITY_IDLE_STARTUP_MENU;

@@ -3,19 +3,7 @@
 
 #include <stddef.h>
 
-#include "city/types.h"
-
-// Text-block alignment used by the software canvas, not GDI flags.
-typedef enum CityCanvasTextAlignment {
-  CITY_CANVAS_TEXT_LEFT = 0, CITY_CANVAS_TEXT_CENTER = 1, CITY_CANVAS_TEXT_RIGHT = 2,
-} CityCanvasTextAlignment;
-
-enum {
-  CITY_TEXT_UPDATE_POSITION = 0x001,
-  CITY_TEXT_RIGHT_UPDATE_POSITION = 0x003,
-};
-
-typedef void (*CityCanvasVisiblePaint)(CityRect area, void *context);
+#include "drawing/types.h"
 
 // Operation-local Drawing view of the final framebuffer; copies are independent.
 typedef struct {
@@ -56,6 +44,18 @@ typedef struct Canvas {
   u32 *palette_composite_rows; // Palette dependencies requiring repaint after alpha compositing.
   u32 *palette_composite_bounds; // Packed left/right u16 bounds, valid when the corresponding mask is nonzero.
 } Canvas;
+
+// Scale signed coordinates by a positive ratio, with mathematical floor/ceiling rounding.
+i32 CanvasScaleFloor(i32 value, i32 numerator, i32 denominator);
+i32 CanvasScaleCeil(i32 value, i32 numerator, i32 denominator);
+// Keep only fully covered pixels: round left/top up and right/bottom down. Fractional edges remain outside.
+// The result may be empty or inverted; the caller decides whether it has any area.
+CityRect CanvasScaleInnerRect(CityRect bounds, i32 numerator, i32 denominator);
+
+// Borrow a logical canvas backed by physical framebuffer pixels for one synchronous paint callback.
+// The callback uses canvas drawing operations; physical stride, palette planes and raster clip stay shared.
+// Ratios must be in 1..1600. Invalid/missing targets or callbacks are no-ops; no pixel buffer is allocated.
+void PaintScaledCanvas(Canvas *framebuffer, i32 numerator, i32 denominator, CanvasScaledPaint paint, void *context);
 
 // UI resolves the active window before painting. Drawing only matches its borrowed press bounds.
 bool CityCanvasButtonPressed(const Canvas *canvas, CityRect bounds);

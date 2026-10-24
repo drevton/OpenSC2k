@@ -277,13 +277,20 @@ enum { CITY_HELICOPTER_ROTOR_FRAMES = 8, CITY_HELICOPTER_ROTOR_FPS = 24 };
 
 // Intro artwork and smooth labels, baked from the shared website identity.
 
-typedef enum CityIntroStage {
-  CITY_INTRO_LOADING_CITY, CITY_INTRO_LOADING_GRAPHICS, CITY_INTRO_PREPARING_GRAPHICS,
-  CITY_INTRO_PREPARING_SPRITES, CITY_INTRO_STAGE_COUNT
-} CityIntroStage;
 enum { CITY_INTRO_IMAGE_COUNT = 16, CITY_INTRO_DIGIT_FIRST = 4, CITY_INTRO_CITY_ART = 15 };
 typedef struct RunSprite RunSprite;
 typedef struct { RunSprite *images[CITY_INTRO_IMAGE_COUNT]; } CityIntroArt;
+
+// Native map toolbar artwork, in assets/ui/map-data/icons.svg and icons.dat order.
+typedef enum CityMapIcon {
+  CITY_MAP_ICON_STRUCTURES, CITY_MAP_ICON_ROADS, CITY_MAP_ICON_POWER, CITY_MAP_ICON_WATER,
+  CITY_MAP_ICON_POPULATION, CITY_MAP_ICON_SAFETY, CITY_MAP_ICON_POLLUTION, CITY_MAP_ICON_LAND_VALUE,
+  CITY_MAP_ICON_CIVIC, CITY_MAP_ICON_ZONES, CITY_MAP_ICON_RAIL, CITY_MAP_ICON_TRAFFIC,
+  CITY_MAP_ICON_DENSITY, CITY_MAP_ICON_GROWTH, CITY_MAP_ICON_CRIME, CITY_MAP_ICON_POLICE_COVERAGE,
+  CITY_MAP_ICON_POLICE_STATION, CITY_MAP_ICON_FIRE_COVERAGE, CITY_MAP_ICON_FIRE_STATION,
+  CITY_MAP_ICON_SCHOOL, CITY_MAP_ICON_COLLEGE, CITY_MAP_ICON_OVERLAY, CITY_MAP_ICON_ISOMETRIC,
+  CITY_MAP_ICON_COUNT
+} CityMapIcon;
 
 // Native toolbar atlas entries, in assets/ui/toolbar/icons.txt order.
 enum { CITY_TOOLBAR_ICON_COUNT = 108 };
@@ -514,12 +521,6 @@ typedef struct {
 enum {
   CITY_UNDERWORLD_SOIL, CITY_UNDERWORLD_DRY_SERVICE, CITY_UNDERWORLD_WATER_SERVICE, CITY_UNDERWORLD_SUBMERGED,
 };
-typedef struct AssetFile AssetFile;
-// Dimensions are already validated; the returned native run image owns one reference.
-RunSprite *ReadAssetRunSprite(AssetFile *file, int width, int height, u32 size);
-// Static picture record: ID, dimensions, optional RGB palette, then native runs.
-// Zero expected dimensions accept the bounded dimensions stored in the record.
-RunSprite *ReadAssetPicture(AssetFile *file, int id, int width, int height);
 
 // Decode retained graphics bytes; missing or invalid data fails.
 bool LoadCityLandscapeAssets(CityResourceState *assets);

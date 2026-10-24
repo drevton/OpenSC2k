@@ -88,7 +88,7 @@ typedef enum CityDropdownPointer { CITY_DROPDOWN_MOVE, CITY_DROPDOWN_DOWN, CITY_
 
 // Opening requires nonempty choices and a valid selected index. Choices, colors and captions are borrowed until closure.
 // Anchors are window-local logical rectangles.
-// Bounds are logical unless named PixelBounds. Pointer input uses physical pixels; keyboard input is UI-local.
+// PixelBounds returns physical desktop pixels. Pointer input uses physical pixels; keyboard input is UI-local.
 // Input handlers report capture, writing selection only for an enabled choice; callers initialize it before dispatch.
 extern const CityDropdownColors kCityDropdownGoldColors;
 void DrawCityDropdownControl(Canvas *canvas, const CityDropdownColors *colors, CityRect bounds,
@@ -99,7 +99,6 @@ void SetCityDropdownChecks(CityCanvasDesktop *desktop, u32 checked, u32 disabled
 // Turn an open dropdown into a button menu, sizing its popup independently of the trigger.
 void SetCityDropdownMenu(CityCanvasDesktop *desktop, u32 disabled);
 void CloseCityDropdown(CityCanvasDesktop *desktop);
-CityRect CityDropdownBounds(const CityCanvasDesktop *desktop);
 CityRect CityDropdownPixelBounds(const CityCanvasDesktop *desktop);
 void DrawCityDropdown(const CityCanvasDesktop *desktop, Canvas *canvas);
 bool HandleCityDropdownPointer(CityCanvasDesktop *desktop, CityDropdownPointer kind, int x, int y,

@@ -57,15 +57,26 @@ static void DrawBudgetRateControl(Canvas *canvas, CityRect bounds, int rate) {
   DrawCityInterfaceTextCentered(canvas->interface_font, canvas, value, text, canvas_text, false, 10);
 }
 
-void Sc2kCanvasBudgetFromCity(City *city, CityBudgetPanel *budget) {
-  static const u8 kRows[CITY_ECONOMY_SECTOR_COUNT] = {
-    CITY_BUDGET_ROW_RESIDENTIAL, CITY_BUDGET_ROW_COMMERCIAL, CITY_BUDGET_ROW_INDUSTRIAL,
-    CITY_BUDGET_ROW_ORDINANCES, CITY_BUDGET_ROW_BONDS, CITY_BUDGET_ROW_POLICE,
-    CITY_BUDGET_ROW_FIRE, CITY_BUDGET_ROW_HEALTH, CITY_BUDGET_ROW_EDUCATION,
-    CITY_BUDGET_ROW_EDUCATION, CITY_BUDGET_ROW_TRANSIT, CITY_BUDGET_ROW_TRANSIT,
-    CITY_BUDGET_ROW_TRANSIT, CITY_BUDGET_ROW_TRANSIT, CITY_BUDGET_ROW_TRANSIT, CITY_BUDGET_ROW_TRANSIT
+void Sc2kCanvasBudgetFromCity(const City *city, CityBudgetPanel *budget) {
+  static const u8 kRowBySector[CITY_ECONOMY_SECTOR_COUNT] = {
+    [CITY_ECONOMY_RESIDENTIAL] = CITY_BUDGET_ROW_RESIDENTIAL,
+    [CITY_ECONOMY_COMMERCIAL] = CITY_BUDGET_ROW_COMMERCIAL,
+    [CITY_ECONOMY_INDUSTRIAL] = CITY_BUDGET_ROW_INDUSTRIAL,
+    [CITY_ECONOMY_ORDINANCES] = CITY_BUDGET_ROW_ORDINANCES,
+    [CITY_ECONOMY_BONDS] = CITY_BUDGET_ROW_BONDS,
+    [CITY_ECONOMY_POLICE] = CITY_BUDGET_ROW_POLICE,
+    [CITY_ECONOMY_FIRE] = CITY_BUDGET_ROW_FIRE,
+    [CITY_ECONOMY_HEALTH] = CITY_BUDGET_ROW_HEALTH,
+    [CITY_ECONOMY_SCHOOLS] = CITY_BUDGET_ROW_EDUCATION,
+    [CITY_ECONOMY_COLLEGES] = CITY_BUDGET_ROW_EDUCATION,
+    [CITY_ECONOMY_ROADS] = CITY_BUDGET_ROW_TRANSIT,
+    [CITY_ECONOMY_HIGHWAYS] = CITY_BUDGET_ROW_TRANSIT,
+    [CITY_ECONOMY_BRIDGES] = CITY_BUDGET_ROW_TRANSIT,
+    [CITY_ECONOMY_RAIL] = CITY_BUDGET_ROW_TRANSIT,
+    [CITY_ECONOMY_SUBWAY] = CITY_BUDGET_ROW_TRANSIT,
+    [CITY_ECONOMY_TUNNELS] = CITY_BUDGET_ROW_TRANSIT,
   };
-  CityEconomyMonths *economy = &city->economy;
+  const CityEconomyMonths *economy = &city->economy;
   const CityBudgetSectorDivisors *divisors = &kBudgetSectorDivisors;
   i32 accumulated_total = 0;
   i32 estimated_total = 0;
@@ -73,27 +84,27 @@ void Sc2kCanvasBudgetFromCity(City *city, CityBudgetPanel *budget) {
   budget->cash = city->indicators.cash;
   budget->loan = (i64)city->indicators.bond_count * 10000;
   budget->credit_rating = CityBondCreditRating(city);
-  budget->next_bond_rate = city->fixes & (1 << CITY_FIX_BOND_RATING) ? CityBondInterestRate(city) : 5;
+  budget->next_bond_rate = city->fixes & (1ull << CITY_FIX_BOND_RATING) ? CityBondInterestRate(city) : 5;
   budget->current_year = city->geography.start_year + (i32)(city->clock.tick / 300);
   budget->estimate_year = budget->current_year + (city->indicators.year_flag != 0);
   CopyText(budget->city_name, sizeof(budget->city_name), CityNameText(&city->name));
   for (i32 index = 0; index < CITY_ECONOMY_SECTOR_COUNT; ++index) {
-    EconomySector *sector = &economy->sector[index];
+    const EconomySector *sector = &economy->sector[index];
     int rate = sector->current_rate;
     int annual_rate = rate * sector->current_amount;
     int projected = city->indicators.year_flag ? 12 * annual_rate :
         sector->accumulated + annual_rate * (11 - city->clock.month);
     i32 divisor = divisors->value[index];
-    i32 category = kRows[index];
-    budget->to_date[category] += sector->accumulated / (12 * divisor);
-    budget->estimate[category] += projected / (12 * divisor);
+    i32 row = kRowBySector[index];
+    budget->to_date[row] += sector->accumulated / (12 * divisor);
+    budget->estimate[row] += projected / (12 * divisor);
     accumulated_total += sector->accumulated / divisor;
     estimated_total += projected / divisor;
   }
   budget->year_to_date_cashflow = accumulated_total / 12;
   budget->estimated_cashflow = estimated_total / 12;
   for (int sector = CITY_ECONOMY_RESIDENTIAL; sector <= CITY_ECONOMY_INDUSTRIAL; ++sector)
-    budget->rate[sector] = economy->sector[sector].current_rate;
+    budget->rate[kRowBySector[sector]] = economy->sector[sector].current_rate;
   budget->rate[CITY_BUDGET_ROW_POLICE] = economy->sector[CITY_ECONOMY_POLICE].current_rate;
   budget->rate[CITY_BUDGET_ROW_FIRE] = economy->sector[CITY_ECONOMY_FIRE].current_rate;
   budget->rate[CITY_BUDGET_ROW_HEALTH] = economy->sector[CITY_ECONOMY_HEALTH].current_rate;
@@ -106,20 +117,29 @@ void Sc2kCanvasBudgetFromCity(City *city, CityBudgetPanel *budget) {
 }
 
 int CityBudgetRateKindForRow(int row) {
-  if (row >= CITY_BUDGET_ROW_RESIDENTIAL && row <= CITY_BUDGET_ROW_INDUSTRIAL) return row;
-  return row >= CITY_BUDGET_ROW_POLICE && row < CITY_BUDGET_ROW_COUNT ? row - 2 : -1;
+  switch (row) {
+  case CITY_BUDGET_ROW_RESIDENTIAL: return CITY_BUDGET_RATE_RESIDENTIAL;
+  case CITY_BUDGET_ROW_COMMERCIAL: return CITY_BUDGET_RATE_COMMERCIAL;
+  case CITY_BUDGET_ROW_INDUSTRIAL: return CITY_BUDGET_RATE_INDUSTRIAL;
+  case CITY_BUDGET_ROW_POLICE: return CITY_BUDGET_RATE_POLICE;
+  case CITY_BUDGET_ROW_FIRE: return CITY_BUDGET_RATE_FIRE;
+  case CITY_BUDGET_ROW_HEALTH: return CITY_BUDGET_RATE_HEALTH;
+  case CITY_BUDGET_ROW_EDUCATION: return CITY_BUDGET_RATE_EDUCATION;
+  case CITY_BUDGET_ROW_TRANSIT: return CITY_BUDGET_RATE_TRANSIT;
+  default: return -1;
+  }
 }
 
 int CityBudgetRateMaximum(int row) {
   return row <= CITY_BUDGET_ROW_INDUSTRIAL ? 20 : 100;
 }
 
-static int CityBudgetRowTop(int category) {
-  return category < CITY_BUDGET_ROW_BONDS ? 51 + category * 12 : 127 + (category - CITY_BUDGET_ROW_BONDS) * 12;
+static int CityBudgetRowTop(int row) {
+  return row < CITY_BUDGET_ROW_BONDS ? 51 + row * 12 : 127 + (row - CITY_BUDGET_ROW_BONDS) * 12;
 }
 
-CityRect CityBudgetControlBounds(CityRect b, CityBudgetControl control, int category) {
-  int y = b.top + CityBudgetRowTop(category);
+CityRect CityBudgetControlBounds(CityRect b, CityBudgetControl control, int row) {
+  int y = b.top + CityBudgetRowTop(row);
   int rate_left = b.left + 150;
   int rate_right = rate_left + 2 * CITY_BUDGET_RATE_ARROW_WIDTH + CITY_BUDGET_RATE_VALUE_WIDTH;
   switch (control) {
@@ -147,12 +167,12 @@ CityRect CityBudgetControlBounds(CityRect b, CityBudgetControl control, int cate
 }
 
 i32 Sc2kCanvasBudgetStepAt(const Window *window, i32 x, i32 y) {
-  for (int category = 0; category < CITY_BUDGET_ROW_COUNT; ++category) {
-    if (category == CITY_BUDGET_ROW_ORDINANCES || category == CITY_BUDGET_ROW_BONDS) continue;
+  for (int row = 0; row < CITY_BUDGET_ROW_COUNT; ++row) {
+    if (row == CITY_BUDGET_ROW_ORDINANCES || row == CITY_BUDGET_ROW_BONDS) continue;
     if (CanvasPointInRect(CityBudgetControlBounds(window->bounds,
-        CITY_BUDGET_CONTROL_DECREASE, category), x, y)) return category * 2;
+        CITY_BUDGET_CONTROL_DECREASE, row), x, y)) return row * 2;
     if (CanvasPointInRect(CityBudgetControlBounds(window->bounds,
-        CITY_BUDGET_CONTROL_INCREASE, category), x, y)) return category * 2 + 1;
+        CITY_BUDGET_CONTROL_INCREASE, row), x, y)) return row * 2 + 1;
   }
   return -1;
 }
@@ -169,14 +189,25 @@ int Sc2kCanvasBudgetRateAt(const Window *window, int x, int y) {
 }
 
 i32 Sc2kCanvasBudgetAdviceAt(const Window *window, i32 x, i32 y) {
-  for (int category = 0; category < CITY_BUDGET_ROW_COUNT; ++category)
+  static const u8 kCategoryByRow[CITY_BUDGET_ROW_COUNT] = {
+    [CITY_BUDGET_ROW_RESIDENTIAL] = CITY_BUDGET_PROPERTY_TAX,
+    [CITY_BUDGET_ROW_COMMERCIAL] = CITY_BUDGET_PROPERTY_TAX,
+    [CITY_BUDGET_ROW_INDUSTRIAL] = CITY_BUDGET_PROPERTY_TAX,
+    [CITY_BUDGET_ROW_ORDINANCES] = CITY_BUDGET_ORDINANCES,
+    [CITY_BUDGET_ROW_BONDS] = CITY_BUDGET_BONDS,
+    [CITY_BUDGET_ROW_POLICE] = CITY_BUDGET_POLICE,
+    [CITY_BUDGET_ROW_FIRE] = CITY_BUDGET_FIRE,
+    [CITY_BUDGET_ROW_HEALTH] = CITY_BUDGET_HEALTH,
+    [CITY_BUDGET_ROW_EDUCATION] = CITY_BUDGET_EDUCATION,
+    [CITY_BUDGET_ROW_TRANSIT] = CITY_BUDGET_TRANSIT,
+  };
+  for (int row = 0; row < CITY_BUDGET_ROW_COUNT; ++row)
     if (CanvasPointInRect(CityBudgetControlBounds(window->bounds,
-        CITY_BUDGET_CONTROL_ADVISOR, category), x, y)) return category <= CITY_BUDGET_ROW_INDUSTRIAL ?
-            CITY_BUDGET_PROPERTY_TAX : category - 2;
+        CITY_BUDGET_CONTROL_ADVISOR, row), x, y)) return kCategoryByRow[row];
   return -1;
 }
 
-CityRect CityPolicyPanelBounds(CityRect bounds, int panel) {
+static CityRect CityPolicyPanelBounds(CityRect bounds, int panel) {
   int width = (bounds.right - bounds.left - 2 * CITY_POLICY_PANEL_MARGIN - CITY_POLICY_PANEL_GAP) / 2;
   int left = bounds.left + CITY_POLICY_PANEL_MARGIN + (panel & 1) * (width + CITY_POLICY_PANEL_GAP);
   int top = bounds.top + 16 + CITY_POLICY_PANEL_MARGIN +
@@ -203,22 +234,6 @@ bool IsCityTransitUnderfunded(const City *city) {
   return total_rate < 600;
 }
 
-void CanvasBudgetAmount(char *output, size_t size, i64 value) {
-  char digits[24];
-  u64 magnitude = value < 0 ? 0 - (u64)value : (u64)value;
-  snprintf(digits, sizeof(digits), "%llu", (unsigned long long)magnitude);
-  size_t length = strlen(digits);
-  size_t position = 0;
-  if (value < 0 && position + 1 < size)
-    output[position++] = '-';
-  for (size_t index = 0; index < length && position + 1 < size; ++index) {
-    output[position++] = digits[index];
-    if ((length - index - 1) % 3 == 0 && index + 1 < length && position + 1 < size)
-      output[position++] = ',';
-  }
-  output[position] = '\0';
-}
-
 static void DrawCityBudgetAmount(Canvas *canvas, int right, int y, i64 value, u32 ink, bool shadow) {
   char amount[CITY_CURRENCY_TEXT_CAPACITY];
   FormatCityCurrencyForCountry(amount, value, "usa");
@@ -238,11 +253,19 @@ static void DrawCityBudgetTotal(Canvas *canvas, CityRect b, int label_x, int y, 
 }
 
 static void DrawCityBudgetTable(Canvas *canvas, CityRect b, const CityBudgetPanel *budget) {
-  static const char *const kCategories[CITY_BUDGET_ROW_COUNT] = {
-    "Residential Tax", "Commercial Tax", "Industrial Tax", "City Ordinances", "Bond Payments",
-    "Police Department", "Fire Department", "Health & Welfare", "Education", "Transit Authority"
+  static const char *const kRowLabels[CITY_BUDGET_ROW_COUNT] = {
+    [CITY_BUDGET_ROW_RESIDENTIAL] = "Residential Tax",
+    [CITY_BUDGET_ROW_COMMERCIAL] = "Commercial Tax",
+    [CITY_BUDGET_ROW_INDUSTRIAL] = "Industrial Tax",
+    [CITY_BUDGET_ROW_ORDINANCES] = "City Ordinances",
+    [CITY_BUDGET_ROW_BONDS] = "Bond Payments",
+    [CITY_BUDGET_ROW_POLICE] = "Police Department",
+    [CITY_BUDGET_ROW_FIRE] = "Fire Department",
+    [CITY_BUDGET_ROW_HEALTH] = "Health & Welfare",
+    [CITY_BUDGET_ROW_EDUCATION] = "Education",
+    [CITY_BUDGET_ROW_TRANSIT] = "Transit Authority",
   };
-  const u32 heading = 0xFFFCFCFC, category_ink = 0xFFFFC000;
+  const u32 heading = 0xFFFCFCFC, label_ink = 0xFFFFC000;
   char text[64];
   CityRect current = CityBudgetControlBounds(b, CITY_BUDGET_CONTROL_TO_DATE, 0);
   CityRect forecast = CityBudgetControlBounds(b, CITY_BUDGET_CONTROL_ESTIMATE, 0);
@@ -264,31 +287,31 @@ static void DrawCityBudgetTable(Canvas *canvas, CityRect b, const CityBudgetPane
   DrawCityInterfaceText(canvas->interface_font, canvas,
       b.left + 12, b.top + 115, "Operating Expenses", heading, true);
   i64 income_to_date = 0, income_estimate = 0, expense_to_date = 0, expense_estimate = 0;
-  for (int category = 0; category < CITY_BUDGET_ROW_COUNT; ++category) {
-    CityRect label = CityBudgetControlBounds(b, CITY_BUDGET_CONTROL_CATEGORY, category);
-    CityRect advisor = CityBudgetControlBounds(b, CITY_BUDGET_CONTROL_ADVISOR, category);
+  for (int row = 0; row < CITY_BUDGET_ROW_COUNT; ++row) {
+    CityRect label = CityBudgetControlBounds(b, CITY_BUDGET_CONTROL_CATEGORY, row);
+    CityRect advisor = CityBudgetControlBounds(b, CITY_BUDGET_CONTROL_ADVISOR, row);
     DrawCityInterfaceText(canvas->interface_font, canvas,
-        label.left + 4, label.top + 1, kCategories[category], category_ink, true);
+        label.left + 4, label.top + 1, kRowLabels[row], label_ink, true);
     DrawCanvasButtonFrame(canvas, advisor, canvas_face, canvas_light, canvas_dark, true);
     DrawCityInterfaceTextCentered(canvas->interface_font, canvas, advisor, "?", heading, true, 10);
-    if (category == CITY_BUDGET_ROW_ORDINANCES) {
+    if (row == CITY_BUDGET_ROW_ORDINANCES) {
       CityRect button = CityBudgetControlBounds(b, CITY_BUDGET_CONTROL_OPEN_ORDINANCES, 0);
       Canvas framed = *canvas;
       framed.unscaled_bevels = false;
       DrawCanvasButtonFrame(&framed, button, 0xFFFFB52A, 0xFFFFDE80, 0xFFD68A08, true);
       DrawCityInterfaceTextCentered(canvas->interface_font, canvas, button, "Open", canvas_text, false, 10);
-    } else if (category != CITY_BUDGET_ROW_BONDS) {
-      CityRect rate = CityBudgetControlBounds(b, CITY_BUDGET_CONTROL_RATE, category);
-      DrawBudgetRateControl(canvas, rate, budget->rate[category]);
+    } else if (row != CITY_BUDGET_ROW_BONDS) {
+      CityRect rate = CityBudgetControlBounds(b, CITY_BUDGET_CONTROL_RATE, row);
+      DrawBudgetRateControl(canvas, rate, budget->rate[row]);
     }
-    DrawCityBudgetAmount(canvas, current.right, label.top + 1, budget->to_date[category], canvas_text, false);
-    DrawCityBudgetAmount(canvas, forecast.right, label.top + 1, budget->estimate[category], canvas_text, false);
-    if (category < CITY_BUDGET_ROW_BONDS) {
-      income_to_date += budget->to_date[category];
-      income_estimate += budget->estimate[category];
+    DrawCityBudgetAmount(canvas, current.right, label.top + 1, budget->to_date[row], canvas_text, false);
+    DrawCityBudgetAmount(canvas, forecast.right, label.top + 1, budget->estimate[row], canvas_text, false);
+    if (row < CITY_BUDGET_ROW_BONDS) {
+      income_to_date += budget->to_date[row];
+      income_estimate += budget->estimate[row];
     } else {
-      expense_to_date += budget->to_date[category];
-      expense_estimate += budget->estimate[category];
+      expense_to_date += budget->to_date[row];
+      expense_estimate += budget->estimate[row];
     }
   }
   DrawCityBudgetTotal(canvas, b, b.left + 100, b.top + 101, "Total", income_to_date, income_estimate);
@@ -476,7 +499,7 @@ void Sc2kCanvasDrawPolicies(Game *game, Canvas *canvas, const Window *window) {
 
 enum { kBondRowHeight = 12, kBondScrollbarWidth = 12, kBondScrollArrowHeight = 10, kBondHeaderRows = 4 };
 
-CityRect CityBondResizeGripBounds(const Window *window) {
+static CityRect CityBondResizeGripBounds(const Window *window) {
   CityRect b = window->bounds;
   return (CityRect){b.right - kBondScrollbarWidth, b.bottom - kBondScrollbarWidth, b.right, b.bottom};
 }
@@ -553,7 +576,7 @@ void DrawCityBonds(const City *city, Canvas *canvas, const Window *window) {
 
   Canvas text = framed;
   text.clip = IntersectCityRects(canvas->clip, content);
-  bool rated = (city->fixes & (1 << CITY_FIX_BOND_RATING)) != 0;
+  bool rated = (city->fixes & (1ull << CITY_FIX_BOND_RATING)) != 0;
   int right = content.right - 6;
   // Draw only visible content rows; the clip also handles a partially visible final row.
   for (int row = first; row < IntMin(rows, first + visible + 1); ++row) {
@@ -649,7 +672,7 @@ bool BondsWindowProcedure(Game *game, const Window *window, const WindowEvent *e
       }
       return true;
     }
-    if ((game->city->fixes & (1 << CITY_FIX_BOND_RATING)) ||
+    if ((game->city->fixes & (1ull << CITY_FIX_BOND_RATING)) ||
         !CanvasPointInRect(CityBondContentBounds(window), x, y)) return false;
     int last = IntMax(0, CityBondContentRows(game->city->indicators.bond_count) - CityBondVisibleRows(window));
     int first = IntClamp(window->bond_scroll, 0, last);

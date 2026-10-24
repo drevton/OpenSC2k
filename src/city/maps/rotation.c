@@ -1,6 +1,16 @@
 #include "city/maps/tile_storage.h"
 #include "city/maps/tables.h"
 
+// Shared map-neighbor steps.
+
+const i8 kCardinalNeighborY[4] = {
+  0, 1, 0, -1,
+};
+
+const i8 kCardinalNeighborX[4] = {
+  -1, 0, 1, 0,
+};
+
 // Rotation Tables
 
 // Return the immutable kind and terrain rotation tables. The pointer is borrowed for the process lifetime and must not
@@ -54,6 +64,18 @@ const CityMapRotationTables *ReadCityMapRotationTables(void) {
 }
 
 // Terrain Tables
+
+const u8 kTerrainRaisedCorners[16] = {
+  [CITY_TERRAIN_FLAT] = 0,
+  [CITY_TERRAIN_SHAPE_1] = 9, [CITY_TERRAIN_SHAPE_2] = 3,
+  [CITY_TERRAIN_SHAPE_3] = 6, [CITY_TERRAIN_SHAPE_4] = 12,
+  [CITY_TERRAIN_SHAPE_5] = 11, [CITY_TERRAIN_SHAPE_6] = 7,
+  [CITY_TERRAIN_SHAPE_7] = 14, [CITY_TERRAIN_SHAPE_8] = 13,
+  [CITY_TERRAIN_SHAPE_9] = 1, [CITY_TERRAIN_SHAPE_10] = 2,
+  [CITY_TERRAIN_SHAPE_11] = 4, [CITY_TERRAIN_SHAPE_12] = 8,
+  [CITY_TERRAIN_SHAPE_13] = 15, [CITY_TERRAIN_SHAPE_14] = 15,
+  [CITY_TERRAIN_SHAPE_15] = 0,
+};
 
 const i8 kTerrainNeighborYOffsets[9] = {
   0, 1, 1, 1, 0, -1, -1, -1, 0,

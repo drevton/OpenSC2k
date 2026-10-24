@@ -1,6 +1,5 @@
 #include "game/audio.h"
 
-#include "assets/assets.h"
 #include "audio/backend.h"
 #include "audio/state.h"
 #include "city/engine/clock.h"
@@ -18,15 +17,15 @@
 #include "ui/state.h"
 
 // Game reports playback results and updates the UI around Audio-owned devices and cursors.
-bool PlayCityEffect(Game *game, int sound_id, CityEffectPlayback playback) {
-  return PlayCitySpatialEffect(game, sound_id, playback, 128);
-}
-
-bool PlayCitySpatialEffect(Game *game, int sound_id, CityEffectPlayback playback, u8 pan) {
+static bool PlayCitySpatialEffect(Game *game, int sound_id, CityEffectPlayback playback, u8 pan) {
   bool result = NativeAudioPlayEffect(game->audio, playback == CITY_EFFECT_STOP ? CITY_SOUND_NONE : sound_id,
       playback == CITY_EFFECT_LOOP || playback == CITY_EFFECT_REPLAY_LOOP, pan);
   if (game->sound_played) game->sound_played(game, sound_id, playback, result);
   return result;
+}
+
+bool PlayCityEffect(Game *game, int sound_id, CityEffectPlayback playback) {
+  return PlayCitySpatialEffect(game, sound_id, playback, 128);
 }
 
 void StopCityPlatformSound(Game *game) { PlayCityEffect(game, CITY_SOUND_NONE, CITY_EFFECT_STOP); }
@@ -37,53 +36,14 @@ void SetJukeboxPlaying(Game *game, bool playing) {
   DirtyCityMusicWindows(game);
 }
 
-// A short interruption stores a cursor, never a second player or decoded audio buffer.
-static bool ResumeJukebox(CityAudioState *audio) {
-  Jukebox *player = &audio->jukebox;
-  int track = audio->resume_music_track;
-  double seconds = audio->resume_music_seconds;
-  audio->interrupt_device = CITY_MUSIC_NO_TOKEN;
-  audio->resume_music_track = player->interrupt_track = -1;
-  bool played = NativeAudioPlayTrack(audio, track, seconds);
-  if (!played) player->playing = 0;
-  return played;
-}
-
 u32 InterruptJukebox(Game *game, int track) {
-  CityAudioState *audio = game->audio;
-  if (!audio->live_open) return 1;
-  Jukebox *player = &audio->jukebox;
-  if (!player->playing) return 1;
-  if (track < 0 || track >= JUKEBOX_TRACKS) return 1;
-  if (audio->interrupt_device == CITY_MUSIC_NO_TOKEN) {
-    double seconds;
-    if (!NativeAudioMusicPosition(audio, &seconds)) return 1;
-    audio->resume_music_track = JukeboxCurrent(player);
-    audio->resume_music_seconds = seconds;
-  }
-  bool played = NativeAudioPlayTrack(audio, track, 0);
-  if (played) {
-    audio->interrupt_device = audio->music_device;
-    player->interrupt_track = track;
-  } else {
-    ResumeJukebox(audio);
-  }
-  DirtyCityMusicWindows(game);
-  return played ? 0 : 1;
+  CityMusicInterruptResult result = NativeAudioInterrupt(game->audio, track);
+  if (result != CITY_MUSIC_INTERRUPT_IGNORED) DirtyCityMusicWindows(game);
+  return result == CITY_MUSIC_INTERRUPT_STARTED ? 0 : 1;
 }
 
-void CompleteJukeboxTrack(Game *game, int notification, u16 device) {
-  CityAudioState *audio = game->audio;
-  if (device == CITY_MUSIC_NO_TOKEN || device != audio->music_device ||
-      (notification != CITY_MUSIC_FINISHED && notification != CITY_MUSIC_FAILED)) return;
-  Jukebox *player = &audio->jukebox;
-  if (audio->interrupt_device == device) ResumeJukebox(audio);
-  else {
-    if (notification == CITY_MUSIC_FINISHED) JukeboxStep(player, 1);
-    else player->playing = 0;
-    NativeAudioPlay(audio);
-  }
-  DirtyCityMusicWindows(game);
+void CompleteJukeboxTrack(Game *game, CityMusicCompletion notification, u16 device) {
+  if (NativeAudioCompleteMusic(game->audio, notification, device)) DirtyCityMusicWindows(game);
 }
 
 // Event cues interrupt the jukebox and resume its saved cursor on completion.
@@ -101,7 +61,7 @@ void StopCityMusicSequence(Game *game) {
 int CompleteCityMusic(Game *game, int notification, int token) {
   if (game->observation && game->observation->complete_music)
     return game->observation->complete_music(game, notification, token);
-  CompleteJukeboxTrack(game, notification, token);
+  CompleteJukeboxTrack(game, (CityMusicCompletion)notification, token);
   return 0;
 }
 
@@ -194,8 +154,8 @@ bool ToggleCityMusicPreference(Game *game) {
 bool PollCityMusic(Game *game) {
   if (!game->audio->live_open) return false;
   u16 device;
-  int notification = NativeAudioMusicNotification(game->audio, &device);
-  if (!notification) return false;
+  CityMusicCompletion notification = NativeAudioMusicNotification(game->audio, &device);
+  if (notification == CITY_MUSIC_PENDING) return false;
   CompleteCityMusic(game, notification, device);
   return true;
 }
@@ -216,26 +176,6 @@ static int CitySoundDuration(Game *game, int sound_id) {
 static int CitySoundReplayThreshold(const CityAudioState *audio, int sound_id) {
   if (sound_id == CITY_SOUND_BRIDGE_CONSTRUCTION) sound_id = CITY_SOUND_CONSTRUCTION;
   return audio->replay_thresholds.threshold[sound_id - CITY_SOUND_FIRST];
-}
-
-// Resource identities are cached; the immutable PCM stays owned by Assets.
-bool CacheCitySoundResource(Game *game, int sound_id) {
-  CityAudioState *audio = game->audio;
-  if (!audio->assets || !IsCitySoundEffectId(sound_id) ||
-      !GetAsset(audio->assets, CITY_ASSET_SOUND_FIRST + sound_id - CITY_SOUND_FIRST).data) return false;
-  audio->cached_sound_id = sound_id;
-  return true;
-}
-
-// Record a resolved tool cue only when its decoded recording is available; cache hits need no asset lookup.
-bool PreloadCityToolSound(Game *game, int sound_id) {
-  CityAudioState *audio = game->audio;
-  if (audio->preloaded_sound_id == sound_id)
-    return true;
-  if (!audio->assets || !IsCitySoundEffectId(sound_id) ||
-      !GetAsset(audio->assets, CITY_ASSET_SOUND_FIRST + sound_id - CITY_SOUND_FIRST).data) return false;
-  audio->preloaded_sound_id = sound_id;
-  return true;
 }
 
 // Play a sound event, interrupting or queuing playback as needed.
@@ -337,7 +277,7 @@ bool PlayCitySoundWithDelay(Game *game, int sound_id, int repetitions) {
       audio->queued_sound = sound_id;
     } else {
       if (sound_id != audio->cached_sound_id)
-        CacheCitySoundResource(game, sound_id);
+        CacheCitySoundResource(audio, sound_id);
       audio->cached_sound_playing = 1;
       if (audio->cached_sound_id == sound_id) {
         if (PlayCityEffect(game, sound_id, CITY_EFFECT_REPLAY_LOOP)) {

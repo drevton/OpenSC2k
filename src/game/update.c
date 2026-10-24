@@ -15,6 +15,7 @@
 #include "city/engine/city_types.h"
 #include "game/state.h"
 #include "city/events/events.h"
+#include "city/presentation.h"
 #include "city/state.h"
 #include "city/saveload/file.h"
 #include "game/errors.h"
@@ -30,11 +31,42 @@
 #include "ui/commands.h"
 #include "ui/dialogs/dialogs.h"
 #include "ui/state.h"
+#include "ui/windows/windows.h"
 #include "ui/tools/tools.h"
 
 // Input advances a waiting startup screen; SDL already dispatches controls.
 void RecordGameInput(Game *game) {
   if (game->idle_state != CITY_IDLE_PLAY) game->idle_input = 1;
+}
+
+// Apply focus suppression, palette, music, tool visibility and map damage in their existing order.
+void HandleApplicationActivation(Game *game, int active) {
+  City *city = game->city;
+  Drawing *drawing = game->drawing;
+  CityInterfaceState *ui = game->ui;
+  CityAudioState *audio = game->audio;
+  if (game->exit_requested)
+    return;
+  game->ranked_events_suppressed = active == 0;
+  if (active == 1 && drawing->palette.background_enabled == 0) {
+    drawing->palette.background_enabled = 1;
+    if (!ui->main_window_iconic) {
+      if (drawing->palette.refresh_deferred == 0)
+        RefreshActiveCityPalette(game);
+      Sc2kDirtyMarkRect(&ui->desktop.dirty, drawing->client_rect);
+      SetCityToolsVisible(game, true);
+      if (audio->music_active == 0)
+        PlayNextCityEventMusicSequence(game);
+      PlayCitySound(city, INVALID_TILE, CITY_SOUND_ACTIVATION_REQUEST);
+    }
+    SetCityCursor(city, CITY_CURSOR_ARROW, 1);
+  } else if (active == 0 && drawing->palette.background_enabled == 1) {
+    drawing->palette.background_enabled = 0;
+    StopCityMusicSequence(game);
+    StopCityPlatformSound(game);
+    Sc2kDirtyMarkRect(&ui->desktop.dirty, drawing->client_rect);
+    InvalidateCityMap(game, NULL);
+  }
 }
 
 // Poll one pending activation input, notifying observers before applying its UI effects. The installed comparison
@@ -107,15 +139,23 @@ void UpdateGame(Game *game) {
   if (game->idle_state == CITY_IDLE_STARTUP_CHOICE) {
     if (game->idle_entry != 0) {
       game->idle_entry = 0;
-      if ((!game->observation || !game->observation->choose_startup_menu) &&
-          (ui->startup_choice == CITY_STARTUP_LOAD_CITY ||
-              ui->startup_choice == CITY_STARTUP_NEW_CITY || ui->startup_choice == CITY_STARTUP_LOAD_SCENARIO ||
-              ui->startup_choice == CITY_STARTUP_EDIT_MAP)) {
-        if (ui->startup_choice == CITY_STARTUP_NEW_CITY) RequestNewCity(game);
-        else if (ui->startup_choice == CITY_STARTUP_EDIT_MAP) RequestCityTerrainEditor(game);
-        else if (ui->startup_choice == CITY_STARTUP_LOAD_SCENARIO) RequestCityScenarioOpen(game);
-        else RequestCityFileOpen(game);
-        return;
+      if (!game->observation || !game->observation->choose_startup_menu) {
+        switch (ui->startup_choice) {
+        case CITY_STARTUP_LOAD_CITY:
+          RequestCityFileOpen(game);
+          return;
+        case CITY_STARTUP_NEW_CITY:
+          RequestNewCity(game);
+          return;
+        case CITY_STARTUP_EDIT_MAP:
+          RequestCityTerrainEditor(game);
+          return;
+        case CITY_STARTUP_LOAD_SCENARIO:
+          RequestCityScenarioOpen(game);
+          return;
+        default:
+          break;
+        }
       }
       switch (ui->startup_choice) {
       case CITY_STARTUP_LOAD_CITY:
@@ -170,14 +210,18 @@ void UpdateGame(Game *game) {
       }
       // Game retains the filename until shutdown, including across nested notices.
       const char *path = CityPathText(&game->command_line_path);
-      if (opening_city && (!game->observation || !game->observation->choose_startup_menu))
-        RequestCityFilePath(game, path);
-      else if (opening_city)
-        OpenCityFromPath(city, path);
-      else if (!game->observation || !game->observation->choose_startup_menu)
-        OpenCityScenarioPath(game, path, true);
-      else
-        OpenCityScenarioFromPath(city, path);
+      bool observed_startup = game->observation && game->observation->choose_startup_menu;
+      if (opening_city) {
+        if (observed_startup)
+          OpenCityFromPath(city, path);
+        else
+          RequestCityFilePath(game, path);
+      } else {
+        if (observed_startup)
+          OpenCityScenarioFromPath(city, path);
+        else
+          OpenCityScenarioPath(game, path, true);
+      }
     }
     return;
   }
@@ -245,7 +289,6 @@ void CompleteCityIdleSimulation(Game *game, u32 options) {
 }
 
 void AdvanceGameCadencePresentation(Game *game, u32 counter, bool animate) {
-  City *city = game->city;
   CityAudioState *audio = game->audio;
   CityPaletteState *palette = &game->drawing->palette;
   if (animate) {
@@ -267,14 +310,14 @@ void AdvanceGameCadencePresentation(Game *game, u32 counter, bool animate) {
   if (audio->sound_delay != 0) {
     --audio->sound_delay;
     if (audio->sound_delay == 0)
-      CompleteCitySoundPlayback(city->game);
+      CompleteCitySoundPlayback(game);
   }
 }
 
 // Simulation passes must not append their feedback to the surrounding player command.
 void FinishGameCitySimulationWork(Game *game) {
   City *city = game->city;
-  CityInterfaceState *ui = city->game->ui;
+  CityInterfaceState *ui = game->ui;
   CityCommandFeedback *feedback = ui ? ui->command_feedback : NULL;
   if (ui) ui->command_feedback = NULL;
   FinishCitySimulationWork(city);
@@ -289,28 +332,32 @@ void RequestCityApplicationExit(Game *game) {
 // Host time controls delivery count, never the deterministic work inside a batch.
 // Always finish one batch, even if preparing/presenting the frame used its budget.
 void RunCitySimulationFrame(Game *game, double deadline) {
-  City *city = game->city;
   do {
-    RunGameIdle(game, (CityIdleInputs){true, true, true});
+    RunGameIdle(game, (GameIdleInputs){
+        .active_view = true, .simulation_enabled = true, .terrain_water_allowed = true});
     if (game->execution_failed) break;
-    if (game->close_requested || game->execution_failed || game->idle_blocked || game->delay_blocked ||
+    City *city = game->city;
+    if (game->close_requested || game->idle_blocked || game->delay_blocked ||
         game->idle_state != (u32)CITY_IDLE_PLAY || city->settings.speed == CITY_SPEED_PAUSED ||
         city->settings.timer_mode != CITY_TIMER_RUNNING || !city->cadence_counter.tick_due ||
         (!city->simulation_work.phase && city->settings.speed != CITY_SPEED_UNLIMITED)) break;
   } while (MonotonicSeconds() < deadline);
 }
 
-void RunGameIdle(Game *game, CityIdleInputs inputs) {
-  CityIdleInputs previous = game->idle_inputs;
+void RunGameIdle(Game *game, GameIdleInputs inputs) {
+  GameIdleInputs previous = game->idle_inputs;
   game->idle_inputs = inputs;
   ClearGameError(game);
   UpdateGame(game);
   game->idle_inputs = previous;
   DeliverCitySimulationEvents(game, 0, 1, false);
-  if (!game->observation && game->ui->newspaper_month != game->city->clock.month) {
-    game->ui->newspaper_month = game->city->clock.month;
-    if (!game->city->newspaper.enabled && !game->ui->newspaper_delivery_disabled &&
-        (game->ui->newspaper_month == CITY_MONTH_APRIL || game->ui->newspaper_month == CITY_MONTH_AUGUST))
-      OpenCityManualNewspaper(game->city, game->city->newspaper.edition_index);
+  if (game->observation) return;
+  City *city = game->city;
+  CityInterfaceState *ui = game->ui;
+  if (ui->newspaper_month != city->clock.month) {
+    ui->newspaper_month = city->clock.month;
+    if (!city->newspaper.enabled && !ui->newspaper_delivery_disabled &&
+        (ui->newspaper_month == CITY_MONTH_APRIL || ui->newspaper_month == CITY_MONTH_AUGUST))
+      OpenCityManualNewspaper(city, city->newspaper.edition_index);
   }
 }

@@ -7,11 +7,12 @@
 
 #include "assets/catalog.h"
 #include "city/engine/command_types.h"
-#include "city/saveload/file.h"
+#include "city/saveload/summary.h"
 #include "city/saveload/legacy_text.h"
 #include "city/saveload/runtime.h"
 #include "city/saveload/services.h"
 #include "city/state.h"
+#include "drawing/fonts/fonts.h"
 #include "drawing/raster/canvas_primitives.h"
 #include "drawing/raster/canvas_raster_internal.h"
 #include "drawing/state.h"
@@ -37,6 +38,9 @@
 // Scenario Window
 // Scenario picker drawn and operated by the native canvas window system.
 
+static void CancelCityScenarioSelection(City *city, CityScenarioSelectionDialog *dialog);
+static void AcceptCityScenarioSelection(City *city, CityScenarioSelectionDialog *dialog);
+
 void CloseCityScenarioSelectionDialog(City *city, CityScenarioSelectionDialog *dialog, i32 result) {
   ScenarioListModel *model = city->game->ui->scenario_window;
   if (model != NULL) { model->answer = result; return; }
@@ -61,7 +65,7 @@ static void DrawScenarioDescription(Canvas *canvas, const char *text) {
     while (end < length && end - start < (int)sizeof(line) - 1 && text[end] != '\n') {
       line[end - start] = text[end];
       line[end - start + 1] = 0;
-      if (Sc2kCanvasChartTextWidth(line) > canvas->width - 85) break;
+      if (CanvasTextWidth(line) > canvas->width - 85) break;
       if (text[end] == ' ') last_space = end;
       ++end;
     }
@@ -69,7 +73,7 @@ static void DrawScenarioDescription(Canvas *canvas, const char *text) {
     if (end == start && text[end] != '\n') ++end;
     memcpy(line, text + start, end - start);
     line[end - start] = 0;
-    Sc2kCanvasChartText(canvas, 75, y, line, 0xFF000000);
+    CanvasTextAt(canvas, 75, y, line, 0xFF000000);
     start = end;
     if (start < length && (text[start] == '\n' || text[start] == ' ')) ++start;
   }
@@ -121,7 +125,7 @@ static bool AddScenarioPath(const char *name, const HostFileInfo *info, void *co
 static bool LoadScenarioPaths(City *city, ScenarioListModel *model) {
   if (!VisitDirectory("Scenario", AddScenarioPath, model)) return false;
   for (int index = 0; index < 256; ++index) {
-    CityPaletteEntry color = city->game->drawing->palette.source.entry[index];
+    CityPaletteEntry color = city->drawing->palette.source.entry[index];
     model->palette[index] = 0xFF000000 | color.red << 16 | color.green << 8 | color.blue;
   }
   return model->count != 0;
@@ -174,7 +178,7 @@ void DrawCityScenarioSelectionWindow(City *city, Canvas *canvas, const Window *w
   Sc2kCanvasDrawStartupWindow(city->game, canvas, window);
   if (model == NULL || model->row_pixels == NULL) return;
   CityRect list = ScenarioListBounds(model, window);
-  Sc2kCanvasChartBox(canvas, list, 0xFFFFFFFFu, 0);
+  CanvasBeveledBox(canvas, list.left, list.top, list.right, list.bottom, 0xFFFFFFFFu, 0);
   i32 left = list.left + 2, top = list.top + 2;
   for (i32 y = top; y < list.bottom - 2; ++y) {
     if (y < 0 || y >= canvas->height || y < canvas->clip.top || y >= canvas->clip.bottom) continue;
@@ -188,18 +192,18 @@ void DrawCityScenarioSelectionWindow(City *city, Canvas *canvas, const Window *w
             (row == (size_t)model->dialog->selected_index ? 0x00FFFFFF : 0));
   }
   CityRect track = {list.right - 18, list.top + 18, list.right - 2, list.bottom - 18};
-  Sc2kCanvasChartFill(canvas, track, 0xFFE0E0E0u);
+  CanvasFill(canvas, track.left, track.top, track.right, track.bottom, 0xFFE0E0E0u);
   DrawCanvasButtonBox(canvas, track.left, list.top + 2, track.right, track.top, 0xFFC0C0C0, true);
   DrawCanvasButtonBox(canvas, track.left, track.bottom, track.right, list.bottom - 2, 0xFFC0C0C0, true);
-  Sc2kCanvasChartText(canvas, track.left + 5, list.top + 4, "^", 0xFF000000u);
-  Sc2kCanvasChartText(canvas, track.left + 5, track.bottom + 2, "v", 0xFF000000u);
+  CanvasTextAt(canvas, track.left + 5, list.top + 4, "^", 0xFF000000u);
+  CanvasTextAt(canvas, track.left + 5, track.bottom + 2, "v", 0xFF000000u);
   i32 height = track.bottom - track.top, visible = ScenarioVisibleRows(model);
   i32 thumb_height = model->count > (size_t)visible ? (i32)((i64)height * visible / model->count) : height;
   thumb_height = IntMax(thumb_height, 12);
   thumb_height = IntMin(thumb_height, height);
   i32 last = ScenarioLastScroll(model);
   i32 thumb_top = track.top + (last > 0 ? (i32)((i64)(height - thumb_height) * model->first_visible / last) : 0);
-  Sc2kCanvasChartBox(canvas, (CityRect){track.left,thumb_top,track.right,thumb_top+thumb_height}, 0xFFC0C0C0u, 1);
+  CanvasBeveledBox(canvas, track.left, thumb_top, track.right, thumb_top + thumb_height, 0xFFC0C0C0u, 1);
 }
 bool BeginCityScenarioSelection(City *city, ScenarioListModel *model, CityScenarioSelectionDialog *dialog) {
   if (city->game->ui->scenario_token == INT32_MAX) return false;
@@ -270,7 +274,7 @@ bool OpenCityScenarioSelection(City *city, CityFileChoiceCallback *callback, voi
     free(model);
     return false;
   }
-  city->game->drawing->palette.direct_animation = 1;
+  city->drawing->palette.direct_animation = 1;
   return true;
 }
 
@@ -283,7 +287,7 @@ void CompleteCityScenarioSelection(City *city) {
   void *context = model->context;
   FinishCityScenarioSelection(city, model);
   DestroyCityScenarioSelectionDialog(&model->owned_dialog);
-  city->game->drawing->palette.direct_animation = 0;
+  city->drawing->palette.direct_animation = 0;
   free(model);
   callback(city, path, context);
   free(path);
@@ -297,7 +301,7 @@ void ClearCityScenarioSelection(City *city) {
 }
 
 // Retained diagnostic callers use the same windows through an optional adapter.
-i32 ChooseCityScenarioDialog(City *city, CityScenarioSelectionDialog *dialog) {
+static i32 ChooseCityScenarioDialog(City *city, CityScenarioSelectionDialog *dialog) {
   const GameObservation *observer = city->game->observation;
   if (observer && observer->choose_scenario) return observer->choose_scenario(city, dialog);
 
@@ -333,12 +337,12 @@ void DestroyCityScenarioSelectionDialog(CityScenarioSelectionDialog *dialog) {
   // Canvas lifetime and list storage are owned by the UI picker.
 }
 
-void CancelCityScenarioSelection(City *city, CityScenarioSelectionDialog *dialog) {
+static void CancelCityScenarioSelection(City *city, CityScenarioSelectionDialog *dialog) {
   dialog->selected_index = CITY_SCENARIO_NO_SELECTION;
   CloseCityScenarioSelectionDialog(city, dialog, CITY_DIALOG_CANCEL);
 }
 
-void AcceptCityScenarioSelection(City *city, CityScenarioSelectionDialog *dialog) {
+static void AcceptCityScenarioSelection(City *city, CityScenarioSelectionDialog *dialog) {
   if (dialog->selected_index == CITY_SCENARIO_NO_SELECTION) {
     ShowCityLoadCommandResource(city, CITY_SCENARIO_SELECT_REQUIRED_RESOURCE);
     return;

@@ -19,8 +19,8 @@ on the next frame.
 
 The original paint routine still runs and retains its City/RNG effects and
 comparison capture. Afterwards, full headlines and bodies are composed using a
-scalar City preview with the same per-story seeds. Drawing's shared-choice scratch
-is restored. The UI window owns these texts; reading and scrolling do not change
+scalar City preview with the same per-story seeds and its own shared token choices.
+The UI window owns these texts; reading and scrolling do not change
 City, regenerate articles or spend simulation random numbers.
 
 Click an excerpt, headline or lead photo to open the article in the same canvas
@@ -36,13 +36,27 @@ installs them explicitly. Stock template installation also restores its token ma
 
 ## Code ownership
 
-`city/events/news.c` owns the news records and initialization tail. After any opening notice is dismissed,
-`FinishCityNewspaperInitialization` fills the weather/editorial records and consumes the existing event-RNG draw
-for the music request. It runs once before the first paint.
+`city/events/news.c` owns news records, ranking, article selection and template expansion. Its existing
+250-byte shared token-choice table is transient City state; headline and body composition reuse it.
+The composition API takes City and immutable newspaper resources, without reaching into Drawing.
+After any opening notice is dismissed, `FinishCityNewspaperInitialization` fills the weather/editorial
+records and consumes the existing event-RNG draw for the music request. It runs once before the first paint.
 
-`ui/news/newspaper_presentation.c` owns opening/closing the dialog, its borrowed picture, wait timer, window damage
-and temporary pause reconciliation. Its UI declarations live in `ui/news/newspaper.h`. Drawing keeps page layout,
-article composition and painting, including the retained first-paint City/RNG effects described above.
+`ui/news/newspaper_capture.c` owns capture layout, retained first-paint effects, text/filler capture and
+full article preview composition. Its declarations live in `ui/news/newspaper_capture.h`. Capture writes
+the supplied City's calendar, CRT RNG and article caches; a manual preview supplies a scalar City copy.
+The result owns copied text and geometry plus a retained picture reference. Recapture replaces that
+reference; release it before discarding the capture storage. Drawing owns only prepared capture
+layout/font/alignment tables.
+
+`ui/news/newspaper_drawing.c` owns software page painting, publication layout, the opening animation
+and window input. It consumes captured text and pictures; painting does not compose articles again.
+`ui/news/newspaper_window.c` owns canvas window creation, page replacement, deadlines and callback handoff.
+Its completion is attached before pause reconciliation can dispatch nested UI work.
+
+`ui/news/newspaper_presentation.c` implements initialization/destruction and the text, rectangle and
+measurement presentation hooks. Comparison can observe those hooks without retaining a native capture.
+Window/dialog lifecycle declarations stay in `ui/news/newspaper.h`; capture internals do not leak through it.
 
 The shared window-stack, focus, pixel-coordinate and visibility interface is `ui/windows/windows.h`.
 Window pointers are borrowed until the stack changes; retain window IDs across callbacks and open/close/focus operations.

@@ -1,5 +1,8 @@
-#include "city/engine/simulation.h"
 #include "ui/news/newspaper.h"
+
+#include "city/engine/simulation.h"
+#include "ui/news/newspaper_capture.h"
+#include "ui/news/newspaper_state.h"
 
 #include <stdlib.h>
 
@@ -29,7 +32,6 @@ static int CreateCityNewspaperPage(City *city, CityNewspaperDialog *paint, int e
   NativeNewspaperDialog *page = calloc(1, sizeof(*page));
   if (!page) {
     SetGameError(city->game, SC2K_ERROR_HOST_ALLOCATION_FAILURE);
-    city->game->execution_failed = true;
     return -1;
   }
   bool captured = paint ? NativeCaptureNewspaper(city, paint, page) :
@@ -51,12 +53,11 @@ static int CreateCityNewspaperPage(City *city, CityNewspaperDialog *paint, int e
   if (slot < 0) {
     NativeReleaseNewspaperPage(page);
     free(page);
-    if (!GetGameError(city->game)) SetGameError(city->game, SC2K_ERROR_HOST_ALLOCATION_FAILURE);
-    city->game->execution_failed = true;
+    SetGameError(city->game, SC2K_ERROR_HOST_ALLOCATION_FAILURE);
     return -1;
   }
   Window *window = &ui->desktop.windows[slot];
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   if (drawing->newspaper_opening_window) {
     MarkScreenDirty(&drawing->screen_damage, drawing->newspaper_opening_bounds);
     Sc2kDirtyMarkRect(&ui->desktop.window_damage, drawing->newspaper_opening_bounds);
@@ -142,8 +143,7 @@ static void CompleteCityNewspaperOpening(City *city, void *context) {
   free(context);
   bool resume = !city->game->close_requested && !city->game->execution_failed;
   if (!ResumeCityNewspaperOpening(city, opening.token, resume, opening.callback, opening.context)) {
-    if (!GetGameError(city->game)) SetGameError(city->game, SC2K_ERROR_HOST_ALLOCATION_FAILURE);
-    city->game->execution_failed = true;
+    SetGameError(city->game, SC2K_ERROR_HOST_ALLOCATION_FAILURE);
     if (opening.callback) opening.callback(city, opening.context);
   }
   ApplicationUpdateDialogPause(city);
@@ -182,13 +182,36 @@ bool OpenCityNewspaperWithCallback(City *city, int edition, bool automatic,
   free(pending);
   ResumeCityTick(city, (int)token, false, 0);
   SetGameError(city->game, SC2K_ERROR_HOST_ALLOCATION_FAILURE);
-  city->game->execution_failed = true;
   return false;
 }
 
 void ScheduleCityStartupNewspaper(City *city) {
   city->game->ui->startup_newspaper_edition = city->newspaper.edition_index;
   city->game->ui->startup_newspaper_open_at = -1;
+}
+
+// Only an armed deadline limits the host wait; queued work waits for a successfully presented map frame.
+int LimitCityStartupNewspaperWait(const CityInterfaceState *ui, int wait_ms) {
+  if (ui->startup_newspaper_open_at > 0)
+    wait_ms = IntMin(wait_ms, IntMax(0, (int)((ui->startup_newspaper_open_at - MonotonicSeconds()) * 1000) + 1));
+  return wait_ms;
+}
+
+void ArmCityStartupNewspaper(CityInterfaceState *ui) {
+  if (ui->startup_newspaper_open_at < 0) ui->startup_newspaper_open_at = MonotonicSeconds() + 0.5;
+}
+
+bool PollCityStartupNewspaper(City *city, double now) {
+  Game *game = city->game;
+  CityInterfaceState *ui = game->ui;
+  if (ui->startup_newspaper_open_at > 0 && now >= ui->startup_newspaper_open_at &&
+      !game->delay_blocked && !ui->dialog_pause_requested && !game->close_requested && !game->execution_failed) {
+    int edition = ui->startup_newspaper_edition;
+    ui->startup_newspaper_open_at = 0;
+    OpenCityManualNewspaper(city, edition);
+    return true;
+  }
+  return false;
 }
 
 void OpenCityManualNewspaper(City *city, int edition) {
@@ -206,7 +229,7 @@ void ApplyCityNewspaperPageEffects(City *city, int edition) {
   CityNewspaperDialog paint = {.edition_index = edition};
   if (BeginCityNewspaperDialog(city, &paint) != CITY_NEWSPAPER_INITIALIZATION_SKIPPED)
     FinishCityNewspaperInitialization(city, edition);
-  if (!city->game->resources->facility_resources_unavailable) {
+  if (!city->game->resources->news_resources_unavailable) {
     NativeNewspaperDialog *page = calloc(1, sizeof(*page));
     if (page) {
       NativeCaptureNewspaper(city, &paint, page);

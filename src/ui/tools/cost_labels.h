@@ -1,7 +1,7 @@
 #ifndef SC2K_UI_TOOL_COST_LABELS_H
 #define SC2K_UI_TOOL_COST_LABELS_H
 
-#include "drawing/canvas.h"
+#include "drawing/types.h"
 
 typedef struct CityMapViewConfig CityMapViewConfig;
 

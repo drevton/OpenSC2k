@@ -1,28 +1,11 @@
-#ifndef SC2K_DOMAIN_SRC_UI_DIALOGS_DIALOGS_H
-#define SC2K_DOMAIN_SRC_UI_DIALOGS_DIALOGS_H
+#ifndef SC2K_UI_DIALOGS_H
+#define SC2K_UI_DIALOGS_H
 
-#include "city/engine/commands.h"
-#include "city/engine/input.h"
 #include "city/types.h"
 
 typedef struct Game Game;
-typedef struct Window Window;
+typedef struct CityNameCommandInput CityNameCommandInput;
 typedef struct CityInterfaceState CityInterfaceState;
-
-// A close transfers completions from Window to UI. The lifetime module releases each record before invoking
-// its callback; the callback owns its context until it runs, after the outer command has unwound.
-typedef void CityWindowCallback(City *city, void *context);
-typedef struct CityWindowCompletion {
-  struct CityWindowCompletion *next;
-  CityWindowCallback *callback;
-  void *context;
-} CityWindowCompletion;
-// The caller or window-close callback owns the reply through window dismissal.
-typedef struct CityConfirmationState {
-  u32 window_id;
-  CityCommand command;
-  i32 answer;
-} CityConfirmationState;
 
 // Operation-local retained notice records. The UI owner borrows the active innermost scope.
 typedef struct CityConnectionDialog CityConnectionDialog;
@@ -88,18 +71,9 @@ bool AnswerCityResourceAlert(City *city, int token);
 bool AnswerCityTextNotice(City *city, int token);
 bool CityMissionNoticeWaiting(const CityInterfaceState *ui);
 
-// Window state is released before completion runs, outside any command.
-// Attach before any call that can reconcile pauses or run nested UI work. Failure leaves the window unchanged;
-// success retains callback delivery and borrows its context until completion. This API never frees the context.
-bool AttachCityWindowCallback(Window *window, CityWindowCallback *callback, void *context);
 // Open the notice for an existing City continuation. UI retains its reply and pause until completion;
 // the callback resumes the live caller once. Unknown tokens do nothing; an open failure cancels that caller.
 void OpenCityTickContinuation(City *city, int token);
-// Copies text and attaches completion before pause reconciliation. Success transfers callback delivery to UI;
-// the window may already have closed on return. Failure retains neither callback nor context.
-bool OpenCityNoticeWithCallback(City *city, const char *title, const char *text, u32 flags,
-    CityWindowCallback *callback, void *context);
-void CompleteCityWindowCallbacks(City *city);
 
 // Requests
 
@@ -132,12 +106,9 @@ typedef struct {
   TileIndex tile;
 } CityCanvasStadiumRequest;
 
-i32 ChooseCityCanvasDialog(City *city, void *dialog);
-
 // Leave/abandon choices are local windows; Game applies an accepted shutdown or replacement after callers unwind.
 void HandleCityExitCommand(City *city);
 void OpenCityAbandonDialog(Game *game);
-void AnswerCityLeaveDialog(Game *game, bool accept);
 void CompleteCityAbandon(Game *game);
 
 // Local retained callers borrow action/context synchronously. The matching pause wraps the complete call.

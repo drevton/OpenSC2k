@@ -20,7 +20,7 @@ static void PresentCityZoneDragCost(City *city, CityMapViewConfig *view, u32 cos
 // Font selection/measurement/rasterization are canvas host services, not CDC emulation.
 void DrawCityZoneCostLabel(City *city, const CityZoneCostPresentation *presentation, int cost,
     int screen_x, int screen_y) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   const CityMapViewConfig *view = presentation->view;
   int zoom = view->zoom;
   int height = drawing->map_state.zone_cost_font_heights[zoom];
@@ -63,7 +63,7 @@ void DrawCityCanvasZoneCostLabel(City *city, Canvas *canvas, CityMapViewConfig *
 
 // The main map's repaint wrapper composes its retained label after terrain, signs and transient effects.
 void DrawRetainedCityZoneCostLabel(City *city) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   CityRect label = drawing->map_state.zone_cost_label_rect;
   if (label.left >= label.right || label.top >= label.bottom) return;
   int magnification = drawing->default_map_view->magnified_large_zoom ? 2 : 1;

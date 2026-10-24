@@ -11,6 +11,8 @@
 // altitude[0..4] remains land/bed height. zone[4] selects underlying slope versus zoning in zone[0..3]; zone[5..7]
 // has no bridge payload. Shared flags/overlay, tunnels and underground retain their tile_storage.h meanings.
 
+#include "drawing/maps/map_sprites.h"
+#include "city/infrastructure/surface_lines.h"
 #include "city/infrastructure/networks.h"
 #include "city/infrastructure/spans.h"
 #include "city/saveload/map_format.h"
@@ -33,6 +35,7 @@
 #include "city/state.h"
 #include "city/tools/tools.h"
 #include "drawing/maps/map_terrain.h"
+#include "drawing/maps/map_camera.h"
 #include "drawing/maps/tables.h"
 #include "game/state.h"
 
@@ -118,7 +121,7 @@ int CityNativeRoadBridgeStyles(int length) {
 
 // OpenTTD CalcBridgePiece: north, south, inner north/south, middle odd/even. North/south distances must describe an
 // admitted span position; returns its head or alternating inner artwork selector.
-int CityRoadBridgePiece(int north, int south) {
+static int CityRoadBridgePiece(int north, int south) {
   if (north == 1) return 0;
   if (south == 1) return 1;
   if (north < south) return north & 1 ? 3 : 2;
@@ -150,7 +153,7 @@ int EncodeCityRoadSpanChoice(int choice) {
 CityInfrastructureSpan FindCityBridgeSpan(const City *city, TileIndex start, TileIndex end, bool rail) {
   CityInfrastructureSpan span = {.start = start, .end = INVALID_TILE, .error_tile = INVALID_TILE,
       .error = CITY_NOTICE_CROSSING_BLOCKED};
-  if (!(city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)) ||
+  if (!(city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) ||
       !IsMapTileValid(city, start) || !IsMapTileValid(city, end)) return span;
   CityPoint start_point = MapTilePt(city, start);
   CityPoint end_point = MapTilePt(city, end);
@@ -230,7 +233,7 @@ static TileIndex CityBridgeNeighbor(const City *city, TileIndex tile, int side) 
 
 // Decode the native bridge-head facing from a readable tile record. Non-head pieces use the routine's no-head value;
 // no whole-span search or mutation occurs.
-SC2K_PRESERVE_MOST int ReadCityBridgeHead(const TileInfo *tp) {
+static SC2K_PRESERVE_MOST int ReadCityBridgeHead(const TileInfo *tp) {
   if (!IsCityBridgeHead(tp)) return CITY_BRIDGE_HEAD_NONE;
   return ReadTileZoneByte(tp) & CITY_BRIDGE_HEAD_FACING_MASK ?
       CITY_BRIDGE_HEAD_SOUTH : CITY_BRIDGE_HEAD_NORTH;
@@ -238,7 +241,7 @@ SC2K_PRESERVE_MOST int ReadCityBridgeHead(const TileInfo *tp) {
 
 // Walk matching bridge metadata toward one end of a valid bridge tile. Side must be -1 or 1; returns the terminal
 // matching cell even when malformed metadata stops before a proper head.
-TileIndex FindCityBridgeHead(const City *city, TileIndex origin, int side) {
+static TileIndex FindCityBridgeHead(const City *city, TileIndex origin, int side) {
   assert(IsMapTileValid(city, origin));
   assert(side == -1 || side == 1);
   TileIndex tile = origin;
@@ -255,24 +258,26 @@ TileIndex FindCityBridgeHead(const City *city, TileIndex origin, int side) {
 // read-only predicate; malformed or incomplete spans are rejected without repairing map data.
 bool ValidateCityBridgeSpan(const City *city, TileIndex tile) {
   TileIndex first = FindCityBridgeHead(city, tile, -1), last = FindCityBridgeHead(city, tile, 1);
-  int axis = ReadCityBridgeAxis(&city->tile[tile]), stride = axis ? city->map_width : 1;
-  bool highway = IsTileKindHighwayBridge(ReadTile(city, tile));
+  const TileInfo *tp = &city->tile[tile];
+  int axis = ReadCityBridgeAxis(tp), stride = axis ? city->map_width : 1;
+  bool highway = IsTileKindHighwayBridge(tp->kind);
   int length = (last - first) / stride + 1;
-  if (length < 2 || ReadCityBridgeHead(&city->tile[first]) != CITY_BRIDGE_HEAD_NORTH ||
-      ReadCityBridgeHead(&city->tile[last]) != CITY_BRIDGE_HEAD_SOUTH ||
-      ReadTileBridgeStyle(&city->tile[first]) != ReadTileBridgeStyle(&city->tile[last])) return false;
+  const TileInfo *first_tp = &city->tile[first], *last_tp = &city->tile[last];
+  if (length < 2 || ReadCityBridgeHead(first_tp) != CITY_BRIDGE_HEAD_NORTH ||
+      ReadCityBridgeHead(last_tp) != CITY_BRIDGE_HEAD_SOUTH ||
+      ReadTileBridgeStyle(first_tp) != ReadTileBridgeStyle(last_tp)) return false;
   if (highway) {
-    int lane = (ReadTileZoneByte(&city->tile[tile]) & CITY_BRIDGE_HIGHWAY_RIGHT) != 0;
+    int lane = (ReadTileZoneByte(tp) & CITY_BRIDGE_HIGHWAY_RIGHT) != 0;
     if (length & 1) return false;
     TileIndex other = GetRelativeTileOrInvalid(city, tile,
         axis ? lane ? -1 : 1 : 0, axis ? 0 : lane ? -1 : 1);
     if (other == INVALID_TILE) return false;
-    const TileInfo *tp = &city->tile[other];
-    if (CityBridgeHeadKind(tp->kind) != TK_HIGHWAY_BRIDGE_HEAD ||
-        ReadCityBridgeAxis(tp) != axis ||
-        !((ReadTileZoneByte(tp) ^ ReadTileZoneByte(&city->tile[tile])) & CITY_BRIDGE_HIGHWAY_RIGHT) ||
-        ReadCityBridgeHead(tp) != ReadCityBridgeHead(&city->tile[tile]) ||
-        (IsTileKindBridgeHead(tp->kind) && ReadTileBridgeStyle(tp) != ReadTileBridgeStyle(&city->tile[tile])))
+    const TileInfo *other_tp = &city->tile[other];
+    if (CityBridgeHeadKind(other_tp->kind) != TK_HIGHWAY_BRIDGE_HEAD ||
+        ReadCityBridgeAxis(other_tp) != axis ||
+        !((ReadTileZoneByte(other_tp) ^ ReadTileZoneByte(tp)) & CITY_BRIDGE_HIGHWAY_RIGHT) ||
+        ReadCityBridgeHead(other_tp) != ReadCityBridgeHead(tp) ||
+        (IsTileKindBridgeHead(other_tp->kind) && ReadTileBridgeStyle(other_tp) != ReadTileBridgeStyle(tp)))
       return false;
     int across = axis ? 1 : city->map_width;
     if (FindCityBridgeHead(city, other, -1) != (lane ? first - across : first + across) ||
@@ -319,11 +324,12 @@ void StoreCityBridgeSpan(City *city, TileIndex first, TileIndex last, int head_k
 // including on odd-grid spans.
 int CityBridgeHighwayZone(const City *city, TileIndex tile) {
   assert(IsMapTileValid(city, tile));
-  int axis = ReadCityBridgeAxis(&city->tile[tile]);
+  const TileInfo *tp = &city->tile[tile];
+  int axis = ReadCityBridgeAxis(tp);
   TileIndex first = FindCityBridgeHead(city, tile, -1);
   int stride = axis ? city->map_width : 1;
   int distance = (tile - first) / stride;
-  int lane = (ReadTileZoneByte(&city->tile[tile]) & CITY_BRIDGE_HIGHWAY_RIGHT) != 0;
+  int lane = (ReadTileZoneByte(tp) & CITY_BRIDGE_HIGHWAY_RIGHT) != 0;
   int along = distance & 1;
   return (axis << CITY_HIGHWAY_ORIENTATION_SHIFT) |
       ((axis ? lane : along) ? CITY_BUILDING_CONTINUE_X : 0) |
@@ -341,7 +347,7 @@ int ReadCityHighwayBridgePiece(const City *city, TileIndex tile) {
 
 // Derive the bridge artwork piece from distances to its two stored ends. Requires a valid consistent span; no topology
 // or style is inferred from pixels.
-int ReadCityBridgePiece(const City *city, TileIndex tile) {
+static int ReadCityBridgePiece(const City *city, TileIndex tile) {
   TileIndex first = FindCityBridgeHead(city, tile, -1), last = FindCityBridgeHead(city, tile, 1);
   int stride = ReadCityBridgeAxis(&city->tile[tile]) ? city->map_width : 1;
   int north = (tile - first) / stride + !IsCityBridgeHead(&city->tile[first]);
@@ -352,13 +358,15 @@ int ReadCityBridgePiece(const City *city, TileIndex tile) {
 // Read a valid bridge's deck level, using its bank head when the dry-head payload is not stored. Requires consistent
 // span metadata; returns geometry without editing borrowed altitude fields.
 int ReadCityBridgeDeckHeight(const City *city, TileIndex tile) {
+  const TileInfo *tp = &city->tile[tile];
   // Bridge heads sit on their bank. Water-built bridges need not initialize
   // a borrowed water-height payload on dry heads, including saved SC2 bridges.
-  if (IsCityBridgeHead(&city->tile[tile])) return ReadCityLandHeight(&city->tile[tile]) + 1;
-  if (!HasTileWater(&city->tile[tile])) return ReadCityWaterHeight(&city->tile[tile]) + 1;
+  if (IsCityBridgeHead(tp)) return ReadCityLandHeight(tp) + 1;
+  if (!HasTileWater(tp)) return ReadCityWaterHeight(tp) + 1;
   TileIndex head = FindCityBridgeHead(city, tile, -1);
-  if (IsCityBridgeHead(&city->tile[head])) return ReadCityLandHeight(&city->tile[head]) + 1;
-  return ReadCityWaterHeight(&city->tile[tile]) + 1;
+  const TileInfo *head_tp = &city->tile[head];
+  if (IsCityBridgeHead(head_tp)) return ReadCityLandHeight(head_tp) + 1;
+  return ReadCityWaterHeight(tp) + 1;
 }
 
 // Resolve the transport family available through a valid bridge tile in the supplied cardinal direction. Crossing the
@@ -493,7 +501,7 @@ bool RemoveCityNativeBridge(City *city, TileIndex origin, bool animate) {
   }
   // Stock graded the banks during construction and repairs them during demolition. Terrain-preserving bridges
   // leave the original slopes in place, so their removal must not reshape the banks or demolish nearby occupants.
-  bool repair_banks = highway && !(city->fixes & (1 << CITY_FIX_HIGHWAY_TERRAIN));
+  bool repair_banks = highway && !(city->fixes & (1ull << CITY_FIX_HIGHWAY_TERRAIN));
   TileIndex far_shore = INVALID_TILE;
   if (repair_banks) {
     TileIndex near_shore = GetRelativeTileOrInvalid(city, first[0], -2 * !axis, -2 * axis);
@@ -553,10 +561,11 @@ void PlaceCityBridgeUnderpass(City *city, TileIndex tile, int kind) {
   InvalidateTile(city, tile);
 }
 
-SC2K_PRESERVE_MOST int CityBridgeViewZone(const City *city, TileIndex tile) {
+// Project bridge axis, head facing and highway lane into the camera without changing stored metadata.
+static SC2K_PRESERVE_MOST int CityBridgeViewZone(const City *city, TileIndex tile) {
   const TileInfo *tp = &city->tile[tile];
   int zone = ReadTileZoneByte(tp), kind = tp->kind;
-  int rotation = CityMapCameraRotation(city->game->drawing), axis = (zone & CITY_BRIDGE_AXIS_MASK) != 0;
+  int rotation = CityMapCameraRotation(city->drawing), axis = (zone & CITY_BRIDGE_AXIS_MASK) != 0;
   int toggles = (rotation & 1) * CITY_BRIDGE_AXIS_MASK;
   // Count turns beginning on each axis; only their parity affects these bits.
   if (IsTileKindBridgeHead(kind) && ((rotation + axis) & 2)) toggles |= CITY_BRIDGE_HEAD_FACING_MASK;
@@ -568,7 +577,7 @@ SC2K_PRESERVE_MOST int CityBridgeViewZone(const City *city, TileIndex tile) {
 static int BridgeDeckSprite(const City *city, TileIndex tile, int zoom, BridgeStyle style) {
   int piece = ReadCityBridgePiece(city, tile);
   int world_axis = ReadCityBridgeAxis(&city->tile[tile]);
-  CityPoint along = CityMapCameraVector(CityMapCameraRotation(city->game->drawing), !world_axis, world_axis);
+  CityPoint along = CityMapCameraVector(CityMapCameraRotation(city->drawing), !world_axis, world_axis);
   static const u8 kReversePiece[] = {1, 0, 3, 2, 4, 5};
   if (along.x + along.y < 0 && piece < 6) piece = kReversePiece[piece];
   if (piece >= CITY_LANDSCAPE_BRIDGE_PIECES) piece = 4;
@@ -580,13 +589,16 @@ static int BridgeDeckSprite(const City *city, TileIndex tile, int zoom, BridgeSt
 }
 
 TileIndex CityDrawbridgeCenter(const City *city, TileIndex tile) {
-  if (!IsMapTileValid(city, tile) || !IsTileKindBridge(city->tile[tile].kind) ||
-      IsTileKindRailBridge(city->tile[tile].kind) || IsTileKindHighwayBridge(city->tile[tile].kind)) return INVALID_TILE;
+  if (!IsMapTileValid(city, tile)) return INVALID_TILE;
+  const TileInfo *tp = &city->tile[tile];
+  if (!IsTileKindBridge(tp->kind) || IsTileKindRailBridge(tp->kind) || IsTileKindHighwayBridge(tp->kind))
+    return INVALID_TILE;
   TileIndex first = FindCityBridgeHead(city, tile, -1);
-  if (!IsCityBridgeHead(&city->tile[first]) || ReadTileBridgeStyle(&city->tile[first]) != BRIDGE_STYLE_DRAWBRIDGE)
+  const TileInfo *first_tp = &city->tile[first];
+  if (!IsCityBridgeHead(first_tp) || ReadTileBridgeStyle(first_tp) != BRIDGE_STYLE_DRAWBRIDGE)
     return INVALID_TILE;
   TileIndex last = FindCityBridgeHead(city, tile, 1);
-  int stride = ReadCityBridgeAxis(&city->tile[first]) ? city->map_width : 1;
+  int stride = ReadCityBridgeAxis(first_tp) ? city->map_width : 1;
   int length = (last - first) / stride;
   return length >= 2 && IsCityBridgeHead(&city->tile[last]) ? first + length / 2 * stride : INVALID_TILE;
 }
@@ -648,7 +660,7 @@ void InvalidateCityDrawbridgesForShip(City *city, int slot, TileIndex previous, 
 
 void DrawCityBridgeDeckArtwork(City *city, TileIndex tile, int layout, int zoom, int screen_x, int baseline,
     BridgeStyle style) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   if (style == BRIDGE_STYLE_DRAWBRIDGE && CityDrawbridgeCenter(city, tile) == tile) {
     int leaf = DrawbridgeHasShip(city, tile, -1) ? CITY_MAP_TILE_SPRITE_RAISING_BRIDGE_OPEN :
         CITY_MAP_TILE_SPRITE_RAISING_BRIDGE_CLOSED;
@@ -660,7 +672,7 @@ void DrawCityBridgeDeckArtwork(City *city, TileIndex tile, int layout, int zoom,
     return;
   }
   int sprite = layout + 500 * zoom;
-  if (city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)) {
+  if (city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) {
     sprite = BridgeDeckSprite(city, tile, zoom, style);
     int palette = kBridgeDefinitions[style].palette;
     DrawCityMapPaletteSpriteAtBaseline(drawing, sprite, screen_x, baseline, SPRITE_OPAQUE_PALETTE,
@@ -680,7 +692,7 @@ void DrawCityBridgeUnderpass(City *city, TileIndex tile, int kind, int zoom, int
   int axis = ReadCityBridgeAxis(&city->tile[tile]);
   int layout = kind == TK_POWER_LINE ? CityMapPowerLayout(axis ? CONN_EW : CONN_NS, CITY_TERRAIN_FLAT) :
       kCityMapKindSprites[kind] + !axis;
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   int sprite = CityMapCameraSprite(city->game->resources, layout, CityMapCameraRotation(drawing)) + 500 * zoom;
   DrawCityMapSpriteAtBaseline(drawing, sprite, screen_x, ground_y, 0);
 }
@@ -697,9 +709,9 @@ bool DrawCityBridgeGround(City *city, TileIndex tile, int zoom, int screen_x, in
 // include the approach structure; terrain and perpendicular underpasses stay below.
 static bool DrawBridgeTile(City *city, TileIndex tile, int zoom, int screen_x, int ground_y,
     const CityTileGeometry *tile_geometry) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   const TileInfo *tp = &city->tile[tile];
-  if (!(city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)) || !IsTileKindBridge(tp->kind) ||
+  if (!(city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) || !IsTileKindBridge(tp->kind) ||
       IsTileKindHighwayBridge(tp->kind)) return false;
   BridgeStyle style = ReadCityBridgeStyle(city, tile);
   CityTileGeometry geometry = *tile_geometry;
@@ -748,9 +760,7 @@ static bool DrawBridgeTile(City *city, TileIndex tile, int zoom, int screen_x, i
 void TickCityBridgeTile(City *city, TileIndex tile) {
   RefreshCityTileGroundCover(city, tile, false);
   if (HasTileWater(&city->tile[tile])) return;
-  CityPoint point = MapTilePt(city, tile);
-  u32 cycle = 11 * point.x + 9 * point.y + (city->landscape_tick >> 8);
-  GrowCityGround(city, tile, cycle, false);
+  AdvanceCityGroundRecovery(city, tile);
 }
 
 const TileModule kCityBridgeModule = {

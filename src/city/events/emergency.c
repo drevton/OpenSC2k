@@ -160,7 +160,7 @@ void DispatchCityService(City *city, TileIndex tile_index, int service) {
 }
 
 // Recall the City's emergency units without changing vehicle/effect events or available service counts.
-bool RecallCityDispatchedUnits(City *city) {
+static bool RecallCityDispatchedUnits(City *city) {
   bool recalled = false;
   for (int slot = CITY_EVENT_SLOT_FIRST; slot < city->events.capacity; ++slot) {
     int type = city->events.event[slot].type;

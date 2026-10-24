@@ -3,7 +3,8 @@
 
 #include "city/types.h"
 
-// Stable IDs: persisted settings and command recordings use these numbers.
+// Stable bit positions in City.fixes: persisted settings and command recordings use these numbers.
+// Construct masks with 1ull so shifts and complements retain all 64 bits.
 typedef enum CityFix {
   CITY_FIX_ASSET_VALUES,
   CITY_FIX_TREATMENT_VALUE,

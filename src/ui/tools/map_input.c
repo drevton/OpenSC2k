@@ -1,4 +1,3 @@
-#include "game/audio.h"
 #include "city/infrastructure/lines.h"
 #include "city/infrastructure/spans.h"
 #include "city/maps/terrain.h"
@@ -6,13 +5,11 @@
 #include <string.h>
 
 #include "assets/state.h"
-#include "audio/backend.h"
-#include "audio/state.h"
-#include "audio/types.h"
 #include "city/economy/economy.h"
 #include "city/engine/city_types.h"
 #include "city/engine/commands.h"
 #include "city/engine/simulation.h"
+#include "city/events/emergency.h"
 #include "city/events/events.h"
 #include "city/infrastructure/bridges.h"
 #include "city/infrastructure/highways.h"
@@ -32,11 +29,9 @@
 #include "drawing/maps/map_view.h"
 #include "drawing/maps/placement.h"
 #include "drawing/maps/tables.h"
-#include "drawing/palette.h"
 #include "drawing/state.h"
 #include "game/commands.h"
 #include "game/errors.h"
-#include "game/palette.h"
 #include "game/state.h"
 #include "ui/cursor/cursor.h"
 #include "ui/charts/charts.h"
@@ -52,24 +47,6 @@
 #include "ui/tools/tools.h"
 #include "ui/tools/types.h"
 #include "ui/windows/windows.h"
-
-// The tile renderer chooses this marker's layer; later tiles still occlude it in painter order.
-void DrawCityMapPlacementTile(City *city, TileIndex tile) {
-  Drawing *drawing = city->game->drawing;
-  if (!drawing->paint_placement || drawing->sprite_damage_bounds) return;
-  const CityCanvasPlacementSelection *placement = &city->game->ui->desktop.placement;
-  int first = 0, end = placement->count;
-  while (first < end) {
-    int middle = first + (end - first) / 2;
-    if (placement->cells[middle].tile < tile) first = middle + 1;
-    else end = middle;
-  }
-  bool selected = first < placement->count && placement->cells[first].tile == tile;
-  if (city->game->ui->error_tile_window && city->game->ui->error_tile == tile && (!selected || placement->point))
-    DrawCityMapPlacementMarker(city, tile, false, true);
-  if (selected)
-    DrawCityMapPlacementMarker(city, tile, placement->point, false);
-}
 
 static void InvalidateCityMapSelectionTile(City *city, int x, int y) {
   TileIndex tile = MapTileXYOrInvalid(city, x, y);
@@ -99,7 +76,7 @@ static void InvalidateCityMapSelectionRectangle(City *city, int first_x, int fir
 
 // Schedule erasure of the previous selection footprint.
 void FlushCityMapSelectionRedraw(City *city) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   if (drawing->map_state.redraw_state == 0)
     return;
   CityMapSelectionBounds *bounds = &drawing->map_state.selection_bounds;
@@ -107,103 +84,10 @@ void FlushCityMapSelectionRedraw(City *city) {
   drawing->map_state.redraw_state = 0;
 }
 
-// UI owns the retained selection and scratch array; Drawing supplies exact marker bounds.
-bool ReserveCityPlacementCells(CityCanvasDesktop *desktop, int count) {
-  CityCanvasPlacementSelection *placement = &desktop->placement;
-  if (count <= placement->capacity) return true;
-  int capacity = IntMax(count, IntMax(64, placement->capacity * 2));
-  CityCanvasPlacementCell *cells = malloc((size_t)capacity * 2 * sizeof(*cells));
-  if (!cells) return false;
-  if (placement->count)
-    memcpy(cells, placement->cells, (size_t)placement->count * sizeof(*cells));
-  if (placement->capacity)
-    memcpy(cells + capacity, placement->scratch, (size_t)placement->capacity * sizeof(*cells));
-  free(placement->cells);
-  placement->cells = cells;
-  placement->scratch = cells + capacity;
-  placement->capacity = capacity;
-  return true;
-}
-
-// Children already satisfy the heap order. Move this parent down until it is at least as large as both children.
-static void SiftCityPlacementCells(CityCanvasPlacementCell *cells, int root, int count) {
-  CityCanvasPlacementCell value = cells[root];
-  for (int child = 2 * root + 1; child < count; child = 2 * root + 1) {
-    if (child + 1 < count && cells[child].tile < cells[child + 1].tile) ++child;
-    if (value.tile >= cells[child].tile) break;
-    cells[root] = cells[child];
-    root = child;
-  }
-  cells[root] = value;
-}
-
-// Placement records contain only tile keys. A max heap produces ascending order without a comparator callback,
-// recursion or extra storage; duplicate keys remain in the selection.
-static void SortCityPlacementCells(CityCanvasPlacementCell *cells, int count) {
-  for (int root = count / 2 - 1; root >= 0; --root) SiftCityPlacementCells(cells, root, count);
-  for (int end = count - 1; end > 0; --end) {
-    CityCanvasPlacementCell value = cells[0];
-    cells[0] = cells[end];
-    cells[end] = value;
-    SiftCityPlacementCells(cells, 0, end);
-  }
-}
-
-// Returns whether the visible selection changed. Cells use the City TileIndex layout.
-// Frame preparation damages the last painted preview and final pointer position once.
-bool SetCityCanvasPlacementCells(const City *city, CityCanvasDesktop *desktop, const CityCanvasPlacementCell *cells,
-    int count, bool point) {
-  if (!desktop || count < 0 || count > city->map_cell_count || (count && !cells)) return false;
-  if (!ReserveCityPlacementCells(desktop, count)) return false;
-  const Drawing *drawing = city->game->drawing;
-  CityRect bounds = {0};
-  bool ordered = true;
-  for (int i = 0; i < count; ++i) {
-    if (!IsMapTileValid(city, cells[i].tile)) return false;
-    if (i && cells[i - 1].tile > cells[i].tile) ordered = false;
-    CityRect cell = CityMapPlacementBounds(city, cells[i].tile, point);
-    if (!i) bounds = cell;
-    else {
-      bounds = UnionCityRects(bounds, cell);
-    }
-  }
-  // Reuse the input scratch; sorted cells allow bounded tile rendering to use binary lookup.
-  if (count) {
-    if (cells != desktop->placement.scratch)
-      memcpy(desktop->placement.scratch, cells, (size_t)count * sizeof(*cells));
-    cells = desktop->placement.scratch;
-    if (!ordered) SortCityPlacementCells(desktop->placement.scratch, count);
-  }
-  bool same_cells = count == desktop->placement.count;
-  for (int i = 0; same_cells && i < count; ++i)
-    same_cells = cells[i].tile == desktop->placement.cells[i].tile;
-  const CityMapViewConfig *view = count ? drawing->default_map_view : NULL;
-  if (count == desktop->placement.count && (!count ||
-      (same_cells && desktop->placement.point == point &&
-       !memcmp(&bounds, &desktop->placement.bounds, sizeof(bounds)) &&
-       desktop->placement.origin_x == drawing->map_state.origin_x &&
-       desktop->placement.origin_y == drawing->map_state.origin_y &&
-       desktop->placement.zoom == view->zoom &&
-       desktop->placement.magnified == view->magnified_large_zoom &&
-       desktop->placement.underground == drawing->map_state.events_suppressed))) return false;
-  desktop->placement.count = count;
-  desktop->placement.bounds = bounds;
-  desktop->placement.point = point;
-  if (count) {
-    memcpy(desktop->placement.cells, cells, (size_t)count * sizeof(*cells));
-    desktop->placement.origin_x = drawing->map_state.origin_x;
-    desktop->placement.origin_y = drawing->map_state.origin_y;
-    desktop->placement.zoom = view->zoom;
-    desktop->placement.magnified = view->magnified_large_zoom;
-    desktop->placement.underground = drawing->map_state.events_suppressed;
-  }
-  return true;
-}
-
 // Retained drag presentation owns the temporary drawing target. City owns the counters and traversal;
 // prepare the clip before publishing damage and clear it after the complete City update.
 void UpdateInfrastructureLinePlacementPreview(City *city, CityMapViewConfig *view, TileIndex start, TileIndex end) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   CityCompactHighwayPlan compact;
   bool compact_preview = PlanCityCompactHighway(city, start, end, -1, &compact);
   if (!compact_preview && GetTransportSpanCompatibilityMask(city, start) == CITY_SPAN_COMPATIBILITY_INVALID)
@@ -282,7 +166,41 @@ void UpdateCityMapToolPreview(Game *game) {
   drawing->map_state.redraw_state = 1;
 }
 
-CityZoneDragInput Sc2kNextCityMapZoneInput(Game *game) {
+// The enclosing tracker controls cursor consumption through release or cancellation.
+CityPoint ReadCityCommandPointer(City *city, u32 index) {
+  return city->pointer_command.samples != NULL ? city->pointer_command.samples[index].point
+                                               : city->pointer_command.points[index];
+}
+
+void ApplyCityCommandPointerModifiers(City *city, u32 index) {
+  if (city->pointer_command.samples == NULL)
+    return;
+  u32 flags = city->pointer_command.samples[index].flags;
+  SetCityAltKeyPressed(city->game->ui, (flags & CITY_POINTER_MODIFIER_ALT) != 0);
+  SetCityShiftKeyPressed(city->game->ui, (flags & CITY_POINTER_MODIFIER_SHIFT) != 0);
+  SetCityCtrlKeyPressed(city->game->ui, (flags & CITY_POINTER_MODIFIER_CONTROL) != 0);
+}
+
+static CityZoneDragInput Sc2kNextZoneDragInput(City *city) {
+  if (city->zone_drag_input == NULL) {
+    CityPoint point = ReadCityCommandPointer(city, city->pointer_command.index);
+    ApplyCityCommandPointerModifiers(city, city->pointer_command.index);
+    u32 flags;
+    if (city->pointer_command.samples != NULL) {
+      u32 sample = city->pointer_command.samples[city->pointer_command.index].flags;
+      flags = (sample & CITY_POINTER_MODIFIER_SHIFT) != 0 ? CITY_DRAG_INPUT_SHIFT_CANCEL
+                                                          : sample & CITY_POINTER_SAMPLE_RELEASE;
+    } else {
+      flags = city->pointer_command.index + 1 == city->pointer_command.count ? city->pointer_command.release_flags : 0;
+    }
+    if (flags == 0)
+      ++city->pointer_command.index;
+    return (CityZoneDragInput){point, flags};
+  }
+  return city->zone_drag_input[city->zone_drag_index++];
+}
+
+static CityZoneDragInput Sc2kNextCityMapZoneInput(Game *game) {
   City *city = game->city;
   Drawing *drawing = game->drawing;
   CityMapViewConfig *view = drawing->default_map_view;
@@ -458,32 +376,25 @@ CityPlacementIntent ResolveCityPlacementIntent(Game *game, int tools, TileIndex 
 
 // Input coordinates and selected tools are local. Only resolved locations/options cross the City boundary.
 const u8 kCityToolVariantCounts[CITY_TOOL_GROUP_COUNT] = {
-    5, 2, 3, 11, 5, 9, 6, 6, 2, 2, 2, 2, 4, 4, 5, 1, 1, 1};
-
-int Sc2kCanvasFacilityVariant(int tool) {
-  static const u8 facilities[CITY_FACILITY_TOOL_TABLE_COUNT][2] = {{CITY_TOOL_GROUP_CIVIC, CITY_CIVIC_POLICE},
-      {CITY_TOOL_GROUP_CIVIC, CITY_CIVIC_FIRE}, {CITY_TOOL_GROUP_CIVIC, CITY_CIVIC_HOSPITAL},
-      {CITY_TOOL_GROUP_EDUCATION, CITY_EDUCATION_SCHOOL}, {CITY_TOOL_GROUP_POWER, CITY_POWER_COAL},
-      {CITY_TOOL_GROUP_POWER, CITY_POWER_NUCLEAR}, {CITY_TOOL_GROUP_RAIL, CITY_RAIL_SUBWAY_STATION},
-      {CITY_TOOL_GROUP_ROAD, CITY_ROAD_BUS_DEPOT}, {CITY_TOOL_GROUP_RAIL, CITY_RAIL_DEPOT},
-      {CITY_TOOL_GROUP_POWER, CITY_POWER_WIND}, {CITY_TOOL_GROUP_POWER, CITY_POWER_SOLAR},
-      {CITY_TOOL_GROUP_POWER, CITY_POWER_MICROWAVE}, {CITY_TOOL_GROUP_POWER, CITY_POWER_FUSION},
-      {CITY_TOOL_GROUP_WATER, CITY_WATER_TOWER}, {CITY_TOOL_GROUP_WATER, CITY_WATER_DESALINATION},
-      {CITY_TOOL_GROUP_EDUCATION, CITY_EDUCATION_LIBRARY}, {CITY_TOOL_GROUP_EDUCATION, CITY_EDUCATION_MUSEUM},
-      {CITY_TOOL_GROUP_RECREATION, CITY_RECREATION_BIG_PARK}, {CITY_TOOL_GROUP_RECREATION, CITY_RECREATION_ZOO},
-      {CITY_TOOL_GROUP_REWARDS, CITY_REWARD_PLYMOUTH_ARCOLOGY}, {CITY_TOOL_GROUP_REWARDS, CITY_REWARD_FOREST_ARCOLOGY},
-      {CITY_TOOL_GROUP_REWARDS, CITY_REWARD_DARCO_ARCOLOGY}, {CITY_TOOL_GROUP_REWARDS, CITY_REWARD_LAUNCH_ARCOLOGY},
-      {CITY_TOOL_GROUP_POWER, CITY_POWER_OIL}, {CITY_TOOL_GROUP_POWER, CITY_POWER_GAS},
-      {CITY_TOOL_GROUP_WATER, CITY_WATER_TREATMENT}, {CITY_TOOL_GROUP_REWARDS, CITY_REWARD_MAYORS_HOUSE},
-      {CITY_TOOL_GROUP_REWARDS, CITY_REWARD_CITY_HALL}, {CITY_TOOL_GROUP_REWARDS, CITY_REWARD_STATUE},
-      {CITY_TOOL_GROUP_REWARDS, CITY_REWARD_LLAMA_DOME}, {CITY_TOOL_GROUP_EDUCATION, CITY_EDUCATION_COLLEGE},
-      {CITY_TOOL_GROUP_CIVIC, CITY_CIVIC_PRISON}, {CITY_TOOL_GROUP_RECREATION, CITY_RECREATION_SMALL_PARK},
-      {CITY_TOOL_GROUP_RECREATION, CITY_RECREATION_STADIUM}, {CITY_TOOL_GROUP_WATER, CITY_WATER_PUMP}};
-  if (tool < CITY_FACILITY_TOOL_FIRST || tool >= CITY_FACILITY_TOOL_COUNT)
-    return -1;
-  const u8 *facility = facilities[tool - CITY_FACILITY_TOOL_FIRST];
-  return facility[0] | (facility[1] << 8);
-}
+  [CITY_TOOL_GROUP_DEMOLISH] = 5,
+  [CITY_TOOL_GROUP_TREE_WATER] = 2,
+  [CITY_TOOL_GROUP_DISPATCH] = 3,
+  [CITY_TOOL_GROUP_POWER] = 11,
+  [CITY_TOOL_GROUP_WATER] = 5,
+  [CITY_TOOL_GROUP_REWARDS] = 9,
+  [CITY_TOOL_GROUP_ROAD] = 6,
+  [CITY_TOOL_GROUP_RAIL] = 6,
+  [CITY_TOOL_GROUP_PORT] = 2,
+  [CITY_TOOL_GROUP_RESIDENTIAL] = 2,
+  [CITY_TOOL_GROUP_COMMERCIAL] = 2,
+  [CITY_TOOL_GROUP_INDUSTRIAL] = 2,
+  [CITY_TOOL_GROUP_EDUCATION] = 4,
+  [CITY_TOOL_GROUP_CIVIC] = 4,
+  [CITY_TOOL_GROUP_RECREATION] = 5,
+  [CITY_TOOL_GROUP_SIGN] = 1,
+  [CITY_TOOL_GROUP_QUERY] = 1,
+  [CITY_TOOL_GROUP_CENTER] = 1,
+};
 
 // Each tile command is independently priced and admitted against live City state. Lower first, then raise, so
 // slope propagation never moves an already leveled tile away from the target. Stop on the first failed edit.
@@ -596,62 +507,95 @@ bool RunCityMapToolAction(Game *game, const CityPlacementIntent *intent) {
   return RunCityCommand(game, CITY_COMMAND_PLACE_BUILDING, end, building, facing, 0, NULL, NULL);
 }
 
-// Read-only frontend translation; original handlers remain the only map-edit entry.
+// Read-only translation into native tool-group/variant bits; City mutations use resolved commands.
 int Sc2kCanvasMapPointerTools(int tool, int road_variant) {
-  if (tool >= CITY_CANVAS_TOOL_RESIDENTIAL && tool <= CITY_CANVAS_TOOL_DENSE_INDUSTRIAL)
-    return (CITY_TOOL_GROUP_RESIDENTIAL + tool % 3) | ((tool / 3) << 8);
-  if (tool >= CITY_CANVAS_TOOL_POLICE && tool <= CITY_CANVAS_TOOL_NUCLEAR)
-    return Sc2kCanvasFacilityVariant(tool);
-  if (tool >= CITY_CANVAS_TOOL_SUBWAY_STATION && tool <= CITY_CANVAS_TOOL_WATER_PUMP)
-    return Sc2kCanvasFacilityVariant(tool - (CITY_CANVAS_TOOL_SUBWAY_STATION - CITY_FACILITY_TOOL_SUBWAY_STATION));
-  if (tool >= CITY_CANVAS_TOOL_DISPATCH_POLICE && tool <= CITY_CANVAS_TOOL_DISPATCH_MILITARY)
-    return CITY_TOOL_GROUP_DISPATCH | ((tool - CITY_CANVAS_TOOL_DISPATCH_POLICE) << 8);
   if (tool == CITY_CANVAS_TOOL_ROAD)
     return road_variant >= CITY_ROAD_ROAD && road_variant <= CITY_ROAD_BUS_DEPOT
         ? CITY_TOOL_GROUP_ROAD | (road_variant << 8)
         : -1;
   // Add one so omitted tools stay invalid while group zero remains selectable.
   static const i32 kPointerTools[CITY_CANVAS_TOOL_COUNT] = {
-    [CITY_CANVAS_TOOL_SEAPORT] = (CITY_TOOL_GROUP_PORT | (CITY_PORT_SEAPORT << 8)) + 1,
-    [CITY_CANVAS_TOOL_AIRPORT] = (CITY_TOOL_GROUP_PORT | (CITY_PORT_AIRPORT << 8)) + 1,
-    [CITY_CANVAS_TOOL_SUBWAY_RAIL_CONNECTION] = (CITY_TOOL_GROUP_RAIL | (CITY_RAIL_SUBWAY_RAIL_CONNECTION << 8)) + 1,
-    [CITY_CANVAS_TOOL_PIPES] = CITY_TOOL_GROUP_WATER + 1,
-    [CITY_CANVAS_TOOL_SUBWAY] = (CITY_TOOL_GROUP_RAIL | (CITY_RAIL_SUBWAY << 8)) + 1,
-    [CITY_CANVAS_TOOL_RAIL] = CITY_TOOL_GROUP_RAIL + 1,
-    [CITY_CANVAS_TOOL_ROAD_BRIDGE] = (CITY_TOOL_GROUP_ROAD | CITY_ROAD_BRIDGE << 8) + 1,
-    [CITY_CANVAS_TOOL_RAIL_BRIDGE] = (CITY_TOOL_GROUP_RAIL | CITY_RAIL_BRIDGE << 8) + 1,
-    [CITY_CANVAS_TOOL_POWER_LINES] = CITY_TOOL_GROUP_POWER + 1,
-    [CITY_CANVAS_TOOL_DEMOLISH] = CITY_TOOL_GROUP_DEMOLISH + 1,
-    [CITY_CANVAS_TOOL_RAISE_TERRAIN] = ((CITY_DEMOLISH_RAISE << 8) | (CITY_DEMOLISH_RAISE << 16)) + 1,
-    [CITY_CANVAS_TOOL_LOWER_TERRAIN] = ((CITY_DEMOLISH_LOWER << 8) | (CITY_DEMOLISH_LOWER << 16)) + 1,
-    [CITY_CANVAS_TOOL_TREES] = CITY_TOOL_GROUP_TREE_WATER + 1,
-    [CITY_CANVAS_TOOL_WATER] = (CITY_TOOL_GROUP_TREE_WATER | (CITY_TREE_WATER_WATER << 8)) + 1,
-    [CITY_CANVAS_TOOL_HYDRO] = (CITY_TOOL_GROUP_POWER | (CITY_POWER_HYDRO << 8)) + 1,
+    [CITY_CANVAS_TOOL_RESIDENTIAL] = (CITY_TOOL_GROUP_RESIDENTIAL | CITY_ZONE_LIGHT << 8) + 1,
+    [CITY_CANVAS_TOOL_COMMERCIAL] = (CITY_TOOL_GROUP_COMMERCIAL | CITY_ZONE_LIGHT << 8) + 1,
+    [CITY_CANVAS_TOOL_INDUSTRIAL] = (CITY_TOOL_GROUP_INDUSTRIAL | CITY_ZONE_LIGHT << 8) + 1,
+    [CITY_CANVAS_TOOL_DENSE_RESIDENTIAL] = (CITY_TOOL_GROUP_RESIDENTIAL | CITY_ZONE_DENSE << 8) + 1,
+    [CITY_CANVAS_TOOL_DENSE_COMMERCIAL] = (CITY_TOOL_GROUP_COMMERCIAL | CITY_ZONE_DENSE << 8) + 1,
+    [CITY_CANVAS_TOOL_DENSE_INDUSTRIAL] = (CITY_TOOL_GROUP_INDUSTRIAL | CITY_ZONE_DENSE << 8) + 1,
+    [CITY_CANVAS_TOOL_POLICE] = (CITY_TOOL_GROUP_CIVIC | CITY_CIVIC_POLICE << 8) + 1,
+    [CITY_CANVAS_TOOL_FIRE] = (CITY_TOOL_GROUP_CIVIC | CITY_CIVIC_FIRE << 8) + 1,
+    [CITY_CANVAS_TOOL_HOSPITAL] = (CITY_TOOL_GROUP_CIVIC | CITY_CIVIC_HOSPITAL << 8) + 1,
+    [CITY_CANVAS_TOOL_SCHOOL] = (CITY_TOOL_GROUP_EDUCATION | CITY_EDUCATION_SCHOOL << 8) + 1,
+    [CITY_CANVAS_TOOL_COAL] = (CITY_TOOL_GROUP_POWER | CITY_POWER_COAL << 8) + 1,
+    [CITY_CANVAS_TOOL_NUCLEAR] = (CITY_TOOL_GROUP_POWER | CITY_POWER_NUCLEAR << 8) + 1,
+    [CITY_CANVAS_TOOL_PIPES] = (CITY_TOOL_GROUP_WATER | CITY_WATER_PIPES << 8) + 1,
+    [CITY_CANVAS_TOOL_SUBWAY] = (CITY_TOOL_GROUP_RAIL | CITY_RAIL_SUBWAY << 8) + 1,
+    [CITY_CANVAS_TOOL_ROAD] = (CITY_TOOL_GROUP_ROAD | CITY_ROAD_ROAD << 8) + 1,
+    [CITY_CANVAS_TOOL_RAIL] = (CITY_TOOL_GROUP_RAIL | CITY_RAIL_RAIL << 8) + 1,
+    [CITY_CANVAS_TOOL_POWER_LINES] = (CITY_TOOL_GROUP_POWER | CITY_POWER_LINES << 8) + 1,
+    [CITY_CANVAS_TOOL_DEMOLISH] = (CITY_TOOL_GROUP_DEMOLISH | CITY_DEMOLISH_CLEAR << 8) + 1,
+    [CITY_CANVAS_TOOL_RAISE_TERRAIN] = (CITY_DEMOLISH_RAISE << 8 | CITY_DEMOLISH_RAISE << 16) + 1,
+    [CITY_CANVAS_TOOL_LOWER_TERRAIN] = (CITY_DEMOLISH_LOWER << 8 | CITY_DEMOLISH_LOWER << 16) + 1,
+    [CITY_CANVAS_TOOL_SUBWAY_STATION] = (CITY_TOOL_GROUP_RAIL | CITY_RAIL_SUBWAY_STATION << 8) + 1,
+    [CITY_CANVAS_TOOL_BUS_DEPOT] = (CITY_TOOL_GROUP_ROAD | CITY_ROAD_BUS_DEPOT << 8) + 1,
+    [CITY_CANVAS_TOOL_RAIL_DEPOT] = (CITY_TOOL_GROUP_RAIL | CITY_RAIL_DEPOT << 8) + 1,
+    [CITY_CANVAS_TOOL_WIND] = (CITY_TOOL_GROUP_POWER | CITY_POWER_WIND << 8) + 1,
+    [CITY_CANVAS_TOOL_SOLAR] = (CITY_TOOL_GROUP_POWER | CITY_POWER_SOLAR << 8) + 1,
+    [CITY_CANVAS_TOOL_MICROWAVE] = (CITY_TOOL_GROUP_POWER | CITY_POWER_MICROWAVE << 8) + 1,
+    [CITY_CANVAS_TOOL_FUSION] = (CITY_TOOL_GROUP_POWER | CITY_POWER_FUSION << 8) + 1,
+    [CITY_CANVAS_TOOL_WATER_TOWER] = (CITY_TOOL_GROUP_WATER | CITY_WATER_TOWER << 8) + 1,
+    [CITY_CANVAS_TOOL_DESALINATION] = (CITY_TOOL_GROUP_WATER | CITY_WATER_DESALINATION << 8) + 1,
+    [CITY_CANVAS_TOOL_LIBRARY] = (CITY_TOOL_GROUP_EDUCATION | CITY_EDUCATION_LIBRARY << 8) + 1,
+    [CITY_CANVAS_TOOL_MUSEUM] = (CITY_TOOL_GROUP_EDUCATION | CITY_EDUCATION_MUSEUM << 8) + 1,
+    [CITY_CANVAS_TOOL_BIG_PARK] = (CITY_TOOL_GROUP_RECREATION | CITY_RECREATION_BIG_PARK << 8) + 1,
+    [CITY_CANVAS_TOOL_ZOO] = (CITY_TOOL_GROUP_RECREATION | CITY_RECREATION_ZOO << 8) + 1,
+    [CITY_CANVAS_TOOL_PLYMOUTH_ARCOLOGY] = (CITY_TOOL_GROUP_REWARDS | CITY_REWARD_PLYMOUTH_ARCOLOGY << 8) + 1,
+    [CITY_CANVAS_TOOL_FOREST_ARCOLOGY] = (CITY_TOOL_GROUP_REWARDS | CITY_REWARD_FOREST_ARCOLOGY << 8) + 1,
+    [CITY_CANVAS_TOOL_DARCO_ARCOLOGY] = (CITY_TOOL_GROUP_REWARDS | CITY_REWARD_DARCO_ARCOLOGY << 8) + 1,
+    [CITY_CANVAS_TOOL_LAUNCH_ARCOLOGY] = (CITY_TOOL_GROUP_REWARDS | CITY_REWARD_LAUNCH_ARCOLOGY << 8) + 1,
+    [CITY_CANVAS_TOOL_OIL] = (CITY_TOOL_GROUP_POWER | CITY_POWER_OIL << 8) + 1,
+    [CITY_CANVAS_TOOL_GAS] = (CITY_TOOL_GROUP_POWER | CITY_POWER_GAS << 8) + 1,
+    [CITY_CANVAS_TOOL_WATER_TREATMENT] = (CITY_TOOL_GROUP_WATER | CITY_WATER_TREATMENT << 8) + 1,
+    [CITY_CANVAS_TOOL_MAYORS_HOUSE] = (CITY_TOOL_GROUP_REWARDS | CITY_REWARD_MAYORS_HOUSE << 8) + 1,
+    [CITY_CANVAS_TOOL_CITY_HALL] = (CITY_TOOL_GROUP_REWARDS | CITY_REWARD_CITY_HALL << 8) + 1,
+    [CITY_CANVAS_TOOL_STATUE] = (CITY_TOOL_GROUP_REWARDS | CITY_REWARD_STATUE << 8) + 1,
+    [CITY_CANVAS_TOOL_LLAMA_DOME] = (CITY_TOOL_GROUP_REWARDS | CITY_REWARD_LLAMA_DOME << 8) + 1,
+    [CITY_CANVAS_TOOL_COLLEGE] = (CITY_TOOL_GROUP_EDUCATION | CITY_EDUCATION_COLLEGE << 8) + 1,
+    [CITY_CANVAS_TOOL_PRISON] = (CITY_TOOL_GROUP_CIVIC | CITY_CIVIC_PRISON << 8) + 1,
+    [CITY_CANVAS_TOOL_SMALL_PARK] = (CITY_TOOL_GROUP_RECREATION | CITY_RECREATION_SMALL_PARK << 8) + 1,
+    [CITY_CANVAS_TOOL_STADIUM] = (CITY_TOOL_GROUP_RECREATION | CITY_RECREATION_STADIUM << 8) + 1,
+    [CITY_CANVAS_TOOL_WATER_PUMP] = (CITY_TOOL_GROUP_WATER | CITY_WATER_PUMP << 8) + 1,
+    [CITY_CANVAS_TOOL_TREES] = (CITY_TOOL_GROUP_TREE_WATER | CITY_TREE_WATER_TREES << 8) + 1,
+    [CITY_CANVAS_TOOL_WATER] = (CITY_TOOL_GROUP_TREE_WATER | CITY_TREE_WATER_WATER << 8) + 1,
+    [CITY_CANVAS_TOOL_HYDRO] = (CITY_TOOL_GROUP_POWER | CITY_POWER_HYDRO << 8) + 1,
+    [CITY_CANVAS_TOOL_DISPATCH_POLICE] = (CITY_TOOL_GROUP_DISPATCH | CITY_DISPATCH_POLICE << 8) + 1,
+    [CITY_CANVAS_TOOL_DISPATCH_FIRE] = (CITY_TOOL_GROUP_DISPATCH | CITY_DISPATCH_FIRE << 8) + 1,
+    [CITY_CANVAS_TOOL_DISPATCH_MILITARY] = (CITY_TOOL_GROUP_DISPATCH | CITY_DISPATCH_MILITARY << 8) + 1,
     [CITY_CANVAS_TOOL_SIGN] = CITY_TOOL_GROUP_SIGN + 1,
     [CITY_CANVAS_TOOL_QUERY] = CITY_TOOL_GROUP_QUERY + 1,
-    [CITY_CANVAS_TOOL_MARINA] = (CITY_TOOL_GROUP_RECREATION | (CITY_RECREATION_MARINA << 8)) + 1,
-    [CITY_CANVAS_TOOL_HIGHWAY] = (CITY_TOOL_GROUP_ROAD | (CITY_ROAD_HIGHWAY << 8)) + 1,
-    [CITY_CANVAS_TOOL_TUNNEL] = (CITY_TOOL_GROUP_ROAD | (CITY_ROAD_TUNNEL << 8)) + 1,
-    [CITY_CANVAS_TOOL_ONRAMP] = (CITY_TOOL_GROUP_ROAD | (CITY_ROAD_ONRAMP << 8)) + 1,
+    [CITY_CANVAS_TOOL_MARINA] = (CITY_TOOL_GROUP_RECREATION | CITY_RECREATION_MARINA << 8) + 1,
+    [CITY_CANVAS_TOOL_HIGHWAY] = (CITY_TOOL_GROUP_ROAD | CITY_ROAD_HIGHWAY << 8) + 1,
+    [CITY_CANVAS_TOOL_TUNNEL] = (CITY_TOOL_GROUP_ROAD | CITY_ROAD_TUNNEL << 8) + 1,
+    [CITY_CANVAS_TOOL_ONRAMP] = (CITY_TOOL_GROUP_ROAD | CITY_ROAD_ONRAMP << 8) + 1,
     [CITY_CANVAS_TOOL_CENTER] = CITY_TOOL_GROUP_CENTER + 1,
-    [CITY_CANVAS_TOOL_LEVEL_TERRAIN] = ((CITY_DEMOLISH_LEVEL << 8) | (CITY_DEMOLISH_LEVEL << 16)) + 1,
-    [CITY_CANVAS_TOOL_STRETCH_TERRAIN] = ((CITY_DEMOLISH_RAISE << 8) | (CITY_DEMOLISH_RAISE << 16)) + 1,
-    [CITY_CANVAS_TOOL_STREAM] = (CITY_TOOL_GROUP_TREE_WATER | (CITY_TREE_WATER_WATER << 8)) + 1,
-    [CITY_CANVAS_TOOL_DEZONE] = ((CITY_DEMOLISH_DEZONE << 8) | (CITY_DEMOLISH_DEZONE << 16)) + 1,
+    [CITY_CANVAS_TOOL_LEVEL_TERRAIN] = (CITY_DEMOLISH_LEVEL << 8 | CITY_DEMOLISH_LEVEL << 16) + 1,
+    [CITY_CANVAS_TOOL_DEZONE] = (CITY_DEMOLISH_DEZONE << 8 | CITY_DEMOLISH_DEZONE << 16) + 1,
+    [CITY_CANVAS_TOOL_SEAPORT] = (CITY_TOOL_GROUP_PORT | CITY_PORT_SEAPORT << 8) + 1,
+    [CITY_CANVAS_TOOL_AIRPORT] = (CITY_TOOL_GROUP_PORT | CITY_PORT_AIRPORT << 8) + 1,
+    [CITY_CANVAS_TOOL_SUBWAY_RAIL_CONNECTION] = (CITY_TOOL_GROUP_RAIL | CITY_RAIL_SUBWAY_RAIL_CONNECTION << 8) + 1,
+    [CITY_CANVAS_TOOL_ROAD_BRIDGE] = (CITY_TOOL_GROUP_ROAD | CITY_ROAD_BRIDGE << 8) + 1,
+    [CITY_CANVAS_TOOL_RAIL_BRIDGE] = (CITY_TOOL_GROUP_RAIL | CITY_RAIL_BRIDGE << 8) + 1,
+    [CITY_CANVAS_TOOL_STRETCH_TERRAIN] = (CITY_DEMOLISH_RAISE << 8 | CITY_DEMOLISH_RAISE << 16) + 1,
+    [CITY_CANVAS_TOOL_STREAM] = (CITY_TOOL_GROUP_TREE_WATER | CITY_TREE_WATER_WATER << 8) + 1,
   };
   return tool >= 0 && tool < CITY_CANVAS_TOOL_COUNT ? kPointerTools[tool] - 1 : -1;
 }
 
 // Resolve only building/facility tools. Line, dispatch and terrain tools have separate cursor/toolbar artwork.
 TileKind CityToolBuildingKind(int tool) {
-  if ((tool >= CITY_CANVAS_TOOL_POLICE && tool <= CITY_CANVAS_TOOL_NUCLEAR) ||
-      (tool >= CITY_CANVAS_TOOL_SUBWAY_STATION && tool <= CITY_CANVAS_TOOL_WATER_PUMP)) {
-    int facility = Sc2kCanvasMapPointerTools(tool, 0);
-    return GetCityFacilityTile(facility & 255, (facility >> 8) & 255);
-  }
   if (tool == CITY_CANVAS_TOOL_HYDRO) return TK_HYDRO_POWER;
-  if (tool == CITY_CANVAS_TOOL_MARINA) return TK_MARINA;
-  return TK_CLEAR;
+  int selection = Sc2kCanvasMapPointerTools(tool, 0);
+  if (selection < 0) return TK_CLEAR;
+  return GetCityFacilityTile(selection & 255, (selection >> 8) & 255);
 }
 
 u32 Sc2kCurrentCityMapPointerTools(CityInterfaceState *ui) {
@@ -684,127 +628,6 @@ CityZoneDragInput Sc2kZoneDragEndpointInput(Game *game, TileIndex tile) {
   }
   // Cancel instead of placing at a different endpoint when no nearby point picks this tile.
   return (CityZoneDragInput){{screen.x, screen.y}, CITY_DRAG_INPUT_SHIFT_CANCEL};
-}
-
-// Reset to the small zoom and initialize the map center from its client rectangle.
-void InitializeCityMapView(Game *game, TileIndex location, int zoom) {
-  RecalculateCityMapClientOrigins(game);
-  game->drawing->default_map_view->zoom = zoom;
-  InvalidateCityMapViews(game->drawing);
-  CenterCityMapViewAtTile(game->city, NULL, MapTileX(game->city, location), MapTileY(game->city, location));
-}
-
-void RecalculateCityMapClientOrigins(Game *game) {
-  City *city = game->city;
-  Drawing *drawing = game->drawing;
-  CityMapViewConfig *view = drawing->default_map_view;
-  view->zoom = 0;
-  GetCityMapClientRect(drawing, &view->view_rect);
-  view->magnified_large_zoom = 0;
-  int width = (int)((u32)view->view_rect.right - (u32)view->view_rect.left);
-  int height = (int)((u32)view->view_rect.bottom - (u32)view->view_rect.top);
-  drawing->map_state.save_x = width / 2;
-  drawing->map_state.save_y = height / 2;
-  drawing->map_state.origin_x = width / 2;
-  drawing->map_state.origin_y = drawing->map_state.save_y - 216;
-  UpdateCityMapViewScrollPosition(city, view);
-}
-
-void ReleaseCityMapMouseCapture(Game *game) {
-  Drawing *drawing = game->drawing;
-  CityMapViewConfig *view = drawing->default_map_view;
-  view->pointer_drag_active = 0;
-  view->pointer_command_stage = 0;
-  ReleaseCityMapWindowPointer(game);
-}
-
-// Restore the pan position, redraw, and release the host mouse capture.
-void EndCityMapPan(Game *game) {
-  City *city = game->city;
-  Drawing *drawing = game->drawing;
-  CityMapViewConfig *view = drawing->default_map_view;
-  int x;
-  int y;
-  if (view->magnified_large_zoom != 0) {
-    x = drawing->map_state.pan_release_point.x >> 1;
-    y = drawing->map_state.pan_release_point.y >> 1;
-  } else {
-    x = drawing->map_state.pan_release_point.x;
-    y = drawing->map_state.pan_release_point.y;
-  }
-  OffsetCityMapOrigin(city, view, drawing->map_state.save_x - x, drawing->map_state.save_y - y);
-  view->pointer_drag_active = 0;
-  view->pointer_command_stage = 0;
-  ReleaseCityMapWindowPointer(city->game);
-  view->pan_capture_active = 0;
-}
-
-// Preserve activation effects without an MFC frame or OS capture.
-void HandleApplicationActivation(Game *game, int active) {
-  City *city = game->city;
-  Drawing *drawing = game->drawing;
-  CityInterfaceState *ui = game->ui;
-  CityAudioState *audio = game->audio;
-  if (game->exit_requested)
-    return;
-  game->ranked_events_suppressed = active == 0;
-  if (active == 1 && drawing->palette.background_enabled == 0) {
-    drawing->palette.background_enabled = 1;
-    if (!ui->main_window_iconic) {
-      if (drawing->palette.refresh_deferred == 0)
-        RefreshActiveCityPalette(game);
-      Sc2kDirtyMarkRect(&ui->desktop.dirty, drawing->client_rect);
-      SetCityToolsVisible(game, true);
-      if (audio->music_active == 0)
-        PlayNextCityEventMusicSequence(game);
-      PlayCitySound(city, INVALID_TILE, CITY_SOUND_ACTIVATION_REQUEST);
-    }
-    SetCityCursor(city, CITY_CURSOR_ARROW, 1);
-  } else if (active == 0 && drawing->palette.background_enabled == 1) {
-    drawing->palette.background_enabled = 0;
-    StopCityMusicSequence(game);
-    StopCityPlatformSound(game);
-    Sc2kDirtyMarkRect(&ui->desktop.dirty, drawing->client_rect);
-    InvalidateCityMap(game, NULL);
-  }
-}
-
-CityPoint ReadCityCommandPointer(City *city, u32 index) {
-  return city->pointer_command.samples != NULL ? city->pointer_command.samples[index].point
-                                               : city->pointer_command.points[index];
-}
-
-void ApplyCityCommandPointerModifiers(City *city, u32 index) {
-  if (city->pointer_command.samples == NULL)
-    return;
-  u32 flags = city->pointer_command.samples[index].flags;
-  SetCityAltKeyPressed(city->game->ui, (flags & CITY_POINTER_MODIFIER_ALT) != 0);
-  SetCityShiftKeyPressed(city->game->ui, (flags & CITY_POINTER_MODIFIER_SHIFT) != 0);
-  SetCityCtrlKeyPressed(city->game->ui, (flags & CITY_POINTER_MODIFIER_CONTROL) != 0);
-}
-
-CityZoneDragInput Sc2kNextZoneDragInput(City *city) {
-  if (city->zone_drag_input == NULL) {
-    CityPoint point = ReadCityCommandPointer(city, city->pointer_command.index);
-    ApplyCityCommandPointerModifiers(city, city->pointer_command.index);
-    u32 flags;
-    if (city->pointer_command.samples != NULL) {
-      u32 sample = city->pointer_command.samples[city->pointer_command.index].flags;
-      flags = (sample & CITY_POINTER_MODIFIER_SHIFT) != 0 ? CITY_DRAG_INPUT_SHIFT_CANCEL
-                                                          : sample & CITY_POINTER_SAMPLE_RELEASE;
-    } else {
-      flags = city->pointer_command.index + 1 == city->pointer_command.count ? city->pointer_command.release_flags : 0;
-    }
-    if (flags == 0)
-      ++city->pointer_command.index;
-    return (CityZoneDragInput){point, flags};
-  }
-  return city->zone_drag_input[city->zone_drag_index++];
-}
-
-// Automatic centering follows this player's local preference.
-void CenterCityMapOnEvent(City *city, int x, int y) {
-  if (!city->game->ui->auto_goto_disabled) CenterCityMapViewAtTile(city, NULL, x, y);
 }
 
 bool SelectCityToolWithModifiers(Game *game, int group, int variant, u32 modifiers) {

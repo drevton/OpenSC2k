@@ -11,8 +11,6 @@ void SetDisasterLocation(CityDisasterLocation *location, int x, int y);
 // Tables
 
 extern const CityDisasterPeriods kCityDefaultDisasterPeriods;
-extern const i8 kCardinalNeighborY[4];
-extern const i8 kCardinalNeighborX[4];
 
 // Dispatch
 

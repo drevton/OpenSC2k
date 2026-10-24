@@ -1,3 +1,5 @@
+#include "city/saveload/file.h"
+
 #include "city/saveload/runtime.h"
 #include "city/disasters/disasters.h"
 #include "city/saveload/types.h"
@@ -9,22 +11,17 @@
 
 #include "base/byte_order.h"
 #include "city/saveload/scenario_format.h"
-#include "city/saveload/city_file_internal.h"
+#include "city/saveload/summary.h"
+#include "city/saveload/input.h"
 #include "city/saveload/services.h"
 #include "city/saveload/legacy_text.h"
-#include "city/saveload/file.h"
-#include "base/text.h"
 #include "city/state.h"
 
 // Scenario
 
-static const CityScenarioWordField k_scenario_word_fields[] = {
-  {0}, {4}, {30}, {32}, {48}, {50}
-};
+static const u8 kScenarioWordOffsets[] = {0, 4, 30, 32, 48, 50};
 
-static const CityScenarioWordField k_scenario_dword_fields[] = {
-  {6}, {10}, {14}, {18}, {22}, {26}, {34}, {38}, {42}
-};
+static const u8 kScenarioDwordOffsets[] = {6, 10, 14, 18, 22, 26, 34, 38, 42};
 
 // Close the scenario input captured by a registered cleanup record. Context must remain alive until cleanup; this
 // follows the stream's real close/unwind path rather than suppressing errors.
@@ -37,16 +34,14 @@ static void CloseScenarioMetadataInput(void *context) {
 // false retains load failure state and must not activate a partially decoded mission.
 bool LoadCityScenarioMetadata(City *city, const char *path) {
   void *input = NULL;
-  i32 result = 0;
+  bool loaded = false;
   CityFileCleanup cleanup = {CloseScenarioMetadataInput, &input, NULL};
   PushCityFileCleanup(city->game->file, &cleanup);
   city->mission.active = LoadCityFile(city, path);
-  if (city->mission.active == 0) {
-    goto done;
-  }
+  if (!city->mission.active) goto done;
   input = CityFileOpenStream(city->game->file, path);
   if (input == NULL) {
-    ReportCityChunkError(city->game->file, CITY_NOTICE_ERROR_OPENING_FILE, 1);
+    ReportCityFileError(city->game->file, CITY_NOTICE_ERROR_OPENING_FILE, CITY_FILE_ERROR_RESOURCE_ONLY);
     goto done;
   }
   CityScenarioMetadata *scenario_metadata = &city->mission.metadata;
@@ -57,17 +52,18 @@ bool LoadCityScenarioMetadata(City *city, const char *path) {
   if (CityFileReadTaggedStream(input, "SCEN", CITY_SCENARIO_METADATA_VERSION,
       metadata, sizeof(metadata)) == NULL) {
     DecodeCityScenarioMetadata(scenario_metadata, metadata);
-    ReportCityChunkError(city->game->file, CITY_NOTICE_ERROR_EXTRACTING_SCENARIO_RESOURCE, 1);
-    goto done; // CStdioFile destructor follows EndWaitCursor.
+    ReportCityFileError(city->game->file,
+        CITY_NOTICE_ERROR_EXTRACTING_SCENARIO_RESOURCE, CITY_FILE_ERROR_RESOURCE_ONLY);
+    goto done; // The registered cleanup closes the stream.
   }
-  for (size_t index = 0; index < sizeof(k_scenario_word_fields) / sizeof(k_scenario_word_fields[0]);
-       ++index) {
-    int offset = k_scenario_word_fields[index].offset;
+  for (size_t index = 0; index < sizeof(kScenarioWordOffsets) / sizeof(kScenarioWordOffsets[0]);
+      ++index) {
+    int offset = kScenarioWordOffsets[index];
     WriteLE16(metadata + offset, ReadBE16(metadata + offset));
   }
-  for (size_t index = 0; index < sizeof(k_scenario_dword_fields) / sizeof(k_scenario_dword_fields[0]);
-       ++index) {
-    int offset = k_scenario_dword_fields[index].offset;
+  for (size_t index = 0; index < sizeof(kScenarioDwordOffsets) / sizeof(kScenarioDwordOffsets[0]);
+      ++index) {
+    int offset = kScenarioDwordOffsets[index];
     WriteLE32(metadata + offset, ReadBE32(metadata + offset));
   }
   DecodeCityScenarioMetadata(scenario_metadata, metadata);
@@ -76,11 +72,11 @@ bool LoadCityScenarioMetadata(City *city, const char *path) {
   CityFileCloseStream(completed_input);
   city->disasters.pending_type = scenario_metadata->disaster_type;
   SetDisasterLocation(&city->disasters.location, scenario_metadata->disaster_x, scenario_metadata->disaster_y);
-  result = 1;
+  loaded = true;
 done:
   PopCityFileCleanup(city->game->file, &cleanup);
   CloseScenarioMetadataInput(&input);
-  return result;
+  return loaded;
 }
 
 // Scenario Format
@@ -94,7 +90,7 @@ typedef struct {
 
 #define FIELD(member, record_offset, width, count) \
     {offsetof(CityScenarioMetadata, member), record_offset, width, count}
-static const ScenarioField fields[] = {
+static const ScenarioField kScenarioFields[] = {
   FIELD(disaster_type, 0, 2, 1),
   FIELD(disaster_y, 2, 1, 1),
   FIELD(disaster_x, 3, 1, 1),
@@ -110,11 +106,11 @@ static const ScenarioField fields[] = {
 };
 #undef FIELD
 
-// Encode mission/scenario state into one fixed stock record. Record must hold CITY_SCENARIO_RECORD_SIZE bytes; numbers
-// use the stock format's explicit byte order and state remains unchanged.
+// Encode mission state into the canonical little-endian scenario record. Output must hold CITY_SCENARIO_RECORD_SIZE
+// writable bytes; input state remains unchanged.
 void EncodeCityScenarioMetadata(const CityScenarioMetadata *state, u8 record[CITY_SCENARIO_RECORD_SIZE]) {
-  for (int field_index = 0; field_index < sizeof(fields) / sizeof(fields[0]); ++field_index) {
-    const ScenarioField *field = &fields[field_index];
+  for (int field_index = 0; field_index < sizeof(kScenarioFields) / sizeof(kScenarioFields[0]); ++field_index) {
+    const ScenarioField *field = &kScenarioFields[field_index];
     for (int index = 0; index < field->count; ++index) {
       const u8 *source = (const u8 *)state + field->state_offset + index * field->width;
       u32 value = 0;
@@ -133,11 +129,11 @@ void EncodeCityScenarioMetadata(const CityScenarioMetadata *state, u8 record[CIT
   }
 }
 
-// Decode one complete stock scenario record into caller-owned mission metadata. Input must hold
+// Decode one complete canonical little-endian scenario record into caller-owned mission metadata. Input must hold
 // CITY_SCENARIO_RECORD_SIZE readable bytes; this does not activate a mission or read a file itself.
 void DecodeCityScenarioMetadata(CityScenarioMetadata *state, const u8 record[CITY_SCENARIO_RECORD_SIZE]) {
-  for (int field_index = 0; field_index < sizeof(fields) / sizeof(fields[0]); ++field_index) {
-    const ScenarioField *field = &fields[field_index];
+  for (int field_index = 0; field_index < sizeof(kScenarioFields) / sizeof(kScenarioFields[0]); ++field_index) {
+    const ScenarioField *field = &kScenarioFields[field_index];
     for (int index = 0; index < field->count; ++index) {
       u32 value = 0;
       for (int byte = 0; byte < field->width; ++byte)
@@ -169,7 +165,7 @@ void CityFileCloseStream(void *stream) {
   CloseCityLoadStream(stream);
 }
 
-// Original raw tagged-chunk reader; FILE supplies the excluded CFile services. Output must hold capacity bytes;
+// Read a versioned stock chunk through the selected borrowed input. Output must hold capacity writable bytes;
 // returns NULL for rejected/missing data and restores the initial stream position through its backend's seek path.
 static u8 *ReadTaggedChunk(CityFileInput *input, const char *tag, int version, u8 *output, size_t capacity) {
   int initial = CityFileInputPosition(input);
@@ -230,8 +226,8 @@ static u8 *ReadTaggedChunk(CityFileInput *input, const char *tag, int version, u
         if (CityFileInputRead(input, output, bytes) == bytes) result = output;
       } else if (strncmp(tag, "SCEN", 4) == 0) {
         // Retain the existing defined SCEN overflow replacement: accept the
-        // first destination-sized prefix, consume the tail and keep adjacent
-        // guest fields untouched. Ordinary stock-sized reads stay identical.
+        // first destination-sized prefix and consume the tail without writing past
+        // the destination. Ordinary stock-sized reads stay identical.
         u8 discarded[256];
         u32 remaining = bytes - (u32)capacity;
         if (CityFileInputRead(input, output, (u32)capacity) != capacity) break;
@@ -251,10 +247,10 @@ done:
 }
 
 // Find a versioned stock chunk through a borrowed stdio input and decode it into caller storage. Tag must provide four
-// bytes and output enough space for the admitted chunk; returns the payload pointer or NULL.
-u8 *ReadCityFileChunkByTag(FILE *input, const char *tag, int version, u8 *output) {
+// bytes and output must hold capacity writable bytes; returns the payload pointer or NULL.
+static u8 *ReadCityFileChunkByTag(FILE *input, const char *tag, int version, u8 *output, size_t capacity) {
   CityFileInput file = {.kind = CITY_FILE_INPUT_STDIO, .stream = input};
-  return ReadTaggedChunk(&file, tag, version, output, SIZE_MAX);
+  return ReadTaggedChunk(&file, tag, version, output, capacity);
 }
 // Find and decode a tagged chunk through an already opened observed-load stream. Output must provide capacity writable
 // bytes; returns its payload pointer or NULL and propagates throwing backend errors.
@@ -278,18 +274,19 @@ bool ReadCityPreview(FILE *stream, u8 *picture, size_t picture_capacity, char *d
 
 // Read scenario instructions; the host owns the file and canvas lifetimes. Output must provide 769 bytes; opens/closes
 // its own input and returns false without changing live City state on invalid data.
-bool ReadCityScenarioInstructions(const char *path, char text[769]) {
+bool ReadCityScenarioInstructions(const char *path, char text[CITY_SCENARIO_INSTRUCTION_BYTES + 1]) {
   text[0] = '\0';
   FILE *input = fopen(path, "rb");
   if (input == NULL)
     return false;
-  u8 *result = ReadCityFileChunkByTag(input, "TEXT", 129, (u8 *)text);
+  u8 *result = ReadCityFileChunkByTag(input, "TEXT", CITY_SCENARIO_INSTRUCTIONS_VERSION, (u8 *)text,
+      CITY_SCENARIO_INSTRUCTION_BYTES + 1);
   fclose(input);
   if (result == NULL)
     return false;
   for (i32 index = 0; text[index] != '\0'; ++index)
     if (text[index] == '\r' || text[index] == '\t')
       text[index] = ' ';
-  DecodeCityScenarioText(text, 769);
+  DecodeCityScenarioText(text, CITY_SCENARIO_INSTRUCTION_BYTES + 1);
   return text[0] != '\0';
 }

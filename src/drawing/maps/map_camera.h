@@ -1,12 +1,10 @@
 #ifndef SC2K_MAP_CAMERA_H
 #define SC2K_MAP_CAMERA_H
 
-#include "city/maps/map.h"
-#include "city/maps/terrain.h"
 #include "city/types.h"
 
-typedef struct City City;
 typedef struct Drawing Drawing;
+typedef struct CityTileGeometry CityTileGeometry;
 typedef struct CityMapViewConfig CityMapViewConfig;
 
 typedef struct {
@@ -20,7 +18,6 @@ SC2K_PRESERVE_MOST CityPoint CityMapCameraSize(const City *city, int rotation);
 SC2K_PRESERVE_MOST CityPoint CityMapCameraPoint(const City *city, int rotation, int x, int y);
 SC2K_PRESERVE_MOST CityPoint CityMapWorldPoint(const City *city, int rotation, int x, int y);
 SC2K_PRESERVE_MOST CityPoint CityMapCameraVector(int rotation, int x, int y);
-TileIndex PickCityMapCameraDiagonalTile(City *city, int rotation, int diagonal_x, int diagonal_y, int zoom);
 TileIndex CityMapCameraTile(const City *city, int rotation, int x, int y);
 CityPoint CityMapViewTilePoint(const City *city, TileIndex tile);
 TileIndex CityMapViewNeighbor(const City *city, TileIndex tile, int dx, int dy);
@@ -52,8 +49,8 @@ int CityMapViewOrientation(const City *city, TileIndex tile);
 bool IsCityMapViewFootprintAnchor(const City *city, TileIndex tile);
 // Pick logical camera pixels or transfer the world point at its center. Neither operation binds or modifies a view.
 // Terrain, layer visibility and underground mode come from the supplied City and its Drawing options.
-TileIndex PickCityMapCameraPoint(City *city, CityMapCamera camera, CityPoint point);
-CityPoint TransferCityMapCameraCenter(City *city, CityMapCamera source, CityMapCamera target);
+TileIndex PickCityMapCameraPoint(const City *city, CityMapCamera camera, CityPoint point);
+CityPoint TransferCityMapCameraCenter(const City *city, CityMapCamera source, CityMapCamera target);
 // Inclusive origin bounds for the supplied viewport, zoom and rotation; no map scan.
 CityRect CityMapOriginBounds(const City *city, CityMapCamera camera);
 CityPoint ClampCityMapCameraOrigin(const City *city, CityMapCamera camera);
@@ -61,16 +58,17 @@ CityPoint ClampCityMapCameraOrigin(const City *city, CityMapCamera camera);
 // Projection reads geometry without changing the camera or world tile data.
 void CityMapTileCorners(const City *city, TileIndex tile, int zoom, int points[8]);
 
-// Project a world tile coordinate into the view's logical screen pixels. City and view remain unchanged.
+// Project a valid world tile into logical screen pixels. Drawing supplies the bound origin; view supplies rotation
+// and artwork zoom. Magnification doubles the final integer coordinates. City and view remain unchanged.
 CityPoint CityMapTileToScreen(const City *city, const CityMapViewConfig *view, CityPoint world);
 
+// Invalid world coordinates return zero. Underground uses land height; surface mode uses the greater visible
+// land/water height. Drawing supplies layer visibility and the bound camera; no state changes occur.
 int CityMapTileElevation(const City *city, int x, int y);
-int CityMapDiagonalToTileSmall(City *city, int diagonal_x, int diagonal_y);
-int CityMapDiagonalToTileMedium(City *city, int diagonal_x, int diagonal_y);
-int CityMapDiagonalToTileLarge(City *city, int diagonal_x, int diagonal_y);
-int CityMapScreenToTile(City *city, const CityMapViewConfig *view, int screen_x, int screen_y);
-TileIndex PickCityMapTile(City *city, const CityMapViewConfig *view, int screen_x, int screen_y);
-TileIndex PickCityMapTerrainPoint(City *city, const CityMapViewConfig *view, int screen_x, int screen_y);
+// Pick a surface tile or closest terrain marker from this view's canvas coordinates; no City/view writes or allocation.
+// Missing hits return INVALID_TILE. Display scale, fractional scroll and layer options come from Drawing.
+TileIndex PickCityMapTile(const City *city, const CityMapViewConfig *view, int screen_x, int screen_y);
+TileIndex PickCityMapTerrainPoint(const City *city, const CityMapViewConfig *view, int screen_x, int screen_y);
 int ReadCityMapTerrainPointHeight(const City *city, TileIndex tile);
 
 // Eight height pixels per 64-pixel tile, without changing City elevations.

@@ -58,6 +58,22 @@ bool TextContains(const char *name, const char *filter, bool match_case) {
   }
 }
 
+void FormatGroupedInteger(char *output, size_t capacity, i64 value) {
+  char digits[24];
+  u64 magnitude = value < 0 ? 0 - (u64)value : (u64)value;
+  snprintf(digits, sizeof(digits), "%llu", (unsigned long long)magnitude);
+  size_t length = strlen(digits);
+  size_t position = 0;
+  if (value < 0 && position + 1 < capacity)
+    output[position++] = '-';
+  for (size_t index = 0; index < length && position + 1 < capacity; ++index) {
+    output[position++] = digits[index];
+    if ((length - index - 1) % 3 == 0 && index + 1 < length && position + 1 < capacity)
+      output[position++] = ',';
+  }
+  output[position] = '\0';
+}
+
 char *AllocateText(size_t bytes) {
   char *text = malloc(bytes);
   if (text == NULL) {

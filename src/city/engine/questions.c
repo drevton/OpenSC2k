@@ -14,25 +14,13 @@
 
 #include "city/economy/economy.h"
 #include "city/engine/commands.h"
-#include "city/maps/layers.h"
 #include "city/state.h"
 #include "game/state.h"
 #include "assets/state.h"
 #include "base/text.h"
 
-
-// Return the number of pending shared decisions owned by City. The value includes reserved opening slots; it does not
-// imply that every slot is ready for replies.
 int CityQuestionCount(const City *city) { return city->question_count; }
 
-// Return a borrowed pending-question entry at the requested position. Out-of-range positions return NULL; callers must
-// not retain the pointer across question insertion, removal or callbacks.
-const CityQuestion *CityQuestionAt(const City *city, int index) {
-  return index >= 0 && index < city->question_count ? &city->questions[index] : NULL;
-}
-
-// Find a pending question by its identity and return a borrowed pointer. Missing identities return NULL; the pointer
-// may be invalidated by any operation that changes the question array.
 const CityQuestion *FindCityQuestion(const City *city, int id) {
   for (int index = 0; index < city->question_count; ++index)
     if (city->questions[index].id == id)

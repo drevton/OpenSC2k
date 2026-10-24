@@ -2,7 +2,47 @@
 #include "assets/state.h"
 #include "city/events/news.h"
 
+#include <stdlib.h>
 #include <string.h>
+
+const char *const kCityNewspaperTitles[] = {
+  "Times",
+  "Herald",
+  "Gazette",
+  "Chronicle",
+  "Tribune",
+  "Journal",
+};
+const char *const kCityNewspaperWeatherHeadings[] = {
+  "Local forecast",
+  "Weather desk",
+  "Around the city",
+  "Skywatch",
+  "The outlook",
+  "Weather notes",
+};
+const char *const kCityNewspaperEditorialHeadings[] = {
+  "From the editor",
+  "Editorial desk",
+  "Local commentary",
+  "City opinion",
+  "Public survey",
+  "Advice desk",
+};
+const char *const kCityNewspaperStatistics[] = {
+  "Traffic: %d%%",
+  "Pollution: %d%%",
+  "Crime: %d%%",
+  "Tax rate: %d%%",
+  "Unemployment: %d%%",
+  "Education: %d%%",
+  "Health: %d%%",
+};
+const char *const kCityNewspaperPrices[3][CITY_NEWSPAPER_PRICE_ERAS] = {
+  {"1 cent", "5 cents", "25 cents", "1 dollar", "5 dollars"},
+  {"Cover: 1¢", "Cover: 5¢", "Cover: 25¢", "Cover: $1", "Cover: $5"},
+  {"Price: 1¢", "Price: 5¢", "Price: 25¢", "Price: $1", "Price: $5"},
+};
 
 // Project-written news, indexed by the gameplay topic. Ranking values retain the existing event behavior.
 static const CityNewspaperArticle kArticles[CITY_NEWS_EVENT_COUNT] = {
@@ -576,7 +616,17 @@ void InitializeCityNewsResources(CityAssets *assets) {
     assets->newspaper.group_counts.value[group] = 1;
     if (group >= CITY_NEWS_EVENT_COUNT) continue;
     assets->rankings.event_severity[group] = kArticles[group].severity;
-    assets->rankings.facility_baselines[group] = kArticles[group].decay;
+    assets->rankings.event_decay[group] = kArticles[group].decay;
   }
-  assets->facility_resources_unavailable = 0;
+  assets->news_resources_unavailable = 0;
+}
+
+void ReleaseCityNewspaperResources(CityNewspaperResources *resources) {
+  free(resources->text);
+  free(resources->offsets);
+  resources->articles = NULL;
+  resources->text = NULL;
+  resources->offsets = NULL;
+  resources->text_capacity = 0;
+  resources->offsets_capacity = 0;
 }

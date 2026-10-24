@@ -1,8 +1,9 @@
 #ifndef SC2K_CITY_MAPS_WATER_H
 #define SC2K_CITY_MAPS_WATER_H
 
-#include "city/engine/command_types.h"
-#include "city/maps/terrain.h"
+#include "city/types.h"
+
+typedef struct CityTileGeometry CityTileGeometry;
 
 // Choose the occupied dry/wet kind while retaining supported bridge/power forms. No tile metadata is written.
 int CityTileKindForWater(int kind, bool water);
@@ -33,9 +34,9 @@ enum { CITY_STREAM_DEFAULT_LENGTH = 64 };
 i64 CmdPlaceStream(City *city, u32 flags, TileIndex tile, int length);
 // Canal admission and raw work prices are read-only; invalid tiles/endpoints are rejected.
 bool CanPlaceCityCanal(const City *city, TileIndex tile);
-CityCommandCost GetCityCanalRectangleCost(const City *city, TileIndex start, TileIndex end);
 // Single-cell application performs no payment; the rectangle command uses shared City command charging policy.
 i64 ApplyWaterToolAtTile(City *city, TileIndex tile);
+// Rectangle TEST validates and quotes without mutation or RNG; execution uses shared command charging policy.
 i64 CmdBuildCanalsRect(City *city, u32 flags, TileIndex start, TileIndex end, int options);
 
 // Resolved City commands: TEST is read-only; execution retains each action's original result/payment contract.

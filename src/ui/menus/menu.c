@@ -1,7 +1,10 @@
 #include "game/update.h"
+#include <string.h>
+#include "base/text.h"
 #include "ui/windows/window_internal.h"
 #include "ui/map.h"
 #include "ui/menus/menu.h"
+#include "ui/text/text.h"
 
 #include <stdlib.h>
 
@@ -9,16 +12,20 @@
 #include "assets/state.h"
 #include "audio/state.h"
 #include "base/time.h"
+#include "base/version.h"
 #include "city/disasters/types.h"
 #include "city/economy/types.h"
 #include "city/engine/city_types.h"
+#include "city/engine/clock.h"
 #include "city/events/emergency.h"
-#include "city/maps/layers.h"
+#include "city/maps/kinds.h"
 #include "city/maps/tile_storage.h"
 #include "city/maps/trees.h"
 #include "city/presentation.h"
+#include "city/state.h"
 #include "city/tools/tools.h"
 #include "city/tools/types.h"
+#include "drawing/sprites/preparation.h"
 #include "drawing/bitmaps.h"
 #include "drawing/fonts/fonts.h"
 #include "drawing/maps/map_camera.h"
@@ -45,6 +52,7 @@
 #include "ui/signs.h"
 #include "ui/startup/startup.h"
 #include "ui/state.h"
+#include "ui/tools/placement.h"
 #include "ui/tools/tools.h"
 #include "ui/tools/types.h"
 #include "ui/windows/controls.h"
@@ -53,9 +61,31 @@
 
 // Icon toolbar, floating construction windows, dropdowns and status bar. All coordinates are UI units.
 
+static bool MoveCityMenu(CityCanvasDesktop *desktop, int x, int y);
+
 int CityToolbarIconColumns(int icon) {
   return icon == CITY_TOPBAR_ICON_COUNT + CITY_CANVAS_TOOL_ROAD_BRIDGE ||
       icon == CITY_TOPBAR_ICON_COUNT + CITY_CANVAS_TOOL_RAIL_BRIDGE ? 2 : 1;
+}
+
+bool PrepareCityToolbarIcons(Game *game) {
+  Drawing *drawing = game->drawing;
+  const CityInterfaceIcons *source = &game->resources->main_toolbar_icons;
+  int scale = drawing->options.scale;
+  if (drawing->toolbar_icon_scale == scale && drawing->toolbar_icon_data == source->data.data) return true;
+  ReleaseCityToolbarIcons(drawing);
+  if (!source->data.data) return true;
+  drawing->toolbar_icon_source = source;
+  drawing->toolbar_icon_scale = scale;
+  // Position-independent image dimensions need one prepared size per UI scale.
+  int size = (20 * scale + 99) / 100;
+  for (int icon = 0; icon < CITY_TOOLBAR_ICON_COUNT; ++icon) {
+    int width = (20 * CityToolbarIconColumns(icon) * scale + 99) / 100;
+    if (!PrepareCityToolbarIcon(drawing, icon, width, size, true)) return false;
+  }
+  // Publish readiness only after every button succeeds. A failed attempt is rebuilt on the next call.
+  drawing->toolbar_icon_data = source->data.data;
+  return true;
 }
 
 bool PrepareCityToolbarIconSize(Game *game, int icon, int size) {
@@ -1233,7 +1263,8 @@ static bool OutsideCityMenu(const CityCanvasDesktop *desktop, int x, int y) {
   return !CanvasPointInRect(CityDropdownCaptureBounds(popup, anchor, margin), x, y);
 }
 
-bool PressCityMenu(CityCanvasDesktop *desktop, int x, int y) {
+// Pointer coordinates use UI units independently of window origins and map scale.
+static bool PressCityMenu(CityCanvasDesktop *desktop, int x, int y) {
   if (desktop->game && !desktop->game->city_active) return false;
   if (!desktop->menu.selected && !CityMenuContains(desktop, x, y)) return false;
   if (IsToolSubmenu(desktop->menu.selected) && !CityMenuContains(desktop, x, y)) {
@@ -1266,7 +1297,7 @@ bool PressCityMenu(CityCanvasDesktop *desktop, int x, int y) {
   return true;
 }
 
-bool MoveCityMenu(CityCanvasDesktop *desktop, int x, int y) {
+static bool MoveCityMenu(CityCanvasDesktop *desktop, int x, int y) {
   if (!desktop->menu.selected) return desktop->menu.held;
   if (!desktop->menu.held && OutsideCityMenu(desktop, x, y)) {
     CloseCityMenu(desktop);
@@ -1375,7 +1406,7 @@ static void ScrollConstructionWindow(CityCanvasDesktop *desktop, Window *window,
   Sc2kDirtyMarkRect(&desktop->dirty, CanvasWindowPaintRect(window));
 }
 
-bool CityToolSupportsPlacementRotation(int tool) {
+static bool CityToolSupportsPlacementRotation(int tool) {
   if (tool == CITY_CANVAS_TOOL_HIGHWAY) return true;
   int tools = Sc2kCanvasMapPointerTools(tool, 0);
   return tools >= 0 && IsTileKindBuilding(GetCityFacilityTile(tools & 255, (tools >> 8) & 255));
@@ -1467,7 +1498,7 @@ void CityConstructionTooltipAt(const Game *game, const Window *window, int x, in
   else CopyText(text, capacity, item->label);
 }
 
-const CityMenuItem *ReleaseCityMenu(CityCanvasDesktop *desktop, int x, int y) {
+static const CityMenuItem *ReleaseCityMenu(CityCanvasDesktop *desktop, int x, int y) {
   bool held = desktop->menu.held;
   desktop->menu.held = false;
   if (!held) return NULL;
@@ -1643,7 +1674,7 @@ bool HandleCityToolbarShortcut(Game *game, CityHotkey key) {
   return true;
 }
 
-bool IsCityMenuItemChecked(const Game *game, const CityMenuItem *item) {
+static bool IsCityMenuItemChecked(const Game *game, const CityMenuItem *item) {
   const City *city = game->city;
   if (item->action == CITY_MENU_ACTION_SUBMENU) {
     const CityToolSubmenu *submenu = &kToolSubmenus[item->parameter - kResidentialDensityMenu];
@@ -1728,7 +1759,7 @@ void CityMenuTooltipAt(const Game *game, int x, int y, char *text, size_t capaci
 
 }
 
-void ReleaseCityToolbarFeedback(CityCanvasDesktop *desktop, u32 milliseconds) {
+static void ReleaseCityToolbarFeedback(CityCanvasDesktop *desktop, u32 milliseconds) {
   if (desktop->menu.pressed) {
     desktop->menu.released = true;
     desktop->menu.release_time = milliseconds;
@@ -1739,11 +1770,12 @@ bool PollCityToolbar(Game *game, u32 milliseconds) {
   CityCanvasDesktop *desktop = &game->ui->desktop;
   if (desktop->menu.submenu_pending && desktop->menu.held) {
     const Window *window = ConstructionWindow(desktop, desktop->menu.pressed_window);
-    int item = desktop->menu.pressed - CITY_TOPBAR_COUNT - 1, x = 0, y = 0;
+    int item = desktop->menu.pressed - CITY_TOPBAR_COUNT - 1;
+    CityPoint point = {0};
     if (window)
-      Sc2kCanvasDesktopPixelPointer(desktop, window->window_id,
-          desktop->tooltip.pointer_x, desktop->tooltip.pointer_y, &x, &y);
-    if (!window || ConstructionItemAt(window, x, y) != item + 1) desktop->menu.submenu_pending = false;
+      point = CityWindowPointFromPixels(desktop, window->window_id,
+          desktop->tooltip.pointer_x, desktop->tooltip.pointer_y);
+    if (!window || ConstructionItemAt(window, point.x, point.y) != item + 1) desktop->menu.submenu_pending = false;
     else if (!desktop->menu.submenu_clock_started) {
       desktop->menu.press_time = milliseconds;
       desktop->menu.submenu_clock_started = true;
@@ -2015,7 +2047,7 @@ bool PrepareCityConstructionIcons(Game *game) {
   return true;
 }
 
-void DrawCityConstructionWindow(Game *game, Canvas *canvas, const Window *window) {
+static void DrawCityConstructionWindow(Game *game, Canvas *canvas, const Window *window) {
   CityRect b = window->bounds;
   bool emergency = !window->toolbar_group && window->toolbar_category == CITY_TOPBAR_EMERGENCY + 1;
   u32 face = emergency ? 0xFF8C3838 : kConstructionFace;

@@ -6,8 +6,16 @@
 typedef struct Canvas Canvas;
 typedef struct Game Game;
 typedef struct Window Window;
-typedef struct RunSprite RunSprite;
 typedef struct CityCanvasDesktop CityCanvasDesktop;
+
+// Optional caller-owned reply sink. Keep it alive through dismissal/deferred completion; the Window owns its command.
+// AnswerCityConfirmation records the decision before closing; close clears window_id without changing the answer.
+typedef struct CityConfirmationState {
+  u32 window_id;
+  i32 answer;
+} CityConfirmationState;
+
+_Static_assert(sizeof(CityConfirmationState) == 8, "confirmation reply has only window identity and answer");
 
 typedef enum CityMessageStyle {
   CITY_MESSAGE_INFORMATION = 1, CITY_MESSAGE_WARNING = 2, CITY_MESSAGE_ERROR = 3
@@ -23,8 +31,11 @@ i32 Sc2kCanvasDesktopOpenNotice(CityCanvasDesktop *desktop, CityRect bounds,
     const char *title, const char *message, u32 flags);
 i32 Sc2kCanvasDesktopOpenConfirm(CityCanvasDesktop *desktop, CityRect bounds,
     const char *title, const char *message, u32 flags);
-i32 Sc2kCanvasDesktopOpenAdvisor(CityCanvasDesktop *desktop, CityRect bounds,
-    const char *title, const char *message, const RunSprite *portrait, u32 flags);
+
+// Copies text and attaches completion before pause reconciliation. Success transfers callback delivery to UI;
+// the window may already have closed on return. Failure retains neither callback nor context.
+bool OpenCityNoticeWithCallback(City *city, const char *title, const char *text, u32 flags,
+    void (*callback)(City *city, void *context), void *context);
 
 // Paint and hit rectangles use logical canvas coordinates; message painting restores its text clip.
 void DrawCityMessageBox(Canvas *canvas, const Window *window);
@@ -47,6 +58,5 @@ void SetCityErrorTile(Game *game, TileIndex tile);
 // Successful opening gives the window ownership of the copied detail; failed opening releases it.
 int OpenCityCommandErrorWindow(Game *game, const char *summary, const char *detail, bool retained, TileIndex tile);
 void CloseCityCommandErrorWindows(CityCanvasDesktop *desktop);
-CityRect CityCommandErrorBounds(Game *game, const char *summary, const char *detail);
 
 #endif

@@ -27,11 +27,11 @@ static const AssetDescription kAssetCatalog[CITY_ASSET_FILE_COUNT] = {
 };
 static const char *const kCategoryNames[] = {"intro", "graphics", "audio"};
 
-int OpenAssetSource(AssetFile *file, CityAssets *assets, u32 id, const char *root) {
+AssetOpenResult OpenAssetSource(AssetFile *file, CityAssets *assets, u32 id, const char *root) {
   if (!root) return OpenAssetSpan(file, GetAsset(assets, id));
   char *path = NULL;
   FormatText(&path, "%s/%s", root, kAssetCatalog[id].path);
-  int result = OpenAssetFile(file, path);
+  AssetOpenResult result = OpenAssetFile(file, path);
   free(path);
   return result;
 }
@@ -73,12 +73,12 @@ void ReleaseCityAssets(CityAssets *assets) {
   ReleaseAssetBlocks(assets);
 }
 
-static int LoadAssetArchive(CityAssets *assets, const char *root, AssetCategory category) {
+static AssetOpenResult LoadAssetArchive(CityAssets *assets, const char *root, AssetCategory category) {
   char *path = NULL;
   FormatText(&path, "%s/%s.sc2assets", root, kCategoryNames[category]);
   FILE *file = fopen(path, "rb");
   free(path);
-  if (!file) return errno == ENOENT ? 0 : -1;
+  if (!file) return errno == ENOENT ? ASSET_OPEN_MISSING : ASSET_OPEN_ERROR;
   struct stat status;
   u8 header[kArchiveHeaderBytes], index[CITY_ASSET_FILE_COUNT * 48];
   bool valid = !fstat(fileno(file), &status) && status.st_size >= kArchiveHeaderBytes &&
@@ -125,45 +125,33 @@ static int LoadAssetArchive(CityAssets *assets, const char *root, AssetCategory 
     for (u32 id = 0; id < CITY_ASSET_FILE_COUNT; ++id)
       if (kAssetCatalog[id].category == category && id != CITY_ASSET_SOUND_OVERRIDES &&
           !assets->asset_spans[id].data) valid = false;
-  return valid ? 1 : -1;
+  return valid ? ASSET_OPEN_OK : ASSET_OPEN_ERROR;
 }
 
-static int LoadLooseAsset(CityAssets *assets, u32 id, const char *root) {
+static AssetOpenResult LoadLooseAsset(CityAssets *assets, u32 id, const char *root) {
   AssetFile file;
-  int opened = OpenAssetSource(&file, assets, id, root);
-  if (opened != 1) return opened;
+  AssetOpenResult opened = OpenAssetSource(&file, assets, id, root);
+  if (opened != ASSET_OPEN_OK) return opened;
   size_t size = 0;
-  u8 *data = NULL;
-  if (!file.decoder) {
-    if (file.length > 0 && file.length <= kAssetDecodedLimit) {
-      size = file.length;
-      data = malloc(size);
-      if (data && (ReadAssetFile(&file, data, size) != size || ReadAssetByte(&file) != EOF)) file.failed = true;
-    }
-  } else {
-    data = ReadAllAssetFile(&file, kAssetDecodedLimit, &size);
-    if (data && size) {
-      u8 *compact = realloc(data, size);
-      if (compact) data = compact;
-    }
-  }
+  u8 *data = ReadAllAssetFile(&file, kAssetDecodedLimit, &size);
   bool valid = data && size > 0;
   if (!CloseAssetFile(&file)) valid = false;
-  if (!valid) { free(data); return -1; }
+  if (!valid) { free(data); return ASSET_OPEN_ERROR; }
   assets->asset_blocks[assets->asset_block_count++] = data;
   assets->asset_spans[id] = (ByteSpan){data, size};
-  return 1;
+  return ASSET_OPEN_OK;
 }
 
 // The loading screen needs only the intro pack. Missing or invalid packs never select checkout files.
-bool LoadCityIntroAsset(CityAssets *assets, const char *bundle_root) {
+static bool LoadCityIntroAsset(CityAssets *assets, const char *bundle_root) {
   if (GetAsset(assets, CITY_ASSET_INTRO).data) return true;
-  if (LoadAssetArchive(assets, bundle_root ? bundle_root : ".", ASSET_INTRO) == 1) return true;
+  if (LoadAssetArchive(assets, bundle_root ? bundle_root : ".", ASSET_INTRO) == ASSET_OPEN_OK) return true;
   ReleaseAssetBlocks(assets);
   return false;
 }
 
-bool LoadCityAssets(CityAssets *assets, const char *bundle_root) {
+// Retain decoded blocks for every category, then apply explicit startup overrides before typed resource decoding.
+static bool LoadCityAssets(CityAssets *assets, const char *bundle_root) {
   if (assets->asset_packs_loaded) return true;
   bool valid = true;
   for (AssetCategory category = ASSET_INTRO; valid && category <= ASSET_AUDIO; ++category) {
@@ -172,13 +160,15 @@ bool LoadCityAssets(CityAssets *assets, const char *bundle_root) {
       if (kAssetCatalog[id].category == category && id != CITY_ASSET_SOUND_OVERRIDES &&
           !GetAsset(assets, id).data) complete = false;
     if (!complete)
-      valid = LoadAssetArchive(assets, bundle_root ? bundle_root : ".", category) == 1;
+      valid = LoadAssetArchive(assets, bundle_root ? bundle_root : ".", category) == ASSET_OPEN_OK;
   }
   // Explicit development overrides are read once at startup, after the three required packs.
   const char *graphics = getenv("SC2K_GRAPHICS_OVERRIDE");
-  if (valid && graphics && graphics[0]) valid = LoadLooseAsset(assets, CITY_ASSET_LANDSCAPE, graphics) == 1;
+  if (valid && graphics && graphics[0])
+    valid = LoadLooseAsset(assets, CITY_ASSET_LANDSCAPE, graphics) == ASSET_OPEN_OK;
   const char *audio = getenv("SC2K_AUDIO_OVERRIDES");
-  if (valid && audio && audio[0]) valid = LoadLooseAsset(assets, CITY_ASSET_SOUND_OVERRIDES, audio) >= 0;
+  if (valid && audio && audio[0])
+    valid = LoadLooseAsset(assets, CITY_ASSET_SOUND_OVERRIDES, audio) != ASSET_OPEN_ERROR;
   if (!valid) {
     fprintf(stderr, "Unable to preload intro, graphics and audio packs\n");
     ReleaseAssetBlocks(assets);

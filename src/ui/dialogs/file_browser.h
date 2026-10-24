@@ -3,16 +3,7 @@
 
 #include "city/types.h"
 
-typedef struct Canvas Canvas;
-typedef struct Window Window;
-
-enum { CITY_FILE_BROWSER_WIDTH = 500, CITY_FILE_BROWSER_HEIGHT = 286, CITY_FILE_BROWSER_ROW_HEIGHT = 10 };
-typedef enum CityFileBrowserControl {
-  CITY_FILE_FILTER, CITY_FILE_CLEAR_FILTER, CITY_FILE_SORT_NAME, CITY_FILE_SORT_DATE, CITY_FILE_HOME,
-  CITY_FILE_LIST, CITY_FILE_SCROLL_UP, CITY_FILE_SCROLL_DOWN, CITY_FILE_SCROLL_TRACK,
-  CITY_FILE_NAME, CITY_FILE_CLEAR_NAME, CITY_FILE_DELETE, CITY_FILE_ACCEPT,
-  CITY_FILE_RESIZE, CITY_FILE_DEFAULT_SIZE, CITY_FILE_CONTROL_COUNT
-} CityFileBrowserControl;
+enum { CITY_FILE_BROWSER_WIDTH = 500, CITY_FILE_BROWSER_HEIGHT = 286 };
 
 typedef struct {
   char name[256], native_name[256];
@@ -38,14 +29,9 @@ typedef struct CityFileBrowser {
   bool open, sort_date, descending, dragging_scroll;
 } CityFileBrowser;
 
-CityRect CityFileBrowserBounds(const Window *window, CityFileBrowserControl control);
-int CityFileBrowserRows(const Window *window);
-CityRect CityFileBrowserThumb(const Window *window);
+// Reading replaces the listing; failure may leave a partial listing with valid row indices.
 bool ReadCityFileBrowserDirectory(CityFileBrowser *browser, const char *display_directory);
-void FilterCityFileBrowser(CityFileBrowser *browser);
-void SortCityFileBrowser(CityFileBrowser *browser);
-void SelectCityFileBrowserEntry(CityFileBrowser *browser, int selected);
-void DrawCityFileBrowser(Canvas *canvas, const Window *window);
+// Release owned directory strings, entries and row indices after the browser window closes.
 void ReleaseCityFileBrowser(CityFileBrowser *browser);
 
 #endif

@@ -5,18 +5,6 @@
 #include "city/maps/tile_storage.h"
 #include "city/types.h"
 
-// Queries read valid tiles and retain no pointers into City or presentation owners.
-CityTileInformation ReadCityTileInformation(const City *city, TileIndex tile);
-// Summarize the compatibility-indexed counters without narrowing their native 32-bit values. Output is borrowed
-// caller storage; construction and abandoned categories retain their existing exclusion rules.
-void CalculateCityLandUse(const CityStatistics *statistics, u32 acres[CITY_LAND_USE_COUNT],
-    u16 percent[CITY_LAND_USE_COUNT]);
-
-// Environment passes require exclusive use of City scratch until complete. A zero-initialized scan starts a pass;
-// retain it between bounded row budgets. False means work remains, true means the derived layers are complete.
-bool StepCityEnvironment(City *city, CityEnvironmentScan *scan, int rows);
-void UpdateCityEnvironmentMaps(City *city);
-
 // Changes
 
 typedef enum CityMapChangeLayer {
@@ -52,7 +40,6 @@ void InvalidateMapLayer(City *city, CityMapChangeLayer layer);
 void InvalidateTile(City *city, TileIndex tile);
 // Same start contract as InvalidateTile. Clip the rectangle at the right/bottom edges without wrapping rows.
 void InvalidateTileRange(City *city, TileIndex start, int width, int height);
-void RefreshCityTileClimates(City *city, TileIndex tile);
 void InvalidateMap(City *city);
 // Reset pending changes without changing enabled. Presentation clears after every view receives its batch;
 // City also clears when replacing the map backing allocation.
@@ -62,8 +49,8 @@ void ClearSimulationMapChanges(SimulationMapChanges *changes);
 
 void RecountCityTileStatistics(City *city);
 void RebuildLoadedCityMapState(City *city);
-void RecountCityIndustryConnections(City *city);
 
+// Initialize missing landscape metadata; retain existing seed/tree choices. Rebuild power connections either way.
 void InitializeCityLandscape(City *city);
 
 typedef struct CityTerrainMap CityTerrainMap;

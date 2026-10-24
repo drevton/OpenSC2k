@@ -3,7 +3,6 @@
 
 #include "assets/graphics.h"
 #include "city/types.h"
-#include "drawing/canvas.h"
 #include "ui/input.h"
 #include "ui/tools/types.h"
 
@@ -24,13 +23,6 @@ enum {
 
 // Original main-menu command IDs, distinct from unified command packets.
 typedef enum CityMainMenuCommandId {
-  CITY_MENU_LOAD_CITY = 32801,
-  CITY_MENU_LOAD_SCENARIO = 32804,
-  CITY_MENU_COMMAND_NEW_CITY = 32802,
-  CITY_MENU_COMMAND_EDIT_NEW_MAP = 32803,
-  CITY_MENU_COMMAND_SAVE_CITY = 32805,
-  CITY_MENU_COMMAND_SAVE_CITY_AS = 32806,
-  CITY_MENU_COMMAND_EXIT = 57665,
   CITY_MENU_COMMAND_SPEED_PAUSE = 32768,
   CITY_MENU_COMMAND_SPEED_SLOW = 32769,
   CITY_MENU_COMMAND_SPEED_NORMAL = 32770,
@@ -44,6 +36,19 @@ typedef enum CityMainMenuCommandId {
   CITY_MENU_COMMAND_DISASTER_TORNADO = 32779,
   CITY_MENU_COMMAND_DISASTER_EARTHQUAKE = 32780,
   CITY_MENU_COMMAND_DISASTER_MONSTER = 32781,
+  CITY_MENU_COMMAND_NO_DISASTERS = 32782,
+  CITY_MENU_COMMAND_BUDGET = 32784,
+  CITY_MENU_COMMAND_ORDINANCES = 32785,
+  CITY_MENU_COMMAND_NEWSPAPER_SUBSCRIPTION = 32791,
+  CITY_MENU_COMMAND_NEWSPAPER_EXTRA = 32792,
+  CITY_MENU_COMMAND_NEWSPAPER_EDITION_FIRST = 32793,
+  CITY_MENU_LOAD_CITY = 32801,
+  CITY_MENU_COMMAND_NEW_CITY = 32802,
+  CITY_MENU_COMMAND_EDIT_NEW_MAP = 32803,
+  CITY_MENU_LOAD_SCENARIO = 32804,
+  CITY_MENU_COMMAND_SAVE_CITY = 32805,
+  CITY_MENU_COMMAND_SAVE_CITY_AS = 32806,
+  CITY_MENU_COMMAND_HELP_SEARCH = 32893,
   CITY_MENU_COMMAND_DISASTER_HURRICANE = 32919,
   CITY_MENU_COMMAND_DISASTER_RIOTS = 32920,
   CITY_MENU_COMMAND_DISASTER_MASS_RIOTS = 32922,
@@ -53,20 +58,15 @@ typedef enum CityMainMenuCommandId {
   CITY_MENU_COMMAND_DISASTER_MELTDOWN = 32926,
   CITY_MENU_COMMAND_DISASTER_MICROWAVE = 32927,
   CITY_MENU_COMMAND_DISASTER_MAJOR_FLOOD = 32928,
-  CITY_MENU_COMMAND_NO_DISASTERS = 32782,
-  CITY_MENU_COMMAND_BUDGET = 32784,
-  CITY_MENU_COMMAND_ORDINANCES = 32785,
-  CITY_MENU_COMMAND_NEWSPAPER_SUBSCRIPTION = 32791,
-  CITY_MENU_COMMAND_NEWSPAPER_EXTRA = 32792,
-  CITY_MENU_COMMAND_NEWSPAPER_EDITION_FIRST = 32793,
-  CITY_MENU_COMMAND_HELP_CONTENTS = 57666,
-  CITY_MENU_COMMAND_HELP_SEARCH = 32893,
-  CITY_MENU_COMMAND_HELP_USING = 57667,
   CITY_MENU_COMMAND_ABOUT = 57664,
+  CITY_MENU_COMMAND_EXIT = 57665,
+  CITY_MENU_COMMAND_HELP_CONTENTS = 57666,
+  CITY_MENU_COMMAND_HELP_USING = 57667,
 } CityMainMenuCommandId;
 
 enum { CITY_NEWSPAPER_MENU_EDITION_FIRST = 3 };
 
+typedef struct Canvas Canvas;
 typedef struct Game Game;
 typedef struct City City;
 typedef struct CityCanvasDesktop CityCanvasDesktop;
@@ -154,25 +154,22 @@ CityRect CityDropdownCaptureBounds(CityRect popup, CityRect anchor, int margin);
 bool CityMenuContains(const CityCanvasDesktop *desktop, int x, int y);
 void CloseCityMenu(CityCanvasDesktop *desktop);
 void SetCityShortcutHints(Game *game, bool visible);
-// Points are UI coordinates independent of window origins and map scale.
-bool PressCityMenu(CityCanvasDesktop *desktop, int x, int y);
-bool MoveCityMenu(CityCanvasDesktop *desktop, int x, int y);
-const CityMenuItem *ReleaseCityMenu(CityCanvasDesktop *desktop, int x, int y);
 bool HandleCityToolbarShortcut(Game *game, CityHotkey key);
 const CityMenuItem *CityMenuKey(CityCanvasDesktop *desktop, CityHotkey key);
 void CityMenuTooltipAt(const Game *game, int x, int y, char *text, size_t capacity);
-bool IsCityMenuItemChecked(const Game *game, const CityMenuItem *item);
 // UI resolves toolbar aspect, pressed/disabled styling and application errors; Drawing owns prepared pixels.
 int CityToolbarIconColumns(int icon);
+// Prepare standard 20-unit toolbar buttons using the installed atlas and current UI scale.
+// Cache hits/no artwork succeed. Failed preparation retains earlier entries and the installed source binding;
+// the incomplete cache is released and rebuilt on the next call.
+bool PrepareCityToolbarIcons(Game *game);
+// Prepare an additional preview size in logical UI units; missing artwork or nonpositive size is a no-op.
 bool PrepareCityToolbarIconSize(Game *game, int icon, int size);
 void DrawCityToolbarIcon(Game *game, Canvas *canvas, CityRect bounds, int icon, bool disabled, bool flipped);
 void DrawCityMenu(Game *game, Canvas *canvas, const CityCanvasDesktop *desktop);
 void UpdateCityToolbar(Game *game);
 bool PollCityToolbar(Game *game, u32 milliseconds);
-void ReleaseCityToolbarFeedback(CityCanvasDesktop *desktop, u32 milliseconds);
 bool PrepareCityConstructionIcons(Game *game);
-void DrawCityConstructionWindow(Game *game, Canvas *canvas, const Window *window);
-bool CityToolSupportsPlacementRotation(int tool);
 bool HandleCityPlacementRotationKey(Game *game, CityHotkey key);
 void CityConstructionTooltipAt(const Game *game, const Window *window, int x, int y,
     char *text, size_t capacity);

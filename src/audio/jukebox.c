@@ -1,5 +1,7 @@
 #include "audio/jukebox.h"
 
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 // Playlist edits and shuffle use the player's own RNG, independently of City.
@@ -41,6 +43,34 @@ const char *const kJukeboxProgrammes[JUKEBOX_PROGRAMMES] = {
   "All", "Old Style", "New Style", "Ezy Street", "Custom 1", "Custom 2"
 };
 
+bool ParseJukeboxPlaylist(const char *text, JukeboxPlaylist *playlist) {
+  JukeboxPlaylist parsed = {0};
+  while (*text) {
+    if (parsed.count == JUKEBOX_CAPACITY || *text < '0' || *text > '9') return false;
+    char *end;
+    long track = strtol(text, &end, 10);
+    if (track < 0 || track >= JUKEBOX_TRACKS) return false;
+    parsed.tracks[parsed.count++] = track;
+    text = end;
+    if (*text && *text++ != ',') return false;
+    if (*end == ',' && !*text) return false;
+  }
+  *playlist = parsed;
+  return true;
+}
+
+bool FormatJukeboxPlaylist(const JukeboxPlaylist *playlist, char *text, size_t capacity) {
+  if (!capacity) return false;
+  size_t length = 0;
+  text[0] = 0;
+  for (int i = 0; i < playlist->count; ++i) {
+    int written = snprintf(text + length, capacity - length, "%s%d", i ? "," : "", playlist->tracks[i]);
+    if (written < 0 || (size_t)written >= capacity - length) return false;
+    length += written;
+  }
+  return true;
+}
+
 static u32 NextJukeboxRandom(Jukebox *p) {
   u32 x = p->random;
   x ^= x << 13; x ^= x >> 17; x ^= x << 5;
@@ -54,8 +84,9 @@ i32 JukeboxCurrent(const Jukebox *p) {
 static void RebuildJukeboxProgramme(Jukebox *p, i32 preserve) {
   p->count = 0;
   if (p->programme >= JUKEBOX_PROGRAMME_CUSTOM_1) {
-    p->count = p->custom_count[p->programme - JUKEBOX_PROGRAMME_CUSTOM_1];
-    memcpy(p->order, p->custom[p->programme - JUKEBOX_PROGRAMME_CUSTOM_1], (size_t)p->count);
+    const JukeboxPlaylist *playlist = &p->custom[p->programme - JUKEBOX_PROGRAMME_CUSTOM_1];
+    p->count = playlist->count;
+    memcpy(p->order, playlist->tracks, (size_t)p->count);
   } else {
     i32 first = p->programme == JUKEBOX_PROGRAMME_ALL ? 1 :
         (p->programme - JUKEBOX_PROGRAMME_OLD_STYLE) * 10 + 1;
@@ -117,10 +148,11 @@ void JukeboxStep(Jukebox *p, i32 direction) {
 }
 void JukeboxAdd(Jukebox *p, i32 track) {
   if (p->programme < JUKEBOX_PROGRAMME_CUSTOM_1 || track < 0 || track >= JUKEBOX_TRACKS) return;
-  i32 custom = p->programme - JUKEBOX_PROGRAMME_CUSTOM_1, count = p->custom_count[custom];
+  JukeboxPlaylist *playlist = &p->custom[p->programme - JUKEBOX_PROGRAMME_CUSTOM_1];
+  int count = playlist->count;
   if (count == JUKEBOX_CAPACITY) return;
-  p->custom[custom][count] = (u8)track;
-  ++p->custom_count[custom];
+  playlist->tracks[count] = (u8)track;
+  ++playlist->count;
   // Insert into the shuffled order without changing the current song.
   i32 insert = p->shuffle && p->count ? (i32)(NextJukeboxRandom(p) % (u32)(p->count + 1)) : p->count;
   memmove(p->order + insert + 1, p->order + insert, (size_t)(p->count - insert));
@@ -130,18 +162,18 @@ void JukeboxAdd(Jukebox *p, i32 track) {
 }
 void JukeboxRemove(Jukebox *p, i32 row) {
   if (p->programme < JUKEBOX_PROGRAMME_CUSTOM_1 || row < 0 || row >= p->count) return;
-  i32 custom = p->programme - JUKEBOX_PROGRAMME_CUSTOM_1, index = 0;
+  JukeboxPlaylist *playlist = &p->custom[p->programme - JUKEBOX_PROGRAMME_CUSTOM_1];
+  int index = 0;
   if (p->shuffle) {
-    while (index < p->custom_count[custom] && p->custom[custom][index] != p->order[row]) ++index;
+    while (index < playlist->count && playlist->tracks[index] != p->order[row]) ++index;
   } else index = row;
-  if (index == p->custom_count[custom]) return;
-  memmove(p->custom[custom] + index, p->custom[custom] + index + 1,
-      (size_t)(--p->custom_count[custom] - index));
+  if (index == playlist->count) return;
+  memmove(playlist->tracks + index, playlist->tracks + index + 1, (size_t)(--playlist->count - index));
   memmove(p->order + row, p->order + row + 1, (size_t)(--p->count - row));
   if (row < p->position) --p->position;
   if (p->position >= p->count) p->position = 0;
 }
 void JukeboxClear(Jukebox *p) {
   if (p->programme < JUKEBOX_PROGRAMME_CUSTOM_1) return;
-  p->custom_count[p->programme - JUKEBOX_PROGRAMME_CUSTOM_1] = p->count = p->position = 0;
+  p->custom[p->programme - JUKEBOX_PROGRAMME_CUSTOM_1].count = p->count = p->position = 0;
 }

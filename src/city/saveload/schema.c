@@ -1,4 +1,5 @@
 #include "city/saveload/events_format.h"
+#include "city/maps/labels.h"
 #include "city/events/news.h"
 #include "city/economy/facilities.h"
 #include "city/saveload/types.h"
@@ -103,9 +104,9 @@ const CityMiscAudioScalar kCityMiscAudioScalars[] = {
 };
 
 const CityMiscArray kCityMiscArrays[] = {
-    {31, 3, 20, 4, 0, 0, 0, offsetof(City, age_cohorts)},
-    {32, 3, 20, 4, 0, 0, 0, offsetof(City, age_metric_a)},
-    {33, 3, 20, 4, 0, 0, 0, offsetof(City, age_metric_b)},
+    {31, 3, CITY_AGE_COHORT_COUNT, 4, 0, 0, 0, offsetof(City, age_cohorts)},
+    {32, 3, CITY_AGE_COHORT_COUNT, 4, 0, 0, 0, offsetof(City, age_metric_a)},
+    {33, 3, CITY_AGE_COHORT_COUNT, 4, 0, 0, 0, offsetof(City, age_metric_b)},
     {91, 3, 11, 2, 1, 0, 0, offsetof(City, industry_demand)},
     {92, 3, 11, 2, 1, 0, 0, offsetof(City, industry_baseline)},
     {93, 3, 11, 4, 0, 0, 0, offsetof(City, industry_accounts)},

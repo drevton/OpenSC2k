@@ -59,6 +59,21 @@ The existing optional `check_command_domains` source uses direct UI/file functio
 commands. It retains focused state-isolation, construction, callback and save/load checks. Task validation
 follows AGENTS.md; compiling this refactor does not claim those checks have been run.
 
+## Retained question identities
+
+City owns pending questions and their continuation context. Read a question by
+identity through `FindCityQuestion`; its pointer is borrowed until insertion,
+removal or a callback can change the array. Keep the ID across those operations
+and look it up again. The unused positional lookup is removed.
+
+`CityQuestionCount` includes reserved opening slots. Finding such a slot does not
+make it replyable: `CanReplyToCityQuestion` validates readiness and reply fields.
+Opening reservations retain their ID/capacity before nested presentation work,
+and the facility name is captured from live City state after opening completes.
+Reply text is borrowed only for synchronous validation/application, with an
+explicit byte length and no embedded zero. City retains copied values, not the
+caller's text pointer. Valid reply consumption and continuation order are unchanged.
+
 ## Construction prices and payment
 
 Domain quote functions calculate raw work prices and admission errors without reading treasury

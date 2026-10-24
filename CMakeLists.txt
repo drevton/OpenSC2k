@@ -160,7 +160,7 @@ add_library(sc2k_core STATIC
   src/assets/asset_file.c
   src/assets/assets.c
   src/assets/audio.c
-  src/assets/data.c
+  src/assets/facilities.c
   src/assets/fonts.c
   src/assets/graphics.c
   src/assets/names.c
@@ -169,6 +169,7 @@ add_library(sc2k_core STATIC
 
   # audio
   src/audio/backend.c
+  src/audio/effects.c
   src/audio/jukebox.c
   src/audio/state.c
 
@@ -236,6 +237,7 @@ add_library(sc2k_core STATIC
   src/city/maps/buildings.c
   src/city/maps/information.c
   src/city/maps/labels.c
+  src/city/maps/kinds.c
   src/city/maps/layers.c
   src/city/maps/rotation.c
   src/city/maps/state.c
@@ -256,6 +258,7 @@ add_library(sc2k_core STATIC
   src/city/saveload/map_native.c
   src/city/saveload/misc.c
   src/city/saveload/misc_state.c
+  src/city/saveload/path.c
   src/city/saveload/runtime.c
   src/city/saveload/save.c
   src/city/saveload/save_archive.c
@@ -283,6 +286,7 @@ add_library(sc2k_core STATIC
   # drawing
   src/drawing/bitmaps.c
   src/drawing/cursors.c
+  src/drawing/frame_overlay.c
   src/drawing/palette.c
 
   # drawing/fonts
@@ -294,15 +298,18 @@ add_library(sc2k_core STATIC
   src/drawing/maps/map_coordinates.c
   src/drawing/maps/map_damage.c
   src/drawing/maps/map_data.c
+  src/drawing/maps/map_depth.c
   src/drawing/maps/map_effects.c
   src/drawing/maps/map_events.c
   src/drawing/maps/map_overlays.c
   src/drawing/maps/map_sprites.c
   src/drawing/maps/map_terrain.c
   src/drawing/maps/map_traversal.c
+  src/drawing/maps/map_vehicles.c
   src/drawing/maps/map_view.c
   src/drawing/maps/placement.c
   src/drawing/maps/road_cars.c
+  src/drawing/maps/sprite_cache.c
   src/drawing/maps/tables.c
 
   # drawing/raster
@@ -311,6 +318,7 @@ add_library(sc2k_core STATIC
 
   # drawing/sprites
   src/drawing/sprites/preparation.c
+  src/drawing/sprites/sources.c
   src/drawing/sprites/sprites.c
 
   # drawing
@@ -321,7 +329,7 @@ add_library(sc2k_core STATIC
   src/game/city_lifecycle.c
   src/game/graphics.c
   src/game/observation.c
-  src/game/options.c
+  src/game/settings_catalog.c
   src/game/palette.c
   src/game/settings.c
   src/game/timing.c
@@ -351,6 +359,7 @@ add_library(sc2k_core STATIC
   src/ui/hotkeys.c
   src/ui/input.c
   src/ui/map.c
+  src/ui/map_saved_view.c
 
   # ui/menus
   src/ui/menus/menu.c
@@ -359,9 +368,9 @@ add_library(sc2k_core STATIC
   src/ui/music/jukebox.c
 
   # ui/news
+  src/ui/news/newspaper_capture.c
   src/ui/news/newspaper_drawing.c
   src/ui/news/newspaper_presentation.c
-  src/ui/news/newspaper_text.c
   src/ui/news/newspaper_window.c
 
   # ui
@@ -384,6 +393,7 @@ add_library(sc2k_core STATIC
   # ui/tools
   src/ui/tools/cost_labels.c
   src/ui/tools/map_input.c
+  src/ui/tools/placement.c
   src/ui/tools/toolbar.c
 
   # ui/windows
@@ -412,6 +422,7 @@ add_executable(sc2k MACOSX_BUNDLE
   src/base/diagnostics.c
   src/city/saveload/load_stream.c
   src/city/saveload/save_stream.c
+  src/city/saveload/workspace.c
   src/drawing/display.c
   src/drawing/maps/map_cache.c
   src/game/application.c
@@ -419,6 +430,7 @@ add_executable(sc2k MACOSX_BUNDLE
   src/game/commands.c
   src/game/frame.c
   src/game/input_script.c
+  src/game/scripting.c
   src/ui/city_lifecycle.c
   src/ui/command_presentation.c
   src/ui/console.c

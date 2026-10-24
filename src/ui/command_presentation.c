@@ -1,4 +1,5 @@
 #include "ui/commands.h"
+#include "base/text.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -195,7 +196,7 @@ void PresentCityBondConfirmation(City *city, u32 id, int rate) {
   CityCommand command = {id, id == CITY_COMMAND_ISSUE_BOND ? rate : 0, CITY_BOND_ASK, 0};
   if (CheckCityBondCommand(city, command) != CITY_COMMAND_NEEDS_CONFIRMATION) return;
   bool issue = id == CITY_COMMAND_ISSUE_BOND;
-  int shown_rate = issue ? (city->fixes & (1 << CITY_FIX_BOND_RATING) ? CityBondInterestRate(city) : rate) :
+  int shown_rate = issue ? (city->fixes & (1ull << CITY_FIX_BOND_RATING) ? CityBondInterestRate(city) : rate) :
       city->economic_tables.bond_rates.rate[0];
   char text[128];
   snprintf(text, sizeof(text), issue ? "Issue a $10,000 bond at %d%% annual interest?" :
@@ -213,13 +214,9 @@ void AnswerCityConfirmation(City *city, u32 window_id, bool accept) {
     Window *window = &desktop->windows[index];
     if (window->window_id != window_id) continue;
     confirmed = window->confirmed_command;
-    if (confirmed.id) break;
-    if (!window->confirmation) continue;
-    CityConfirmationState *pending = window->confirmation;
-    confirmed = pending->command;
-    pending->answer = accept ? CITY_DIALOG_YES : CITY_DIALOG_NO;
-    if (confirmed.id == CITY_COMMAND_DISASTER_UNLOCK_ANSWER)
-      confirmed.parameter1 = pending->answer;
+    int answer = accept ? CITY_DIALOG_YES : CITY_DIALOG_NO;
+    if (window->confirmation) window->confirmation->answer = answer;
+    if (confirmed.id == CITY_COMMAND_DISASTER_UNLOCK_ANSWER) confirmed.parameter1 = answer;
     break;
   }
   Sc2kCanvasDesktopDismissWindow(&city->game->ui->desktop, window_id);
@@ -282,7 +279,6 @@ static void OpenNextCityResourceNotice(City *city) {
     if (window) Sc2kCanvasDesktopDismissWindow(&ui->desktop, window);
     ClearCityResourceNotices(ui);
     SetGameError(city->game, SC2K_ERROR_HOST_ALLOCATION_FAILURE);
-    city->game->execution_failed = true;
     return;
   }
   notice->window_id = window;

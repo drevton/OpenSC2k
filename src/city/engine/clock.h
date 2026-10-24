@@ -20,4 +20,27 @@ void AdvanceCityClock(City *city, CityClockChange kind, u32 frames);
 // Set absolute logical milliseconds and report an external-time change; incomplete logical frames are truncated.
 void SetSimulationFrameTime(City *city, u32 milliseconds);
 
+// Cadence
+
+// City owns cadence counters independently of host clock reads or presentation frames.
+typedef struct {
+  u32 counter;
+  u16 parity;
+  u32 tick_due;
+} TimerCadenceCounter;
+
+// Advance one cadence callback, update presentation and mark simulation work due for the agreed speed.
+// Returns the retained tick/parity projection. Requires attached Game/Drawing/Audio owners; no host time is sampled
+// and no simulation phase is executed.
+i16 UpdateCityCadence(City *city);
+
+// Calendar
+
+// Project the given signed simulation tick onto the stored month, quarter and year.
+// Return elapsed months before the twelve-month wrap. Only the derived calendar fields are written.
+int UpdateCityCalendar(City *city, int tick);
+
+// One calendar day per simulation phase, with 25 days in every month.
+int CityDayOfMonth(const City *city);
+
 #endif

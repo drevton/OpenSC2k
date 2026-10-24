@@ -50,7 +50,7 @@ void SetUndergroundTile(City *city, TileIndex tile_index, int value) {
 // unchanged underground surface geometry.
 static int UndergroundConnectionTerrain(const City *city, TileIndex tile) {
   assert(IsMapTileValid(city, tile));
-  if ((city->fixes & (1 << CITY_FIX_BURIED_UTILITY_TERRAIN)) &&
+  if ((city->fixes & (1ull << CITY_FIX_BURIED_UTILITY_TERRAIN)) &&
       HasTileWater(&city->tile[tile])) return CITY_TERRAIN_FLAT;
   return ReadLegacyTerrainCode(city, tile);
 }

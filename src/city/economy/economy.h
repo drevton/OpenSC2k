@@ -7,52 +7,21 @@
 // Economy
 
 void UpdateMonthlyEconomyBookkeeping(City *city);
+// Apply the due January settlement once. After any facility/fiscal notices, Finish records the live month and rates.
 bool BeginCityAnnualSettlement(City *city);
 bool PrepareCityFiscalWarning(City *city);
 void FinishCityMonthlyEconomy(City *city);
 void UpdateCityEconomyPrimary(City *city);
-typedef struct {
-  int index;
+typedef struct CityMilestoneNotice {
+  int milestone; // Captured due milestone, or -1 when none was selected.
   u8 event, data;
   bool show;
 } CityMilestoneNotice;
+// BeginCityEconomyPrimary applies updates once and returns a notice to retain through any newspaper.
+// Call FinishCityEconomyPrimary once with its milestone, including -1, after optional presentation.
+// The show flag never suppresses finishing; weather advances from live City state.
 CityMilestoneNotice BeginCityEconomyPrimary(City *city);
 void FinishCityEconomyPrimary(City *city, int milestone);
-int ScaleDemand(int value, int percent);
 void UpdateCityEconomySecondary(City *city);
-
-// Chart Data
-
-typedef struct { int x, y; } CityChartPoint;
-typedef struct {
-  CityChartPoint point[20];
-  u32 latest;
-  i32 count;
-} CityHistoryPlot;
-typedef struct {
-  int value[20];
-  int summary;
-} CityDemographicValues;
-typedef struct {
-  i32 value[11];
-  i32 maximum;
-} CityIndustryValues;
-
-// Read-only City calculations used by chart presentation. Results live in caller storage; no window or cache is
-// updated, and drawing a chart cannot advance the simulation or consume RNG.
-bool BuildCityHistoryPlot(const City *city, i32 series, i32 period, i32 width, i32 height, CityHistoryPlot *plot);
-bool ReadCityDemographicValues(const City *city, i32 mode, CityDemographicValues *values);
-bool ReadCityIndustryValues(const City *city, i32 mode, CityIndustryValues *values);
-u32 ReadCityNeighborPopulation(const City *city, i32 neighbor, i32 rotation);
-i32 CityNeighborPopulationIconRow(u32 population, i32 neighboring);
-u32 ReadCityNeighborCentralPopulation(const City *city);
-
-// History
-
-// Record one monthly sample per series and advance the half-year/five-year bands when due.
-void RecordCityMonthlyHistory(City *city);
-void RebuildCityHistoryMaxima(City *city);
-// Rescale from the recent year, clamp retained samples and invalidate history windows.
-void RebaseCityHistoryGraphScales(City *city);
 
 #endif

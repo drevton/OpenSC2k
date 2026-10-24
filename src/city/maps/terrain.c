@@ -25,8 +25,6 @@
 static const i8 kTerrainCornerX[4] = {0, 0, 1, 1};
 static const i8 kTerrainCornerY[4] = {0, 1, 1, 0};
 
-static const u8 kRaisedCorners[16] = {0, 9, 3, 6, 12, 11, 7, 14, 13, 1, 2, 4, 8, 15, 15, 0};
-
 // Derive a shared vertex's height from its valid neighboring native tile corners. Vertex coordinates may lie on the
 // outer map edge; absent neighbor cells are skipped and the highest contributing corner wins.
 int ReadCityTerrainVertexHeight(const City *city, int x, int y) {
@@ -37,7 +35,7 @@ int ReadCityTerrainVertexHeight(const City *city, int x, int y) {
     if (tile == INVALID_TILE) continue;
     const TileInfo *tp = &city->tile[tile];
     int shape = ReadTerrainCode(tp), level = ReadCityLandHeight(tp);
-    height = IntMax(height, level + ((kRaisedCorners[shape] >> corner) & 1));
+    height = IntMax(height, level + ((kTerrainRaisedCorners[shape] >> corner) & 1));
   }
   return height;
 }
@@ -48,7 +46,7 @@ void ReclaimCityShorelineBanks(City *city, TileIndex land) {
   const TileInfo *ground = &city->tile[land];
   if (HasTileWater(ground)) return;
   CityTileGeometry geometry = ReadCityTileGeometry(city, land);
-  int raised = kRaisedCorners[geometry.land_shape];
+  int raised = kTerrainRaisedCorners[geometry.land_shape];
   bool changed = false;
   for (int direction = 0; direction < 8; ++direction) {
     int dx = kTerrainNeighborXOffsets[direction], dy = kTerrainNeighborYOffsets[direction];
@@ -56,7 +54,7 @@ void ReclaimCityShorelineBanks(City *city, TileIndex land) {
     if (neighbor == INVALID_TILE || !IsTileKindShoreBank(city->tile[neighbor].kind)) continue;
     CityTileGeometry bank = ReadCityTileGeometry(city, neighbor);
     if (bank.land_height != bank.water_height || !bank.land_shape) continue;
-    int bank_raised = kRaisedCorners[bank.land_shape];
+    int bank_raised = kTerrainRaisedCorners[bank.land_shape];
     bool touches = false;
     for (int corner = 0; corner < 4; ++corner) {
       if (geometry.land_height + ((raised >> corner) & 1) > bank.water_height) continue;
@@ -90,12 +88,13 @@ void ReclaimCityShorelineBanks(City *city, TileIndex land) {
 int CityTerrainEdgeHeight(const TileInfo *tp, const TileInfo *neighbor, int direction) {
   assert(direction >= 0 && direction < 4);
   static const u8 kEdgeCorners[4][2] = {{0, 3}, {3, 2}, {2, 1}, {1, 0}};
-  int corners = kRaisedCorners[ReadTerrainCode(tp)];
-  int other = kRaisedCorners[ReadTerrainCode(neighbor)];
+  int corners = kTerrainRaisedCorners[ReadTerrainCode(tp)];
+  int other = kTerrainRaisedCorners[ReadTerrainCode(neighbor)];
+  int land = ReadCityLandHeight(tp), neighbor_land = ReadCityLandHeight(neighbor);
   int height = 32;
   for (int end = 0; end < 2; ++end) {
-    int first = ReadCityLandHeight(tp) + ((corners >> kEdgeCorners[direction][end]) & 1);
-    int second = ReadCityLandHeight(neighbor) + ((other >> kEdgeCorners[(direction + 2) & 3][1 - end]) & 1);
+    int first = land + ((corners >> kEdgeCorners[direction][end]) & 1);
+    int second = neighbor_land + ((other >> kEdgeCorners[(direction + 2) & 3][1 - end]) & 1);
     height = IntMin(height, IntMax(first, second));
   }
   return height;
@@ -118,7 +117,7 @@ int CityTerrainSlopeAt(const City *city, TileIndex tile) {
 // Derive the visible shoreline slope from a valid tile and its already decoded geometry. Geometry must describe that
 // same tile; neighboring water levels can override the bank's apparent edge.
 static int ShoreSlope(const City *city, TileIndex tile, CityTileGeometry geometry) {
-  int shape = geometry.land_shape, corners = kRaisedCorners[shape];
+  int shape = geometry.land_shape, corners = kTerrainRaisedCorners[shape];
   // A shared edge at a flat river mouth belongs to the water plane, even
   // when diagonal land neighbors would otherwise raise its corners.
   for (int direction = 0; direction < 8; direction += 2) {
@@ -126,14 +125,13 @@ static int ShoreSlope(const City *city, TileIndex tile, CityTileGeometry geometr
         GetRelativeTileOrInvalid(city, tile, kTerrainNeighborXOffsets[direction], kTerrainNeighborYOffsets[direction]);
     if (next == INVALID_TILE) continue;
     const TileInfo *tp = &city->tile[next];
-    int terrain = ReadTerrainCode(tp);
-    bool level = !terrain ||
-        ReadCityLandHeight(tp) != ReadCityWaterHeight(tp);
-    if (ReadCityWaterGroundKind(tp) == TK_RIVER && level &&
-        ReadCityWaterHeight(tp) == geometry.water_height)
+    if (ReadCityWaterGroundKind(tp) != TK_RIVER) continue;
+    int terrain = ReadTerrainCode(tp), water_height = ReadCityWaterHeight(tp);
+    bool level = !terrain || ReadCityLandHeight(tp) != water_height;
+    if (level && water_height == geometry.water_height)
       corners &= ~kTerrainHigherNeighborBits[direction];
   }
-  return corners == kRaisedCorners[shape] ? shape : kTerrainShapeByHigherNeighbors[corners];
+  return corners == kTerrainRaisedCorners[shape] ? shape : kTerrainShapeByHigherNeighbors[corners];
 }
 
 // Read stored bed geometry and resolve the visible surface from its water kind.
@@ -262,7 +260,7 @@ void RebalanceAdjacentTerrainElevations(City *city, TileIndex tile) {
 // ordinary demolition preserves point edits. Tile must be valid or INVALID_TILE; reconstructs only admitted
 // native-generation/disaster corners and does not replace ordinary point-edit geometry.
 static void PrepareCityTerrainRebuild(City *city, TileIndex tile) {
-  if (!(city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)) || tile == INVALID_TILE) return;
+  if (!(city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) || tile == INVALID_TILE) return;
   InvalidateTile(city, tile);
   int shape = CityTerrainSlopeAt(city, tile);
   if (shape == CITY_TERRAIN_RAISE_LEVEL) {
@@ -272,14 +270,6 @@ static void PrepareCityTerrainRebuild(City *city, TileIndex tile) {
     shape = CITY_TERRAIN_FLAT;
   }
   WriteTerrainCode(&city->tile[tile], shape);
-}
-
-// Reconstruct terrain corners from tile minima for generation/disaster callers, then recalculate that cell. Requires
-// the caller's valid edit context; ordinary point edits must preserve their stored corners instead of using this
-// rebuild path.
-void RebuildCityTerrainCell(City *city, TileIndex tile_index) {
-  PrepareCityTerrainRebuild(city, tile_index);
-  RecalculateTerrainCell(city, tile_index);
 }
 
 // Refresh terrain state and drawing bounds for the 3-by-3 neighborhood. Invalid input is ignored; reconstructs each
@@ -310,7 +300,7 @@ static void FinishCityTerrainRecalculation(City *city, TileIndex tile_index, int
   TileInfo *tp = &city->tile[tile_index];
   bool wet = HasTileWater(tp);
   int water_height = wet ? ReadCityWaterHeight(tp) : 0;
-  int shape = city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE) ?
+  int shape = city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE) ?
       ReadTerrainCode(tp) : CityTerrainSlopeAt(city, tile_index);
   if (shape != 0)
     WriteZoneByte(city, tile_index, ReadZoneByte(city, tile_index) & CITY_ZONE_METADATA_MASK);
@@ -318,7 +308,7 @@ static void FinishCityTerrainRecalculation(City *city, TileIndex tile_index, int
     elevation += 1;
     WriteAltitudeWord(city, tile_index, (ReadAltitudeWord(city, tile_index) & CITY_ALTITUDE_CLEAR_LAND) | elevation);
   }
-  if ((city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)) || ReadCityWaterGroundKind(tp) == TK_RIVER) {
+  if ((city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) || ReadCityWaterGroundKind(tp) == TK_RIVER) {
     // Recalculation removes structures without changing the water plane. Actual terrain edits apply sea level
     // when they change the vertices; doing that here would flood dry ground after highway demolition.
     if (wet) SetCityTerrainWater(city, tile_index, water_height, shape, true);

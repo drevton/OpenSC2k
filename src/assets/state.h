@@ -19,8 +19,8 @@ enum { CITY_RANKING_RESOURCE_WORDS = 82 };
 
 typedef struct {
   i16 event_severity[CITY_RANKING_RESOURCE_WORDS];
-  u16 facility_baselines[CITY_RANKING_RESOURCE_WORDS];
-} CityRankingResources;
+  u16 event_decay[CITY_RANKING_RESOURCE_WORDS];
+} CityNewsRankingResources;
 
 typedef struct { i16 value[256]; } CityNewspaperTemplateGroups;
 typedef struct { u16 template_id[256]; } CityNewspaperTokenExpansions;
@@ -62,9 +62,10 @@ typedef struct CityResourceState {
   CityCursorAssets cursors;
   CityMusicAssets music_buttons;
   CityInterfaceFont interface_font;
+  CityOverlayFont overlay_font;
   CityIntroArt intro;
-  u32 facility_resources_unavailable;
-  CityRankingResources rankings;
+  u32 news_resources_unavailable; // Nonzero blocks news ranking and page composition after loading failure.
+  CityNewsRankingResources rankings;
   CityNewspaperResources newspaper;
   CityCalendarNames calendar_names;
   CityToolNames tool_names;

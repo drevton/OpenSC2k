@@ -8,6 +8,8 @@
 // are dry; water spans use distinct native bridge kinds. zone[4] selects slope versus zoning in zone[0..3];
 // zone[5..7] has no highway payload. Land/tunnel heights, flags, overlays and underground follow tile_storage.h.
 
+#include "city/events/events.h"
+#include "drawing/maps/map_sprites.h"
 #include "city/maps/labels.h"
 #include "city/infrastructure/lines.h"
 #include "city/infrastructure/networks.h"
@@ -24,9 +26,9 @@
 #include "assets/state.h"
 #include "city/maps/module.h"
 #include "drawing/maps/map_terrain.h"
+#include "drawing/maps/map_camera.h"
 #include "drawing/maps/map_view.h"
 #include "drawing/maps/tables.h"
-#include "game/state.h"
 
 #include <assert.h>
 #include <stdlib.h>
@@ -38,6 +40,10 @@
 #include "city/saveload/map_format.h"
 #include "city/state.h"
 #include "city/tools/tools.h"
+
+static CityInfrastructureSpan FindCityNativeHighwaySpan(const City *city, TileIndex origin, int direction,
+    bool choose_direction);
+static i64 PlaceCityHighwayOnramp(City *city, TileIndex tile);
 
 // The complete two-by-two highway footprint must fit on the map before it can start a water span.
 static const u8 kTransportTerrainClass[256] = {
@@ -86,7 +92,7 @@ TileIndex CityHighwayAnchor(const City *city, TileIndex tile) {
 TileIndex CityHighwayPlacementAnchor(const City *city, TileIndex tile) {
   int kind = ReadTile(city, tile);
   if (IsTileKindHighwayFootprint(kind) || IsTileKindHighwayBridge(kind)) return CityHighwayAnchor(city, tile);
-  if (city->fixes & (1 << CITY_FIX_COMPACT_HIGHWAYS)) return tile;
+  if (city->fixes & (1ull << CITY_FIX_COMPACT_HIGHWAYS)) return tile;
   CityPoint point = MapTilePt(city, tile);
   return MapTileXY(city, point.x & ~1, point.y & ~1);
 }
@@ -163,7 +169,7 @@ void UpdateCityHighwayFootprint(City *city, TileIndex tile_index, int footprint_
   const TileIndex cells[4] = {tile_index, tile_south, tile_east, tile_south_east};
   static const i8 corner_y[4] = {0, 1, 1, 0};
   static const i8 corner_x[4] = {0, 0, 1, 1};
-  bool preserve_ground = (city->fixes & (1 << CITY_FIX_HIGHWAY_TERRAIN)) != 0;
+  bool preserve_ground = (city->fixes & (1ull << CITY_FIX_HIGHWAY_TERRAIN)) != 0;
   InvalidateTileRange(city, tile_index, 2, 2);
   int maximum = GetMaximumTerrainHeightIn2x2(city, tile_index);
   if (footprint_shape < CITY_TRANSPORT_FOOTPRINT_GRADED_4) {
@@ -275,7 +281,7 @@ void ClearZoneStateAndUpdateTransportSpanNeighbors(City *city, TileIndex tile) {
 // A highway edge uses the water plane or an aligned land grade; -1 rejects unsupported slopes. Placement and
 // reconnection share this admission rule. Geometry and direction must be decoded supported values; the query has no
 // terrain or connection side effects.
-int CityHighwayGradeEdgeHeight(CityTileGeometry geometry, int direction) {
+static int CityHighwayGradeEdgeHeight(CityTileGeometry geometry, int direction) {
   static const u8 kRaisedEdges[] = {0, CITY_LINE_NORTH, CITY_LINE_WEST, CITY_LINE_SOUTH, CITY_LINE_EAST};
   if (geometry.water != CITY_WATER_NONE) return geometry.surface_height;
   int shape = geometry.land_shape;
@@ -288,7 +294,7 @@ int CityHighwayGradeEdgeHeight(CityTileGeometry geometry, int direction) {
 // Both carriageways must cross a placement boundary together. Parallel sides may touch without joining; a one-cell
 // stagger at an end is not a connection. Bounds must be an admitted half-open placement rectangle; false means an
 // adjoining carriageway would be split or misaligned.
-bool CityHighwayEdgesAlign(const City *city, CityRect bounds) {
+static bool CityHighwayEdgesAlign(const City *city, CityRect bounds) {
   for (int direction = 0; direction < 4; ++direction) {
     int axis = direction & 1;
     int begin = axis ? bounds.left : bounds.top;
@@ -381,8 +387,8 @@ static int CityHighwayJunctionConnections(const City *city, int x, int y) {
 
 // Recompute compact-highway junction artwork in the bounded neighborhood of an edited tile. Requires a valid tile
 // after its fields are written; disabled compact-highway behavior leaves connections alone.
-void RefreshCityHighwayConnections(City *city, TileIndex tile) {
-  if (!(city->fixes & (1 << CITY_FIX_COMPACT_HIGHWAYS))) return;
+static void RefreshCityHighwayConnections(City *city, TileIndex tile) {
+  if (!(city->fixes & (1ull << CITY_FIX_COMPACT_HIGHWAYS))) return;
   CityPoint point = MapTilePt(city, tile);
   for (int y = point.y - 2; y <= point.y + 1; ++y) for (int x = point.x - 2; x <= point.x + 1; ++x) {
     if (!CanFormCityHighwayJunction(city, x, y, false)) continue;
@@ -401,7 +407,7 @@ void RefreshCityHighwayConnections(City *city, TileIndex tile) {
 // two-by-two artwork footprint. Endpoints must be valid; false also selects the legacy-width route when compact
 // highways are disabled.
 SC2K_PRESERVE_MOST bool IsCityCompactHighwayLine(const City *city, TileIndex start, TileIndex end) {
-  if (!(city->fixes & (1 << CITY_FIX_COMPACT_HIGHWAYS))) return false;
+  if (!(city->fixes & (1ull << CITY_FIX_COMPACT_HIGHWAYS))) return false;
   CityPoint from = MapTilePt(city, start), to = MapTilePt(city, end);
   // Turning needs at least one 2x2 step on both axes. Ignore one-cell jitter
   // on an otherwise straight drag, without projecting every drag onto an axis.
@@ -637,7 +643,8 @@ i64 CityCompactHighwayCost(const CityCompactHighwayPlan *plan, int span_style) {
 // Quote or build a compact highway using resolved endpoints, orientation and span options. Rejects unsupported input
 // and invalid plans; CITY_COMMAND_TEST leaves City/RNG untouched and execution returns the actual signed
 // placement result.
-i64 CmdBuildCityCompactHighway(City *city, u32 flags, TileIndex start, TileIndex end, int orientation, int span_style) {
+static i64 CmdBuildCityCompactHighway(City *city, u32 flags, TileIndex start, TileIndex end,
+    int orientation, int span_style) {
   CityCompactHighwayPlan plan;
   if ((flags & ~CITY_COMMAND_TEST) || !PlanCityCompactHighway(city, start, end, orientation, &plan))
     return CITY_COMMAND_COST_BLOCKED;
@@ -862,7 +869,7 @@ void PrepareCityHighwayLine(const City *city, CityConstructionState *state, int 
 // Test whether a proposed highway cell can reuse the existing footprint at no charge. Coordinates and construction
 // state must describe the current route; this is a read-only admission check.
 bool CityHighwayCellAlreadyBuilt(const City *city, TileIndex tile) {
-  if (!(city->fixes & (1 << CITY_FIX_REUSE_INFRASTRUCTURE))) return false;
+  if (!(city->fixes & (1ull << CITY_FIX_REUSE_INFRASTRUCTURE))) return false;
   int surface = ReadTile(city, tile);
   return IsTileKindHighwayFootprint(surface);
 }
@@ -1009,7 +1016,8 @@ CityInfrastructureSpan FindCityHighwaySpan(const City *city, TileIndex origin_ti
 // Native spans preserve their selected axis and accept aligned existing bank highways. The prepared reinforced deck
 // still groups longitudinal cells in pairs. Requires explicit supported axis/options and initialized native map data;
 // returns its plan/error without changing City.
-CityInfrastructureSpan FindCityNativeHighwaySpan(const City *city, TileIndex origin, int direction, bool choose_direction) {
+static CityInfrastructureSpan FindCityNativeHighwaySpan(const City *city, TileIndex origin, int direction,
+    bool choose_direction) {
   CityInfrastructureSpan span = {.start = origin, .end = INVALID_TILE, .error_tile = INVALID_TILE, .direction = direction};
   if (!IsMapTileValid(city, origin)) return span;
   CityPoint origin_point = MapTilePt(city, origin);
@@ -1149,7 +1157,7 @@ i64 PlaceCityBridgeOrTunnel(City *city, TileIndex origin_tile, int ui_mode) {
 }
 
 // The native frontend and retained pointer adapters enter the same command.
-i64 PlaceCityNativeTransportLine(City *city, TileIndex origin_tile) {
+static i64 PlaceCityNativeTransportLine(City *city, TileIndex origin_tile) {
   assert(IsMapTileValid(city, origin_tile));
   TileIndex end = city->command_choices.endpoint_supplied ?
       PrepareCityLineEndpoint(city, origin_tile, city->command_choices.end, 25, true) :
@@ -1227,7 +1235,7 @@ i64 PlaceCityLegacyTransportLine(City *city, TileIndex origin_tile) {
 // Placement mode is selected once; native failures never fall through to stock placement.
 i64 PlaceCityTransportLine(City *city, TileIndex origin_tile) {
   assert(IsMapTileValid(city, origin_tile));
-  return city->fixes & (1 << CITY_FIX_COMPACT_HIGHWAYS) ? PlaceCityNativeTransportLine(city, origin_tile) :
+  return city->fixes & (1ull << CITY_FIX_COMPACT_HIGHWAYS) ? PlaceCityNativeTransportLine(city, origin_tile) :
       PlaceCityLegacyTransportLine(city, origin_tile);
 }
 
@@ -1536,8 +1544,9 @@ bool CanPlaceCityOnramp(const City *city, TileIndex tile) {
   return FindCityOnrampConnections(city, tile).roads != 0;
 }
 
-// Join an ordinary road to an adjacent highway. Road selection keeps west/south/east/north priority.
-i64 PlaceCityHighwayOnramp(City *city, TileIndex tile) {
+// Join an ordinary road to an adjacent highway. Requires a valid tile and returns success or a negative gameplay
+// error. Road selection keeps west/south/east/north priority.
+static i64 PlaceCityHighwayOnramp(City *city, TileIndex tile) {
   assert(IsMapTileValid(city, tile));
   const TileInfo *tp = &city->tile[tile];
   if (!IsTileKindLandscape(tp->kind) || tp->kind == TK_RADIOACTIVE_WASTE ||
@@ -1576,7 +1585,7 @@ i64 PlaceCityHighwayOnramp(City *city, TileIndex tile) {
   if (mirrored)
     WriteTileZoneByte(&city->tile[tile],
         ReadTileZoneByte(&city->tile[tile]) | CITY_HIGHWAY_RAMP_MIRROR_MASK);
-  if (city->fixes & (1 << CITY_FIX_RAMP_CONNECTIONS))
+  if (city->fixes & (1ull << CITY_FIX_RAMP_CONNECTIONS))
     UpdateRoadConnections(city, road_tile);
   else {
     ReplaceCityTileAndStatistics(city, road_tile, TK_ROAD);
@@ -1722,7 +1731,7 @@ static int DiagonalHighwaySprite(const City *city, TileIndex tile, int layout, i
 }
 
 int CityHighwaySpriteFlip(const City *city, TileIndex tile, int layout) {
-  int rotation = CityMapCameraRotation(city->game->drawing);
+  int rotation = CityMapCameraRotation(city->drawing);
   const TileInfo *tp = &city->tile[tile];
   if (layout >= CITY_MAP_TILE_SPRITE_HIGHWAY_ENTRANCE_FIRST && layout < CITY_MAP_TILE_SPRITE_HIGHWAY_MULTI_FIRST)
     return CityHighwayRampView(city, tile, rotation) >> 2;
@@ -1735,7 +1744,7 @@ int CityHighwaySpriteFlip(const City *city, TileIndex tile, int layout) {
   }
   int axis = ReadCityHighwayAxis(tp) ^ (rotation & 1);
   if (bridge) {
-    if ((city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)))
+    if ((city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)))
       return axis ^ (layout - CITY_MAP_TILE_SPRITE_HIGHWAY_BRIDGE_FIRST);
     return axis;
   }
@@ -1746,7 +1755,7 @@ int CityHighwaySpriteFlip(const City *city, TileIndex tile, int layout) {
 static int HighwayTransportSprite(const City *city, TileIndex tile, int layout, int zoom,
     const CityTileGeometry *geometry) {
   int original = layout + 500 * zoom;
-  int rotation = CityMapCameraRotation(city->game->drawing);
+  int rotation = CityMapCameraRotation(city->drawing);
   const TileInfo *tp = &city->tile[tile];
   // A highway over level water follows its surface, not the submerged bed.
   int shape = geometry->surface_shape;
@@ -1776,7 +1785,7 @@ static int HighwayTransportSprite(const City *city, TileIndex tile, int layout, 
 
 void DrawCityHighwayTransportArtwork(City *city, TileIndex tile, int layout, int zoom, int x, int baseline,
     const CityTileGeometry *geometry) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   int sprite = layout + 500 * zoom;
   if (!IsCityMapGroundPass(drawing)) {
     bool crossing = layout >= CITY_MAP_TILE_SPRITE_HIGHWAY_ROAD_CROSSING_FIRST &&
@@ -1795,13 +1804,13 @@ void DrawCityHighwayTransportArtwork(City *city, TileIndex tile, int layout, int
     }
   }
   int flipped = CityHighwaySpriteFlip(city, tile, layout);
-  if (city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE))
+  if (city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE))
     sprite = HighwayTransportSprite(city, tile, layout, zoom, geometry);
   DrawCityMapSpriteAtBaseline(drawing, sprite, x, baseline, flipped);
 }
 
 void DrawCityHighwayCrossingGround(City *city, int layout, int zoom, int screen_x, int ground_y) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   if (layout >= CITY_MAP_TILE_SPRITE_HIGHWAY_ROAD_CROSSING_FIRST &&
       layout <= CITY_MAP_TILE_SPRITE_HIGHWAY_RAIL_CROSSING_LAST) {
     bool rail = layout >= CITY_MAP_TILE_SPRITE_HIGHWAY_RAIL_CROSSING_FIRST;
@@ -1816,9 +1825,9 @@ void DrawCityHighwayCrossingGround(City *city, int layout, int zoom, int screen_
 void DrawCityHighwaySharedFootprint(City *city, TileIndex tile, int layout, int zoom, int screen_x, int ground_y,
     const CityTileGeometry *geometry) {
   if (!IsCityMapViewFootprintAnchor(city, tile)) return;
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   int half_width = 4 << zoom, row_step = 2 << zoom;
-  bool native = (city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)) != 0;
+  bool native = (city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) != 0;
   bool draw_underpasses = native && IsCityMapGroundPass(drawing) &&
       CityMapLayerVisible(drawing, CITY_MAP_LAYER_NETWORKS);
   if (zoom != CITY_MAP_ZOOM_SMALL || native) {
@@ -1854,10 +1863,10 @@ void DrawCityHighwaySharedFootprint(City *city, TileIndex tile, int layout, int 
 // ground cells at their actual elevations before placing the independent deck.
 static bool DrawHighwayTile(City *city, TileIndex tile, int zoom, int screen_x, int ground_y,
     const CityTileGeometry *tile_geometry) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   CityTileGeometry geometry = *tile_geometry;
   int kind = ReadTile(city, tile);
-  if (!(city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)) ||
+  if (!(city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) ||
       !IsTileKindMultiHighway(kind)) return false;
   if (!CityMapTileDetailsVisible(drawing)) {
     DrawCityMapTerrainTile(city, tile, zoom, -1, screen_x, ground_y, &geometry);
@@ -1870,7 +1879,7 @@ static bool DrawHighwayTile(City *city, TileIndex tile, int zoom, int screen_x, 
     DrawCityMapTerrainTile(city, tile, zoom, -1, screen_x, ground_y, &geometry);
     DrawCityMapPlacementTile(city, tile);
     int baseline = ground_y - (geometry.surface_shape == CITY_TERRAIN_SHAPE_13) * CityMapHeightStep(zoom);
-    int axis = ReadCityHighwayAxis(&city->tile[tile]) ^ (CityMapCameraRotation(city->game->drawing) & 1);
+    int axis = ReadCityHighwayAxis(&city->tile[tile]) ^ (CityMapCameraRotation(city->drawing) & 1);
     DrawCityHighwayTransportArtwork(city, tile, CITY_MAP_TILE_SPRITE_HIGHWAY_FIRST + axis,
         zoom, screen_x, baseline, &geometry);
     return true;
@@ -1881,7 +1890,7 @@ static bool DrawHighwayTile(City *city, TileIndex tile, int zoom, int screen_x, 
   int height = geometry.surface_height, deck_height = 0;
   for (int y = bounds.top; y < bounds.bottom; ++y) for (int x = bounds.left; x < bounds.right; ++x) {
     TileIndex ground = MapTileXY(city, x, y);
-    CityPoint offset = CityMapCameraVector(CityMapCameraRotation(city->game->drawing), x - tx, y - ty);
+    CityPoint offset = CityMapCameraVector(CityMapCameraRotation(city->drawing), x - tx, y - ty);
     int dx = offset.x, dy = offset.y;
     CityTileGeometry ground_geometry = ground == tile ? geometry : ReadCityMapViewGeometry(city, ground);
     int ground_height = ground_geometry.surface_height;

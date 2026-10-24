@@ -2,6 +2,7 @@
 
 #include <string.h>
 
+#include "drawing/canvas.h"
 #include "drawing/raster/canvas_primitives.h"
 #include "ui/menus/menu.h"
 #include "ui/news/newspaper.h"
@@ -92,7 +93,7 @@ CityRect CityCanvasDirtyPixelBounds(const CityCanvasDesktop *desktop, CityRect l
       return CityNewspaperPaintBounds(window, Sc2kCanvasDesktopPixelBounds(desktop, window->window_id));
   }
   int scale = desktop->pixel_state.scale ? desktop->pixel_state.scale : 100;
-  return CanvasScaleCover(logical, scale, 100);
+  return CanvasScaleInnerRect(logical, scale, 100);
 }
 
 void PositionCityWindowPixels(CityCanvasDesktop *desktop, u32 id, CityPoint position) {
@@ -115,33 +116,30 @@ void PositionCityWindowPixels(CityCanvasDesktop *desktop, u32 id, CityPoint posi
 
 CityRect CanvasPixelMapCover(const CityCanvasDesktop *desktop, u32 id, CityRect logical) {
   if (!desktop->pixel_state.scale)
-    return CanvasScaleCover(logical, desktop->ui_scale_numerator, desktop->ui_scale_denominator);
+    return CanvasScaleInnerRect(logical, desktop->ui_scale_numerator, desktop->ui_scale_denominator);
   CityRect b = Sc2kCanvasDesktopPixelBounds(desktop, id);
   i32 scale = desktop->pixel_state.map_scale;
   return (CityRect){CanvasScaleCeil(b.left, 1, scale), CanvasScaleCeil(b.top, 1, scale),
       CanvasScaleFloor(b.right, 1, scale), CanvasScaleFloor(b.bottom, 1, scale)};
 }
 
-void Sc2kCanvasDesktopPixelPointer(const CityCanvasDesktop *desktop, u32 capture,
-                                      i32 x, i32 y, i32 *logical_x, i32 *logical_y) {
-  if (!desktop->pixel_state.scale) { *logical_x = x; *logical_y = y; return; }
-  if (!capture) {
+CityPoint CityWindowPointFromPixels(const CityCanvasDesktop *desktop, u32 window_id, int x, int y) {
+  if (!desktop->pixel_state.scale) return (CityPoint){x, y};
+  if (!window_id) {
     for (i32 i = desktop->count - 1; i >= 0; --i)
       if (desktop->windows[i].visible && CanvasPointInRect(
           Sc2kCanvasDesktopPixelBounds(desktop, desktop->windows[i].window_id), x, y)) {
-        capture = desktop->windows[i].window_id; break;
+        window_id = desktop->windows[i].window_id; break;
       }
-
   }
-  const CityRect *bounds = capture ? CanvasPixelLogicalBounds(desktop, capture) : NULL;
+  const CityRect *bounds = window_id ? CanvasPixelLogicalBounds(desktop, window_id) : NULL;
   if (bounds) {
-    CityRect pixels = Sc2kCanvasDesktopPixelBounds(desktop, capture);
-    *logical_x = bounds->left + CanvasScaleFloor(x - pixels.left, 100, desktop->pixel_state.scale);
-    *logical_y = bounds->top + CanvasScaleFloor(y - pixels.top, 100, desktop->pixel_state.scale);
-  } else {
-    *logical_x = CanvasScaleFloor(x, 100, desktop->pixel_state.scale);
-    *logical_y = CanvasScaleFloor(y, 100, desktop->pixel_state.scale);
+    CityRect pixels = Sc2kCanvasDesktopPixelBounds(desktop, window_id);
+    return (CityPoint){bounds->left + CanvasScaleFloor(x - pixels.left, 100, desktop->pixel_state.scale),
+        bounds->top + CanvasScaleFloor(y - pixels.top, 100, desktop->pixel_state.scale)};
   }
+  return (CityPoint){CanvasScaleFloor(x, 100, desktop->pixel_state.scale),
+      CanvasScaleFloor(y, 100, desktop->pixel_state.scale)};
 }
 
 u32 Sc2kCanvasDesktopFocusPixels(CityCanvasDesktop *desktop, i32 x, i32 y) {
@@ -164,9 +162,8 @@ void Sc2kCanvasDesktopBeginPixelDrag(CityCanvasDesktop *desktop, i32 x, i32 y) {
 bool Sc2kCanvasDesktopMovePixelDrag(CityCanvasDesktop *desktop, i32 x, i32 y) {
   if (!desktop->pixel_state.scale || !desktop->pixel_state.capture || desktop->dragging == CITY_CANVAS_DRAG_NONE) return false;
   if (desktop->resizing) {
-    int logical_x, logical_y;
-    Sc2kCanvasDesktopPixelPointer(desktop, desktop->pixel_state.capture, x, y, &logical_x, &logical_y);
-    return Sc2kCanvasDesktopPointerMove(desktop, logical_x, logical_y);
+    CityPoint point = CityWindowPointFromPixels(desktop, desktop->pixel_state.capture, x, y);
+    return Sc2kCanvasDesktopPointerMove(desktop, point.x, point.y);
   }
   u32 id = desktop->pixel_state.capture;
   Window *window = FindCityCanvasWindow(desktop, id);

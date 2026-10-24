@@ -4,10 +4,6 @@
 #include "city/types.h"
 
 typedef struct {
-  i8 choice[250];
-} CityNewspaperSharedChoices;
-
-typedef struct {
   CityRect panel[11];
 } CityNewspaperLayout;
 
@@ -31,10 +27,9 @@ typedef struct {
   CityNewspaperAlignments style[3];
 } CityNewspaperAlignmentTable;
 
-// Shared newspaper composition scratch and prepared capture layouts, separate from map-view drawing state.
-// Comparison transports the four records individually, excluding padding between them.
+// Prepared newspaper capture layouts, separate from map-view drawing state.
+// Comparison transports the three records individually, excluding padding between them.
 typedef struct {
-  CityNewspaperSharedChoices choices;
   CityNewspaperLayouts layouts;
   CityNewspaperFontTable fonts;
   CityNewspaperAlignmentTable alignments;

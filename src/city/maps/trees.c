@@ -8,8 +8,10 @@
 // altitude[0..4] is land height and [10..14] can describe an independent road tunnel below;
 // altitude[5..9] is not tree age or construction progress. Shared flags, overlay and underground follow tile_storage.h.
 
+#include "drawing/maps/map_sprites.h"
 #include "city/maps/trees.h"
 #include "city/maps/terrain.h"
+#include "city/maps/tables.h"
 #include "city/maps/ground.h"
 #include "city/maps/module.h"
 
@@ -25,7 +27,6 @@
 #include "city/terrain/terrain.h"
 #include "drawing/maps/map_camera.h"
 #include "drawing/maps/map_view.h"
-#include "game/state.h"
 #include "drawing/sprites/sprites.h"
 
 // Select natural tree aging and reseeding. Invalid or reserved values fail before TEST or mutation.
@@ -175,13 +176,13 @@ static int CityTreePlacementError(const City *city, TileIndex tile, int options)
 
 // Test the same single-tile tree rules used by rectangle pricing and execution. Tile and options must already be
 // valid; the predicate neither changes the map nor consumes RNG.
-bool CanPlaceCityTree(const City *city, TileIndex tile, int options) {
+static bool CanPlaceCityTree(const City *city, TileIndex tile, int options) {
   return CityTreePlacementError(city, tile, options) == CITY_COMMAND_COST_OK;
 }
 
 // Quote eligible tree edits in the inclusive rectangle using explicit species and removal options. Invalid
 // endpoints/options return an admission error; the query changes neither RNG, treasury nor map state.
-CityCommandCost GetCityTreeRectangleCost(const City *city, TileIndex start, TileIndex end, int options) {
+static CityCommandCost GetCityTreeRectangleCost(const City *city, TileIndex start, TileIndex end, int options) {
   CityCommandCost quote = {.error = CITY_COMMAND_COST_INVALID, .error_tile = INVALID_TILE};
   if (!IsMapTileValid(city, start) || !IsMapTileValid(city, end) ||
       (options & ~(CITY_TREE_SPECIES_MASK | CITY_TREE_REMOVE | CITY_TREE_CLIMATE_MASK)) ||
@@ -201,7 +202,7 @@ CityCommandCost GetCityTreeRectangleCost(const City *city, TileIndex start, Tile
 i64 CmdPlantTreesRect(City *city, u32 flags, TileIndex location, TileIndex end, int options) {
   CityCommandCost quote = GetCityTreeRectangleCost(city, location, end, options);
   if (flags & CITY_COMMAND_TEST) return CityCommandPriceResult(quote);
-  if (!(city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE))) return CITY_COMMAND_COST_INVALID;
+  if (!(city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE))) return CITY_COMMAND_COST_INVALID;
   if (quote.error) return quote.error;
   if (!quote.cost) return 1;
   CityRect bounds = MapTileRectangle(city, location, end);
@@ -287,7 +288,7 @@ void SeedCityTrees(City *city) {
 
 // Advance a tree tile after ground recovery on its scheduled growth visit. The caller owns traversal and cadence;
 // saplings mature with lifecycle disabled, while spontaneous growth and death use only the landscape RNG.
-void GrowCityTrees(City *city, TileIndex tile) {
+static void GrowCityTrees(City *city, TileIndex tile) {
   TileInfo *tp = &city->tile[tile];
   int kind = tp->kind;
   int growth = ReadTreeGrowth(tp);
@@ -530,17 +531,15 @@ static const u8 kCityTreePositions[4][4][2] = {
   {{3, 9}, {8, 2}, {9, 9}, {1, 5}},
 };
 
-static const u8 kTreeRaisedCorners[] = {0, 9, 3, 6, 12, 11, 7, 14, 13, 1, 2, 4, 8, 15, 15, 0};
-
 int CityTreeGroundOffset(int terrain, int zoom) {
-  int corners = kTreeRaisedCorners[terrain & 15];
+  int corners = kTerrainRaisedCorners[terrain & 15];
   return (__builtin_popcount(corners) * CityMapHeightStep(zoom) + 2) >> 2;
 }
 
 // Draw the tree silhouettes over the already-painted ground. The caller applies visibility policy and supplies
 // camera-relative slope/screen coordinates. Drawing decides whether each sprite is collected or rasterized now.
-void DrawCityTrees(const City *city, Drawing *drawing, TileIndex tile, int zoom, int screen_x, int ground_y,
-    int land_shape) {
+static void DrawCityTrees(const City *city, TileIndex tile, int zoom, int screen_x, int ground_y, int land_shape) {
+  Drawing *drawing = city->drawing;
   const TileInfo *tp = &city->tile[tile];
   int kind = tp->kind;
   int rotation = CityMapCameraRotation(drawing);
@@ -555,7 +554,7 @@ void DrawCityTrees(const City *city, Drawing *drawing, TileIndex tile, int zoom,
   const u8 (*layout_positions)[2] = kCityTreePositions[(hash >> 2) & 3];
   CityPoint positions[4];
   bool shore = IsTileKindShoreTree(kind);
-  int corners = kTreeRaisedCorners[land_shape & 15];
+  int corners = kTerrainRaisedCorners[land_shape & 15];
   if (shore && !corners) return;
   for (int tree = 0; tree < count; ++tree) {
     if (shore) {
@@ -602,9 +601,9 @@ void DrawCityTrees(const City *city, Drawing *drawing, TileIndex tile, int zoom,
 static bool DrawCityTreeTile(City *city, TileIndex tile, int zoom, int screen_x, int ground_y,
     const CityTileGeometry *geometry) {
   if (!DrawCityGroundTile(city, tile, zoom, screen_x, ground_y, geometry)) return false;
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   if (CityMapTileDetailsVisible(drawing) && CityMapLayerVisible(drawing, CITY_MAP_LAYER_TREES))
-    DrawCityTrees(city, drawing, tile, zoom, screen_x, ground_y, geometry->land_shape);
+    DrawCityTrees(city, tile, zoom, screen_x, ground_y, geometry->land_shape);
   return true;
 }
 
@@ -612,7 +611,7 @@ static void TickTreeTile(City *city, TileIndex tile) {
   RefreshCityTileGroundCover(city, tile, false);
   CityPoint point = MapTilePt(city, tile);
   u32 cycle = 11 * point.x + 9 * point.y + (city->landscape_tick >> 8);
-  GrowCityGround(city, tile, cycle, true);
+  AdvanceCityGroundRecovery(city, tile);
   if ((cycle & 15) == 15) GrowCityTrees(city, tile);
 }
 

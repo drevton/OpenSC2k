@@ -6,9 +6,8 @@
 
 typedef struct CityBudgetState CityBudgetState;
 
-// Forecasts replace projected totals; tax adjustment normalizes baselines and refreshes their rounded mean.
+// Replace projected annual totals without booking income or costs, and invalidate finance information.
 void RefreshBudgetDialogEstimates(City *city);
-void AdjustIndustryTaxRates(City *city, int direction);
 
 // Signed monthly income/cost, independent of whether the policy is enabled. Unsupported policies cost zero.
 int CityPolicyMonthlyCost(const City *city, int policy);
@@ -16,7 +15,6 @@ void RebuildCityPolicyAvailability(City *city);
 
 // Valuation and bond queries are read-only except for the explicitly named recalculation.
 void RecalculateCityAssetValue(City *city);
-bool CanCityIssueBond(const City *city);
 int CityBondInterestRate(const City *city);
 const char *CityBondCreditRating(const City *city);
 

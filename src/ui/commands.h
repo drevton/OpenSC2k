@@ -43,7 +43,8 @@ void PresentCityBondConfirmation(City *city, u32 id, int rate);
 void PresentCityTunnelConfirmation(City *city, TileIndex tile);
 void PresentCityNeighborConfirmation(City *city, CityCommand command, int cost);
 i64 CheckCityConstructionCommand(City *city, CityCommand command);
-// Submit a confirmation answer through its retained UI caller; this may close/reorder windows.
+// Record the reply and capture the command before closing/reconciling, then execute the resolved decision.
+// This may close or reorder other windows; retain IDs across the call.
 void AnswerCityConfirmation(City *city, u32 window_id, bool accept);
 // Consume a detached command-notice list: present it in command order, or discard it before any window opens.
 void PresentCityCommandNotices(City *city, CityResourceNotice *notices);
@@ -51,6 +52,9 @@ void DiscardCityCommandNotices(CityResourceNotice *notices);
 // Clear queued notices; the open window's completion callback keeps ownership of its current notice.
 void ClearCityResourceNotices(CityInterfaceState *ui);
 
+// Record legacy tool feedback in the current UI scope without presenting a window. Keep the first error unless
+// funds run out; blocker is an explicit refusing tile. No scope means no effect. Native commands return their errors.
+void ReportCityCommandFailure(City *city, i64 error, TileIndex blocker);
 void ReportCityCommandResult(City *city, i64 error);
 
 #endif

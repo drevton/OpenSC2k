@@ -1,7 +1,9 @@
+#include "city/events/events.h"
 #include "city/maps/labels.h"
 #include "game/errors.h"
 #include "city/infrastructure/networks.h"
 #include "city/maps/terrain.h"
+#include "city/maps/ground.h"
 #include "city/saveload/map_format.h"
 #include "city/engine/random.h"
 #include "city/economy/facilities.h"
@@ -129,7 +131,7 @@ void BulldozeCityTile(City *city, TileIndex tile_index, bool animate) {
 
   if (animate)
     ShowCityDemolitionEffect(city, MapTileXY(city, anchor_x - (width >> 1), anchor_y + (height >> 1)), size > 1);
-  if (city->fixes & (1 << CITY_FIX_POWER_CLEANUP)) {
+  if (city->fixes & (1ull << CITY_FIX_POWER_CLEANUP)) {
     for (int row = start_point.y; row < start_point.y + height; ++row)
       for (int column = start_point.x; column < start_point.x + width; ++column) {
         TileIndex demolished = MapTileXYOrInvalid(city, column, row);
@@ -168,7 +170,7 @@ static bool IsClearCityGroundTile(const TileInfo *tp) {
 
 // Check whether demolition would leave a valid ground tile unchanged. Underground selects the layer being edited; the
 // predicate does not charge or invalidate anything.
-bool IsCityBulldozeGroundNoop(const TileInfo *tp, bool underground) {
+static bool IsCityBulldozeGroundNoop(const TileInfo *tp, bool underground) {
   if (underground || !IsClearCityGroundTile(tp)) return false;
   int ground = ReadGroundKind(tp);
   return ground >= CITY_GROUND_RECOVERY_FIRST && ground <= CITY_GROUND_RECOVERY_GRASS_FIRST;
@@ -189,13 +191,13 @@ static bool IsClearCityGrassTile(const TileInfo *tp) {
 i64 GetCityBulldozeTileCost(const City *city, TileIndex tile, bool underground) {
   const TileInfo *tp = &city->tile[tile];
   if (IsCityBulldozeGroundNoop(tp, underground)) return 0;
-  if (!underground && IsClearCityGrassTile(tp) && !(city->fixes & (1 << CITY_FIX_GRASS_CLEARING_COST)))
+  if (!underground && IsClearCityGrassTile(tp) && !(city->fixes & (1ull << CITY_FIX_GRASS_CLEARING_COST)))
     return 0;
   return kCityToolCosts[CITY_DEMOLISH_CLEAR];
 }
 
-// Check obstruction and protected-category rules for demolition at a valid tile. Underground and alt are resolved
-// gameplay choices; returns zero or a negative error without performing demolition.
+// Check obstruction and protected-category rules for the resolved layer/alt choices. Invalid tiles report nothing
+// to remove; returns zero or a negative error without editing City.
 int GetCityBulldozeTileError(const City *city, TileIndex tile_index, bool underground, bool alt) {
   if (!IsMapTileValid(city, tile_index)) return CITY_COMMAND_COST_NOTHING_TO_REMOVE;
   const TileInfo *tp = &city->tile[tile_index];
@@ -204,27 +206,26 @@ int GetCityBulldozeTileError(const City *city, TileIndex tile_index, bool underg
   if (ReadCityZoneKind(tp) == ZONE_MILITARY)
     return CITY_COMMAND_COST_NOTHING_TO_REMOVE;
   if (IsCityBulldozeGroundNoop(tp, underground)) return CITY_COMMAND_COST_OK;
-  int tile = tp->kind;
-  int underground_kind = CITY_TUNNEL_DEPTH_NONE;
   if (underground) {
-    underground_kind = (ReadAltitudeWord(city, tile_index) & CITY_ALTITUDE_TUNNEL_MASK) >> CITY_ALTITUDE_TUNNEL_SHIFT;
-    if (ReadUnderground(city, tile_index) == TUK_CLEAR && underground_kind != CITY_TUNNEL_DEPTH_ENTRANCE &&
+    int tunnel_depth = (tp->altitude & CITY_ALTITUDE_TUNNEL_MASK) >> CITY_ALTITUDE_TUNNEL_SHIFT;
+    if ((tp->underground & CITY_UNDERGROUND_KIND_MASK) == TUK_CLEAR && tunnel_depth != CITY_TUNNEL_DEPTH_ENTRANCE &&
         !(tp->flags & TF_PIPED))
       return CITY_COMMAND_COST_NOTHING_TO_REMOVE;
   } else {
-    if (tile == TK_RADIOACTIVE_WASTE) return CITY_COMMAND_COST_NOTHING_TO_REMOVE;
-    if (IsTileKindBridgeMiddle(tile)) {
+    int kind = tp->kind;
+    if (kind == TK_RADIOACTIVE_WASTE) return CITY_COMMAND_COST_NOTHING_TO_REMOVE;
+    if (IsTileKindBridgeMiddle(kind)) {
       int ground = ReadGroundKind(tp);
       return ReadCityBridgeUnderpass(tp) != CITY_BRIDGE_UNDERPASS_NONE ||
           ground == CITY_GROUND_ROUGH || ground == CITY_GROUND_ROCKS || IsClearCityGrassTile(tp) ?
           CITY_COMMAND_COST_OK : CITY_COMMAND_COST_NOTHING_TO_REMOVE;
     }
-    if (IsTileKindExposedWater(tile)) {
+    if (IsTileKindExposedWater(kind)) {
       if (ReadCityWaterHeight(tp) > ReadCityLandHeight(tp))
         return CITY_COMMAND_COST_CLEAR_DEEP_WATER;
       return CITY_COMMAND_COST_OK;
     }
-    if (tile == TK_CLEAR) {
+    if (kind == TK_CLEAR) {
       int ground = ReadGroundKind(tp);
       if (ground != CITY_GROUND_ROUGH && ground != CITY_GROUND_ROCKS && !IsClearCityGrassTile(tp))
         return CITY_COMMAND_COST_NOTHING_TO_REMOVE;
@@ -256,37 +257,37 @@ i64 ApplyBulldozerTile(City *city, TileIndex tile_index, int options,
     }
     return true;
   }
-  int tile = ReadTile(city, tile_index);
-  int underground_kind = underground ?
+  int kind = ReadTile(city, tile_index);
+  int tunnel_depth = underground ?
       (ReadAltitudeWord(city, tile_index) & CITY_ALTITUDE_TUNNEL_MASK) >> CITY_ALTITUDE_TUNNEL_SHIFT :
       CITY_TUNNEL_DEPTH_NONE;
   i64 cost = cost_index == CITY_DEMOLISH_CLEAR ? GetCityBulldozeTileCost(city, tile_index, underground) :
       kCityToolCosts[cost_index];
   i64 payment = PayCityCommandCost(city, cost);
   if (payment < 0) return payment;
-  bool surface_demolition = underground && (underground_kind == CITY_TUNNEL_DEPTH_ENTRANCE ||
+  bool surface_demolition = underground && (tunnel_depth == CITY_TUNNEL_DEPTH_ENTRANCE ||
       ReadUnderground(city, tile_index) == TUK_SUBWAY_ACCESS);
   // Structural demolition plays its explosion in BulldozeCityTile. Ground
   // clearing and hidden networks need the same feedback after their edit.
   bool play_sound = underground ? !surface_demolition :
-      IsTileKindBridgeMiddle(tile) || IsTileKindExposedWater(tile) || IsTileKindUnbuilt(tile);
+      IsTileKindBridgeMiddle(kind) || IsTileKindExposedWater(kind) || IsTileKindUnbuilt(kind);
   InvalidateTile(city, tile_index);
   if (underground) {
-    if (!IsTileKindBuilding(tile))
+    if (!IsTileKindBuilding(kind))
       city->tile[tile_index].flags &= ~TF_PIPED;
     if (surface_demolition) BulldozeCityTile(city, tile_index, true);
     SetUndergroundTile(city, tile_index, TUK_CLEAR);
     if (!surface_demolition) ShowCityDemolitionEffect(city, tile_index, false);
   } else if (IsTileKindBridgeMiddle(city->tile[tile_index].kind)) {
     ClearCityBridgeUnderpass(city, tile_index);
-  } else if (IsTileKindExposedWater(tile)) {
+  } else if (IsTileKindExposedWater(kind)) {
     ClearCityExposedWater(city, tile_index);
   } else {
-    if (tile == TK_SUBWAY_STATION ||
-        IsTileKindTrainTransition(tile))
+    if (kind == TK_SUBWAY_STATION ||
+        IsTileKindTrainTransition(kind))
       SetUndergroundTile(city, tile_index, TUK_CLEAR);
-    if (IsTileKindUnbuilt(tile)) {
-      if (IsTileKindTree(tile) && Sc2kCrtRandRange(city, 20) == 0) {
+    if (IsTileKindUnbuilt(kind)) {
+      if (IsTileKindTree(kind) && Sc2kCrtRandRange(city, 20) == 0) {
         StopCitySound(city->game, CITY_SOUND_BULLDOZER_WORK);
         PlayCitySound(city, tile_index, CITY_SOUND_DEMOLITION);
         ShowCityResourceAlertDialog(city, CITY_BITMAP_NOTICE_403, CITY_NOTICE_TREE_REMOVAL_PROTEST);
@@ -295,7 +296,7 @@ i64 ApplyBulldozerTile(City *city, TileIndex tile_index, int options,
       }
       ReplaceCityTileAndStatistics(city, tile_index,
           ReadCityWaterGroundKind(&city->tile[tile_index]));
-      if (IsTileKindTree(tile)) ShowCityDemolitionEffect(city, tile_index, false);
+      if (IsTileKindTree(kind)) ShowCityDemolitionEffect(city, tile_index, false);
     } else {
       BulldozeCityTile(city, tile_index, true);
     }
@@ -320,7 +321,7 @@ i64 ApplyCityBulldozerAtTile(City *city, TileIndex tile, int options) {
 
 // Quote the currently admitted cells in an inclusive rectangle, in row order. This sums their per-cell prices;
 // execution can change later cells by removing a footprint. Quoting does not remove tiles, charge cash or consume RNG.
-CityCommandCost GetCityBulldozeRectangleCost(const City *city, TileIndex start, TileIndex end, int options) {
+static CityCommandCost GetCityBulldozeRectangleCost(const City *city, TileIndex start, TileIndex end, int options) {
   CityCommandCost quote = {.error = CITY_COMMAND_COST_INVALID, .error_tile = INVALID_TILE};
   if (!IsMapTileValid(city, start) || !IsMapTileValid(city, end) ||
       (options & ~CITY_BULLDOZER_FLAGS_MASK)) return quote;

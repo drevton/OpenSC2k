@@ -2,7 +2,6 @@
 // Storage belongs to City.map_storage. This module adds no TileInfo payload or extra allocation.
 #include "city/maps/tile_queue.h"
 
-#include "city/maps/layers.h"
 #include "city/state.h"
 
 // Append an in-map coordinate to the reusable flood queue, suppressing duplicates when enabled. Out-of-map coordinates
@@ -10,7 +9,7 @@
 void PushCityTileCoordinate(City *city, int x, int y) {
   if ((u32)x >= city->map_width || (u32)y >= city->map_height) return;
   CityTileQueueCursor *queue = &city->route_queue_cursor;
-  u8 *queued = city->fixes & (1u << CITY_FIX_ROUTE_QUEUE_DEDUPLICATION) ? city->route_queued : NULL;
+  u8 *queued = city->fixes & (1ull << CITY_FIX_ROUTE_QUEUE_DEDUPLICATION) ? city->route_queued : NULL;
   if (queued) {
     TileIndex tile = MapTileXY(city, x, y);
     if (queued[tile / 8] & (1 << (tile & 7))) return;
@@ -33,8 +32,8 @@ void PushCityTileCoordinate(City *city, int x, int y) {
 // matching map workspace; this does not clear unrelated scratch state.
 void ClearCityTileQueue(City *city) {
   CityTileQueueCursor *queue = &city->route_queue_cursor;
-  if (city->fixes & (1u << CITY_FIX_ROUTE_QUEUE_DEDUPLICATION)) {
-    u8 *queued = city->route_queued;
+  u8 *queued = city->fixes & (1ull << CITY_FIX_ROUTE_QUEUE_DEDUPLICATION) ? city->route_queued : NULL;
+  if (queued) {
     for (int index = queue->read; index != queue->write; index = (index + 1) & queue->mask) {
       PointU16 point = city->route_points[index];
       TileIndex tile = MapTileXY(city, point.x, point.y);
@@ -57,9 +56,10 @@ PointU16 DequeueCityTileCoordinate(City *city) {
   CityTileQueueCursor *queue = &city->route_queue_cursor;
   PointU16 point = city->route_points[queue->read];
   queue->read = (queue->read + 1) & queue->mask;
-  if (city->fixes & (1u << CITY_FIX_ROUTE_QUEUE_DEDUPLICATION)) {
+  u8 *queued = city->fixes & (1ull << CITY_FIX_ROUTE_QUEUE_DEDUPLICATION) ? city->route_queued : NULL;
+  if (queued) {
     TileIndex tile = MapTileXY(city, point.x, point.y);
-    city->route_queued[tile / 8] &= ~(1 << (tile & 7));
+    queued[tile / 8] &= ~(1 << (tile & 7));
   }
   return point;
 }
@@ -70,9 +70,10 @@ PointU16 PopCityTileCoordinate(City *city) {
   CityTileQueueCursor *queue = &city->route_queue_cursor;
   queue->write = (queue->write - 1) & queue->mask;
   PointU16 point = city->route_points[queue->write];
-  if (city->fixes & (1u << CITY_FIX_ROUTE_QUEUE_DEDUPLICATION)) {
+  u8 *queued = city->fixes & (1ull << CITY_FIX_ROUTE_QUEUE_DEDUPLICATION) ? city->route_queued : NULL;
+  if (queued) {
     TileIndex tile = MapTileXY(city, point.x, point.y);
-    city->route_queued[tile / 8] &= ~(1 << (tile & 7));
+    queued[tile / 8] &= ~(1 << (tile & 7));
   }
   return point;
 }

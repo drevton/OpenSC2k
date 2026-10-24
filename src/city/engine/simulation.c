@@ -1,5 +1,7 @@
 #include "game/timing.h"
+#include "city/maps/environment.h"
 #include "city/engine/city_name.h"
+#include "city/engine/clock.h"
 #include "city/economy/budget.h"
 #include "city/engine/simulation_state.h"
 #include "city/disasters/types.h"
@@ -16,7 +18,6 @@
 #include "city/events/news.h"
 #include "city/maps/tile_storage.h"
 #include "city/tools/types.h"
-#include "city/maps/layers.h"
 #include "city/presentation.h"
 #include "city/engine/simulation.h"
 #include "city/engine/commands.h"
@@ -28,6 +29,7 @@
 #include "game/audio.h"
 #include "city/disasters/disasters.h"
 #include "city/economy/economy.h"
+#include "city/economy/history.h"
 #include "city/economy/tables.h"
 #include "city/engine/city_types.h"
 #include "city/events/events.h"
@@ -70,11 +72,7 @@ static void FinishCityEconomyPhase(City *city, int milestone) {
 // tail; a dialog may have changed the clock since the phase began.
 static void FinishCityMonthlyPhase(City *city) {
   // Dialog continuations can change the clock; reload it before clearing population.
-  int tick = (int)city->clock.tick;
-  int month = (tick / CITY_PHASE_COUNT) % CITY_MONTH_COUNT;
-  city->clock.month = month;
-  city->clock.quarter = ((month + 1) % CITY_MONTH_COUNT) / 3;
-  city->clock.year = tick / CITY_TICKS_PER_YEAR;
+  UpdateCityCalendar(city, (int)city->clock.tick);
   for (int index = 0; index < CITY_POPULATION_BUCKET_COUNT; ++index)
     city->population.value[index] = 0;
 }
@@ -149,7 +147,7 @@ const CityTickContinuation *FindCityTickContinuation(const City *city, int token
 i64 BeginCityNewspaperOpening(City *city, int edition) {
   assert(IsCityNewspaperEditionValid(edition));
   city->newspaper.edition_index = edition;
-  bool ended = city->game->resources->facility_resources_unavailable != 0;
+  bool ended = city->game->resources->news_resources_unavailable != 0;
   CityNewspaperInitialization state = BeginCityNewspaperOpeningPresentation(city, edition);
   return GetGameError(city->game) ? 0 : SuspendCityTick(city,
       (CityTickContinuation){.dialog = CITY_TICK_DIALOG_NEWSPAPER_INITIALIZATION, .edition = edition,
@@ -430,11 +428,8 @@ i64 AdvanceCitySimulationPhaseWithOptions(City *city, u32 options) {
   city->clock.tick = tick_bits;
   InvalidateCityInformation(city->game, CITY_UPDATE_STATUS);
   AdvanceCityLandscape(city);
-  int month = (tick / CITY_PHASE_COUNT) % CITY_MONTH_COUNT;
-  city->clock.month = month;
-  city->clock.quarter = ((month + 1) % CITY_MONTH_COUNT) / 3;
-  city->clock.year = tick / CITY_TICKS_PER_YEAR;
-  if (city->fixes & (1 << CITY_FIX_DAILY_VALUATION))
+  int month = UpdateCityCalendar(city, tick) % CITY_MONTH_COUNT;
+  if (city->fixes & (1ull << CITY_FIX_DAILY_VALUATION))
     RecalculateCityAssetValue(city);
   int phase = tick % CITY_PHASE_COUNT;
 
@@ -443,7 +438,7 @@ i64 AdvanceCitySimulationPhaseWithOptions(City *city, u32 options) {
           phase == CITY_PHASE_TRAFFIC_DECAY ||
           (phase >= CITY_PHASE_TILE_SCAN_FIRST && phase <= CITY_PHASE_TILE_SCAN_LAST))) {
     city->simulation_work = (CitySimulationWork){.phase = phase,
-        .large_city_effect = ((city->fixes & (1 << CITY_FIX_RESTORED_CHEATS)) && city->cheats.church == 2) ||
+        .large_city_effect = ((city->fixes & (1ull << CITY_FIX_RESTORED_CHEATS)) && city->cheats.church == 2) ||
             (u32)(2500 * city->statistics.count[TK_CHURCH]) < city->indicators.population};
     StepCitySimulationWork(city);
     return GetGameError(city->game) == 0;
@@ -487,10 +482,10 @@ i64 AdvanceCitySimulationPhaseWithOptions(City *city, u32 options) {
         if (options & CITY_TICK_DEFER_DIALOGS)
           return GetGameError(city->game) ? 0 : SuspendCityTick(city,
               (CityTickContinuation){.options = options, .dialog = CITY_TICK_DIALOG_MILESTONE_NEWSPAPER,
-                  .milestone = notice.index, .edition = city->newspaper.edition_index});
+                  .milestone = notice.milestone, .edition = city->newspaper.edition_index});
         ApplyCityNewspaperPageEffects(city, city->newspaper.edition_index);
       }
-      FinishCityEconomyPhase(city, notice.index);
+      FinishCityEconomyPhase(city, notice.milestone);
     }
   } else if (phase == CITY_PHASE_MISSION_UNLOCK) {
     int unlock_index = city->unlocks.disaster_level;

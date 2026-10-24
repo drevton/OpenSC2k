@@ -1,8 +1,11 @@
+#include "drawing/maps/map_sprites.h"
+#include "drawing/sprites/surface.h"
 #include "drawing/maps/placement.h"
 
 #include "assets/graphics.h"
 #include "city/maps/layers.h"
-#include "drawing/maps/map_render.h"
+#include "drawing/maps/map_depth.h"
+#include "drawing/maps/map_camera.h"
 #include "drawing/state.h"
 #include "game/state.h"
 
@@ -23,7 +26,7 @@ static CityRect CanvasPreviewBounds(const int points[8]) {
 }
 
 CityRect CityMapPlacementBounds(const City *city, TileIndex tile, bool point) {
-  const Drawing *drawing = city->game->drawing;
+  const Drawing *drawing = city->drawing;
   const CityMapViewConfig *view = drawing->default_map_view;
   int points[8];
   CityMapTileCorners(city, tile, view->zoom, points);
@@ -50,7 +53,7 @@ CityRect CityMapPlacementBounds(const City *city, TileIndex tile, bool point) {
 
 // Damage a main-map marker's existing footprint. Invalid tiles or an unprepared view have no screen footprint.
 void InvalidateCityMapPlacement(const City *city, TileIndex tile) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   if (!IsMapTileValid(city, tile) || !drawing->default_map_view) return;
   CityRect bounds = CityMapPlacementBounds(city, tile, false);
   int scale = drawing->map_pixel_scale;
@@ -101,7 +104,7 @@ void ApplyCityMapSelectionPalette(SpriteSurface *surface, int style) {
 }
 
 void DrawCityMapPlacementMarker(const City *city, TileIndex tile, bool point, bool blocked) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   int zoom = drawing->default_map_view->zoom, tile_scale = 1 << zoom;
   int points[8];
   CityMapTileCorners(city, tile, zoom, points);
@@ -141,6 +144,6 @@ void DrawCityMapPlacementMarker(const City *city, TileIndex tile, bool point, bo
   int px = drawing->target_x + left * drawing->target_scale / 100 + drawing->sprite_cache.offsets_x[slot][id];
   int py = drawing->target_y + bottom * drawing->target_scale / 100 - drawing->sprite_cache.baselines[slot][id];
   if (drawing->map_depth.preparing)
-    PrepareCityMapSprite(drawing, id, px, py, SPRITE_FIXED_PALETTE, MAP_PALETTE_SELECTION_FIRST + style);
+    SubmitCityMapSprite(drawing, id, px, py, SPRITE_FIXED_PALETTE, MAP_PALETTE_SELECTION_FIRST + style);
   else DrawRunSprite(&surface, sprite, px, py, SPRITE_FIXED_PALETTE, NULL);
 }

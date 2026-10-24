@@ -1,7 +1,10 @@
 #ifndef SC2K_CITY_SAVELOAD_RUNTIME_H
 #define SC2K_CITY_SAVELOAD_RUNTIME_H
 
+#include <stddef.h>
+
 #include "city/saveload/path.h"
+#include "city/saveload/types.h"
 #include "city/types.h"
 
 // File context
@@ -44,36 +47,23 @@ void PopCityFileCleanup(CityFileRuntime *file, CityFileCleanup *cleanup);
 CityFileCleanup *CityFileCleanupTop(const CityFileRuntime *file);
 void UnwindCityFileCleanups(CityFileRuntime *file, CityFileCleanup *until);
 
+// File workspace
+
+// Borrow a zeroed command-pool slot or allocate zeroed fallback storage. Free only through FreeCityFileScratch
+// with this operation, before its scratch scope ends. Failure returns NULL and records a Game allocation error.
+void *AllocateCityFileScratch(CityFileRuntime *file, size_t size);
+void FreeCityFileScratch(CityFileRuntime *file, void *pointer);
+// Replace MISC with zeroed scratch or heap storage, releasing the previous workspace first. Prepare may fail;
+// release detaches borrowed storage or frees owned storage and clears the operation's workspace state.
+bool PrepareCityMiscWorkspace(CityFileRuntime *file);
+void ReleaseCityMiscWorkspace(CityFileRuntime *file);
+
 // Run synchronously inside a scratch and exception boundary. Errors unwind registered cleanups and report the
 // failure while preserving partial City writes; nested commands restore the parent's workspace and exception frame.
 typedef void (*CityFileAction)(void *context);
 void RunCityFileCommand(CityFileRuntime *file, CityFileAction action, void *context);
 
 // City Save
-
-typedef enum NativeSaveOperation {
-  NATIVE_SAVE_OPEN = 1,
-  NATIVE_SAVE_WRITE = 2,
-  NATIVE_SAVE_SEEK = 3,
-  NATIVE_SAVE_CLOSE = 4,
-  NATIVE_SAVE_REMOVE = 5,
-  NATIVE_LOAD_OPEN = 6,
-  NATIVE_LOAD_READ = 7,
-  NATIVE_LOAD_SEEK = 8,
-  NATIVE_LOAD_CLOSE = 9,
-  NATIVE_LOAD_DIRECTORY = 10
-} NativeSaveOperation;
-
-// Platform observations, not guest mutations. Write result is the byte count;
-// other results are 0/1. Input is valid only for the duration of the call.
-typedef struct NativeSaveIOOutcome {
-  NativeSaveOperation operation;
-  u32 requested;
-  u32 result;
-  i32 error;
-  const u8 *input;
-  u32 input_size;
-} NativeSaveIOOutcome;
 
 // Begin before the complete Save/Save As command caller. A picker may select
 // its final native path later, before the first open. Nested attempts isolate
@@ -93,8 +83,7 @@ i32 EndCitySaveAttempt(CityFileRuntime *file, NativeCitySaveAttempt *attempt);
 // Save to an accepted host destination inside a private I/O attempt. The caller retains an active file operation
 // and a mutable CityPath; serialization may normalize that path. The attempt copies destination before writing.
 // The caller owns the chooser, name changes and final path commit. False includes serialization or close failure.
-bool SaveCityToDestination(City *city, CityPath *path,
-    const char *destination);
+bool SaveCityToDestination(City *city, CityPath *path, const char *destination);
 // Zero after successful platform operations, otherwise the first errno from
 // active attempt, or the last ended attempt if none is active. Close/remove
 // errors are visible here even when the original
@@ -108,12 +97,5 @@ void FillCitySaveFileError(const CityFileRuntime *file, CityFileExceptionState *
 // Resolve and replace Game's directory for relative city paths. Returns zero on success or -1 on failure and
 // records the I/O outcome; path is borrowed for the call.
 i32 ChangeCityLoadDirectory(CityFileRuntime *file, const char *path);
-
-// File presentation
-
-// Text is borrowed only for this call. The opened window owns its displayed copy through dismissal.
-void PresentCityFileNotice(City *city, const char *text, bool error);
-void SetCityHostWindowTitle(City *city, const char *text);
-void InvalidateLoadedCityCanvas(City *city);
 
 #endif

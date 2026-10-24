@@ -1,12 +1,12 @@
+#include "city/events/events.h"
 #include "city/maps/labels.h"
-#include "city/maps/terrain.h"
-#include "drawing/maps/map_data.h"
+#include "drawing/sprites/surface.h"
+#include "drawing/maps/map_labels.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 
 #include "assets/state.h"
-#include "city/infrastructure/bridges.h"
 #include "city/maps/layers.h"
 #include "city/maps/map.h"
 #include "city/state.h"
@@ -19,7 +19,7 @@
 #include "drawing/state.h"
 #include "game/state.h"
 
-// Map labels, sign composition and compact data-layer previews.
+// Map labels, sign composition and effect dispatch.
 
 void SetCityMapLabelStyle(Drawing *drawing, bool enabled) {
   drawing->label_style = enabled;
@@ -71,8 +71,9 @@ static void DrawCityMapOverlayBeveledRect(Drawing *drawing, CityRect rect, u8 fi
   CityOverlayPutPixel(drawing, rect.left, rect.bottom - 1, light);
 }
 
-static void CityOverlayDrawText(Drawing *drawing, int x, int y, int zoom, const char *text, u8 color) {
-  const CityOverlayGlyph *font = CityOverlayFontGlyphs(&drawing->overlay_font, zoom);
+static void CityOverlayDrawText(const City *city, int x, int y, int zoom, const char *text, u8 color) {
+  Drawing *drawing = city->drawing;
+  const CityOverlayGlyph *font = CityOverlayFontGlyphs(&city->game->resources->overlay_font, zoom);
   for (int character = 0; text[character] != 0; ++character) {
     int code = (u8)text[character];
     if (code < CITY_OVERLAY_FONT_FIRST ||
@@ -90,7 +91,8 @@ static void CityOverlayDrawText(Drawing *drawing, int x, int y, int zoom, const 
 }
 
 // Native presentation: a two-pixel inside bevel, with visible glyph pixels centered in the face.
-static void CanvasOverlayLabel(Drawing *drawing, CityRect rect, int zoom, const char *text) {
+static void CanvasOverlayLabel(const City *city, CityRect rect, int zoom, const char *text) {
+  Drawing *drawing = city->drawing;
   int light = CityOverlayColorIndex(drawing, 0x00BFBFBF);
   int dark = CityOverlayColorIndex(drawing, 0x00555555);
   CityOverlayFillRect(drawing, rect, CityOverlayColorIndex(drawing, 0x00838383));
@@ -100,7 +102,7 @@ static void CanvasOverlayLabel(Drawing *drawing, CityRect rect, int zoom, const 
   CityOverlayFillRect(drawing, (CityRect){rect.right - 2, rect.top, rect.right, rect.bottom}, dark);
   if (text == NULL)
     return;
-  const CityOverlayGlyph *font = CityOverlayFontGlyphs(&drawing->overlay_font, zoom);
+  const CityOverlayGlyph *font = CityOverlayFontGlyphs(&city->game->resources->overlay_font, zoom);
   int advance = 0;
   CityRect ink = {INT32_MAX, INT32_MAX, INT32_MIN, INT32_MIN};
   for (int index = 0; text[index]; ++index) {
@@ -122,12 +124,13 @@ static void CanvasOverlayLabel(Drawing *drawing, CityRect rect, int zoom, const 
     advance += glyph->paint_advance;
   }
   if (ink.left != INT32_MAX)
-    CityOverlayDrawText(drawing, rect.left + (rect.right - rect.left - (ink.right - ink.left)) / 2 - ink.left,
+    CityOverlayDrawText(city, rect.left + (rect.right - rect.left - (ink.right - ink.left)) / 2 - ink.left,
         rect.top + (rect.bottom - rect.top - (ink.bottom - ink.top)) / 2 - ink.top,
         zoom, text, CityOverlayColorIndex(drawing, 0));
 }
 
-static void DrawOverlayLabelSoftware(Drawing *drawing, int zoom, int screen_x, int screen_y, const char *text) {
+static void DrawOverlayLabelSoftware(const City *city, int zoom, int screen_x, int screen_y, const char *text) {
+  Drawing *drawing = city->drawing;
   int label_x = screen_x;
   int label_y = screen_y;
   if (zoom == 0) {
@@ -141,7 +144,7 @@ static void DrawOverlayLabelSoftware(Drawing *drawing, int zoom, int screen_x, i
     label_y -= 8;
   }
 
-  const CityOverlayGlyph *font = CityOverlayFontGlyphs(&drawing->overlay_font, zoom);
+  const CityOverlayGlyph *font = CityOverlayFontGlyphs(&city->game->resources->overlay_font, zoom);
   int text_width = 0;
   int length = (int)strlen(text);
   for (int index = 0; index < length; ++index) {
@@ -161,10 +164,10 @@ static void DrawOverlayLabelSoftware(Drawing *drawing, int zoom, int screen_x, i
   int dark = CityOverlayColorIndex(drawing, drawing->map_state.border_dark_color);
   int corner = CityOverlayColorIndex(drawing, drawing->map_state.border_corner_color);
   if (drawing->label_style)
-    CanvasOverlayLabel(drawing, rect, zoom, text);
+    CanvasOverlayLabel(city, rect, zoom, text);
   else {
     DrawCityMapOverlayBeveledRect(drawing, rect, fill, light, dark, corner);
-    CityOverlayDrawText(drawing, rect.left + 4, rect.top + 2, zoom, text,
+    CityOverlayDrawText(city, rect.left + 4, rect.top + 2, zoom, text,
         CityOverlayColorIndex(drawing, drawing->map_state.label_text_color));
   }
   rect.top = rect.bottom;
@@ -172,15 +175,16 @@ static void DrawOverlayLabelSoftware(Drawing *drawing, int zoom, int screen_x, i
   rect.left = label_x - 2;
   rect.right = label_x + 2;
   if (drawing->label_style)
-    CanvasOverlayLabel(drawing, rect, zoom, NULL);
+    CanvasOverlayLabel(city, rect, zoom, NULL);
   else
     DrawCityMapOverlayBeveledRect(drawing, rect, CityOverlayColorIndex(drawing, 0x009F9F9F), light, dark, corner);
 }
 
 // Host damage bounds, including the label border and its stem.
-CityRect Sc2kCityOverlayLabelBounds(const Drawing *drawing, int zoom, int screen_x, int screen_y,
+static CityRect CityOverlayLabelBounds(const City *city, int zoom, int screen_x, int screen_y,
     const char *text) {
-  const CityOverlayGlyph *font = CityOverlayFontGlyphs(&drawing->overlay_font, zoom);
+  const Drawing *drawing = city->drawing;
+  const CityOverlayGlyph *font = CityOverlayFontGlyphs(&city->game->resources->overlay_font, zoom);
   int text_width = 0;
   for (int index = 0; text[index]; ++index) {
     int code = (u8)text[index];
@@ -215,19 +219,20 @@ CitySignColors CitySignColorStyle(int color) {
 }
 
 // Native signs use interface detail and size independently of the map zoom.
-CityRect CitySignPixelBounds(const City *city, CityPoint anchor, const char *text) {
-  int scale = city->game->drawing->options.scale;
-  int width = (CityInterfaceTextWidth(&city->game->resources->interface_font, CitySignTextName(text)) + 4) * scale;
+CityRect CitySignPixelBounds(const CityInterfaceFont *font, int scale, CityPoint anchor, const char *text) {
+  int width = (CityInterfaceTextWidth(font, CitySignTextName(text)) + 4) * scale;
   int height = 12 * scale;
   width = (width + 99) / 100;
   height = (height + 99) / 100;
   return (CityRect){anchor.x - (width >> 1), anchor.y - height, anchor.x - (width >> 1) + width, anchor.y};
 }
 
-CityRect CitySignMapBounds(const City *city, int zoom, int screen_x, int screen_y, const char *text) {
-  Drawing *drawing = city->game->drawing;
+CityRect CitySignMapBounds(const City *city, int zoom, CityPoint tile_point, const char *text) {
+  const Drawing *drawing = city->drawing;
+  const CityInterfaceFont *font = &city->game->resources->interface_font;
+  int screen_x = tile_point.x, screen_y = tile_point.y;
   if (drawing->label_style) {
-    CityRect pixels = CitySignPixelBounds(city, (CityPoint){0}, text);
+    CityRect pixels = CitySignPixelBounds(font, drawing->options.scale, (CityPoint){0}, text);
     int scale = drawing->target_scale;
     int left = pixels.left * 100, top = pixels.top * 100;
     int right = pixels.right * 100;
@@ -237,20 +242,22 @@ CityRect CitySignMapBounds(const City *city, int zoom, int screen_x, int screen_
         y + top / scale - (top % scale < 0) - 2,
         x + right / scale + (right % scale > 0) + 2, y + 2};
   }
-  CityRect legacy = Sc2kCityOverlayLabelBounds(drawing, zoom, screen_x, screen_y, text);
+  CityRect legacy = CityOverlayLabelBounds(city, zoom, screen_x, screen_y, text);
   // One source pixel always occupies at least one physical pixel. This conservative
   // source-space cover works for the main camera and independently scaled extra cameras.
-  CityRect native = CitySignPixelBounds(city, (CityPoint){screen_x + (4 << zoom), screen_y - (2 << zoom)}, text);
+  CityRect native = CitySignPixelBounds(font, drawing->options.scale,
+      (CityPoint){screen_x + (4 << zoom), screen_y - (2 << zoom)}, text);
   return (CityRect){IntMin(legacy.left, native.left) - 1, IntMin(legacy.top, native.top) - 1,
       IntMax(legacy.right, native.right) + 1, IntMax(legacy.bottom, native.bottom) + 1};
 }
 
-static void DrawNativeCityMapSign(City *city, int zoom, int screen_x, int screen_y, const char *text) {
-  Drawing *drawing = city->game->drawing;
+static void DrawNativeCityMapSign(const City *city, int zoom, CityPoint tile_point, const char *text) {
+  Drawing *drawing = city->drawing;
+  const CityInterfaceFont *font = &city->game->resources->interface_font;
   int scale = drawing->target_scale;
-  CityPoint anchor = {drawing->target_x + (screen_x + (4 << zoom)) * scale / 100,
-      drawing->target_y + (screen_y - (2 << zoom)) * scale / 100};
-  CityRect bounds = CitySignPixelBounds(city, anchor, text);
+  CityPoint anchor = {drawing->target_x + (tile_point.x + (4 << zoom)) * scale / 100,
+      drawing->target_y + (tile_point.y - (2 << zoom)) * scale / 100};
+  CityRect bounds = CitySignPixelBounds(font, drawing->options.scale, anchor, text);
   CitySignColors colors = CitySignColorStyle(CitySignTextColor(text));
   text = CitySignTextName(text);
   Canvas canvas = drawing->map_target.canvas;
@@ -261,10 +268,10 @@ static void DrawNativeCityMapSign(City *city, int zoom, int screen_x, int screen
   canvas.raster.origin_x = canvas.raster.origin_y = 0;
   canvas.raster.offset_x = bounds.left;
   canvas.raster.offset_y = bounds.top;
-  canvas.width = CityInterfaceTextWidth(&city->game->resources->interface_font, text) + 4;
+  canvas.width = CityInterfaceTextWidth(font, text) + 4;
   canvas.height = 12;
   canvas.clip = (CityRect){0, 0, canvas.width, canvas.height};
-  canvas.interface_font = &city->game->resources->interface_font;
+  canvas.interface_font = font;
   canvas.unscaled_bevels = !drawing->options.scale_bevels;
   canvas.scalable_font = !drawing->options.sprite_font;
   canvas.font_antialias = drawing->options.font_antialias;
@@ -284,8 +291,8 @@ static void FormatCityConnectionSign(const City *city, int x, int y, char text[C
 
 // Connection labels have no fixed count. Visit only the visible border strips
 // after traffic, without consuming the bounded pool reserved for ordinary signs.
-static void DrawCityConnectionSigns(City *city) {
-  Drawing *drawing = city->game->drawing;
+static void DrawCityConnectionSigns(const City *city) {
+  Drawing *drawing = city->drawing;
   if (!drawing->label_style || !drawing->map_state.label_display || drawing->map_state.events_suppressed ||
       (drawing->map_state.data_overlay_enabled && drawing->map_state.data_mode != CITY_DATA_MODE_NONE)) return;
   int zoom = drawing->default_map_view->zoom, scale = 1 << zoom;
@@ -310,7 +317,7 @@ static void DrawCityConnectionSigns(City *city) {
             ReadCitySurfaceHeight(&city->tile[tile]) * CityMapHeightStep(zoom);
         char text[CITY_OVERLAY_NAME_BYTES];
         FormatCityConnectionSign(city, x, y, text);
-        DrawOverlayLabelSoftware(drawing, zoom, screen_x, screen_y, text);
+        DrawOverlayLabelSoftware(city, zoom, screen_x, screen_y, text);
       }
     }
   }
@@ -322,338 +329,56 @@ static int ComparePaintedSigns(const void *left, const void *right) {
 }
 
 // Paint ordinary signs and visible connection labels after all map objects.
-void DrawCapturedCitySigns(City *city) {
-  Drawing *drawing = city->game->drawing;
+void DrawCapturedCitySigns(const City *city) {
+  Drawing *drawing = city->drawing;
   if (drawing->sign_count > 1)
     qsort(drawing->signs, drawing->sign_count, sizeof(MapSignPaint), ComparePaintedSigns);
   for (int index = 0; index < drawing->sign_count; ++index) {
     if (index && !ComparePaintedSigns(&drawing->signs[index - 1], &drawing->signs[index])) continue;
     const MapSignPaint *sign = &drawing->signs[index];
-    DrawNativeCityMapSign(city, drawing->default_map_view->zoom, sign->anchor.x, sign->anchor.y, sign->text);
+    DrawNativeCityMapSign(city, drawing->default_map_view->zoom, sign->anchor, sign->text);
   }
   DrawCityConnectionSigns(city);
 }
 
 // City-map overlay dispatch.
-void DrawCityMapOverlay(City *city, int zoom, int x, int y, int screen_x, int screen_y) {
-  Drawing *drawing = city->game->drawing;
-  TileIndex tile = MapTileXY(city, x, y);
+void DrawCityMapOverlay(City *city, TileIndex tile, int zoom, CityPoint screen) {
+  Drawing *drawing = city->drawing;
+  int x = MapTileX(city, tile), y = MapTileY(city, tile);
+  int screen_x = screen.x, screen_y = screen.y;
   int overlay = ReadOverlay(city, tile);
   int sign = ReadCitySignOverlay(city, tile);
   if (drawing->map_state.label_display && (sign || overlay == CITY_OVERLAY_BORDER_CONNECTION)) {
-    int label = sign ? sign : overlay;
-    if (label == CITY_OVERLAY_BORDER_CONNECTION) {
+    if (!sign) {
       if (drawing->label_style && !drawing->map_state.events_suppressed) return;
-      FormatCityConnectionSign(city, x, y, (char *)CityOverlayNameAt(city, label)->character);
-    }
-    const char *text = (const char *)ReadCityOverlayName(city, label)->character;
-    if (drawing->label_style && sign) {
-      if (drawing->sign_count == drawing->sign_capacity) {
-        int capacity = IntMax(64, drawing->sign_capacity * 2);
-        MapSignPaint *signs = realloc(drawing->signs, capacity * sizeof(*signs));
-        if (signs) { drawing->signs = signs; drawing->sign_capacity = capacity; }
-      }
-      if (drawing->sign_count < drawing->sign_capacity) {
-        CityPoint point = CityMapViewTilePoint(city, tile);
-        drawing->signs[drawing->sign_count++] = (MapSignPaint){.anchor = {screen_x, screen_y}, .text = text,
-            .diagonal = point.x + point.y, .row = point.y};
-      }
+      // Generated connection text belongs to this paint, never City's saved label storage.
+      char connection_text[CITY_OVERLAY_NAME_BYTES];
+      FormatCityConnectionSign(city, x, y, connection_text);
+      DrawOverlayLabelSoftware(city, zoom, screen_x, screen_y, connection_text);
     } else {
-      DrawOverlayLabelSoftware(drawing, zoom, screen_x, screen_y, text);
+      const char *text = (const char *)ReadCityOverlayName(city, sign)->character;
+      if (drawing->label_style) {
+        if (drawing->sign_count == drawing->sign_capacity) {
+          int capacity = IntMax(64, drawing->sign_capacity * 2);
+          MapSignPaint *signs = realloc(drawing->signs, capacity * sizeof(*signs));
+          if (signs) { drawing->signs = signs; drawing->sign_capacity = capacity; }
+        }
+        if (drawing->sign_count < drawing->sign_capacity) {
+          CityPoint point = CityMapViewTilePoint(city, tile);
+          drawing->signs[drawing->sign_count++] = (MapSignPaint){.anchor = {screen_x, screen_y}, .text = text,
+              .diagonal = point.x + point.y, .row = point.y};
+        }
+      } else
+        DrawOverlayLabelSoftware(city, zoom, screen_x, screen_y, text);
     }
   }
-  bool animated = BeginCityMapOverlayAnimation(city, drawing, x, y, overlay);
+  bool animated = BeginCityMapOverlayAnimation(city, tile, overlay);
   if (overlay >= CITY_OVERLAY_POLLUTION && overlay < 256) {
-    DrawCityMapAnimatedOverlay(city, zoom, x, y, overlay);
+    DrawCityMapAnimatedOverlay(city, tile, zoom, overlay);
   } else if (IsCityEventOverlay(overlay)) {
     for (int slot = FirstCityMapEventOnTile(city, tile); slot >= 0;
         slot = NextCityMapEventOnTile(city, slot))
-      DrawCityMapEventOverlay(city, zoom, x, y, slot);
+      DrawCityMapEventOverlay(city, tile, zoom, slot);
   }
-  if (animated) EndCityMapSpriteAnimation(city, drawing);
-}
-
-// Map Overlays
-
-// Shared background for all 128-pixel data-map overlays. History deliberately
-// uses the rubble color for trees while the other overlays use green.
-static u8 CityMapOverlayGroundColor(const City *city, TileIndex tile, int tree_color) {
-  int kind = ReadTile(city, tile);
-  if (kind != TK_CLEAR && !IsTileKindExposedWater(kind))
-    return !IsTileKindUnbuilt(kind) ? 0 : IsTileKindTree(kind) ? tree_color : 53;
-  if (IsTileKindExposedWater(kind)) return 98;
-  int elevation = IntMin(ReadCityLandHeight(&city->tile[tile]), 16);
-  return (u8)(-124 - ((3 * elevation >> 2) + 4));
-}
-
-static void BuildCityMapMetricOverlay(const City *city, u8 *pixels, int row_stride, const u8 *values, int shift) {
-  for (int y = 0; y < 128; ++y) {
-    for (int x = 0; x < 128; ++x) {
-      int map_x = y * city->map_width >> 7, map_y = x * city->map_height >> 7;
-      int value = values[((map_y >> shift) * city->map_width / (1 << shift) + (map_x >> shift)) * 4] >> 4;
-      pixels[y * row_stride + x] = value ? (u8)(value - 101u) :
-          CityMapOverlayGroundColor(city, MapTileXY(city, map_x, map_y), 67);
-    }
-  }
-}
-
-void BuildCityMapCrimeOverlay(const City *city, u8 *pixels, int row_stride) {
-  BuildCityMapMetricOverlay(city, pixels, row_stride, &city->half[0].land_value, 1);
-}
-
-typedef enum CityDataOverlayKind {
-  CITY_DATA_OVERLAY_GROUND, CITY_DATA_OVERLAY_ZONES, CITY_DATA_OVERLAY_ROADS, CITY_DATA_OVERLAY_RAIL,
-  CITY_DATA_OVERLAY_TRAFFIC, CITY_DATA_OVERLAY_POWER, CITY_DATA_OVERLAY_WATER, CITY_DATA_OVERLAY_HISTORY,
-  CITY_DATA_OVERLAY_TILE,
-} CityDataOverlayKind;
-
-static void BuildCityMapDataOverlay(const City *city, u8 *pixels, int row_stride,
-    CityDataOverlayKind mode, int tile_id) {
-  static const u8 kZonePalette[15] = {';', ';', '\\', '\\', '2', '2', 0, 0, 0, 0, 0, 0, 0, 0, 0};
-  for (int y = 0; y < 128; ++y) {
-    for (int x = 0; x < 128; ++x) {
-      int map_x = y * city->map_width >> 7, map_y = x * city->map_height >> 7;
-      TileIndex cell_index = MapTileXY(city, map_x, map_y);
-      const TileInfo *tp = &city->tile[cell_index];
-      int tile = tp->kind, pixel = -1, tree_color = 67;
-      u32 classes = ReadCityTileClasses(tile);
-      switch (mode) {
-      case CITY_DATA_OVERLAY_GROUND:
-        break;
-      case CITY_DATA_OVERLAY_ZONES: {
-        int zone = ReadCityZoneKind(tp);
-        if (zone != 0) {
-          pixel = kZonePalette[zone - 1u];
-        }
-        break;
-      }
-      case CITY_DATA_OVERLAY_ROADS:
-        if (tile != TK_CLEAR && ((classes & TCLASS_ROAD) ||
-            ((classes & TCLASS_NATIVE_BRIDGE) && !(classes & TCLASS_RAIL_BRIDGE)) ||
-                ReadCityBridgeUnderpass(tp) == CITY_BRIDGE_UNDERPASS_ROAD ||
-                IsTileKindMultiHighway(tile) ||
-                IsTileKindStraightHighwayFamily(tile))) {
-          pixel = 255;
-        }
-        break;
-      case CITY_DATA_OVERLAY_RAIL:
-        if ((classes & (TCLASS_RAIL | TCLASS_RAIL_BRIDGE)) ||
-            ReadCityBridgeUnderpass(tp) == CITY_BRIDGE_UNDERPASS_RAIL) {
-          pixel = 255;
-        }
-        break;
-      case CITY_DATA_OVERLAY_TRAFFIC: {
-        int traffic_density = ReadTrafficDensity(city, MapTileXY(city, map_x & ~1, map_y & ~1)) >> 4;
-        if (traffic_density != 0) {
-          pixel = (u8)(traffic_density - 101u);
-        } else if (classes & (TCLASS_ROAD | TCLASS_RAIL |
-            TCLASS_NATIVE_BRIDGE | TCLASS_HIGHWAY)) {
-          pixel = 255;
-        }
-        break;
-      }
-      case CITY_DATA_OVERLAY_POWER: {
-        int flags = tp->flags;
-        if (classes & TCLASS_POWER) {
-          pixel = 255;
-        } else if (tile != TK_CLEAR && !IsTileKindExposedWater(tile) && (flags & TF_POWERED) != 0) {
-          pixel = 50;
-        } else if (tile != TK_CLEAR && !IsTileKindExposedWater(tile) && (i8)flags < 0) {
-          pixel = 29;
-        }
-        break;
-      }
-      case CITY_DATA_OVERLAY_WATER: {
-        int underground = ReadUnderground(city, cell_index);
-        int flags = tp->flags;
-        if (underground >= TUK_PIPE_FIRST && underground <= TUK_SUBWAY_ACCESS) {
-          pixel = 255;
-        } else if ((flags & TF_WATER_SERVICE) == TF_WATER_SERVICE) {
-          pixel = 50;
-        } else if ((flags & TF_PIPED) != 0) {
-          pixel = 29;
-        }
-        break;
-      }
-      case CITY_DATA_OVERLAY_HISTORY: {
-        int history = ReadDensityHistory(city, MapTileXY(city, map_x & ~3, map_y & ~3));
-        if (history > 124 && history < 131) {
-          tree_color = 53;
-        } else if (history > 130) {
-          pixel = 67;
-        } else {
-          pixel = 29;
-        }
-        break;
-      }
-      case CITY_DATA_OVERLAY_TILE:
-        if (tile != TK_CLEAR && tile == (u8)tile_id) {
-          pixel = 255;
-        }
-        break;
-      }
-      pixels[y * row_stride + x] = pixel >= 0 ? pixel : CityMapOverlayGroundColor(city, cell_index, tree_color);
-    }
-  }
-}
-
-void BuildCityMapDefaultOverlay(const City *city, u8 *pixels, int row_stride) {
-  BuildCityMapDataOverlay(city, pixels, row_stride, CITY_DATA_OVERLAY_GROUND, 0);
-}
-
-void BuildCityMapZoneOverlay(const City *city, u8 *pixels, int row_stride) {
-  BuildCityMapDataOverlay(city, pixels, row_stride, CITY_DATA_OVERLAY_ZONES, 0);
-}
-
-// Native previews use semantic colors, independently of the compatibility palette.
-static u32 CityMapPreviewGround(const City *city, TileIndex tile) {
-  const TileInfo *tp = &city->tile[tile];
-  if (HasTileWater(tp)) return 0xFF285A80;
-  if (IsTileKindTree(tp->kind)) return 0xFF304E38;
-  if (!IsTileKindUnbuilt(tp->kind)) return 0xFF505860;
-  CityTileGeometry geometry = ReadCityTileGeometry(city, tile);
-  int shade = 40 + IntMin(geometry.land_height, 31);
-  return 0xFF000000 | shade << 16 | (shade + 8) << 8 | shade;
-}
-
-static u32 CityMapPreviewZone(const TileInfo *tp, u32 ground) {
-  static const u32 kZoneColors[ZONE_RESERVED_FIRST] = {
-    [ZONE_RESIDENTIAL_LOW] = 0xFF54B85C, [ZONE_RESIDENTIAL_HIGH] = 0xFF278C39,
-    [ZONE_COMMERCIAL_LOW] = 0xFF559DE0, [ZONE_COMMERCIAL_HIGH] = 0xFF286DBD,
-    [ZONE_INDUSTRIAL_LOW] = 0xFFF0D05A, [ZONE_INDUSTRIAL_HIGH] = 0xFFCBA527,
-    [ZONE_MILITARY] = 0xFFCB6556, [ZONE_AIRPORT] = 0xFFAD7BC9, [ZONE_SEAPORT] = 0xFF55BFC5
-  };
-  int zone = ReadCityZoneKind(tp);
-  return zone > ZONE_NONE && zone < ZONE_RESERVED_FIRST ? kZoneColors[zone] : ground;
-}
-
-// Preserve the sixteen data levels; zero leaves the background visible.
-static u32 CityMapPreviewMetric(int value, u32 low, u32 high, u32 ground) {
-  int level = value >> 4;
-  if (!level) return ground;
-  u32 color = 0xFF000000;
-  for (int shift = 0; shift < 24; shift += 8)
-    color |= (((low >> shift & 255) * (15 - level) + (high >> shift & 255) * (level - 1)) / 14) << shift;
-  return color;
-}
-
-static u32 CityMapPreviewColor(const City *city, TileIndex tile, int selection) {
-  const TileInfo *tp = &city->tile[tile];
-  u32 ground = CityMapPreviewGround(city, tile), classes = ReadCityTileClasses(tp->kind);
-  const u32 highlight = 0xFFF4F0DC, supplied = 0xFF65D67B, missing = 0xFFE65C50;
-  const u32 low_warning = 0xFFC9B85B, high_warning = 0xFFE74232;
-  const u32 low_benefit = 0xFF344D3C, high_benefit = 0xFF65D67B;
-  switch (selection) {
-  case CITY_DATA_SELECTION_STRUCTURES: return ground;
-  case CITY_DATA_SELECTION_ZONES: return CityMapPreviewZone(tp, ground);
-  case CITY_DATA_SELECTION_ROADS:
-    return tp->kind != TK_CLEAR && ((classes & TCLASS_ROAD) ||
-        ((classes & TCLASS_NATIVE_BRIDGE) && !(classes & TCLASS_RAIL_BRIDGE)) ||
-        ReadCityBridgeUnderpass(tp) == CITY_BRIDGE_UNDERPASS_ROAD ||
-        IsTileKindMultiHighway(tp->kind) || IsTileKindStraightHighwayFamily(tp->kind)) ? highlight : ground;
-  case CITY_DATA_SELECTION_RAIL:
-    return (classes & (TCLASS_RAIL | TCLASS_RAIL_BRIDGE)) ||
-        ReadCityBridgeUnderpass(tp) == CITY_BRIDGE_UNDERPASS_RAIL ? highlight : ground;
-  case CITY_DATA_SELECTION_TRAFFIC: {
-    u32 background = classes & (TCLASS_ROAD | TCLASS_RAIL | TCLASS_NATIVE_BRIDGE | TCLASS_HIGHWAY) ? highlight : ground;
-    return CityMapPreviewMetric(ReadTrafficDensity(city, tile), low_warning, high_warning, background);
-  }
-  case CITY_DATA_SELECTION_POWER:
-    if (classes & TCLASS_POWER) return highlight;
-    if (tp->kind != TK_CLEAR && !IsTileKindExposedWater(tp->kind)) {
-      if (tp->flags & TF_POWERED) return supplied;
-      if (tp->flags & TF_POWERABLE) return missing;
-    }
-    return ground;
-  case CITY_DATA_SELECTION_WATER: {
-    int underground = ReadUnderground(city, tile);
-    if (underground >= TUK_PIPE_FIRST && underground <= TUK_SUBWAY_ACCESS) return highlight;
-    if ((tp->flags & TF_WATER_SERVICE) == TF_WATER_SERVICE) return 0xFF55BFC5;
-    return tp->flags & TF_PIPED ? missing : ground;
-  }
-  case CITY_DATA_SELECTION_DENSITY:
-    return CityMapPreviewMetric(ReadDensity(city, tile), 0xFF3B5474, 0xFF9FDBFF, ground);
-  case CITY_DATA_SELECTION_GROWTH: {
-    int history = ReadDensityHistory(city, tile);
-    if (history <= 124) return missing;
-    if (history > 130) return supplied;
-    return IsTileKindTree(tp->kind) ? 0xFF505860 : ground;
-  }
-  case CITY_DATA_SELECTION_CRIME:
-    return CityMapPreviewMetric(ReadCrime(city, tile), low_warning, high_warning, ground);
-  case CITY_DATA_SELECTION_POLLUTION:
-    return CityMapPreviewMetric(ReadPollution(city, tile), low_warning, high_warning, ground);
-  case CITY_DATA_SELECTION_LAND_VALUE:
-    return CityMapPreviewMetric(ReadLandValue(city, tile), low_benefit, high_benefit, ground);
-  case CITY_DATA_SELECTION_POLICE_COVERAGE:
-    return CityMapPreviewMetric(ReadPoliceCoverage(city, tile), low_benefit, high_benefit, ground);
-  case CITY_DATA_SELECTION_FIRE_COVERAGE:
-    return CityMapPreviewMetric(ReadFireCoverage(city, tile), low_benefit, high_benefit, ground);
-  case CITY_DATA_SELECTION_POLICE_STATIONS: return tp->kind == TK_POLICE_STATION ? highlight : ground;
-  case CITY_DATA_SELECTION_FIRE_STATIONS: return tp->kind == TK_FIRE_STATION ? highlight : ground;
-  case CITY_DATA_SELECTION_SCHOOLS: return tp->kind == TK_SCHOOL ? highlight : ground;
-  case CITY_DATA_SELECTION_COLLEGES: return tp->kind == TK_COLLEGE ? highlight : ground;
-  default: return ground;
-  }
-}
-
-bool BuildCityMapDataPreview(const City *city, int selection, u32 *pixels) {
-  bool changed = false;
-  for (int y = 0; y < 128; ++y)
-    for (int x = 0; x < 128; ++x) {
-      TileIndex tile = MapTileXY(city, y * city->map_width / 128, x * city->map_height / 128);
-      u32 color = CityMapPreviewColor(city, tile, selection);
-      int index = y * 128 + x;
-      changed |= pixels[index] != color;
-      pixels[index] = color;
-    }
-  return changed;
-}
-
-void BuildCityMapResidentialOverlay(const City *city, u8 *pixels, int row_stride) {
-  BuildCityMapDataOverlay(city, pixels, row_stride, CITY_DATA_OVERLAY_ROADS, 0);
-}
-
-void BuildCityMapCommercialOverlay(const City *city, u8 *pixels, int row_stride) {
-  BuildCityMapDataOverlay(city, pixels, row_stride, CITY_DATA_OVERLAY_RAIL, 0);
-}
-
-void BuildCityMapTrafficDensityOverlay(const City *city, u8 *pixels, int row_stride) {
-  BuildCityMapDataOverlay(city, pixels, row_stride, CITY_DATA_OVERLAY_TRAFFIC, 0);
-}
-
-void BuildCityMapIndustrialOverlay(const City *city, u8 *pixels, int row_stride) {
-  BuildCityMapDataOverlay(city, pixels, row_stride, CITY_DATA_OVERLAY_POWER, 0);
-}
-
-void BuildCityMapUndergroundOverlay(const City *city, u8 *pixels, int row_stride) {
-  BuildCityMapDataOverlay(city, pixels, row_stride, CITY_DATA_OVERLAY_WATER, 0);
-}
-
-void BuildCityMapDensityOverlay(const City *city, u8 *pixels, int row_stride) {
-  BuildCityMapMetricOverlay(city, pixels, row_stride, &city->quarter[0].density, 2);
-}
-
-void BuildCityMapDensityHistoryOverlay(const City *city, u8 *pixels, int row_stride) {
-  BuildCityMapDataOverlay(city, pixels, row_stride, CITY_DATA_OVERLAY_HISTORY, 0);
-}
-
-void BuildCityMapPollutionOverlay(const City *city, u8 *pixels, int row_stride) {
-  BuildCityMapMetricOverlay(city, pixels, row_stride, &city->half[0].crime, 1);
-}
-
-void BuildCityMapPoliceCoverageOverlay(const City *city, u8 *pixels, int row_stride) {
-  BuildCityMapMetricOverlay(city, pixels, row_stride, &city->quarter[0].police_coverage, 2);
-}
-
-void BuildCityMapLandValueOverlay(const City *city, u8 *pixels, int row_stride) {
-  BuildCityMapMetricOverlay(city, pixels, row_stride, &city->half[0].pollution, 1);
-}
-
-void BuildCityMapFireCoverageOverlay(const City *city, u8 *pixels, int row_stride) {
-  BuildCityMapMetricOverlay(city, pixels, row_stride, &city->quarter[0].fire_coverage, 2);
-}
-
-void BuildCityMapTileTypeHighlight(const City *city, u8 *pixels, int row_stride, int tile_id) {
-  BuildCityMapDataOverlay(city, pixels, row_stride, CITY_DATA_OVERLAY_TILE, tile_id);
+  if (animated) EndCityMapSpriteAnimation(city);
 }

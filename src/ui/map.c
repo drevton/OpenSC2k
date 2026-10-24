@@ -12,11 +12,12 @@
 #include "city/state.h"
 #include "drawing/maps/map_camera.h"
 #include "drawing/maps/map_effects.h"
-#include "drawing/maps/map_events.h"
+#include "drawing/maps/map_vehicles.h"
+#include "drawing/maps/map_damage.h"
 #include "drawing/maps/map_render.h"
+#include "drawing/maps/road_cars.h"
 #include "drawing/maps/map_view.h"
 #include "drawing/state.h"
-#include "game/errors.h"
 #include "game/state.h"
 #include "ui/charts/charts.h"
 #include "ui/dialogs/map_data.h"
@@ -41,7 +42,7 @@ bool InvalidateCityMap(Game *game, const CityRect *rect) {
   if (rect != NULL)
     bounds = *rect;
   else
-    Sc2kGetCityMapClientRect(drawing, &bounds);
+    bounds = DrawingMapClientRect(drawing);
   // Map renderer coordinates become native window pixels at this boundary.
   int scale = drawing->map_pixel_scale > 0 ? drawing->map_pixel_scale : 1;
   bounds = (CityRect){bounds.left * scale, bounds.top * scale, bounds.right * scale, bounds.bottom * scale};
@@ -91,42 +92,16 @@ void RefreshCityMapTiles(City *city) {
   for (int layer = 0; layer < CITY_MAP_CHANGE_COUNT; ++layer) InvalidateMapLayer(city, layer);
 }
 
-void ReadCitySavedView(City *city, int *position_out, int *mode_out) {
-  Drawing *drawing = city->game->drawing;
-  int point = drawing->map_state.save_x;
-  int packed_position;
-  int mode;
-  if (drawing->default_map_view != NULL) {
-    const CityMapViewConfig *view = drawing->default_map_view;
-    if (drawing->options.save_view_position) {
-      int x = (view->view_rect.left + view->view_rect.right) / 2;
-      int y = (view->view_rect.top + view->view_rect.bottom) / 2;
-      packed_position = CityMapScreenToTile(city, view, x, y);
-    } else {
-      packed_position = CityMapScreenToTile(city, view, point, point);
-    }
-    mode = (i16)drawing->default_map_view->zoom;
-  } else if (drawing->options.save_view_position) {
-    packed_position = 128;
-    mode = CITY_MAP_ZOOM_SMALL;
-  } else {
-    packed_position = CityMapDiagonalToTileSmall(city, point + 6, point + 8);
-    mode = CITY_MAP_ZOOM_MEDIUM;
-  }
-  *position_out = packed_position;
-  *mode_out = mode;
-}
-
 void SetCityTileScanPresentation(City *city, int direction_mask) {
-  if (city->game->drawing) city->game->drawing->map_state.tile_scan_mask = direction_mask;
+  if (city->drawing) city->drawing->map_state.tile_scan_mask = direction_mask;
 }
 
 void RestoreCityVolcanoPresentation(City *city, u32 labels) {
-  city->game->drawing->map_state.label_display = labels;
+  city->drawing->map_state.label_display = labels;
 }
 
 void StartCityEarthquakePresentation(City *city) {
-  StartCityScreenShake(city->game->drawing);
+  StartCityScreenShake(city->drawing);
 }
 
 void ShowCityConstructionCost(City *city, TileIndex tile, i64 cost) {
@@ -134,51 +109,19 @@ void ShowCityConstructionCost(City *city, TileIndex tile, i64 cost) {
   double now = MonotonicSeconds();
   char currency[CITY_CURRENCY_TEXT_CAPACITY];
   FormatCityCurrency(city->game, currency, cost);
-  StartCityConstructionCost(city->game->drawing, tile, currency, now);
+  StartCityConstructionCost(city->drawing, tile, currency, now);
 }
 
 void ShowCityDemolitionEffect(City *city, TileIndex tile, bool large) {
   if (!IsMapTileValid(city, tile)) return;
   int elevation = ReadCitySurfaceHeight(&city->tile[tile]);
-  StartCityDemolitionEffect(city->game->drawing, tile, elevation, large);
-}
-
-void ApplyCitySavedViewPosition(City *city, int position) {
-  CityLoadedMapView *view = &city->game->drawing->map_state.loaded_view;
-  view->y = position == -1 ? 64 : (u16)position & 127;
-  view->x = position == -1 ? 128 : (u16)(position >> 8);
-}
-
-void ApplyCitySavedViewMode(City *city, int mode) {
-  city->game->drawing->map_state.loaded_view.zoom = mode;
-}
-
-void SetCityLoadedViewCenter(City *city, int x, int y) {
-  CityLoadedMapView *view = &city->game->drawing->map_state.loaded_view;
-  view->x = x;
-  view->y = y;
-}
-
-void RestoreCityLoadedView(City *city) {
-  CityLoadedMapView view = city->game->drawing->map_state.loaded_view;
-  CenterCityMapViewAndResetOverlays(city, view.x, view.y, view.zoom);
-}
-
-CityMapViewConfig *BeginCitySaveView(City *city) {
-  CityMapViewConfig *view = city->game->drawing->default_map_view;
-  bool magnified = view && view->magnified_large_zoom;
-  if (magnified) ZoomCityMapViewOut(city, view);
-  return magnified ? view : NULL;
-}
-
-void EndCitySaveView(City *city, CityMapViewConfig *view) {
-  if (view) ZoomCityMapViewIn(city, view);
+  StartCityDemolitionEffect(city->drawing, tile, elevation, large);
 }
 
 void MarkCityMapSpriteDamage(CityRect rect, void *context) {
   CityMapPaint *paint = context;
   City *city = paint->city;
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   if (rect.left >= rect.right || rect.top >= rect.bottom) return;
   rect = CityMapScreenRect(rect, paint);
   MarkScreenDirty(&drawing->screen_damage, rect);
@@ -188,13 +131,13 @@ void MarkCityMapSpriteDamage(CityRect rect, void *context) {
 void MarkCityMapRect(CityRect rect, void *context) {
   CityMapPaint *paint = context;
   City *city = paint->city;
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   if (rect.left >= rect.right || rect.top >= rect.bottom) return;
   MarkScreenDirty(&drawing->screen_damage, CityMapScreenRect(rect, paint));
 }
 
 void PublishCityMapTileDamage(City *city, TileIndex tile) {
-  Drawing *drawing = city->game ? city->game->drawing : NULL;
+  Drawing *drawing = city->game ? city->drawing : NULL;
   CityInterfaceState *ui = city->game ? city->game->ui : NULL;
   if (!drawing || !drawing->tile_damage_enabled || !ui) return;
   ResizeScreenDamage(&drawing->screen_damage, drawing->framebuffer.width, drawing->framebuffer.height);
@@ -217,7 +160,7 @@ void PublishCityMapTileDamage(City *city, TileIndex tile) {
 }
 
 static void MarkCityRoadCarDamage(const RoadCar *car, CityMapCamera camera, const CityMapPaint *paint) {
-  Drawing *drawing = paint->city->game->drawing;
+  Drawing *drawing = paint->city->drawing;
   CityExtraMapView *view = paint->view;
   int magnification = view ? CityViewportMagnification(view) :
       drawing->default_map_view->magnified_large_zoom ? 2 : 1;
@@ -236,7 +179,7 @@ static void MarkCityRoadCarDamage(const RoadCar *car, CityMapCamera camera, cons
 }
 
 void PublishCityRoadCarDamage(City *city, const RoadCar *previous, const RoadCar *current) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   CityInterfaceState *ui = city->game->ui;
   if (!drawing->tile_damage_enabled || !ui) return;
   ResizeScreenDamage(&drawing->screen_damage, drawing->framebuffer.width, drawing->framebuffer.height);
@@ -270,9 +213,67 @@ void HideCitySimulationPanels(City *city) {
 
 // Camera controls change local presentation only; projection and picking stay in Drawing.
 
+// Initialize main-camera geometry, apply the requested zoom, then center at the supplied tile.
+void InitializeCityMapView(Game *game, TileIndex location, int zoom) {
+  RecalculateCityMapClientOrigins(game);
+  game->drawing->default_map_view->zoom = zoom;
+  InvalidateCityMapViews(game->drawing);
+  CenterCityMapViewAtTile(game->city, NULL, MapTileX(game->city, location), MapTileY(game->city, location));
+}
+
+void RecalculateCityMapClientOrigins(Game *game) {
+  City *city = game->city;
+  Drawing *drawing = game->drawing;
+  CityMapViewConfig *view = drawing->default_map_view;
+  view->zoom = 0;
+  GetCityMapClientRect(drawing, &view->view_rect);
+  view->magnified_large_zoom = 0;
+  int width = (int)((u32)view->view_rect.right - (u32)view->view_rect.left);
+  int height = (int)((u32)view->view_rect.bottom - (u32)view->view_rect.top);
+  drawing->map_state.save_x = width / 2;
+  drawing->map_state.save_y = height / 2;
+  drawing->map_state.origin_x = width / 2;
+  drawing->map_state.origin_y = drawing->map_state.save_y - 216;
+  UpdateCityMapViewScrollPosition(city, view);
+}
+
+void ReleaseCityMapMouseCapture(Game *game) {
+  Drawing *drawing = game->drawing;
+  CityMapViewConfig *view = drawing->default_map_view;
+  view->pointer_drag_active = 0;
+  view->pointer_command_stage = 0;
+  ReleaseCityMapWindowPointer(game);
+}
+
+// Restore the pan position, redraw, and release the host mouse capture.
+void EndCityMapPan(Game *game) {
+  City *city = game->city;
+  Drawing *drawing = game->drawing;
+  CityMapViewConfig *view = drawing->default_map_view;
+  int x;
+  int y;
+  if (view->magnified_large_zoom != 0) {
+    x = drawing->map_state.pan_release_point.x >> 1;
+    y = drawing->map_state.pan_release_point.y >> 1;
+  } else {
+    x = drawing->map_state.pan_release_point.x;
+    y = drawing->map_state.pan_release_point.y;
+  }
+  OffsetCityMapOrigin(city, view, drawing->map_state.save_x - x, drawing->map_state.save_y - y);
+  view->pointer_drag_active = 0;
+  view->pointer_command_stage = 0;
+  ReleaseCityMapWindowPointer(city->game);
+  view->pan_capture_active = 0;
+}
+
+// Automatic centering follows this player's local preference.
+void CenterCityMapOnEvent(City *city, int x, int y) {
+  if (!city->game->ui->auto_goto_disabled) CenterCityMapViewAtTile(city, NULL, x, y);
+}
+
 // Center the main camera unless its host window is minimized. A NULL view selects the default.
 int CenterCityMapViewAtTile(City *city, CityMapViewConfig *view, int x, int y) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   if (view == NULL) view = drawing->default_map_view;
   const CityInterfaceState *ui = city->game->ui;
   if (ui->main_window_iconic)
@@ -310,7 +311,7 @@ int CenterCityMapViewAtTile(City *city, CityMapViewConfig *view, int x, int y) {
 
 // Increase map zoom around its saved screen center.
 void ZoomCityMapViewIn(City *city, CityMapViewConfig *view) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   if (view->zoom + view->magnified_large_zoom >= CityMapZoomLimit(drawing->map_pixel_scale * 100))
     return;
 
@@ -340,7 +341,7 @@ void ZoomCityMapViewIn(City *city, CityMapViewConfig *view) {
 
 // Step out of magnified-large mode or reduce the map zoom by one.
 void ZoomCityMapViewOut(City *city, CityMapViewConfig *view) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   if (view->zoom == CITY_MAP_ZOOM_SMALL)
     return;
 
@@ -368,7 +369,7 @@ void ZoomCityMapViewOut(City *city, CityMapViewConfig *view) {
 
 // Restore the map overlays, center the saved tile, and redraw.
 int CenterCityMapViewAndResetOverlays(City *city, int x, int y, int zoom) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   CityMapViewConfig *view = drawing->default_map_view;
   // A stock save without a camera position supplies (128, 64), outside a
   // 128-wide map. Resolve that fallback before looking up tile elevation.
@@ -409,7 +410,7 @@ int CenterCityMapViewAndResetOverlays(City *city, int x, int y, int zoom) {
 }
 
 void RotateCityMapView(City *city, CityMapViewConfig *view, bool clockwise) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   int rotation = (view->rotation + (clockwise ? 1 : 3)) & 3;
   CityPoint center = {drawing->map_state.save_x, drawing->map_state.save_y};
   CityPoint origin = TransferCityMapCameraCenter(city,
@@ -429,7 +430,7 @@ void RotateCityMapView(City *city, CityMapViewConfig *view, bool clockwise) {
 }
 
 void RotateCityMapViewport(City *city, u32 window_id, bool clockwise) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   for (int index = 0; index < CITY_EXTRA_MAP_VIEW_COUNT; ++index) {
     CityExtraMapView *view = &drawing->views[index];
     if (!window_id || view->window_id != window_id) continue;
@@ -471,7 +472,7 @@ int GetCityMapClientRect(Drawing *drawing, CityRect *rect) {
 
 // Constrain the main camera and update both scrollbar positions from its logical viewport and rotated map dimensions.
 int UpdateCityMapViewScrollPosition(City *city, CityMapViewConfig *view) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   CityMapCamera camera = {drawing->map_state.origin_x, drawing->map_state.origin_y, view->zoom,
       drawing->map_state.save_x * 2, drawing->map_state.save_y * 2, view->rotation};
   CityPoint origin = ClampCityMapCameraOrigin(city, camera);
@@ -493,7 +494,7 @@ void MaskCityMapOriginForZoom(Drawing *drawing, CityMapViewConfig *view) {
 
 // Offset the main map, constrain its extents and refresh the map-data preview.
 void OffsetCityMapOrigin(City *city, CityMapViewConfig *view, int delta_x, int delta_y) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   CityRect bounds = CityMapOriginBounds(city, (CityMapCamera){0, 0, view->zoom,
       drawing->map_state.save_x * 2, drawing->map_state.save_y * 2, view->rotation});
   i64 x = (i64)drawing->map_state.origin_x + delta_x;

@@ -1,4 +1,6 @@
 #include "ui/windows/window_internal.h"
+#include <string.h>
+#include "base/text.h"
 #include "ui/map_views.h"
 #include "ui/map.h"
 #include "city/maps/labels.h"
@@ -20,9 +22,10 @@
 #include "drawing/maps/map_view.h"
 #include "drawing/raster/canvas_primitives.h"
 #include "drawing/raster/canvas_raster_internal.h"
+#include "drawing/maps/map_labels.h"
+#include "drawing/maps/map_render.h"
 #include "drawing/state.h"
 #include "game/commands.h"
-#include "game/errors.h"
 #include "game/state.h"
 #include "ui/dialogs/scenario.h"
 #include "ui/dialogs/spans.h"
@@ -33,6 +36,16 @@
 #include "ui/tools/types.h"
 #include "ui/windows/controls.h"
 #include "ui/windows/windows.h"
+
+enum { CITY_SIGN_ROW_HEIGHT = 12, CITY_SIGN_SCROLL_WIDTH = 12 };
+
+typedef enum CitySignControl {
+  CITY_SIGN_CONTROL_NONE, CITY_SIGN_OK, CITY_SIGN_CANCEL, CITY_SIGN_DELETE, CITY_SIGN_MOVE,
+  CITY_SIGN_PREVIOUS, CITY_SIGN_NEXT, CITY_SIGN_LOCATION, CITY_SIGN_TEXT, CITY_SIGN_CLEAR,
+  CITY_SIGN_MATCH_CASE, CITY_SIGN_SCROLL_UP, CITY_SIGN_SCROLL_DOWN, CITY_SIGN_SCROLL_TRACK,
+  CITY_SIGN_SHADE, CITY_SIGN_DEFAULT_SIZE, CITY_SIGN_STICKY,
+  CITY_SIGN_COLOR_FIRST, CITY_SIGN_COLOR_LAST = CITY_SIGN_COLOR_FIRST + CITY_SIGN_COLOR_COUNT - 1
+} CitySignControl;
 
 static bool ReserveSignEntries(CitySignState *signs, int capacity) {
   if (capacity <= signs->capacity) return true;
@@ -125,7 +138,7 @@ static void SiftSignOrder(CitySignState *signs, int root, int count) {
   signs->order[root] = slot;
 }
 
-void SortCitySigns(CitySignState *signs) {
+static void SortCitySigns(CitySignState *signs) {
   if (!signs->dirty) return;
   signs->count = 0;
   for (int slot = 1; slot < signs->capacity; ++slot) {
@@ -143,17 +156,17 @@ void SortCitySigns(CitySignState *signs) {
   signs->dirty = false;
 }
 
-CityRect CitySignListRows(const Window *window) {
+static CityRect CitySignListRows(const Window *window) {
   CityRect b = window->bounds;
   return (CityRect){b.left + 1, b.top + 15, b.right - CITY_SIGN_SCROLL_WIDTH, b.bottom - 16};
 }
 
-int CitySignVisibleRows(const Window *window) {
+static int CitySignVisibleRows(const Window *window) {
   CityRect b = CitySignListRows(window);
   return IntMax(1, (b.bottom - b.top) / CITY_SIGN_ROW_HEIGHT);
 }
 
-CityRect CitySignControlBounds(const Window *window, CitySignControl control) {
+static CityRect CitySignControlBounds(const Window *window, CitySignControl control) {
   CityRect b = window->bounds;
   if (window->kind == CITY_CANVAS_SIGN_EDIT) {
     if (control >= CITY_SIGN_OK && control <= CITY_SIGN_MOVE) {
@@ -188,7 +201,7 @@ CityRect CitySignControlBounds(const Window *window, CitySignControl control) {
   return (CityRect){0};
 }
 
-CitySignControl CitySignControlAt(const Window *window, int x, int y) {
+static CitySignControl CitySignControlAt(const Window *window, int x, int y) {
   for (int control = CITY_SIGN_COLOR_LAST; control > CITY_SIGN_CONTROL_NONE; --control) {
     if (window->shaded && control < CITY_SIGN_SHADE) continue;
     CityRect b = CitySignControlBounds(window, control);
@@ -254,7 +267,7 @@ static CityScrollbar SignScrollbar(const CitySignState *signs, const Window *win
   return ReadCityScrollbar(track, signs->count, CitySignVisibleRows(window), signs->first, 8);
 }
 
-void DrawCitySignWindow(Game *game, Canvas *canvas, const Window *window) {
+static void DrawCitySignWindow(Game *game, Canvas *canvas, const Window *window) {
   CitySignState *signs = &game->ui->signs;
   bool editor = window->kind == CITY_CANVAS_SIGN_EDIT;
   u32 face = editor ? canvas_face : 0xFF97855B;
@@ -523,7 +536,7 @@ typedef struct {
 } SignCamera;
 
 static SignCamera SignMapCamera(City *city, CityExtraMapView *view) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   if (!view) return (SignCamera){drawing->default_map_view->zoom,
       drawing->map_pixel_scale * (drawing->default_map_view->magnified_large_zoom ? 200 : 100),
       drawing->scroll_pixels.x + drawing->screen_shake_offset * drawing->map_pixel_scale,
@@ -552,7 +565,7 @@ static TileIndex PickSignTile(City *city, SignCamera camera, int x, int y) {
 }
 
 static TileIndex PickSignLabel(City *city, SignCamera camera, int pixel_x, int pixel_y) {
-  if (!city->game->drawing->map_state.label_display) return INVALID_TILE;
+  if (!city->drawing->map_state.label_display) return INVALID_TILE;
   int x = SignSourceCoordinate(pixel_x - camera.x, camera.scale);
   int y = SignSourceCoordinate(pixel_y - camera.y, camera.scale);
   CityRect tiles = VisibleCityMapTileBounds(city, camera.origin_x, camera.origin_y, camera.zoom, camera.rotation,
@@ -568,11 +581,12 @@ static TileIndex PickSignLabel(City *city, SignCamera camera, int pixel_x, int p
           (point.x + point.y == order && point.y <= last_y)) continue;
       int sx = camera.origin_x + (point.y - point.x) * 4 * scale;
       const TileInfo *tp = &city->tile[tile];
-      int height = city->game->drawing->map_state.water_enabled ? ReadCitySurfaceHeight(tp) : ReadCityLandHeight(tp);
+      int height = city->drawing->map_state.water_enabled ? ReadCitySurfaceHeight(tp) : ReadCityLandHeight(tp);
       int sy = camera.origin_y + (point.x + point.y) * 2 * scale - height * CityMapHeightStep(camera.zoom);
       CityPoint anchor = {camera.x + (sx + 4 * scale) * camera.scale / 100,
           camera.y + (sy - 2 * scale) * camera.scale / 100};
-      CityRect rect = CitySignPixelBounds(city, anchor, (const char *)CityOverlayNameAt(city, slot)->character);
+      CityRect rect = CitySignPixelBounds(&city->game->resources->interface_font, city->drawing->options.scale,
+          anchor, (const char *)ReadCityOverlayName(city, slot)->character);
       if (CanvasPointInRect(rect, pixel_x, pixel_y)) {
         result = tile;
         order = point.x + point.y;
@@ -817,6 +831,18 @@ bool SignWindowProcedure(Game *game, const Window *window, const WindowEvent *ev
 // Drawing owners; refreshes charts and rebuilds the existing sign index when enabled.
 
 const char *CitySignTooltipAt(Game *game, const Window *window, int x, int y) {
+  if ((window->kind == CITY_CANVAS_SIGN_EDIT || window->kind == CITY_CANVAS_SIGN_LIST) &&
+      y < window->bounds.top + 14) {
+    switch (CitySignControlAt(window, x, y)) {
+    case CITY_SIGN_LOCATION: return "Center the main view on this sign.";
+    case CITY_SIGN_SHADE: return window->shaded ? "Expand this window." : "Shade this window to its title bar.";
+    case CITY_SIGN_DEFAULT_SIZE: return "Restore the default window size.";
+    case CITY_SIGN_STICKY: return window->sticky ?
+        "Unpin this window so Escape can close it." : "Pin this window to keep it open when pressing Escape.";
+    default: break;
+    }
+    return NULL;
+  }
   switch (window->kind) {
   case CITY_CANVAS_SIGN_EDIT: {
     CitySignControl control = CitySignControlAt(window, x, y);

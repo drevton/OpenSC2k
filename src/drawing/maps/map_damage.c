@@ -3,6 +3,8 @@
 
 #include "city/maps/labels.h"
 #include "city/maps/terrain.h"
+#include "drawing/maps/map_damage.h"
+#include "drawing/maps/map_labels.h"
 #include "drawing/maps/map_render.h"
 
 #include <stdlib.h>
@@ -109,7 +111,7 @@ static int DrawingTileHeight(const City *city, TileIndex tile) {
   const CityResourceState *assets = city->game->resources;
   const TileInfo *tp = &city->tile[tile];
   int kind = tp->kind;
-  if (!(city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE))) return 0;
+  if (!(city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE))) return 0;
   if (kind == TK_CLEAR || IsTileKindExposedWater(kind) || IsTileKindPlainTransport(kind)) return 4;
   return assets->kind_sprite_heights[kind];
 }
@@ -143,7 +145,7 @@ bool PrepareCityMapDrawingSnapshot(const City *city, CityMapDrawingSnapshot *sna
 }
 
 bool PrepareCityMapDrawingStorage(const City *city) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   bool resized = drawing->map_snapshot.width != city->map_width ||
       drawing->map_snapshot.height != city->map_height;
   if (!PrepareCityEventDrawingStorage(city) ||
@@ -276,7 +278,7 @@ typedef struct {
 static bool ProjectTileHeightBounds(const City *city, const MapDamageProjection *projection,
     TileIndex tile, int screen_x, int screen_y, CityRect *bounds) {
   const CityMapDrawingSnapshot *snapshot = projection->snapshot;
-  if (!snapshot || !(city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)) || projection->data_overlay) return false;
+  if (!snapshot || !(city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) || projection->data_overlay) return false;
   const TileInfo *tp = &city->tile[tile];
   int kind = tp->kind, previous = snapshot->values.tiles[tile];
   // These animated and suspended objects have independent extents outside a
@@ -356,11 +358,11 @@ static void ProjectChangedMapCell(const City *city, const MapDamageProjection *p
         screen_x + sprite_width + 20 * scale, screen_y + (sprite_width >> 2) + 20 * scale};
   }
   int sign = ReadCitySignOverlay(city, tile);
-  if (city->game->drawing->map_state.label_display && sign) {
+  if (city->drawing->map_state.label_display && sign) {
     // Sign edits invalidate before and after changing text/location, preserving both extents.
     const char *text = (const char *)ReadCityOverlayName(city, sign)->character;
-    CityRect bounds = CitySignMapBounds(city, zoom, screen_x,
-        screen_y - altitude * CITY_MAP_HEIGHT_UNIT * scale, text);
+    CityRect bounds = CitySignMapBounds(city, zoom,
+        (CityPoint){screen_x, screen_y - altitude * CITY_MAP_HEIGHT_UNIT * scale}, text);
     rect = UnionCityRects(rect, bounds);
   }
   rect = IntersectCityRects(rect, (CityRect){0, 0, width, height});
@@ -369,7 +371,7 @@ static void ProjectChangedMapCell(const City *city, const MapDamageProjection *p
 
 void ProjectCityMapTileDamage(const City *city, TileIndex tile, CityMapCamera region,
     CityCanvasVisiblePaint mark, void *context) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   const CityMapDrawingSnapshot *snapshot = &drawing->map_snapshot;
   if (!snapshot->valid || snapshot->city != city || snapshot->width != city->map_width ||
       snapshot->height != city->map_height) snapshot = NULL;
@@ -413,7 +415,7 @@ void ProjectSimulationMapDamage(const City *city, const SimulationMapChanges *ch
   int layers = changes->invalidated_layers;
   // Without immediate tile damage, deferred publishers discover tile edits from
   // observed layer differences. Native viewports already received rectangles.
-  if (changes->tiles_changed && !city->game->drawing->tile_damage_enabled)
+  if (changes->tiles_changed && !city->drawing->tile_damage_enabled)
     layers |= (1 << CITY_MAP_CHANGE_COUNT) - 1;
   layers &= visible_layers;
   if (!layers) return;

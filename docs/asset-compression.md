@@ -61,6 +61,11 @@ full startup reuses it and loads graphics/audio before play. This reorganizes th
 84 MiB of decoded assets, independent of map size; it adds no duplicate runtime asset buffer.
 Graphics parsers read bounded memory cursors. Effect IDs resolve to borrowed PCM; CoreAudio and WinMM MIDI playback borrow retained track bytes. Drawing, audio callbacks and gameplay do no resource file I/O.
 
+Callers use `PreloadCityAssetPacks` for the intro-only stage and then the complete startup load.
+Bundle paths, category loading and override selection stay private to Assets. A failed preload
+clears decoded pack blocks and spans, so startup stops before non-intro resources are decoded.
+Drawing, UI and Audio must release their borrowed resources before `ReleaseCityAssets` runs.
+
 ```c
 ByteSpan GetAsset(CityAssets *assets, u32 id);
 ```

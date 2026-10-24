@@ -1,4 +1,5 @@
 #include "ui/windows/window_internal.h"
+#include "drawing/sprites/surface.h"
 #include "ui/map_visibility.h"
 #include "ui/map.h"
 #include "ui/map_views.h"
@@ -9,14 +10,14 @@
 #include "audio/state.h"
 #include "base/time.h"
 #include "city/events/events.h"
-#include "city/maps/layers.h"
 #include "city/state.h"
 #include "drawing/display.h"
 #include "drawing/maps/map_cache.h"
 #include "drawing/maps/map_animation.h"
 #include "drawing/maps/map_effects.h"
 #include "drawing/maps/map_events.h"
-#include "drawing/maps/map_render.h"
+#include "drawing/maps/map_damage.h"
+#include "drawing/maps/road_cars.h"
 #include "drawing/maps/map_view.h"
 #include "drawing/raster/canvas_primitives.h"
 #include "drawing/raster/canvas_raster_internal.h"
@@ -39,7 +40,7 @@ CityRect CityViewportContentBounds(const Window *window) {
       window->shaded ? b.top + CITY_VIEWPORT_TOP : b.bottom - CITY_VIEWPORT_BOTTOM};
 }
 
-CityRect CityViewportControlBounds(const Window *window, CityViewportControl control) {
+static CityRect CityViewportControlBounds(const Window *window, CityViewportControl control) {
   CityRect b = window->bounds;
   if (control >= CITY_VIEWPORT_SHADE)
     return CityCaptionControlBounds(window, control - CITY_VIEWPORT_SHADE + CITY_CAPTION_SHADE);
@@ -67,7 +68,7 @@ CityViewportControl CityViewportControlAt(const Window *window, int x, int y) {
 enum { CITY_SCROLL_PIXELS_PER_STEP = 20 };
 
 void SyncCityMapViewSize(const City *city, CityExtraMapView *view, Window *window) {
-  const Drawing *drawing = city->game->drawing;
+  const Drawing *drawing = city->drawing;
   CityRect content = CityViewportContentBounds(window);
   int scale = drawing->map_pixel_scale * 100 * CityViewportMagnification(view);
   int width = (content.right - content.left) * drawing->options.scale;
@@ -92,7 +93,7 @@ static CityPoint CityMainMapCenter(const Drawing *drawing) {
 // Exchange world-space centers without changing either camera's rotation.
 
 static void CenterCityExtraMapView(City *city, CityExtraMapView *view) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   CityPoint center = CityMainMapCenter(drawing);
   CityPoint origin = TransferCityMapCameraCenter(city,
       (CityMapCamera){drawing->map_state.origin_x, drawing->map_state.origin_y,
@@ -104,7 +105,7 @@ static void CenterCityExtraMapView(City *city, CityExtraMapView *view) {
 }
 
 void OpenCityMapView(City *city) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   CityInterfaceState *ui = city->game->ui;
   for (int index = 0; index < CITY_EXTRA_MAP_VIEW_COUNT; ++index) {
     CityExtraMapView *view = &drawing->views[index];
@@ -142,12 +143,11 @@ void OpenCityMapView(City *city) {
 
 void PublishCityMapChanges(City *city) {
   RefreshCitySignEntries(city);
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   CityInterfaceState *ui = city->game->ui;
   CityMapPaint paint = {city, NULL};
   if (!PrepareCityMapDrawingStorage(city)) {
     SetGameError(city->game, SC2K_ERROR_HOST_ALLOCATION_FAILURE);
-    city->game->execution_failed = true;
     return;
   }
   ResizeScreenDamage(&drawing->screen_damage, drawing->framebuffer.width, drawing->framebuffer.height);
@@ -209,26 +209,48 @@ void PublishCityMapChanges(City *city) {
   drawing->world_damage = drawing->screen_damage;
 }
 
+// Include the window's physical anchor, rounded chrome and pending sub-tile scroll.
+// Cache preservation and target binding must agree before any camera paints.
+static CityPoint CityViewportTargetPosition(const City *city, const CityExtraMapView *view) {
+  const Drawing *drawing = city->drawing;
+  CityRect bounds = Sc2kCanvasDesktopPixelBounds(&city->game->ui->desktop, view->window_id);
+  int scale = drawing->options.scale;
+  return (CityPoint){bounds.left + (3 * scale + 99) / 100 + view->scroll_pixels.x,
+      bounds.top + (CITY_VIEWPORT_TOP * scale + 99) / 100 + view->scroll_pixels.y};
+}
+
+static bool PreserveCityViewportScrollSource(City *city) {
+  Drawing *drawing = city->drawing;
+  CityCanvasDesktop *desktop = &city->game->ui->desktop;
+  for (int index = 0; index < CITY_EXTRA_MAP_VIEW_COUNT; ++index) {
+    CityExtraMapView *view = &drawing->views[index];
+    if (!view->cache.valid) continue;
+    const Window *window = FindCityCanvasWindow(desktop, view->window_id);
+    if (!window || !window->visible || window->shaded) continue;
+    CityPoint position = CityViewportTargetPosition(city, view);
+    if (view->cache.target_x == position.x && view->cache.target_y == position.y &&
+        view->cache.origin_x == view->origin_x && view->cache.origin_y == view->origin_y) continue;
+    // All cameras share framebuffer storage. Preserve old viewport pixels before
+    // the main map or another viewport repaints the source exposed by a drag.
+    MapCachePixels pixels = CityMapCachePixels(drawing);
+    SaveMapCacheScrollSource(&pixels);
+    return true;
+  }
+  return false;
+}
+
 bool BindCityMapTarget(const CityMapPaint *paint) {
   City *city = paint->city;
-  Drawing *drawing = city->game->drawing;
-  const CityInterfaceState *ui = city->game->ui;
+  Drawing *drawing = city->drawing;
   CityExtraMapView *view = paint->view;
   int magnification = drawing->default_map_view->magnified_large_zoom ? 2 : 1;
   int scale = drawing->map_pixel_scale * 100 * magnification;
-  CityPoint position = {0};
-  if (view) {
-    CityRect bounds = Sc2kCanvasDesktopPixelBounds(&ui->desktop, view->window_id);
-    position.x = bounds.left + (3 * drawing->options.scale + 99) / 100;
-    position.y = bounds.top + (CITY_VIEWPORT_TOP * drawing->options.scale + 99) / 100;
-  }
-  CityPoint offset = view ? view->scroll_pixels : drawing->scroll_pixels;
-  position.x += offset.x; position.y += offset.y;
+  CityPoint position = view ? CityViewportTargetPosition(city, view) : drawing->scroll_pixels;
   if (!view) position.x += drawing->screen_shake_offset * drawing->map_pixel_scale;
   return BindDrawingMapTarget(drawing, scale, position);
 }
 
-void PaintCityMapPixels(CityRect rect, void *context) {
+static void PaintCityMapPixels(CityRect rect, void *context) {
   CityMapPaint *paint = context;
   City *city = paint->city;
   PaintDrawingMapPixels(rect, paint);
@@ -243,10 +265,10 @@ void PaintCityMapPixels(CityRect rect, void *context) {
   }
 }
 
-void RepaintCityMapDamage(CityRect screen, void *context) {
+static void RepaintCityMapDamage(CityRect screen, void *context) {
   CityMapPaint *paint = context;
   City *city = paint->city;
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   CityInterfaceState *ui = city->game->ui;
   CityExtraMapView *view = paint->view;
   screen.left = IntMax(screen.left, 0); screen.top = IntMax(screen.top, 0);
@@ -254,8 +276,29 @@ void RepaintCityMapDamage(CityRect screen, void *context) {
   VisitCanvasMapRepaintPixels(&ui->desktop, view ? view->window_id : 0, screen, PaintCityMapPixels, context);
 }
 
-bool RenderCityMapViews(City *city, bool preserved_source) {
-  Drawing *drawing = city->game->drawing;
+// The caller has bound this camera and published its sprite/effect damage.
+// Reuse retained pixels before repainting requests; animation replay ends after this camera.
+static void PaintCityMapViewCache(CityMapPaint *paint, bool preserved_source) {
+  City *city = paint->city;
+  Drawing *drawing = city->drawing;
+  CityExtraMapView *view = paint->view;
+  NativeMapCache *cache = view ? &view->cache : &drawing->main_cache;
+  int magnification = !view && drawing->default_map_view->magnified_large_zoom ? 2 : 1;
+  int origin_x = view ? view->origin_x : drawing->map_state.origin_x;
+  int origin_y = view ? view->origin_y : drawing->map_state.origin_y;
+  bool retained = cache->valid;
+  MapCachePixels pixels = CityMapCachePixels(drawing);
+  pixels.preserved_source = preserved_source;
+  DrawCityMapCache(cache, &city->game->ui->desktop, view ? view->window_id : 0,
+      drawing->framebuffer.width, drawing->framebuffer.height, magnification, origin_x, origin_y,
+      &pixels, PaintCityMapPixels, paint);
+  if (retained) VisitScreenRepaintDamage(&drawing->world_damage, RepaintCityMapDamage, paint,
+      !drawing->disable_repaint_coalescing);
+  FinishCityMapAnimations(city);
+}
+
+static bool RenderCityExtraMapViews(City *city, bool preserved_source) {
+  Drawing *drawing = city->drawing;
   CityInterfaceState *ui = city->game->ui;
   CityMapViewConfig saved_view = *drawing->default_map_view;
   int saved_x = drawing->map_state.origin_x, saved_y = drawing->map_state.origin_y;
@@ -284,17 +327,7 @@ bool RenderCityMapViews(City *city, bool preserved_source) {
         (CityRect){0, 0, drawing->framebuffer.width, drawing->framebuffer.height}, &paint);
     PrepareCityMapEffectDamage(&paint, effect_clip);
     if (drawing->disable_map_cache) view->cache.valid = 0;
-    bool retained = view->cache.valid;
-    MapCachePixels pixels = CityMapCachePixels(drawing);
-    pixels.preserved_source = preserved_source;
-    DrawCityMapCache(&view->cache, &ui->desktop, view->window_id,
-        drawing->framebuffer.width, drawing->framebuffer.height, 1, view->origin_x, view->origin_y,
-        &pixels, PaintCityMapPixels, &paint);
-    if (retained) {
-      VisitScreenRepaintDamage(&drawing->world_damage, RepaintCityMapDamage, &paint,
-          !drawing->disable_repaint_coalescing);
-    }
-    FinishCityMapAnimations(city, drawing);
+    PaintCityMapViewCache(&paint, preserved_source);
   }
 restore:
   *drawing->default_map_view = saved_view;
@@ -308,6 +341,22 @@ restore:
   return success && GetGameError(city->game) == 0;
 }
 
+bool RenderCityMapViews(City *city) {
+  Drawing *drawing = city->drawing;
+  // Sprite footprints come from native render scratch.
+  drawing->world_damage = drawing->screen_damage;
+  // Requests are preserved for every camera. From here, screen_damage records
+  // painted pixels for F8; scroll copies only contribute to upload_damage.
+  ClearScreenDamage(&drawing->screen_damage);
+  bool preserved_source = PreserveCityViewportScrollSource(city);
+  CityMapPaint paint = {city, NULL};
+  PaintCityMapViewCache(&paint, preserved_source);
+  bool rendered = RenderCityExtraMapViews(city, preserved_source);
+  // Between frames, command-time paint requests must not overwrite retained pixels.
+  drawing->map_target.canvas.clip = (CityRect){0};
+  return rendered;
+}
+
 static void DirtyCityMapView(City *city, CityExtraMapView *view) {
   CityInterfaceState *ui = city->game->ui;
   Window *window = FindCityCanvasWindow(&ui->desktop, view->window_id);
@@ -315,7 +364,7 @@ static void DirtyCityMapView(City *city, CityExtraMapView *view) {
 }
 
 static void SetCityMapViewZoom(City *city, CityExtraMapView *view, int zoom) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   zoom = IntMin(zoom, CityMapZoomLimit(drawing->map_pixel_scale * 100));
   if (view->zoom == zoom) return;
   Window *window = FindCityCanvasWindow(&city->game->ui->desktop, view->window_id);
@@ -369,7 +418,7 @@ void PanCityMapWithScroll(City *city, CityExtraMapView *view, const CanvasSDLEve
 }
 
 void OffsetCityMapPixels(City *city, CityExtraMapView *view, int dx, int dy) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   CityPoint *pixels = view ? &view->scroll_pixels : &drawing->scroll_pixels;
   int scale = view ? drawing->map_pixel_scale * 100 * CityViewportMagnification(view) :
       drawing->map_pixel_scale * (drawing->default_map_view->magnified_large_zoom ? 2 : 1) * 100;
@@ -394,7 +443,7 @@ void OffsetCityMapPixels(City *city, CityExtraMapView *view, int dx, int dy) {
 }
 
 static void ApplyCityViewportControl(City *city, CityExtraMapView *view, CityViewportControl control) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   CityInterfaceState *ui = city->game->ui;
   Window *window = FindCityCanvasWindow(&ui->desktop, view->window_id);
   switch (control) {

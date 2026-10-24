@@ -1,16 +1,23 @@
+#include "drawing/maps/map_sprites.h"
+#include "drawing/maps/road_cars.h"
+
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "assets/graphics.h"
 #include "city/engine/city_types.h"
 #include "city/engine/simulation.h"
 #include "city/infrastructure/bridges.h"
 #include "city/infrastructure/surface_lines.h"
+#include "city/maps/tables.h"
 #include "city/infrastructure/types.h"
 #include "city/maps/layers.h"
+#include "city/infrastructure/highways.h"
 #include "city/maps/tile_storage.h"
 #include "city/presentation.h"
 #include "drawing/maps/map_camera.h"
+#include "drawing/maps/map_depth.h"
 #include "drawing/maps/map_render.h"
 #include "drawing/maps/map_view.h"
 #include "drawing/maps/tables.h"
@@ -20,6 +27,8 @@
 #include "road-car-paths.inc"
 #include "ui/map_visibility.h"
 #include "ui/map_views.h"
+
+_Static_assert(CITY_ROAD_VEHICLE_PALETTES <= 32 && CITY_ROAD_VEHICLE_TYPES <= 8, "Car appearances fit packed fields");
 
 // Decorative cars share the map vehicle renderer and host animation clock.
 // Their bounded pool and random stream belong to Drawing, never saved City events.
@@ -96,7 +105,7 @@ static int ChooseRoadCarExit(DrawingRoadTraffic *traffic, int exits, int entry) 
 static int RoadCarHeight(const RoadCar *car);
 
 static bool RoadCarWatched(const City *city, const RoadCar *car) {
-  const Drawing *drawing = city->game->drawing;
+  const Drawing *drawing = city->drawing;
   int height = RoadCarHeight(car);
   for (int i = 0; i <= CITY_EXTRA_MAP_VIEW_COUNT; ++i) {
     if (i && !drawing->views[i - 1].window_id) continue;
@@ -108,7 +117,7 @@ static bool RoadCarWatched(const City *city, const RoadCar *car) {
 static int RoadCarBucket(TileIndex tile) { return (tile ^ (tile >> 10)) & (CITY_ROAD_CAR_BUCKETS - 1); }
 
 static TileIndex SampleRoadCarTile(City *city, CityMapCamera view) {
-  DrawingRoadTraffic *traffic = &city->game->drawing->road_traffic;
+  DrawingRoadTraffic *traffic = &city->drawing->road_traffic;
   int scale = 1 << view.zoom, margin = 64 * scale;
   int px = (int)(RoadTrafficRandom(traffic) % (view.width + margin * 2)) - margin - view.origin_x;
   int py = (int)(RoadTrafficRandom(traffic) % (view.height + margin * 2)) - margin - view.origin_y;
@@ -309,9 +318,8 @@ static void PrepareRoadCarSurface(const City *city, RoadCar *car, int entry) {
     return;
   }
   CityMapSurface surface = ResolveCitySurfaceLineGround(city, tile);
-  static const u8 kCorners[] = {0, 9, 3, 6, 12, 11, 7, 14, 13, 1, 2, 4, 8, 15};
   car->base_height = ReadCityLandHeight(tp) + surface.raised;
-  car->surface = kCorners[surface.shape];
+  car->surface = kTerrainRaisedCorners[surface.shape];
 }
 
 static int RoadCarHeightAt(const RoadCar *car, int u, int v) {
@@ -376,7 +384,7 @@ static void PrepareRoadCar(const City *city, RoadCar *car, int entry, int exit) 
 // Road edits refresh the entry cache, including while paused. Ordinary car
 // movement never resolves its current tile's connections or surface again.
 void RefreshCityRoadTrafficPoses(City *city) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   DrawingRoadTraffic *traffic = &drawing->road_traffic;
   for (int slot = 0; slot < CITY_ROAD_CAR_COUNT; ++slot) {
     RoadCar *car = &traffic->cars[slot];
@@ -527,7 +535,7 @@ static bool RoadCarStraightRoute(const City *city, TileIndex tile, int entry) {
 }
 
 static int RoadCarLeaderDistance(const City *city, const RoadCar *car, TileIndex tile) {
-  const DrawingRoadTraffic *traffic = &city->game->drawing->road_traffic;
+  const DrawingRoadTraffic *traffic = &city->drawing->road_traffic;
   CityPoint start = MapTilePt(city, car->tile);
   int entry = RoadCarEntry(car), exit = RoadCarExit(car), distance = 5 * 256;
   int height = RoadCarHeight(car);
@@ -611,7 +619,7 @@ static void AdvanceRoadCar(City *city, DrawingRoadTraffic *traffic, RoadCar *car
 
 static bool SpawnRoadCar(City *city, TileIndex tile, int entry, int phase) {
   if (IsCityDrawbridgeOpen(city, tile)) return false;
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   DrawingRoadTraffic *traffic = &drawing->road_traffic;
   int exits = RoadCarRouteExits(city, tile, entry);
   // Never materialize in a junction or in the exit space reserved by an approaching car.
@@ -660,7 +668,7 @@ static CityMapCamera RoadCarCurrentCamera(const Drawing *drawing, int index) {
 }
 
 static bool RoadCarWatchedCurrent(const City *city, const RoadCar *car) {
-  const Drawing *drawing = city->game->drawing;
+  const Drawing *drawing = city->drawing;
   for (int i = 0; i <= CITY_EXTRA_MAP_VIEW_COUNT; ++i) {
     if (i && !drawing->views[i - 1].window_id) continue;
     if (IsCityRoadCarInView(city, car->tile, RoadCarHeight(car), RoadCarCurrentCamera(drawing, i), i)) return true;
@@ -669,7 +677,7 @@ static bool RoadCarWatchedCurrent(const City *city, const RoadCar *car) {
 }
 
 static bool RoadCarVisibleCurrent(const City *city, const RoadCar *car) {
-  const Drawing *drawing = city->game->drawing;
+  const Drawing *drawing = city->drawing;
   int height = RoadCarHeight(car);
   for (int i = 0; i <= CITY_EXTRA_MAP_VIEW_COUNT; ++i) {
     if (i && !drawing->views[i - 1].window_id) continue;
@@ -690,7 +698,7 @@ static bool RoadCarVisibleCurrent(const City *city, const RoadCar *car) {
 
 static void SeedRoadCarRect(City *city, CityMapCamera view, int index, CityRect rect) {
   if (rect.left >= rect.right || rect.top >= rect.bottom) return;
-  DrawingRoadTraffic *traffic = &city->game->drawing->road_traffic;
+  DrawingRoadTraffic *traffic = &city->drawing->road_traffic;
   CityRect bounds = VisibleCityMapTileBounds(city, view.origin_x, view.origin_y, view.zoom, view.rotation, rect);
   int scale = 1 << view.zoom;
   for (int y = bounds.top; y < bounds.bottom; ++y)
@@ -716,8 +724,8 @@ static void SeedRoadCarRect(City *city, CityMapCamera view, int index, CityRect 
 // Camera history already belongs to the map snapshot. Seed only the newly
 // exposed strips and the viewing margin; no visited-map mask or camera copy is needed.
 void PopulateCityRoadTrafficView(City *city, int index, CityMapCamera previous, CityMapCamera view) {
-  Drawing *drawing = city->game->drawing;
-  if (!(city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)) || !drawing->map_state.tile_details_enabled ||
+  Drawing *drawing = city->drawing;
+  if (!(city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) || !drawing->map_state.tile_details_enabled ||
       !drawing->map_state.vehicles_enabled || drawing->map_state.events_suppressed ||
       (drawing->map_state.data_overlay_enabled && drawing->map_state.data_mode != CITY_DATA_MODE_NONE) ||
       view.zoom < CITY_MAP_ZOOM_LARGE || view.width <= 0 || view.height <= 0 ||
@@ -753,7 +761,7 @@ void PopulateCityRoadTrafficView(City *city, int index, CityMapCamera previous, 
 }
 
 bool UpdateCityRoadTraffic(City *city, u32 now) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   if (!drawing->map_state.vehicles_enabled) return false;
   DrawingRoadTraffic *traffic = &drawing->road_traffic;
   if (traffic->map != city->tile || (i32)(now - traffic->time) < 0 || !drawing->map_snapshot.valid) {
@@ -762,7 +770,7 @@ bool UpdateCityRoadTraffic(City *city, u32 now) {
   u32 elapsed = now - traffic->time;
   bool check_population = (now >> 8) != (traffic->time >> 8);
   traffic->time = now;
-  traffic->enabled = (city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)) != 0;
+  traffic->enabled = (city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) != 0;
   if (!traffic->enabled) return false;
   if (drawing->map_state.events_suppressed || !drawing->map_state.tile_details_enabled ||
       (drawing->map_state.data_overlay_enabled && drawing->map_state.data_mode != CITY_DATA_MODE_NONE))
@@ -854,7 +862,7 @@ static CityPoint RoadCarSpriteOffset(CityPoint point, int height, int zoom) {
 CityRect CityRoadCarPixelBounds(const City *city, const RoadCar *car, CityMapCamera view, int pixel_scale) {
   if (!car || !car->path || !IsMapTileValid(city, car->tile) || view.zoom < CITY_MAP_ZOOM_LARGE)
     return (CityRect){0};
-  const MapSpriteCache *cache = &city->game->drawing->sprite_cache;
+  const MapSpriteCache *cache = &city->drawing->sprite_cache;
   int slot = FindMapSpriteScale(cache, pixel_scale * 100);
   if (slot < 0) return (CityRect){0};
   int heading = RoadCarSpriteView(car, view.rotation);
@@ -878,10 +886,10 @@ CityRect CityRoadCarPixelBounds(const City *city, const RoadCar *car, CityMapCam
 }
 
 void DrawCityRoadCar(City *city, int slot, int zoom) {
-  const RoadCar *car = &city->game->drawing->road_traffic.cars[slot];
+  const RoadCar *car = &city->drawing->road_traffic.cars[slot];
   // A car already on the leaf when a ship approaches evacuates through its cached path without painting on air.
   if (IsCityDrawbridgeOpen(city, car->tile)) return;
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   TileIndex tile = car->tile;
   CityPoint position = CityMapViewTilePoint(city, tile);
   int scale = 1 << zoom;
@@ -920,9 +928,9 @@ void DrawCityRoadCar(City *city, int slot, int zoom) {
 }
 
 void CollectCityRoadTraffic(City *city, int zoom) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   if (zoom < CITY_MAP_ZOOM_LARGE || !drawing->map_state.tile_details_enabled || !drawing->map_state.vehicles_enabled ||
-      drawing->map_state.events_suppressed || !(city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)))
+      drawing->map_state.events_suppressed || !(city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)))
     return;
   drawing->map_depth.phase = MAP_DEPTH_OBJECTS;
   for (int i = 0; i < CITY_ROAD_CAR_COUNT; ++i)

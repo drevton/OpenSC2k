@@ -5,13 +5,25 @@
 
 #include "city/types.h"
 
+typedef struct AssetFile AssetFile;
+typedef struct RunSprite RunSprite;
+
+// Shared native run-image decoder. Dimensions must already be positive and within SPRITE_RUN_LIMIT.
+// Reads size bytes from the open cursor, checking row offsets and run payloads. The caller owns one reference;
+// failure returns NULL and releases the incomplete image, without rewinding or closing the cursor.
+RunSprite *ReadAssetRunSprite(AssetFile *file, int width, int height, u32 size);
+
 // Graphics Assets
 
-// Picture IDs select illustrations, advisors or neighbors. Successful decodes replace the retained image references.
+// Picture IDs select illustrations, advisors or neighbors. Validated images replace their slots one at a time;
+// failure preserves earlier replacements and leaves later slots unchanged. Unknown IDs fail before opening input.
+// Assets owns the decoded sprite references; a failure after the final image can still leave every slot replaced.
 bool LoadCityPictureAssets(CityAssets *assets, u32 asset_id);
 typedef struct CityInterfaceIcons CityInterfaceIcons;
-// Validate the expected count before replacement. The destination owns decoded images and borrows pack lookup data.
-bool LoadCityInterfaceIcons(CityAssets *assets, CityInterfaceIcons *destination, u32 id, u32 count);
+// Load CITY_ASSET_MAP_ICONS, CITY_ASSET_BRIDGES or CITY_ASSET_TOOLBAR into its slot in Assets.
+// Validate the expected count and replace only after complete validation. Unknown IDs or decoding failure
+// preserve the installed atlas. Assets owns decoded images and borrows lookup/variant bytes from the pack.
+bool LoadCityInterfaceIcons(CityAssets *assets, u32 id);
 // Release all retained image references and clear borrowed metadata. Accepts zeroed or partially loaded icons.
 void ReleaseCityInterfaceIcons(CityInterfaceIcons *icons);
 
@@ -23,10 +35,11 @@ bool LoadCityMusicButtonAssets(CityAssets *assets, const char *graphics_root);
 
 typedef struct CityResourceState CityResourceState;
 
+// Keep an existing intro without reloading. Otherwise preload and replace the image set only after full validation.
+// Decode failure leaves prior images unchanged; pack preload can retain successfully loaded bytes.
 bool LoadApplicationIntroAssets(CityResourceState *assets);
 
-typedef struct RunSprite RunSprite;
-// Borrowed native image with its own palette; valid for the Assets lifetime.
+// Borrowed native image with its own palette; valid until its slot is replaced or Assets releases it.
 const RunSprite *ReadCityPicture(const CityAssets *assets, int id);
 
 #endif

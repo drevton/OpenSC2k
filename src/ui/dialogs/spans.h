@@ -1,12 +1,10 @@
 #ifndef SC2K_UI_SPANS_H
 #define SC2K_UI_SPANS_H
 
-#include "city/engine/commands.h"
+#include "city/engine/command_types.h"
 #include "city/infrastructure/types.h"
 #include "city/types.h"
 
-typedef struct Canvas Canvas;
-typedef struct Window Window;
 typedef struct CityInterfaceState CityInterfaceState;
 
 typedef struct CityCanvasDesktop CityCanvasDesktop;
@@ -27,21 +25,9 @@ typedef enum CityCanvasSpanHit {
   CITY_CANVAS_SPAN_HIT_TRACK = -7, CITY_CANVAS_SPAN_HIT_RESTORE = -8,
 } CityCanvasSpanHit;
 
-// Chooser geometry is in logical canvas pixels. Opening helpers return desktop array indices, or -1 on failure.
-i32 Sc2kCanvasDesktopOpenSpanChoices(CityCanvasDesktop *desktop, CityRect bounds,
-    const char *title, const char *message, u32 styles, const u32 *prices);
+// Shared chooser geometry is in logical canvas pixels.
 enum CitySpanChoiceLayout { CITY_SPAN_CHOICE_WIDTH = 220, CITY_SPAN_LIST_TOP = 27, CITY_SPAN_ROW_HEIGHT = 24,
        CITY_SPAN_FOOTER_HEIGHT = 14 };
-enum CitySpanSort { CITY_SPAN_SORT_COST, CITY_SPAN_SORT_NAME };
-// Nonnegative controls are visible row numbers; negative values are header/scroll controls.
-CityRect CitySpanControlBounds(const Window *window, int control);
-int ReadCitySpanList(const Window *window, u8 order[CITY_SPAN_STYLE_COUNT]);
-int CitySpanVisibleRows(const Window *window);
-CityRect CitySpanScrollThumb(const Window *window);
-// Returns a style index or a CityCanvasSpanHit sentinel.
-i32 CitySpanChoiceAt(const Window *window, i32 x, i32 y);
-void Sc2kCanvasDrawSpanStyle(Canvas *canvas, CityRect bounds, const char *title, const char *message);
-void CanvasDrawSpanChoices(Canvas *canvas, const Window *window);
 
 // Native bridge choices execute their saved command from deferred window completion.
 void SetCitySpanPresentation(CityInterfaceState *ui, CityCanvasDesktop *desktop);

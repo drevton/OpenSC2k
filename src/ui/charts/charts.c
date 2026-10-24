@@ -1,4 +1,5 @@
 #include "ui/windows/window_internal.h"
+#include "base/text.h"
 #include "ui/charts/charts.h"
 
 #include <stdio.h>
@@ -9,20 +10,19 @@
 #include "assets/state.h"
 #include "audio/state.h"
 #include "base/byte_order.h"
-#include "city/economy/economy.h"
+#include "city/economy/history.h"
 #include "city/economy/types.h"
 #include "city/engine/city_types.h"
-#include "city/maps/layers.h"
 #include "city/presentation.h"
 #include "city/state.h"
 #include "drawing/bitmaps.h"
+#include "drawing/fonts/fonts.h"
 #include "drawing/raster/canvas_primitives.h"
 #include "drawing/raster/canvas_raster_internal.h"
 #include "drawing/state.h"
 #include "game/errors.h"
 #include "game/state.h"
 #include "ui/commands.h"
-#include "ui/dialogs/budget.h"
 #include "ui/dialogs/map_data.h"
 #include "ui/map.h"
 #include "ui/startup/startup.h"
@@ -142,7 +142,7 @@ static void DrawChartLine(Canvas *canvas, i32 x0, i32 y0, i32 x1, i32 y1, u32 co
   i32 dy = y1 >= y0 ? y0 - y1 : y1 - y0, sy = y0 < y1 ? 1 : -1;
   i32 error = dx + dy;
   for (;;) {
-    Sc2kCanvasChartFill(canvas, (CityRect){x0, y0, x0 + 1, y0 + 1}, color);
+    CanvasStore(canvas, x0, y0, color);
     if (x0 == x1 && y0 == y1) break;
     i32 twice = 2 * error;
     if (twice >= dy) { error += dy; x0 += sx; }
@@ -160,7 +160,7 @@ static void DrawHistoryLegend(Canvas *canvas, const Window *window) {
     const CityCanvasChartControl *item = Sc2kCanvasChartControl(charts, CITY_PANEL_HISTORY,
         CITY_CONTROL_HISTORY_SERIES_FIRST + series);
     char value[32];
-    CanvasBudgetAmount(value, sizeof(value), ReadHistorySample(window->city, series, 0));
+    FormatGroupedInteger(value, sizeof(value), ReadHistorySample(window->city, series, 0));
     int value_width = CityInterfaceTextWidth(canvas->interface_font, value);
     u32 ink = selected ? 0xFFFCFCFC : canvas_text;
     CityRect clip = canvas->clip;
@@ -255,7 +255,7 @@ static void DrawDemographics(Canvas *canvas, const Window *window) {
   }
   char summary[128], population[32];
   if (mode == CITY_DEMOGRAPHIC_POPULATION) {
-    CanvasBudgetAmount(population, sizeof(population), window->city->indicators.population);
+    FormatGroupedInteger(population, sizeof(population), window->city->indicators.population);
     snprintf(summary, sizeof(summary), "Population: %s   Workforce: %d%%", population, values.summary);
   } else if (mode == CITY_DEMOGRAPHIC_HEALTH) {
     snprintf(summary, sizeof(summary), "Life expectancy: %d years", values.summary);
@@ -269,8 +269,8 @@ static void DrawDemographics(Canvas *canvas, const Window *window) {
   DrawCityInterfaceText(canvas->interface_font, canvas, b.left + 19, summary_y - 1, summary, canvas_text, false);
 
   // Population uses actual percentages; the other modes retain their existing cohort metrics.
-  int samples[20], maximum = mode == CITY_DEMOGRAPHIC_POPULATION ? 2000 : 100;
-  for (int i = 0; i < 20; ++i) {
+  int samples[CITY_AGE_COHORT_COUNT], maximum = mode == CITY_DEMOGRAPHIC_POPULATION ? 2000 : 100;
+  for (int i = 0; i < CITY_AGE_COHORT_COUNT; ++i) {
     if (mode == CITY_DEMOGRAPHIC_POPULATION) {
       u32 total = window->city->indicators.population;
       samples[i] = total ? (u64)window->city->age_cohorts.value[i] * 10000 / total : 0;
@@ -294,8 +294,9 @@ static void DrawDemographics(Canvas *canvas, const Window *window) {
   }
   CityRect clip = canvas->clip;
   canvas->clip = IntersectCityRects(clip, plot);
-  for (int i = 0; i < 20; ++i) {
-    int left = plot.left + 2 + i * width / 20, right = plot.left + 2 + (i + 1) * width / 20;
+  for (int i = 0; i < CITY_AGE_COHORT_COUNT; ++i) {
+    int left = plot.left + 2 + i * width / CITY_AGE_COHORT_COUNT,
+        right = plot.left + 2 + (i + 1) * width / CITY_AGE_COHORT_COUNT;
     if (!(i & 1)) CanvasFill(canvas, left, plot.top + 1, left + 1, plot.bottom - 1, 0xFF383838);
     int bar_height = (i64)samples[i] * height / maximum;
     if (samples[i] > 0) bar_height = IntMax(1, bar_height);
@@ -305,15 +306,15 @@ static void DrawDemographics(Canvas *canvas, const Window *window) {
     CanvasFill(canvas, left + 1, top, right - 1, top + 1, 0xFFD8E8E8);
   }
   canvas->clip = clip;
-  for (int i = 0; i < 20; i += 2) {
+  for (int i = 0; i < CITY_AGE_COHORT_COUNT; i += 2) {
     char age[8];
     snprintf(age, sizeof(age), "%d", i * 5);
-    int center = plot.left + 2 + (2 * i + 1) * width / 40;
+    int center = plot.left + 2 + (2 * i + 1) * width / (2 * CITY_AGE_COHORT_COUNT);
     DrawCityInterfaceText(canvas->interface_font, canvas,
         center - CityInterfaceTextWidth(canvas->interface_font, age) / 2, plot.bottom + 3, age, canvas_text, false);
   }
   const char *oldest = "95";
-  int oldest_x = plot.left + 2 + 39 * width / 40;
+  int oldest_x = plot.left + 2 + (2 * CITY_AGE_COHORT_COUNT - 1) * width / (2 * CITY_AGE_COHORT_COUNT);
   DrawCityInterfaceText(canvas->interface_font, canvas,
       oldest_x - CityInterfaceTextWidth(canvas->interface_font, oldest) / 2, plot.bottom + 3,
       oldest, canvas_text, false);
@@ -324,7 +325,7 @@ static void DrawDemographics(Canvas *canvas, const Window *window) {
 static void FormatIndustryChartValue(char *text, size_t capacity, int mode, int value) {
   if (mode == CITY_INDUSTRY_ACCOUNTS) snprintf(text, capacity, "%.1f%%", value / 10.0);
   else if (mode == CITY_INDUSTRY_TAX) snprintf(text, capacity, "%d%%", value);
-  else CanvasBudgetAmount(text, capacity, value);
+  else FormatGroupedInteger(text, capacity, value);
 }
 
 static void DrawIndustry(Canvas *canvas, const Window *window) {
@@ -457,20 +458,20 @@ static void DrawNeighbors(Canvas *canvas, const Window *window) {
     CityRect clip = canvas->clip;
     canvas->clip = IntersectCityRects(clip, region);
     char value[32];
-    CanvasBudgetAmount(value, sizeof(value), populations[i]);
+    FormatGroupedInteger(value, sizeof(value), populations[i]);
     DrawNeighborLabel(canvas, (CityRect){region.left + 4, label_top, region.right - 4, label_top + 11}, value);
     DrawNeighborLabel(canvas, (CityRect){region.left + 4, label_top + 12, region.right - 4, label_top + 23}, names[i]);
     canvas->clip = clip;
   }
   char value[32], summary[96];
   u64 national = (u64)ReadHistorySample(window->city, CITY_HISTORY_NATIONAL_POPULATION, 0) * 1000;
-  CanvasBudgetAmount(value, sizeof(value), national);
+  FormatGroupedInteger(value, sizeof(value), national);
   snprintf(summary, sizeof(summary), "National population: %s", value);
   DrawCityInterfaceTextCentered(canvas->interface_font, canvas,
       (CityRect){b.left + 6, b.top + 18, b.right - 6, b.top + 32}, summary, 0xFFFCFCFC, true, 10);
 }
 
-void Sc2kCanvasDrawCharts(Canvas *canvas, const Window *window) {
+static void Sc2kCanvasDrawCharts(Canvas *canvas, const Window *window) {
   if (canvas == NULL || window == NULL || window->city == NULL) return;
   CityRect b = window->bounds;
   DrawCanvasFrame(canvas, (CityRect){b.left, b.top + 14, b.right, b.bottom},
@@ -557,8 +558,6 @@ static bool InitializeChartLayout(CityChartState *charts, int slot) {
   return true;
 }
 
-// Refresh the cached values needed by a visible chart before painting it. Returns whether the requested panel was
-// handled; calculation may update the UI chart cache but does not advance simulation.
 bool PrepareCityChartPaintState(City *city, int code) {
   CityChartState *charts = &city->game->ui->charts;
   if (code == CITY_PANEL_INDUSTRY && charts->visible[CITY_CANVAS_CHART_INDUSTRY]) {
@@ -757,26 +756,6 @@ bool ChartsWindowProcedure(Game *game, const Window *window, const WindowEvent *
     }
   }
   return false;
-}
-
-void Sc2kCanvasChartFill(Canvas *canvas, CityRect rect, u32 color) {
-  CanvasFill(canvas, rect.left, rect.top, rect.right, rect.bottom, color);
-}
-
-void Sc2kCanvasChartText(Canvas *canvas, i32 x, i32 y, const char *text, u32 color) {
-  CanvasTextAt(canvas, x, y, text != NULL ? text : "", color);
-}
-
-i32 Sc2kCanvasChartTextWidth(const char *text) {
-  return CanvasTextWidth(text != NULL ? text : "");
-}
-
-void Sc2kCanvasChartFrame(Canvas *canvas, CityRect rect, const char *title) {
-  CanvasPanelFrame(canvas, rect, title != NULL ? title : "");
-}
-
-void Sc2kCanvasChartBox(Canvas *canvas, CityRect rect, u32 color, i32 raised) {
-  CanvasBeveledBox(canvas, rect.left, rect.top, rect.right, rect.bottom, color, raised);
 }
 
 const char *CityChartTooltipAt(Game *game, const Window *window, int x, int y) {

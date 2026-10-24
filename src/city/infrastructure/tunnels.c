@@ -8,6 +8,7 @@
 // portal zone[5..7] has no tunnel payload. Flags, signs/effects and the independent underground layer are shared
 // as described in tile_storage.h. Removing the tunnel clears its depth field, not the surface occupant above it.
 
+#include "drawing/maps/map_sprites.h"
 #include "city/infrastructure/lines.h"
 #include "city/saveload/map_format.h"
 #include "city/engine/random.h"
@@ -26,6 +27,7 @@
 #include "city/state.h"
 #include "city/tools/tools.h"
 #include "drawing/maps/map_terrain.h"
+#include "drawing/maps/map_camera.h"
 #include "drawing/maps/map_view.h"
 #include "game/observation.h"
 #include "game/state.h"
@@ -146,7 +148,7 @@ static bool FinishCityRoadTunnel(City *city, TileIndex origin_tile, CityInfrastr
 }
 
 // Native commands receive the resolved confirmation; tunnel price is simulation data.
-i64 PlaceCityRoadTunnel(City *city, TileIndex tile, bool accept) {
+static i64 PlaceCityRoadTunnel(City *city, TileIndex tile, bool accept) {
   assert(IsMapTileValid(city, tile));
   const GameObservation *observer = city->game->observation;
   if (observer && observer->place_road_tunnel)
@@ -211,7 +213,7 @@ TileIndex RemoveCityRoadTunnel(City *city, TileIndex tile_index, bool animate) {
   int direction = ReadTileVariant(&city->tile[tile_index]);
   for (int endpoint = 0; endpoint < 2; ++endpoint) {
     TileInfo *tp = &city->tile[tile_index];
-    if (city->fixes & (1 << CITY_FIX_TUNNEL_RUBBLE))
+    if (city->fixes & (1ull << CITY_FIX_TUNNEL_RUBBLE))
       ReplaceCityTileVariant(city, tile_index, TK_RUBBLE, Sc2kCrtRand(city) & 3);
     else
       ReplaceCityTileAndStatistics(city, tile_index, ReadCityWaterGroundKind(tp));
@@ -219,7 +221,7 @@ TileIndex RemoveCityRoadTunnel(City *city, TileIndex tile_index, bool animate) {
     if (tp->kind != TK_RUBBLE) WriteTileZoneByte(tp, ReadTileZoneByte(tp) & CITY_ZONE_KIND_MASK);
     if (endpoint == 0) {
       // Power cleanup belongs to the selected entrance; clear tunnel depth all the way to the other entrance.
-      if ((city->fixes & (1 << CITY_FIX_POWER_CLEANUP)) &&
+      if ((city->fixes & (1ull << CITY_FIX_POWER_CLEANUP)) &&
           !HasTileWater(tp)) {
         tp->flags &= ~(TF_POWERED | TF_POWERABLE);
         RefreshCityPowerConnections(city, tile_index);
@@ -244,10 +246,10 @@ TileIndex RemoveCityRoadTunnel(City *city, TileIndex tile_index, bool animate) {
 // Terrain stays in the ground pass; the entrance uses the current depth pass and ordinary sprite clipping.
 void DrawCityRoadTunnelEntrance(City *city, TileIndex tile, int sprite, int zoom, int screen_x, int ground_y,
     const CityTileGeometry *geometry) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   const TileInfo *tp = &city->tile[tile];
   int terrain = CityMapDryGroundShape(city, tile, geometry);
-  bool native = city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE);
+  bool native = city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE);
   int ground = -1;
   if (zoom == CITY_MAP_ZOOM_SMALL && terrain == CITY_TERRAIN_FLAT) {
     int zone = ReadCityZoneKind(tp);

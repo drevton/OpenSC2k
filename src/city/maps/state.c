@@ -9,6 +9,8 @@
 // and tile_storage.h. Recounting reads them without introducing another per-tile encoding.
 
 #include "city/infrastructure/utilities.h"
+#include "city/infrastructure/power_lines.h"
+#include "city/infrastructure/transport.h"
 #include "city/maps/terrain.h"
 #include "city/saveload/map_format.h"
 #include "city/maps/map.h"
@@ -18,7 +20,6 @@
 #include "city/maps/water.h"
 #include "city/maps/layers.h"
 #include "city/maps/module.h"
-#include "city/maps/tables.h"
 #include "city/state.h"
 #include "city/presentation.h"
 #include "city/terrain/terrain.h"
@@ -102,69 +103,50 @@ void RecountCityTileStatistics(City *city) {
     statistics->count[kind] = counts[0][kind] + counts[1][kind] + counts[2][kind] + counts[3][kind];
 }
 
-// Recount industry border connections from the current surface and underground tiles. Requires normalized native
-// storage; replaces the cached connection count rather than creating connections.
-void RecountCityIndustryConnections(City *city) {
-  int count = 0;
-  for (TileIndex tile = 0; tile < city->map_cell_count; ++tile) {
-    const TileInfo *tp = &city->tile[tile];
-    if (tp->overlay != CITY_OVERLAY_BORDER_CONNECTION) continue;
-    int surface = tp->kind;
-    if (surface == TK_RAIL ||
-        surface == TK_ROAD_RAIL_CROSSING || surface == TK_RAIL_POWER_CROSSING ||
-        IsTileKindStraightHighway(surface) ||
-        IsTileKindMultiHighway(surface)) ++count;
-  }
-  city->infrastructure.service_bonus_a = count;
-}
-
 // Rebuild power, transport, zone and bond state after reading a city. Call only after successful decoding/conversion;
 // rebuilds derived counts/networks instead of applying a second import over partial data.
 void RebuildLoadedCityMapState(City *city) {
   city->infrastructure.service_bonus_b = 0;
-  if (city->fixes & (1 << CITY_FIX_LOADED_CONNECTIONS))
+  if (city->fixes & (1ull << CITY_FIX_LOADED_CONNECTIONS))
     RecountCityIndustryConnections(city);
-  for (int y = 0; y < city->map_height; ++y)
-    for (int x = 0; x < city->map_width; ++x) {
-      const TileIndex cell_index = MapTileXY(city, x, y);
-      const TileInfo *tp = &city->tile[cell_index];
-      if (tp->overlay != CITY_OVERLAY_BORDER_CONNECTION)
-        continue;
-      int tile = tp->kind;
-      if (IsTileKindRoadRoute(tile))
-        ++city->infrastructure.service_bonus_b;
-    }
+  for (TileIndex tile = 0; tile < city->map_cell_count; ++tile) {
+    const TileInfo *tp = &city->tile[tile];
+    if (tp->overlay == CITY_OVERLAY_BORDER_CONNECTION && IsTileKindRoadRoute(tp->kind))
+      ++city->infrastructure.service_bonus_b;
+  }
   city->infrastructure.counter_a = 0;
   city->infrastructure.counter_b = 0;
   city->infrastructure.counter_c = 0;
   ScanPowerGridPhase(city);
   ScanCityWaterNetwork(city);
   city->indicators.zone_count = 0;
-  for (int y = 0; y < city->map_height; ++y)
-    for (int x = 0; x < city->map_width; ++x) {
-      const TileIndex cell_index = MapTileXY(city, x, y);
-      const TileInfo *tp = &city->tile[cell_index];
+  const int width = city->map_width, height = city->map_height;
+  for (int y = 0; y < height; ++y) {
+    const TileInfo *tp = city->tile + y * width;
+    // Coarse visited flags retain the full TileInfo row stride.
+    TileInfo *visited_row = city->tile + (y >> 1) * width;
+    int scratch_y = y / 4, companion_y = scratch_y + height / 4;
+    for (int x = 0; x < width; ++x, ++tp) {
       int scratch_x = x / 4;
-      int scratch_y = y / 4;
       int value = ReadScratch(city, scratch_x, scratch_y);
-      int companion = ReadScratch(city, scratch_x, scratch_y + city->map_height / 4);
-      int tile = tp->kind;
+      int companion = ReadScratch(city, scratch_x, companion_y);
+      int kind = tp->kind;
       int flags = tp->flags;
-      if (tile != TK_CLEAR && !IsTileKindExposedWater(tile)) {
-        if (tile == TK_LARGE_PARK)
+      if (kind != TK_CLEAR && !IsTileKindExposedWater(kind)) {
+        if (kind == TK_LARGE_PARK)
           value += 40;
-        else if (IsTileKindTreeOrPark(tile))
+        else if (IsTileKindTreeOrPark(kind))
           value += 20;
-        else if (IsTileKindBareGround(tile))
+        else if (IsTileKindBareGround(kind))
           value -= 20;
-      } else if (IsTileKindExposedWater(tile)) {
+      } else if (IsTileKindExposedWater(kind)) {
         value += 12;
         companion += 12;
       } else {
         value += 4;
       }
-      if (IsTileKindTransportOrBuilding(tile) || ReadCityZoneKind(tp) != ZONE_NONE) {
-        city->tile[MapTileXY(city, x >> 1, y >> 1)].flags |= TF_VISITED;
+      if (IsTileKindTransportOrBuilding(kind) || ReadCityZoneKind(tp) != ZONE_NONE) {
+        visited_row[x >> 1].flags |= TF_VISITED;
         ++city->indicators.zone_count;
       }
       if (flags & TF_WATERED) {
@@ -175,8 +157,9 @@ void RebuildLoadedCityMapState(City *city) {
       if (terrain_code != CITY_TERRAIN_FLAT &&
           !HasTileWater(tp)) value += 12;
       WriteScratch(city, scratch_x, scratch_y, value);
-      WriteScratch(city, scratch_x, scratch_y + city->map_height / 4, companion);
+      WriteScratch(city, scratch_x, companion_y, companion);
     }
+  }
   city->disasters.event_cleanup_ticks = 0;
   city->indicators.bond_rate_total = 0;
   city->disasters.event_decay_ticks = 0;
@@ -185,40 +168,7 @@ void RebuildLoadedCityMapState(City *city) {
     city->indicators.bond_rate_total += city->economic_tables.bond_rates.rate[index];
 }
 
-// Changes
-
-// Native landscape follows OpenTTD's shuffled tile loop (landscape.cpp), eight-visit grass counter (clear_cmd.cpp), and
-// coordinate-staggered tree loop (tree_cmd.cpp).
-static CityPoint ClimatePosition(const City *city, TileIndex tile) {
-  assert(IsMapTileValid(city, tile));
-  CityPoint position = MapTilePt(city, tile);
-  int width = city->map_width, height = city->map_height;
-  // The map arrays rotate. Sample the fixed weather pattern in the original
-  // coordinates so rotating a map cannot move its snow boundary.
-  for (int rotation = city->geography.rotation; rotation > 0; --rotation) {
-    position = (CityPoint){position.y, width - 1 - position.x};
-    int previous_width = width;
-    width = height; height = previous_width;
-  }
-  return position;
-}
-
-// The two permanent bits are interpreted by the City's landscape preset and survive every occupant change.
-int ReadCityTileBaseClimate(const City *city, const TileInfo *tp) {
-  int region = (tp->flags & TF_REGION_MASK) >> 1;
-  if (city->terrain_climate == CITY_TERRAIN_MIXED) {
-    static const u8 kMixed[] = {CLIMATE_TEMPERATE, CLIMATE_ARCTIC, CLIMATE_TROPICAL, CLIMATE_DESERT_100};
-    return kMixed[region];
-  }
-  if (city->terrain_climate == CITY_TERRAIN_DESERT) {
-    static const u8 kDesert[] = {CLIMATE_TROPICAL, CLIMATE_DESERT_100, CLIMATE_RAINFOREST, CLIMATE_TROPICAL};
-    return kDesert[region];
-  }
-  return city->terrain_climate == CITY_TERRAIN_NORMAL ? CLIMATE_TEMPERATE :
-      city->terrain_climate == CITY_TERRAIN_SNOWY ? CLIMATE_ARCTIC : CLIMATE_SIMCITY;
-}
-
-void WriteCityTileRegion(City *city, TileInfo *tp, int climate) {
+static void WriteCityTileRegion(City *city, TileInfo *tp, int climate) {
   int base = TerrainBaseClimate(climate), region = 0;
   if (city->terrain_climate == CITY_TERRAIN_MIXED)
     region = base >= CLIMATE_DESERT_50 && base <= CLIMATE_DESERT_100 ? 3 :
@@ -229,89 +179,8 @@ void WriteCityTileRegion(City *city, TileInfo *tp, int climate) {
   tp->flags = (tp->flags & ~TF_REGION_MASK) | region << 1;
 }
 
-// Coverage is stored as ground state. Region supplies only the permanent grass/tree family.
-int ReadTileClimate(const City *city, const TileInfo *tp) {
-  int base = ReadCityTileBaseClimate(city, tp);
-  if (HasTileWater(tp)) return base == CLIMATE_DESERT_100 ? CLIMATE_TROPICAL : base;
-  int ground = ReadGroundKind(tp);
-  if (ground >= CITY_GROUND_SNOW_FIRST && ground <= CITY_GROUND_SNOW_LAST)
-    return CLIMATE_ARCTIC + ground;
-  if (ground == CITY_GROUND_DESERT_HALF) return CLIMATE_DESERT_50;
-  if (ground == CITY_GROUND_DESERT_FULL) return CLIMATE_DESERT_100;
-  return base == CLIMATE_DESERT_100 ? CLIMATE_TROPICAL : base;
-}
-
-// Blend artwork is selected from bounded permanent-region neighbors, independently of their occupants.
-int ReadCityTileClimate(const City *city, TileIndex tile) {
-  const TileInfo *tp = &city->tile[tile];
-  int appearance = ReadTileClimate(city, tp), base = ReadCityTileBaseClimate(city, tp);
-  if (city->terrain_climate != CITY_TERRAIN_MIXED || base == CLIMATE_DESERT_100) return appearance;
-  bool temperate = false, tropical = false;
-  for (int d = 0; d < 8; d += 2) {
-    TileIndex next = GetRelativeTileOrInvalid(city, tile, kTerrainNeighborXOffsets[d], kTerrainNeighborYOffsets[d]);
-    if (next == INVALID_TILE) continue;
-    int adjacent = ReadCityTileBaseClimate(city, &city->tile[next]);
-    temperate |= adjacent == CLIMATE_TEMPERATE;
-    tropical |= adjacent == CLIMATE_TROPICAL;
-  }
-  int blend = base == CLIMATE_ARCTIC ?
-      (temperate ? CLIMATE_TEMPERATE_ARCTIC : tropical ? CLIMATE_ARCTIC_TROPICAL : base) :
-      base == CLIMATE_TROPICAL && temperate ? CLIMATE_TEMPERATE_TROPICAL : base;
-  int snow = ReadTileSnowCoverage(tp);
-  if (snow) return snow <= 2 && blend == CLIMATE_TEMPERATE_ARCTIC ? CLIMATE_SNOW_TEMPERATE_ARCTIC_50 :
-      snow <= 2 && blend == CLIMATE_ARCTIC_TROPICAL ? CLIMATE_SNOW_ARCTIC_TROPICAL_50 : appearance;
-  return appearance == base ? blend : appearance;
-}
-
-// Move stored coverage toward its current height/region target. Terrain-editor edits can settle it immediately.
-void RefreshCityTileGroundCover(City *city, TileIndex tile, bool immediate) {
-  TileInfo *tp = &city->tile[tile];
-  if (HasTileWater(tp) && !IsTileKindShoreTree(tp->kind)) return;
-  int ground = ReadGroundKind(tp), base = ReadCityTileBaseClimate(city, tp), target = 0;
-  // Clearing and exposed beds must finish their bare phase before climate
-  // coverage can settle, including immediate terrain-editor refreshes.
-  if (ground >= CITY_GROUND_RECOVERY_FIRST && ground <= CITY_GROUND_RECOVERY_GRASS_FIRST) return;
-  if (ground == CITY_TRANSPORT_GROUND_PAVED && IsTileKindGroundTransport(tp->kind)) return;
-  if (base == CLIMATE_ARCTIC && city->snow.line != CITY_SNOW_LINE_DISABLED)
-    target = IntClamp(ReadCityLandHeight(tp) - TerrainSnowLineAt(&city->snow, ClimatePosition(city, tile)) + 1, 0, 4);
-  if (base == CLIMATE_DESERT_100) target = CITY_GROUND_DESERT_FULL;
-  else if (city->terrain_climate == CITY_TERRAIN_DESERT || city->terrain_climate == CITY_TERRAIN_MIXED) {
-    for (int d = 0; d < 8; d += 2) {
-      TileIndex next = GetRelativeTileOrInvalid(city, tile, kTerrainNeighborXOffsets[d], kTerrainNeighborYOffsets[d]);
-      if (next != INVALID_TILE && ReadCityTileBaseClimate(city, &city->tile[next]) == CLIMATE_DESERT_100) {
-        target = CITY_GROUND_DESERT_HALF;
-        break;
-      }
-    }
-  }
-  bool snow = ground >= CITY_GROUND_SNOW_FIRST && ground <= CITY_GROUND_SNOW_LAST;
-  bool desert = ground == CITY_GROUND_DESERT_HALF || ground == CITY_GROUND_DESERT_FULL;
-  int next = ground;
-  if (target >= CITY_GROUND_DESERT_HALF) next = target;
-  else if (target) {
-    int amount = snow ? ground : 0;
-    next = immediate ? target : amount < target ? amount + 1 : amount > target ? amount - 1 : amount;
-  } else if (snow) next = immediate || ground == CITY_GROUND_SNOW_FIRST ? CITY_GROUND_GRASS : ground - 1;
-  else if (desert) next = CITY_GROUND_GRASS;
-  if (next == ground) return;
-  InvalidateTile(city, tile);
-  WriteGroundKind(tp, next);
-  InvalidateTile(city, tile);
-}
-
-void RefreshCityTileClimates(City *city, TileIndex tile) {
-  if (!IsMapTileValid(city, tile)) return;
-  for (int dy = -1; dy <= 1; ++dy) for (int dx = -1; dx <= 1; ++dx) {
-    TileIndex next = GetRelativeTileOrInvalid(city, tile, dx, dy);
-    if (next == INVALID_TILE) continue;
-    InvalidateTile(city, next);
-    RefreshCityTileGroundCover(city, next, city->settings.timer_mode == CITY_TIMER_STOPPED);
-    InvalidateTile(city, next);
-  }
-}
-
-// Initialize landscape evolution and generated ground, tree and climate metadata. Terrain may be NULL for defaults;
-// when supplied its dimensions and storage must match City, and enabled fixes determine which landscape effects apply.
+// Copy or downsample City terrain into caller-owned preview storage, then finish it using the supplied settings.
+// City is read-only; returns false if preview backing cannot be prepared.
 bool ReadCityTerrainPreview(const City *city, CityTerrainMap *map, const CityTerrainSettings *settings) {
   int divisor = IntMax(1, IntMax(city->map_width, city->map_height) / 256);
   int width = IntMax(128, city->map_width / divisor), height = IntMax(128, city->map_height / divisor);
@@ -331,11 +200,43 @@ bool ReadCityTerrainPreview(const City *city, CityTerrainMap *map, const CityTer
   return true;
 }
 
+// Initialize imported native ground, climate, tree and power metadata when no landscape state exists. Reuses an
+// existing nonzero landscape seed without rerandomizing trees; initialization may consume the independent landscape
+// RNG and invalidates the map.
+void InitializeCityLandscape(City *city) {
+  if (city->landscape_random) {
+    InitializeCityPowerConnections(city);
+    return;
+  }
+  city->landscape_cursor = 1;
+  city->landscape_tick = 0;
+  city->landscape_random = city->random.crt ^ city->random.event ^ 0x6D2B79F5;
+  if (!city->landscape_random) city->landscape_random = 1;
+  TileIndex cells = city->map_cell_count;
+  for (TileIndex tile = 0; tile < cells; ++tile) {
+    TileInfo *tp = &city->tile[tile];
+    int kind = tp->kind;
+    if (kind == TK_CLEAR || IsTileKindExposedWater(kind) || IsTileKindTree(kind)) {
+      tp->terrain &= 15;
+      if (IsTileKindTree(kind)) {
+        WriteTreeSpecies(tp, city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE) ?
+            RandomCityTreeSpecies(city, ReadCityTileBaseClimate(city, tp)) : 0);
+        WriteTreeGrowth(tp, CITY_TREE_GROWN);
+      }
+    }
+  }
+  InitializeCityPowerConnections(city);
+  city->protect_terrain_structures = (city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) != 0;
+  InvalidateMap(city);
+}
+
+// Initialize landscape evolution and generated ground, tree and climate metadata. Terrain may be NULL for defaults;
+// when supplied its dimensions and storage must match City, and enabled fixes determine which landscape effects apply.
 void GenerateCityLandscape(City *city, const CityTerrainMap *terrain) {
   city->landscape_cursor = city->landscape_tick = city->landscape_random = 0;
   InitializeCityLandscape(city);
-  if (!(city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE))) return;
-  if (!(city->fixes & (1 << CITY_FIX_LANDSCAPE_DETAILS))) return;
+  if (!(city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE))) return;
+  if (!(city->fixes & (1ull << CITY_FIX_LANDSCAPE_DETAILS))) return;
   city->terrain_climate = terrain ? terrain->climate : CITY_TERRAIN_SIMCITY;
   city->desert_limit = terrain ? terrain->desert_limit : 0;
   city->snow.seed = terrain ? terrain->snow.seed : 0;
@@ -369,6 +270,8 @@ void GenerateCityLandscape(City *city, const CityTerrainMap *terrain) {
   for (TileIndex tile = 0; tile < cells; ++tile) RefreshCityTileGroundCover(city, tile, true);
 }
 
+// Native landscape follows OpenTTD's shuffled tile loop (landscape.cpp), eight-visit grass counter (clear_cmd.cpp), and
+// coordinate-staggered tree loop (tree_cmd.cpp).
 // Apply the landscape visit appropriate to a valid tile's water, ground, transport or trees. May change recovery, age and
 // species using landscape RNG; the traversal owns the visit order.
 static void VisitCityLandscapeTile(City *city, TileIndex tile) {
@@ -399,7 +302,7 @@ static void StepCityLandscape(City *city, u32 feedback) {
 // Advance one deterministic landscape tick when native landscape is enabled. Selects the supported map-size traversal
 // and reuses City state; it does not sample host time.
 void AdvanceCityLandscape(City *city) {
-  if (!(city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE))) return;
+  if (!(city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE))) return;
   static const u32 kLandscapeFeedback[] = {0xD8F, 0x1296, 0x2496, 0x4357, 0x8679, 0x1030E,
       0x206CD, 0x403FE, 0x807B8, 0x1004B2, 0x2006A8, 0x4004B2, 0x800B87};
   int bits = 0;

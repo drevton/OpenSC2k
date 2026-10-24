@@ -1,6 +1,7 @@
 // Environment passes derive coarse pollution, land value, density and service coverage from City tiles.
 // Their stages share City scratch storage; an incremental scan must finish before another scratch user runs.
 #include "city/saveload/map_format.h"
+#include "city/maps/environment.h"
 #include "city/maps/map.h"
 
 #include "city/economy/types.h"

@@ -10,16 +10,17 @@
 // zone[5..7] has no power payload. TF_POWERABLE/TF_POWERED are capability/supply; all other fields are shared
 // as documented in tile_storage.h. Reconnecting changes topology without borrowing the region or overlay bits.
 
+#include "drawing/maps/map_sprites.h"
 #include "city/infrastructure/power_lines.h"
 #include "city/infrastructure/lines.h"
 #include "city/maps/terrain.h"
+#include "city/maps/tables.h"
 
 #include <assert.h>
 
 #include "city/infrastructure/bridges.h"
 #include "city/infrastructure/highways.h"
 #include "city/infrastructure/surface_lines.h"
-#include "assets/state.h"
 #include "game/audio.h"
 #include "city/maps/layers.h"
 #include "city/maps/module.h"
@@ -27,9 +28,9 @@
 #include "city/presentation.h"
 #include "city/state.h"
 #include "drawing/maps/map_terrain.h"
+#include "drawing/maps/map_camera.h"
 #include "drawing/maps/map_view.h"
 #include "drawing/maps/tables.h"
-#include "game/state.h"
 
 // Keep tower spacing and appearance attached to the original world coordinates after a geography rotation.
 static CityPoint PowerLinePatternPoint(const City *city, TileIndex tile) {
@@ -201,16 +202,15 @@ int CityMapPowerLayout(int mask, int shape) {
 
 // Cable drawing reads stored connections and only the adjoining endpoint heights.
 static int PowerAnchorQuarter(const CityTileGeometry *geometry) {
-  static const u8 kCorners[] = {0, 9, 3, 6, 12, 11, 7, 14, 13, 1, 2, 4, 8, 15};
-  return 4 * geometry->surface_height + __builtin_popcount(kCorners[geometry->surface_shape]);
+  return 4 * geometry->surface_height + __builtin_popcount(kTerrainRaisedCorners[geometry->surface_shape]);
 }
 
 static bool DrawPowerTile(City *city, TileIndex tile, int zoom, int screen_x, int ground_y,
     const CityTileGeometry *tile_geometry) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   const TileInfo *tp = &city->tile[tile];
   int kind = tp->kind;
-  if (!(city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)) || !IsTileKindPowerLine(kind)) return false;
+  if (!(city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) || !IsTileKindPowerLine(kind)) return false;
   CityTileGeometry geometry = *tile_geometry;
   if (IsTileKindPlainPowerLine(kind) && geometry.water == CITY_WATER_NONE) {
     CityMapSurface surface = {.shape = geometry.land_shape, .foundation = -1};
@@ -268,7 +268,7 @@ static bool DrawPowerTile(City *city, TileIndex tile, int zoom, int screen_x, in
 
 static bool DrawPowerGround(City *city, TileIndex tile, int zoom, int screen_x, int ground_y,
     const CityTileGeometry *geometry) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   DrawCityMapTerrainTile(city, tile, zoom, -1, screen_x, ground_y, geometry);
   int kind = city->tile[tile].kind, layout = CityMapViewTileSpriteIndex(city, tile);
   if (IsTileKindPowerLine(kind) && IsTileKindGroundCrossing(kind))

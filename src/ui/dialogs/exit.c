@@ -65,7 +65,7 @@ void CompleteCityAbandon(Game *game) {
   game->idle_input = 0;
 }
 
-void AnswerCityLeaveDialog(Game *game, bool accept) {
+static void AnswerCityLeaveDialog(Game *game, bool accept) {
   CityCanvasDesktop *desktop = &game->ui->desktop;
   if (!desktop->count) return;
   Window *window = &desktop->windows[desktop->count - 1];

@@ -6,6 +6,10 @@
 typedef struct Game Game;
 typedef struct CanvasSDL CanvasSDL;
 
+// Fresh Game startup only, before resources or drawing buffers are loaded. Initialize the Drawing owner and seed
+// Assets fallback glyphs. Per-city resets use InitializeDrawingDefaults without replacing loaded fonts/preferences.
+void InitializeGameDrawing(Game *game);
+
 // Startup graphics loading retains its partial results on failure. Cursor source changes invalidate Drawing's
 // composed artwork after successful loading or release; failed source loading preserves it.
 bool LoadApplicationGraphicsAssets(Game *game);
@@ -16,11 +20,6 @@ void ReleaseCityCursorAssets(Game *game);
 // Sources can be prepared independently before startup workers prepare zooms and construction previews.
 bool PrepareCityMapSpriteSources(Game *game);
 bool PrepareCityMapSprites(Game *game);
-
-// Prepare standard toolbar button sizes for the installed atlas/UI scale; UI supplies each icon's aspect.
-// Cache hits/no artwork succeed. Failed preparation retains earlier entries and the installed source binding;
-// the incomplete cache is released and rebuilt on the next call.
-bool PrepareCityToolbarIcons(Game *game);
 
 // Present all visible map windows when a presenter is installed; a canvas-free owner has nothing to flush.
 bool PresentCityMapView(Game *game);

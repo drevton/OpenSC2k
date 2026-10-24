@@ -1,43 +1,36 @@
-#include "city/economy/budget.h"
-#include "city/engine/random.h"
-#include "city/economy/facilities.h"
-#include "city/maps/trees.h"
-#include "audio/types.h"
-#include "city/economy/types.h"
-#include "city/engine/city_types.h"
-#include "city/engine/weather.h"
-#include "city/events/news.h"
-#include "city/maps/tile_storage.h"
-#include "city/terrain/terrain.h"
-#include "city/tools/types.h"
-#include "game/audio.h"
-#include "game/state.h"
-#include "city/presentation.h"
-#include "base/fixed.h"
 #include "city/economy/economy.h"
 
 #include <string.h>
 
-#include "city/state.h"
+#include "base/fixed.h"
+#include "city/economy/budget.h"
+#include "city/economy/facilities.h"
+#include "city/economy/history.h"
 #include "city/economy/tables.h"
-#include "city/engine/simulation.h"
+#include "city/economy/types.h"
+#include "city/engine/city_types.h"
+#include "city/engine/random.h"
+#include "city/engine/weather.h"
+#include "city/events/news.h"
 #include "city/maps/layers.h"
-#include "city/tools/tools.h"
-#include "city/saveload/file.h"
+#include "city/maps/tile_storage.h"
+#include "city/maps/trees.h"
+#include "city/presentation.h"
 #include "city/saveload/map_format.h"
-#include "base/text.h"
+#include "city/state.h"
+#include "game/audio.h"
 
 // Apply the January settlement gate and prepare the year's budget bookkeeping. Returns false outside the due January
 // boundary; a true result means the caller must continue the settlement sequence once.
 bool BeginCityAnnualSettlement(City *city) {
   if (city->clock.month_word != CITY_MONTH_JANUARY || !city->indicators.year_flag) return false;
-  CityEconomyMonths *annual_economy = &city->economy;
+  CityEconomyMonths *economy = &city->economy;
   for (int sector = 0; sector < CITY_ECONOMY_SECTOR_COUNT; ++sector) {
+    EconomySector *account = &economy->sector[sector];
     int divisor = 12 * kAnnualSettlementFactors.factor[sector];
     if (divisor != 0)
-      city->indicators.cash = AddInt64Clamped(city->indicators.cash,
-          annual_economy->sector[sector].accumulated / divisor);
-    annual_economy->sector[sector].accumulated = 0;
+      city->indicators.cash = AddInt64Clamped(city->indicators.cash, account->accumulated / divisor);
+    account->accumulated = 0;
   }
   city->indicators.year_flag = 0;
   InvalidateCityInformation(city->game, CITY_UPDATE_STATUS);
@@ -86,7 +79,7 @@ static const struct { u8 sector, first, last; } kMaintenanceRanges[] = {
 void FinishCityMonthlyEconomy(City *city) {
   int month = city->clock.month_word;
   CityEconomyMonths *economy = &city->economy;
-  CityStatistics *statistics = &city->statistics;
+  const CityStatistics *statistics = &city->statistics;
   for (int sector = 0; sector < CITY_ECONOMY_SECTOR_COUNT; ++sector) {
     EconomySector *account = &economy->sector[sector];
     int amount = account->current_amount;
@@ -98,12 +91,17 @@ void FinishCityMonthlyEconomy(City *city) {
   if (month == CITY_MONTH_DECEMBER)
     city->indicators.year_flag = 1;
   economy->sector[CITY_ECONOMY_BONDS].current_amount = city->indicators.bond_count;
-  static const u8 kServiceTiles[5] = {
-      TK_POLICE_STATION, TK_FIRE_STATION, TK_HOSPITAL, TK_SCHOOL, TK_COLLEGE};
-  for (int i = 0; i < 5; ++i) {
-    int count = statistics->value[kServiceTiles[i]];
-    int divisor = i == 4 ? 16 : 9;
-    economy->sector[CITY_ECONOMY_POLICE + i].current_amount = count / divisor;
+  // Each service is funded per complete facility footprint, independent of sector or tile-kind ordering.
+  static const struct { u8 sector, kind, tiles_per_facility; } kServiceMaintenance[] = {
+    {CITY_ECONOMY_POLICE, TK_POLICE_STATION, 9},
+    {CITY_ECONOMY_FIRE, TK_FIRE_STATION, 9},
+    {CITY_ECONOMY_HEALTH, TK_HOSPITAL, 9},
+    {CITY_ECONOMY_SCHOOLS, TK_SCHOOL, 9},
+    {CITY_ECONOMY_COLLEGES, TK_COLLEGE, 16},
+  };
+  for (size_t i = 0; i < sizeof(kServiceMaintenance) / sizeof(*kServiceMaintenance); ++i) {
+    int count = statistics->value[kServiceMaintenance[i].kind];
+    economy->sector[kServiceMaintenance[i].sector].current_amount = count / kServiceMaintenance[i].tiles_per_facility;
   }
   for (int sector = CITY_ECONOMY_ROADS; sector < CITY_ECONOMY_SECTOR_COUNT; ++sector)
     economy->sector[sector].current_amount = 0;
@@ -142,7 +140,7 @@ void FinishCityMonthlyEconomy(City *city) {
 void UpdateCityEconomyPrimary(City *city) {
   CityMilestoneNotice notice = BeginCityEconomyPrimary(city);
   if (notice.show) ShowRankedCityEventModal(city, notice.event, notice.data);
-  FinishCityEconomyPrimary(city, notice.index);
+  FinishCityEconomyPrimary(city, notice.milestone);
 }
 
 // Apply primary population/economy updates and select any due milestone newspaper. Returns the captured milestone
@@ -264,16 +262,18 @@ CityMilestoneNotice BeginCityEconomyPrimary(City *city) {
         InsertRankedCityEvent(city, CITY_NEWS_SPORTS, category);
       }
     }
-    static const i8 kNewsHistory[3] = {CITY_HISTORY_TRAFFIC, CITY_HISTORY_POLLUTION, CITY_HISTORY_CRIME};
-    static const u8 kHighMetricNews[] = {CITY_NEWS_HIGH_TRAFFIC, CITY_NEWS_HIGH_POLLUTION, CITY_NEWS_HIGH_CRIME};
-    static const u8 kLowMetricNews[] = {CITY_NEWS_LOW_TRAFFIC, CITY_NEWS_LOW_POLLUTION, CITY_NEWS_LOW_CRIME};
-    for (int i = 0; i < (int)(sizeof(kNewsHistory) / sizeof(kNewsHistory[0])); ++i) {
-      int threshold = (int)ReadHistorySample(city, kNewsHistory[i], 0);
+    static const struct { u8 series, high, low; } kHistoryMetricNews[] = {
+      {CITY_HISTORY_TRAFFIC, CITY_NEWS_HIGH_TRAFFIC, CITY_NEWS_LOW_TRAFFIC},
+      {CITY_HISTORY_POLLUTION, CITY_NEWS_HIGH_POLLUTION, CITY_NEWS_LOW_POLLUTION},
+      {CITY_HISTORY_CRIME, CITY_NEWS_HIGH_CRIME, CITY_NEWS_LOW_CRIME},
+    };
+    for (size_t i = 0; i < sizeof(kHistoryMetricNews) / sizeof(*kHistoryMetricNews); ++i) {
+      int threshold = (int)ReadHistorySample(city, kHistoryMetricNews[i].series, 0);
       if ((int)(Sc2kCrtRand(city) & 0x7F) < threshold) {
-        InsertRankedCityEvent(city, kHighMetricNews[i], 0);
+        InsertRankedCityEvent(city, kHistoryMetricNews[i].high, 0);
       }
       if ((int)(Sc2kCrtRand(city) & 0xF) > threshold) {
-        InsertRankedCityEvent(city, kLowMetricNews[i], 0);
+        InsertRankedCityEvent(city, kHistoryMetricNews[i].low, 0);
       }
     }
     int unemployment = (int)city->indicators.unemployment;
@@ -305,11 +305,11 @@ CityMilestoneNotice BeginCityEconomyPrimary(City *city) {
         u32 event_arg =
             milestone < CITY_MILESTONE_BUILDING_FIRST ? milestone : milestone - CITY_MILESTONE_BUILDING_FIRST;
         bool show = PrepareRankedCityEvent(city, event, event_arg);
-        return (CityMilestoneNotice){milestone, event, event_arg, show};
+        return (CityMilestoneNotice){.milestone = milestone, .event = event, .data = event_arg, .show = show};
       }
     }
   }
-  return (CityMilestoneNotice){.index = -1};
+  return (CityMilestoneNotice){.milestone = -1};
 }
 
 // A selected milestone clears after its newspaper, even if nested commands changed its due year. Milestone must be the
@@ -324,7 +324,7 @@ void FinishCityEconomyPrimary(City *city, int milestone) {
 
 // Scale a signed demand by an integer percentage with a widened intermediate. Division truncates toward zero; callers
 // must keep the resulting demand within int range.
-int ScaleDemand(int value, int percent) { return (i64)value * percent / 100; }
+static int ScaleDemand(int value, int percent) { return (i64)value * percent / 100; }
 
 // Compute the rate-scaled capacity of complete facility groups. Divisor must be nonzero; the unsigned product
 // intentionally retains the simulation's fixed-width arithmetic before signed division.
@@ -528,8 +528,8 @@ void UpdateCityEconomySecondary(City *city) {
     memset(life_expectancy, 0, sizeof(*life_expectancy));
     return;
   }
-  CityEconomyMonths *economy = &city->economy;
-  CityTileCounts *tiles = &city->statistics;
+  const CityEconomyMonths *economy = &city->economy;
+  const CityTileCounts *tiles = &city->statistics;
 
   int school_capacity = AgeFacilityCapacity(
       economy->sector[CITY_ECONOMY_SCHOOLS].current_rate, tiles->value[TK_SCHOOL], 9, 15);
@@ -545,7 +545,7 @@ void UpdateCityEconomySecondary(City *city) {
   if (city->unlocks.ordinance_flags & CITY_POLICY_FLAG_FREE_CLINICS)
     health_capacity += economy->sector[CITY_ECONOMY_RESIDENTIAL].current_amount / 400;
 
-  for (int index = 1, age = 5; index < 20; ++index, age += 5) {
+  for (int index = 1, age = 5; index < CITY_AGE_COHORT_COUNT; ++index, age += 5) {
     u32 count = counts->value[index];
     if (count == 0)
       continue;
@@ -569,7 +569,7 @@ void UpdateCityEconomySecondary(City *city) {
 
   u32 pollution_denominator = city->indicators.population + 10 * city->population.value[CITY_POPULATION_ABANDONED] + 1;
   int pollution_penalty = IntMin(UintDiv(city->indicators.city_pollution, pollution_denominator), 3);
-  for (int source = 18; source >= 0; --source) {
+  for (int source = CITY_AGE_COHORT_COUNT - 2; source >= 0; --source) {
     u32 count = counts->value[source];
     if (count == 0)
       continue;
@@ -631,7 +631,7 @@ void UpdateCityEconomySecondary(City *city) {
     city->indicators.birth_count -= city->indicators.attrition_count;
     while (city->indicators.birth_count != 0) {
       u32 pass_emigrants = city->indicators.birth_count;
-      for (int index = 0; index < 20 && city->indicators.birth_count != 0; ++index) {
+      for (int index = 0; index < CITY_AGE_COHORT_COUNT && city->indicators.birth_count != 0; ++index) {
         u32 count = counts->value[index];
         if (count == 0)
           continue;

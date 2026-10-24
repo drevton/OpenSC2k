@@ -1,6 +1,8 @@
 #include "game/timing.h"
+#include <string.h>
 #include "city/economy/budget.h"
 #include <stdlib.h>
+#include "ui/text/text.h"
 
 #include "assets/catalog.h"
 #include "assets/state.h"
@@ -44,7 +46,7 @@ const char *CityAdvisorName(CityBudgetCategory category) {
   return kNames[category];
 }
 
-CityRect CityAdvisorButtonBounds(const Window *window, CityBudgetCategory category) {
+static CityRect CityAdvisorButtonBounds(const Window *window, CityBudgetCategory category) {
   CityRect b = window->bounds;
   int width = b.right - b.left;
   int left = b.left + category * width / CITY_BUDGET_CATEGORY_COUNT;
@@ -67,7 +69,7 @@ i32 Sc2kCanvasDesktopOpenPolicies(CityCanvasDesktop *desktop, CityRect bounds, u
           .title = "City Ordinances", .policy_flags = policy_flags});
 }
 
-i32 Sc2kCanvasDesktopOpenBonds(CityCanvasDesktop *desktop, CityRect bounds, int issue_rate) {
+static i32 Sc2kCanvasDesktopOpenBonds(CityCanvasDesktop *desktop, CityRect bounds, int issue_rate) {
   bounds.right = bounds.left + CITY_BOND_WINDOW_WIDTH;
   bounds.bottom = bounds.top + CITY_BOND_WINDOW_HEIGHT;
   return Sc2kCanvasDesktopOpen(desktop,
@@ -75,7 +77,7 @@ i32 Sc2kCanvasDesktopOpenBonds(CityCanvasDesktop *desktop, CityRect bounds, int 
           .title = "City Bonds", .bond_issue_rate = issue_rate});
 }
 
-void UpdateCityPolicyWindows(City *city, CityCanvasDesktop *desktop, u32 policy_flags) {
+void UpdateCityPolicyWindows(const City *city, CityCanvasDesktop *desktop, u32 policy_flags) {
   const CityEconomyMonths *economy = &city->economy;
   const CityBudgetPolicyGroupTotals *group_totals = &city->game->ui->budget_policy_totals;
   for (i32 index = 0; index < desktop->count; ++index) {
@@ -200,7 +202,8 @@ void ShowAnnualBudgetDialog(City *city) {
   SetCityCursor(city, CITY_CURSOR_ARROW, 0);
 }
 
-const CityBudgetState *ReadCityBudgetWindowState(const City *city) {
+// Observed callers retain the original budget continuation in City; native window controls use UI state.
+static const CityBudgetState *ReadCityBudgetWindowState(const City *city) {
   return city->game->observation ? &city->budget : &city->game->ui->budget_window;
 }
 
@@ -227,14 +230,15 @@ void ApplicationBudgetBegin(City *city, u32 window, bool manual) {
 }
 
 void CloseCityManualBudget(City *city) {
-  if (!ReadCityBudgetWindowState(city)->id || !ReadCityBudgetWindowState(city)->manual) return;
-  int id = ReadCityBudgetWindowState(city)->id;
+  const CityBudgetState *budget = ReadCityBudgetWindowState(city);
+  if (!budget->id || !budget->manual) return;
+  int id = budget->id;
   Sc2kCanvasDesktopDismissWindow(&city->game->ui->desktop, id);
   ApplicationBudgetEnd(city, id);
   ApplicationUpdateDialogPause(city);
 }
 
-void ApplyCityBudgetWindowRate(City *city, u32 window, int row, int rate) {
+static void ApplyCityBudgetWindowRate(City *city, u32 window, int row, int rate) {
   Game *game = city->game;
   int kind = CityBudgetRateKindForRow(row);
   if (kind < 0) return;
@@ -252,7 +256,7 @@ void ApplyCityBudgetWindowRate(City *city, u32 window, int row, int rate) {
   ApplicationBudgetSync(city);
 }
 
-void OpenCityBudgetRateEditor(City *city, u32 parent, int row) {
+static void OpenCityBudgetRateEditor(City *city, u32 parent, int row) {
   static const char *const kTitles[CITY_BUDGET_ROW_COUNT] = {
     "Residential property tax", "Commercial property tax", "Industrial property tax", NULL, NULL,
     "Police funding", "Fire funding", "Health funding", "Education funding", "Transit funding"
@@ -364,7 +368,7 @@ static u32 OpenCityAdvisorWindow(City *city, CityBudgetCategory category, const 
   return slot < 0 ? 0 : desktop->windows[slot].window_id;
 }
 
-void ApplicationBudgetAdvisor(City *city, u32 window, CityBudgetCategory category) {
+static void ApplicationBudgetAdvisor(City *city, u32 window, CityBudgetCategory category) {
   if (!city->game->observation) {
     OpenCityAdvisor(city, category);
     return;
@@ -539,7 +543,7 @@ bool BudgetWindowProcedure(Game *game, const Window *window, const WindowEvent *
   if (bond_action != CITY_BOND_ACTION_NONE) {
     if (bond_action == CITY_BOND_ACTION_ISSUE || bond_action == CITY_BOND_ACTION_REDEEM)
       PresentCityBondConfirmation(city, bond_action == CITY_BOND_ACTION_ISSUE ? CITY_COMMAND_ISSUE_BOND :
-          CITY_COMMAND_REDEEM_BOND, city->fixes & (1 << CITY_FIX_BOND_RATING) ? CityBondInterestRate(city) : 5);
+          CITY_COMMAND_REDEEM_BOND, city->fixes & (1ull << CITY_FIX_BOND_RATING) ? CityBondInterestRate(city) : 5);
   } else if (step >= 0) {
     BeginCityButtonRepeat(game, window, event);
     int row = step / 2;
@@ -553,7 +557,7 @@ bool BudgetWindowProcedure(Game *game, const Window *window, const WindowEvent *
     Sc2kCanvasDesktopOpenPolicies(desktop, (CityRect){70, 18, 530, 472}, city->unlocks.ordinance_flags);
   } else if (CanvasPointInRect(CityBudgetControlBounds(window->bounds, CITY_BUDGET_CONTROL_SHOW_BONDS, 0), x, y))
     Sc2kCanvasDesktopOpenBonds(desktop, (CityRect){120, 70, 480, 274},
-        city->fixes & (1 << CITY_FIX_BOND_RATING) ? CityBondInterestRate(city) : 5);
+        city->fixes & (1ull << CITY_FIX_BOND_RATING) ? CityBondInterestRate(city) : 5);
   else return false;
   ApplicationUpdateDialogPause(city);
   return true;

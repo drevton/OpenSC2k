@@ -12,6 +12,36 @@ const u32 canvas_light = 0xFFA8A8A8;
 const u32 canvas_dark = 0xFF636562;
 const u32 canvas_edge = 0xFF636562;
 
+i32 CanvasScaleFloor(i32 value, i32 numerator, i32 denominator) {
+  i64 product = (i64)value * numerator;
+  return (i32)(product / denominator - (product % denominator < 0));
+}
+
+i32 CanvasScaleCeil(i32 value, i32 numerator, i32 denominator) {
+  return -CanvasScaleFloor(-value, numerator, denominator);
+}
+
+CityRect CanvasScaleInnerRect(CityRect b, i32 numerator, i32 denominator) {
+  return (CityRect){CanvasScaleCeil(b.left, numerator, denominator),
+                    CanvasScaleCeil(b.top, numerator, denominator),
+                    CanvasScaleFloor(b.right, numerator, denominator),
+                    CanvasScaleFloor(b.bottom, numerator, denominator)};
+}
+
+void PaintScaledCanvas(Canvas *framebuffer, i32 numerator, i32 denominator,
+    CanvasScaledPaint paint, void *context) {
+  if (!framebuffer || !framebuffer->pixels || !paint || numerator < 1 || numerator > 1600 ||
+      denominator < 1 || denominator > 1600 || framebuffer->width < 1 || framebuffer->height < 1)
+    return;
+  Canvas logical = *framebuffer;
+  logical.raster = (CanvasRaster){framebuffer->pixels, numerator, denominator, 0, 0,
+      framebuffer->width, framebuffer->height, framebuffer->clip, 0, 0};
+  logical.width = (i32)(((i64)framebuffer->width * denominator + numerator - 1) / numerator);
+  logical.height = (i32)(((i64)framebuffer->height * denominator + numerator - 1) / numerator);
+  logical.clip = (CityRect){0, 0, logical.width, logical.height};
+  paint(&logical, context);
+}
+
 bool CanvasPointInRect(CityRect rect, i32 x, i32 y) {
   return x >= rect.left && x < rect.right && y >= rect.top && y < rect.bottom;
 }

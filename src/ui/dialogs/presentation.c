@@ -128,8 +128,7 @@ failed:
   if (pending && pending->mission_notice) ui->outcome_dialog_active = 0;
   free(pending);
   ResumeCityTick(city, token, false, 0);
-  if (!GetGameError(city->game)) SetGameError(city->game, SC2K_ERROR_HOST_ALLOCATION_FAILURE);
-  city->game->execution_failed = true;
+  SetGameError(city->game, SC2K_ERROR_HOST_ALLOCATION_FAILURE);
 }
 
 static int PresentResourceAlertPaused(City *city, void *context) {

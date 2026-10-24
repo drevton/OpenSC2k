@@ -1,30 +1,22 @@
-#include "game/timing.h"
 #include "game/commands.h"
 
 #include <stdlib.h>
 #include <string.h>
 
-#include "city/engine/city_types.h"
-#include "city/engine/command_types.h"
 #include "city/engine/simulation.h"
-#include "city/maps/tile_storage.h"
-#include "city/presentation.h"
 #include "city/state.h"
-#include "game/application.h"
 #include "game/errors.h"
 #include "game/observation.h"
 #include "game/state.h"
+#include "game/timing.h"
 #include "ui/commands.h"
-#include "ui/dialogs/budget.h"
 #include "ui/dialogs/dialogs.h"
 #include "ui/dialogs/information.h"
 #include "ui/dialogs/messages.h"
 #include "ui/dialogs/name_editor.h"
-#include "ui/dialogs/spans.h"
 #include "ui/map.h"
+#include "ui/signs.h"
 #include "ui/state.h"
-#include "ui/text/text.h"
-#include "ui/tools/tools.h"
 
 static bool IsCityConstructionCommand(u32 command) {
   switch (command) {
@@ -60,14 +52,8 @@ static bool IsCityConstructionCommand(u32 command) {
   }
 }
 
-// Stack-owned completion survives nested UI work without reading its later errors.
-typedef struct {
-  CityCommandResult result;
-  bool written;
-} CityRunCompletion;
-
-// Only callback-bearing suspended actions allocate this small caller record.
-// It owns explicit completion data, never an execution stack or a City copy.
+// Reserve callback storage before execution can change City. Synchronous completion frees it;
+// a suspended command retains its arguments, initial outcome and treasury baseline until completion.
 typedef struct CityPendingCommand {
   struct CityPendingCommand *next;
   int token;
@@ -172,13 +158,14 @@ bool StepCityAnimation(Game *game) {
 }
 
 // Shared City commands keep admission, feedback, observer hooks and completion in one place.
+// Every normal return writes completion when supplied, before later presentation can change live errors.
 static i64 ExecuteCommandPayload(Game *game, CityCommand packet, const u8 *text, u32 length,
-    const CityCommandArguments *native_arguments, CityRunCompletion *completion) {
+    const CityCommandArguments *native_arguments, CityCommandResult *completion) {
   if (game->observation && game->observation->execute_command) {
     CityCommandResult result;
     i64 value = game->observation->execute_command(game, packet, NULL, 0, text, length, NULL,
         native_arguments, &result);
-    if (completion) *completion = (CityRunCompletion){result, true};
+    if (completion) *completion = result;
     return value;
   }
   // A nested question can pump input and reuse the editor's storage.
@@ -225,7 +212,7 @@ static i64 ExecuteCommandPayload(Game *game, CityCommand packet, const u8 *text,
       .succeeded = !failure && !error && !feedback.cancelled};
   if (admitted && !error && !feedback.cancelled && !game->execution_failed)
     PresentCityCommandAudio(city, packet.id, &args, result.succeeded, result.cost);
-  if (completion) *completion = (CityRunCompletion){result, true};
+  if (completion) *completion = result;
   if (admitted && observer && observer->end_command) observer->end_command(game, scope, value, error, before_tick);
   --game->command_depth;
   ui->active_command = previous_command;
@@ -281,23 +268,16 @@ static bool RunCommandWithPayload(Game *game, u32 id, TileIndex tile, int parame
     return false;
   }
   i64 cash_before = game->city->indicators.cash;
-  CityRunCompletion completion = {0};
+  CityCommandResult result;
   CityInterfaceState *ui = game->ui;
   bool previous_errors = ui->command_errors_enabled;
   u32 previous_depth = ui->command_error_depth;
   ui->command_errors_enabled = true;
   ui->command_error_depth = game->command_depth;
   i64 value = ExecuteCommandPayload(game, packet, payload ? payload->text : NULL, payload ? payload->length : 0,
-      &args, &completion);
+      &args, &result);
   ui->command_errors_enabled = previous_errors;
   ui->command_error_depth = previous_depth;
-  // Setup/menu shortcuts and admission failures return before the execution scope.
-  if (!completion.written) {
-    i32 host_error = GetGameError(game);
-    completion.result = (CityCommandResult){.value = value, .host_error = host_error,
-        .error = value < 0 ? value : 0, .succeeded = value >= 0 && !host_error};
-  }
-  CityCommandResult result = completion.result;
   if (pending && value >= 2 && FindCityTickContinuation(game->city, (int)value)) {
     *pending = (CityPendingCommand){.next = game->pending_commands, .token = (int)value,
         .id = id, .arguments = args, .callback = callback, .context = context,

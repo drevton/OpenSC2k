@@ -6,17 +6,16 @@
 #include "assets/state.h"
 #include "base/version.h"
 #include "city/engine/command_types.h"
-#include "city/maps/layers.h"
+#include "city/maps/kinds.h"
 #include "city/maps/tile_storage.h"
 #include "drawing/bitmaps.h"
 #include "drawing/fonts/fonts.h"
 #include "drawing/raster/canvas_primitives.h"
 #include "drawing/raster/canvas_raster_internal.h"
-#include "drawing/sprites/sprites.h"
+#include "drawing/sprites/preparation.h"
 #include "drawing/state.h"
 #include "game/graphics.h"
 #include "game/state.h"
-#include "ui/charts/charts.h"
 #include "ui/menus/menu.h"
 #include "ui/startup/startup.h"
 #include "ui/sdl.h"
@@ -30,7 +29,7 @@ static const u32 kTerrainAmber = 0xFFFCB030, kTerrainAmberLight = 0xFFFFDC80, kT
 static const u32 kTerrainGreen = 0xFF609C30, kTerrainGreenLight = 0xFF98C85C, kTerrainGreenDark = 0xFF386018;
 static const u32 kTerrainFreshWater = 0xFF488CBC;
 
-int CityStartupMenuIcon(int control) {
+static int CityStartupMenuIcon(int control) {
   switch (control) {
     case CITY_STARTUP_CONTROL_NEW_CITY: return CITY_TOPBAR_MAP;
     case CITY_STARTUP_CONTROL_LOAD_CITY: return CITY_TOPBAR_FILE;
@@ -61,7 +60,7 @@ typedef struct {
   CanvasRaster raster;
 } TerrainPreviewPixels;
 
-static u32 BuildTerrainPreview(Canvas *pixels, const void *context) {
+static void BuildTerrainPreview(Canvas *pixels, const void *context) {
   const TerrainPreviewPixels *preview = context;
   const CityTerrainMap *map = preview->layout->terrain_preview;
   CanvasRaster raster = preview->raster;
@@ -106,7 +105,6 @@ static u32 BuildTerrainPreview(Canvas *pixels, const void *context) {
     for (int y = top; y < bottom; ++y)
       for (int x = left; x < right; ++x) pixels->pixels[(size_t)y * pixels->stride + x] = color;
   }
-  return 0;
 }
 
 static CityRect ControlBounds(const Window *window, const CityCanvasStartupControl *control) {
@@ -183,7 +181,7 @@ void Sc2kCanvasDrawStartupWindow(Game *game, Canvas *canvas, const Window *windo
     DrawCanvasFrame(canvas, body, canvas_face, canvas_light, canvas_dark, true);
     DrawCityWindowCaption(canvas, window->bounds, layout->title, canvas_face, canvas_light, canvas_dark, 0);
   } else {
-    Sc2kCanvasChartFrame(canvas, window->bounds, layout != NULL ? layout->title : window->title);
+    CanvasPanelFrame(canvas, window->bounds, layout != NULL ? layout->title : window->title);
   }
   if (layout == NULL) return;
   CityRect saved = canvas->clip;
@@ -206,16 +204,15 @@ void Sc2kCanvasDrawStartupWindow(Game *game, Canvas *canvas, const Window *windo
       if (setup)
         DrawCanvasFrame(canvas, rect, kTerrainFace, kTerrainLight, kTerrainDark, false);
       else if (layout->focused_control == control->id)
-        Sc2kCanvasChartBox(canvas, rect, 0xFFD0D0D0, false);
+        CanvasBeveledBox(canvas, rect.left, rect.top, rect.right, rect.bottom, 0xFFD0D0D0, false);
       int y = (rect.top + rect.bottom) / 2;
       int x = rect.left + control->checked * (rect.right - rect.left - 1) / 47;
-      Sc2kCanvasChartFill(canvas, (CityRect){rect.left + 2, y - 1, rect.right - 2, y + 1},
-          setup ? kTerrainDark : 0xFF606060);
+      CanvasFill(canvas, rect.left + 2, y - 1, rect.right - 2, y + 1, setup ? kTerrainDark : 0xFF606060);
       if (setup)
         DrawCanvasFrame(canvas, (CityRect){x - 2, rect.top + 2, x + 3, rect.bottom - 2},
             kTerrainAmber, kTerrainAmberLight, kTerrainAmberDark, true);
       else
-        Sc2kCanvasChartBox(canvas, (CityRect){x - 3, rect.top + 2, x + 4, rect.bottom - 2}, 0xFFE0E0E0, true);
+        CanvasBeveledBox(canvas, x - 3, rect.top + 2, x + 4, rect.bottom - 2, 0xFFE0E0E0, true);
       continue;
     }
     i32 button = control->control_class == CITY_RESOURCE_CONTROL_BUTTON;
@@ -241,8 +238,7 @@ void Sc2kCanvasDrawStartupWindow(Game *game, Canvas *canvas, const Window *windo
       continue;
     }
     if (!setup && button && type == CITY_RESOURCE_BUTTON_DEFAULT)
-      Sc2kCanvasChartBox(canvas, (CityRect){rect.left - 2, rect.top - 2, rect.right + 2, rect.bottom + 2},
-          0xFFC0C0C0u, !pressed);
+      CanvasBeveledBox(canvas, rect.left - 2, rect.top - 2, rect.right + 2, rect.bottom + 2, 0xFFC0C0C0u, !pressed);
     if (setup && (button || edit)) {
       u32 fill = edit ? 0xFF101010 : generate ? kTerrainGreen : kTerrainAmber;
       u32 light = edit ? kTerrainLight : generate ? kTerrainGreenLight : kTerrainAmberLight;
@@ -253,17 +249,17 @@ void Sc2kCanvasDrawStartupWindow(Game *game, Canvas *canvas, const Window *windo
         DrawCanvasButtonFrame(canvas, rect, fill, light, dark, !pressed && !(radio && control->checked));
       else DrawCanvasFrame(canvas, rect, fill, light, dark, !edit && !pressed);
     } else if (group) {
-      Sc2kCanvasChartBox(canvas, rect, 0xFFC0C0C0u, 0);
-      Sc2kCanvasChartFill(canvas, (CityRect){rect.left + 6, rect.top - 1,
-          rect.left + 12 + Sc2kCanvasChartTextWidth(control->text), rect.top + 12}, 0xFFC0C0C0u);
+      CanvasBeveledBox(canvas, rect.left, rect.top, rect.right, rect.bottom, 0xFFC0C0C0u, 0);
+      CanvasFill(canvas, rect.left + 6, rect.top - 1, rect.left + 12 + CanvasTextWidth(control->text), rect.top + 12,
+          0xFFC0C0C0u);
     } else if (radio) {
       i32 y = rect.top + (rect.bottom - rect.top - 12) / 2;
-      Sc2kCanvasChartBox(canvas, (CityRect){rect.left, y, rect.left + 12, y + 12},
-          pressed ? 0xFFC0C0C0u : 0xFFFFFFFFu, 0);
+      CanvasBeveledBox(canvas, rect.left, y, rect.left + 12, y + 12, pressed ? 0xFFC0C0C0u : 0xFFFFFFFFu, 0);
       if (control->checked)
-        Sc2kCanvasChartFill(canvas, (CityRect){rect.left + 4, y + 4, rect.left + 8, y + 8}, 0xFF101010u);
+        CanvasFill(canvas, rect.left + 4, y + 4, rect.left + 8, y + 8, 0xFF101010u);
     } else if (button || edit)
-      Sc2kCanvasChartBox(canvas, rect, edit ? 0xFFFFFFFFu : 0xFFC0C0C0u, button && !pressed);
+      CanvasBeveledBox(canvas, rect.left, rect.top, rect.right, rect.bottom,
+          edit ? 0xFFFFFFFFu : 0xFFC0C0C0u, button && !pressed);
     if (setup && control->id == CITY_SETUP_RANDOM_NAME) {
       int x = (rect.left + rect.right) / 2 + pressed, y = (rect.top + rect.bottom) / 2 + pressed;
       CanvasFill(canvas, x - 5, y - 5, x + 5, y + 5, 0xFF101010);
@@ -300,8 +296,8 @@ void Sc2kCanvasDrawStartupWindow(Game *game, Canvas *canvas, const Window *windo
       char *next = strchr(line, '\n');
       if (next != NULL) *next++ = 0;
       i32 x = radio && !setup ? rect.left + 16 : group ? rect.left + 8 :
-          button ? rect.left + (rect.right - rect.left - Sc2kCanvasChartTextWidth(line)) / 2 : rect.left + 2;
-      Sc2kCanvasChartText(canvas, x + pressed, y + pressed, line,
+          button ? rect.left + (rect.right - rect.left - CanvasTextWidth(line)) / 2 : rect.left + 2;
+      CanvasTextAt(canvas, x + pressed, y + pressed, line,
           generate ? 0xFFFFFFFF : disabled ? (setup ? kTerrainDark : 0xFF808080) :
           setup && edit ? 0xFFFFFF80 : 0xFF101010);
       line = next; y += 12;
@@ -318,13 +314,13 @@ void Sc2kCanvasDrawStartupWindow(Game *game, Canvas *canvas, const Window *windo
     int width = IntMax(1, preview_size * layout->map_width / edge);
     int height = IntMax(1, preview_size * layout->map_height / edge);
     int preview_left = left + (preview_size - width) / 2, preview_top = top + (preview_size - height) / 2;
-    Sc2kCanvasChartFill(canvas, (CityRect){left, top, left + preview_size, top + preview_size}, kTerrainDark);
+    CanvasFill(canvas, left, top, left + preview_size, top + preview_size, kTerrainDark);
     CityRect preview_bounds = {preview_left, preview_top, preview_left + width, preview_top + height};
     CanvasRaster raster = CanvasRasterView(canvas);
     TerrainPreviewPixels preview = {layout, {0, 0, width, height}, raster};
-    CityBitmapPaint paint = {.bounds = preview_bounds, .build = BuildTerrainPreview, .context = &preview};
+    CanvasBitmapPaint paint = {.bounds = preview_bounds, .build = BuildTerrainPreview, .context = &preview};
     CityTerrainPreviewDrawing *pixels = layout->drawing;
-    if (!DrawCityCachedBitmap(canvas, &pixels->preview, &paint))
+    if (!DrawCachedCanvasBitmap(canvas, &pixels->preview, &paint))
       game->execution_failed = true;
     char summary[128];
     snprintf(summary, sizeof(summary), "Water: %.1f%%  Trees: %.1f%%  Height: %d-%d",
@@ -347,8 +343,7 @@ static void DrawIntroImage(Game *game, Canvas *canvas, int id, int left, int top
   const RunSprite *image = game->resources->intro.images[id];
   CityRect bounds = {left, top, left + IntMax(1, image->width * scale / 65536),
       top + IntMax(1, image->height * scale / 65536)};
-  if (!DrawCanvasSpriteImage(canvas, NULL, image,
-      (CityRect){0, 0, image->width, image->height}, bounds, 0)) game->execution_failed = true;
+  if (!DrawCanvasRunSprite(canvas, image, bounds, 0)) game->execution_failed = true;
 }
 
 void DrawCityStartupBackdrop(Game *game, Canvas *canvas, CityRect area) {

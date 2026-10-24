@@ -1,3 +1,7 @@
+#include "drawing/maps/map_view.h"
+#include <string.h>
+#include "base/text.h"
+#include "drawing/maps/map_sprites.h"
 #include "game/graphics.h"
 #include "ui/updates.h"
 #include "ui/cursor/cursor.h"
@@ -19,15 +23,15 @@
 #include "base/time.h"
 #include "base/version.h"
 #include "city/engine/city_types.h"
-#include "city/maps/layers.h"
 #include "city/saveload/file.h"
 #include "city/saveload/runtime.h"
 #include "game/city_lifecycle.h"
 #include "city/state.h"
 #include "drawing/display.h"
 #include "drawing/maps/map_effects.h"
-#include "drawing/maps/map_events.h"
+#include "drawing/maps/map_vehicles.h"
 #include "drawing/maps/map_render.h"
+#include "drawing/maps/road_cars.h"
 #include "drawing/palette.h"
 #include "drawing/state.h"
 #include "game/commands.h"
@@ -51,11 +55,12 @@
 #include "ui/map_views.h"
 #include "ui/music/jukebox.h"
 #include "ui/news/newspaper.h"
-#include "ui/news/newspaper_text.h"
+#include "ui/news/newspaper_capture.h"
 #include "ui/signs.h"
 #include "ui/sdl.h"
 #include "ui/state.h"
 #include "ui/startup/startup.h"
+#include "ui/text/status.h"
 #include "ui/text/text.h"
 #include "ui/tools/tools.h"
 #include "ui/windows/state.h"
@@ -253,35 +258,104 @@ static bool RunHeadlessApplication(Game *game, const ApplicationOptions *options
   const char *city_path = options->startup.city_path, *script_path = options->startup.script_path;
   int frames = options->frames;
 
-    if (!PrepareCityMapSprites(game)) return false;
-    if (script_path != NULL && !RunInputScript(game, script_path, city_path))
-      return false;
-    for (i32 index = 0; index < frames && !game->execution_failed && !game->close_requested; ++index) {
-      i64 advanced = hooks && hooks->advance_phase ? hooks->advance_phase(game, context) :
-          AdvanceCitySimulationPhaseWithOptions(game->city, 0);
-      DeliverCitySimulationEvents(game, 0, advanced, false);
+  if (!PrepareCityMapSprites(game)) return false;
+  if (script_path != NULL && !RunInputScript(game, script_path, city_path))
+    return false;
+  for (i32 index = 0; index < frames && !game->execution_failed && !game->close_requested; ++index) {
+    i64 advanced = hooks && hooks->advance_phase ? hooks->advance_phase(game, context) :
+        AdvanceCitySimulationPhaseWithOptions(game->city, 0);
+    DeliverCitySimulationEvents(game, 0, advanced, false);
+  }
+  if (game->execution_failed || !RedrawCityCanvas(city, NULL))
+    return false;
+  if (drawing->benchmark_redraw) {
+    // Exclude startup and the first draw, which warms resource and allocator caches.
+    drawing->snapshot_seconds = drawing->map_seconds = drawing->canvas_seconds = 0;
+    double benchmark_started = MonotonicSeconds();
+    for (i32 index = 0; index < drawing->benchmark_redraw; ++index) {
+      drawing->main_cache.valid = 0;
+      if (!RedrawCityCanvas(city, NULL))
+        return false;
     }
-    if (game->execution_failed || !RedrawCityCanvas(city, NULL))
-      return false;
-    if (drawing->benchmark_redraw) {
-      // Exclude startup and the first draw, which warms resource and allocator caches.
-      drawing->snapshot_seconds = drawing->map_seconds = drawing->canvas_seconds = 0;
-      double benchmark_started = MonotonicSeconds();
-      for (i32 index = 0; index < drawing->benchmark_redraw; ++index) {
-        drawing->main_cache.valid = 0;
-        if (!RedrawCityCanvas(city, NULL))
-          return false;
-      }
-      double milliseconds = 1000.0 / drawing->benchmark_redraw;
-      double frame_cpu_ms = (MonotonicSeconds() - benchmark_started) * milliseconds;
-      fprintf(stderr, "redraw_samples=%d snapshot_ms=%.3f map_ms=%.3f canvas_ms=%.3f "
-          "total_ms=%.3f frame_cpu_ms=%.3f\n",
-          drawing->benchmark_redraw, drawing->snapshot_seconds * milliseconds, drawing->map_seconds * milliseconds,
-          drawing->canvas_seconds * milliseconds,
-          (drawing->snapshot_seconds + drawing->map_seconds + drawing->canvas_seconds) * milliseconds, frame_cpu_ms);
-    }
+    double milliseconds = 1000.0 / drawing->benchmark_redraw;
+    double frame_cpu_ms = (MonotonicSeconds() - benchmark_started) * milliseconds;
+    fprintf(stderr, "redraw_samples=%d snapshot_ms=%.3f map_ms=%.3f canvas_ms=%.3f "
+        "total_ms=%.3f frame_cpu_ms=%.3f\n",
+        drawing->benchmark_redraw, drawing->snapshot_seconds * milliseconds, drawing->map_seconds * milliseconds,
+        drawing->canvas_seconds * milliseconds,
+        (drawing->snapshot_seconds + drawing->map_seconds + drawing->canvas_seconds) * milliseconds, frame_cpu_ms);
+  }
 
   return true;
+}
+
+typedef enum GraphicsLoadingResult {
+  GRAPHICS_LOADING_FAILED, GRAPHICS_LOADING_STOPPED, GRAPHICS_LOADING_READY
+} GraphicsLoadingResult;
+
+// Loading accepts only close/expose events; ordinary input begins after every preparation worker joins.
+// Guard exits preserve the host loop's stop result. CloseApplication cancels/joins retained work on every exit.
+static GraphicsLoadingResult RunGraphicsLoading(Game *game, CanvasSDL *display) {
+  Drawing *drawing = game->drawing;
+  // Drawing installs the batch scale before launching workers; desired sizes stay local until then.
+  MapSpriteRequirements loading_requirements = DrawingMapSpriteRequirements(drawing);
+  MapSpriteProgress loading_progress = {.total = 1};
+  bool sources_ready = false, preparing = false;
+  double next_frame_time = MonotonicSeconds();
+  while (!game->close_requested && !game->execution_failed) {
+    PollGameSettings(game, MonotonicSeconds());
+    CanvasSDLEvent event;
+    bool resized = false;
+    int wait_ms = IntMax(0, (int)((next_frame_time - MonotonicSeconds()) * 1000));
+    for (int count = 0; count < 64 && Sc2kSDLEvent(display, &event, count ? 0 : wait_ms); ++count) {
+      if (event.kind == CANVAS_SDL_CLOSE) { game->close_requested = true; return GRAPHICS_LOADING_STOPPED; }
+      if (event.kind == CANVAS_SDL_EXPOSE) resized = true;
+    }
+    if (resized) {
+      SyncCityInterface(game, display, 1);
+      MapSpriteRequirements requirements = DrawingMapSpriteRequirements(drawing);
+      if (requirements.count != loading_requirements.count ||
+          memcmp(requirements.scales, loading_requirements.scales, requirements.count * sizeof(int)) ||
+          requirements.preview_width != loading_requirements.preview_width ||
+          requirements.preview_height != loading_requirements.preview_height) {
+        FreeMapSpriteScales(&drawing->sprite_cache);
+        loading_requirements = requirements;
+        loading_progress.completed = 0;
+        preparing = false;
+      }
+    }
+    if (game->execution_failed) return GRAPHICS_LOADING_FAILED;
+    if (preparing) {
+      loading_progress = MapSpritePreparationProgress(&drawing->sprite_cache);
+      if (loading_progress.completed < 0) {
+        fprintf(stderr, "Sprite preparation failed\n");
+        return GRAPHICS_LOADING_FAILED;
+      }
+    }
+    CityIntroStage stage = sources_ready ? CITY_INTRO_PREPARING_SPRITES : CITY_INTRO_PREPARING_GRAPHICS;
+    if (!DrawCityLoadingScreen(game, display, stage, loading_progress.completed, loading_progress.total, false))
+      return GRAPHICS_LOADING_FAILED;
+    int refresh = drawing->options.refresh_rate;
+    double frame_interval = 1.0 / (refresh > 0 ? refresh : 60);
+    next_frame_time = MonotonicSeconds() + frame_interval;
+    if (!sources_ready) {
+      if (!PrepareCityMapSpriteSources(game)) return GRAPHICS_LOADING_FAILED;
+      sources_ready = true;
+      continue;
+    }
+    if (!preparing) {
+      if (!StartMapSpritePreparation(drawing, loading_requirements)) {
+        fprintf(stderr, "Cannot start sprite preparation workers: %s\n", Sc2kSDLError());
+        return GRAPHICS_LOADING_FAILED;
+      }
+      preparing = true;
+      continue;
+    }
+    if (loading_progress.completed < loading_progress.total) continue;
+    if (!FinishMapSpritePreparation(&drawing->sprite_cache, false)) return GRAPHICS_LOADING_FAILED;
+    return GRAPHICS_LOADING_READY;
+  }
+  return GRAPHICS_LOADING_STOPPED;
 }
 
 static bool RunLiveApplication(Game *game, CanvasSDL *display, const ApplicationOptions *options) {
@@ -298,250 +372,185 @@ static bool RunLiveApplication(Game *game, CanvasSDL *display, const Application
   bool show_startup_menu = !hooks && !options->startup.headless && !options->city_path_supplied &&
       !script_path && !live_script_path;
 
-    SetCityMapNavigationPresentation(game, true, true);
-    ui->command_display = display;
-    ui->display = display;
-    drawing->vehicles.enabled = true;
-    ConfigureCityDiagnostics(game);
-    if (drawing->options.fullscreen && Sc2kSDLFullscreen(display, 1))
-      fprintf(stderr, "Fullscreen: %s\n", Sc2kSDLError());
-    SyncCityInterface(game, display, 1);
-    // Drawing installs the batch scale before launching workers; desired scales stay local until then.
-    int loading_scales[2], loading_count = CityMapSpriteScales(drawing, loading_scales);
-    int loading_completed = 0, loading_total = 1;
-    int loading_preview_width = (CITY_BUILDING_PREVIEW_WIDTH * drawing->options.scale + 99) / 100;
-    int loading_preview_height = (CITY_BUILDING_PREVIEW_HEIGHT * drawing->options.scale + 99) / 100;
-    bool loading = true, sources_ready = false, preparing = false;
-    double next_frame_time = MonotonicSeconds();
-    while (!game->close_requested && !game->execution_failed &&
-        (loading || !close_after || MonotonicSeconds() - game->host_start_time < close_after)) {
-      PollGameSettings(game, MonotonicSeconds());
-      CanvasSDLEvent event;
-      if (loading) {
-        bool resized = false;
-        int wait_ms = IntMax(0, (int)((next_frame_time - MonotonicSeconds()) * 1000));
-        for (int count = 0; count < 64 && Sc2kSDLEvent(display, &event, count ? 0 : wait_ms); ++count) {
-          if (event.kind == CANVAS_SDL_CLOSE) { game->close_requested = true; return true; }
-          if (event.kind == CANVAS_SDL_EXPOSE) resized = true;
-        }
-        if (resized) {
-          SyncCityInterface(game, display, 1);
-          int scales[2], count = CityMapSpriteScales(drawing, scales);
-          int preview_width = (CITY_BUILDING_PREVIEW_WIDTH * drawing->options.scale + 99) / 100;
-          int preview_height = (CITY_BUILDING_PREVIEW_HEIGHT * drawing->options.scale + 99) / 100;
-          if (count != loading_count || memcmp(scales, loading_scales, count * sizeof(int)) ||
-              preview_width != loading_preview_width || preview_height != loading_preview_height) {
-            FinishMapSpritePreparation(&drawing->sprite_cache, true);
-            FreeMapSpriteScales(&drawing->sprite_cache);
-            memcpy(loading_scales, scales, count * sizeof(int));
-            loading_count = count;
-            loading_preview_width = preview_width;
-            loading_preview_height = preview_height;
-            loading_completed = 0;
-            preparing = false;
-          }
-        }
-        if (game->execution_failed) return false;
-        if (preparing) {
-          loading_completed = MapSpritePreparationProgress(&drawing->sprite_cache, &loading_total);
-          if (loading_completed < 0) { fprintf(stderr, "Sprite preparation failed\n"); return false; }
-        }
-        CityIntroStage stage = sources_ready ? CITY_INTRO_PREPARING_SPRITES : CITY_INTRO_PREPARING_GRAPHICS;
-        if (!DrawCityLoadingScreen(game, display, stage, loading_completed, loading_total, false)) return false;
-        int refresh = drawing->options.refresh_rate;
-        double frame_interval = 1.0 / (refresh > 0 ? refresh : 60);
-        next_frame_time = MonotonicSeconds() + frame_interval;
-        if (!sources_ready) {
-          if (!PrepareCityMapSpriteSources(game)) return false;
-          sources_ready = true;
-          continue;
-        }
-        if (!preparing) {
-          if (!StartMapSpritePreparation(&drawing->sprite_cache, loading_scales, loading_count,
-              loading_preview_width, loading_preview_height, drawing->colors)) {
-            fprintf(stderr, "Cannot start sprite preparation workers: %s\n", Sc2kSDLError());
-            return false;
-          }
-          preparing = true;
-          continue;
-        }
-        if (loading_completed < loading_total) continue;
-        if (!FinishMapSpritePreparation(&drawing->sprite_cache, false)) return false;
-        preparing = false;
-        SyncCityInterface(game, display, 1);
-        if (script_path != NULL && !RunInputScript(game, script_path, city_path)) return false;
-        for (int index = 0; index < frames && !game->execution_failed && !game->close_requested; ++index) {
-          i64 advanced = hooks && hooks->advance_phase ? hooks->advance_phase(game, context) :
-              AdvanceCitySimulationPhaseWithOptions(game->city, 0);
-          DeliverCitySimulationEvents(game, 0, advanced, false);
-        }
-        if (game->execution_failed || game->close_requested) return false;
-        game->host_start_time = MonotonicSeconds();
-        game->activation_context = display;
-        game->poll_activation = PollGameCanvasActivation;
-        StartGameCadence(game, game->host_start_time);
-        game->close_deadline = close_after ? game->host_start_time + close_after : 0;
-        if (!hooks) {
-          ui->terrain_setup_enabled = true;
-          ui->terrain_settings = (CityTerrainSettings){.seed = (u32)(u64)(MonotonicSeconds() * 1000000),
-              .features = kRiver, .hills = 12, .water = 5, .trees = 15, .width = 128, .height = 128,
-              .smoothness = CITY_TERRAIN_SMOOTH, .variety = CITY_TERRAIN_VARIETY_LOW,
-              .small_rivers = CITY_TERRAIN_SMALL_RIVERS_MEDIUM,
-              .climate = CITY_TERRAIN_NORMAL, .snow_coverage = 40, .desert_coverage = 50};
-          CopyText(ui->terrain_mayor, sizeof(ui->terrain_mayor), "Mayor");
-          if (show_startup_menu) {
-            game->idle_state = CITY_IDLE_STARTUP_MENU;
-            game->idle_entry = 1;
-            if (!OpenCityStartupMenu(city)) return false;
-          }
-        }
-        if (audio->jukebox.playing) NativeAudioPlay(audio);
-        if (!RedrawCityCanvas(city, display))
-          return false;
-        if (open_newspaper >= 0) {
-          Sc2kSDLTitle(display, "SimCity newspaper lifetime diagnostic");
-          OpenCityManualNewspaper(city, open_newspaper);
-        }
-        loading = false;
-        next_frame_time = MonotonicSeconds();
-        continue;
-      }
-      i32 dirty = 0;
-      int wait_ms = 16;
-      // A cost label uses presentation time, including while the city is paused.
-      if (drawing->cost_texts_active)
-        wait_ms = IntMin(wait_ms,
-            IntMax(0, (int)((drawing->cost_text_time + 1.0 / 60 - MonotonicSeconds()) * 1000)));
-      if (city->settings.speed == CITY_SPEED_PAUSED && game->idle_state == (u32)CITY_IDLE_PLAY &&
-          !ui->music_press.active && !ui->viewport_pressed_window && !ui->signs.pressed_window &&
-          !ui->desktop.menu.pressed && !ui->button_feedback.repeating &&
-          !drawing->cost_texts_active &&
-          !ui->pointer_stroke_count &&
-          !audio->jukebox.playing && !audio->music_notify && !audio->sound_playing && !audio->cached_sound_playing) {
-        // SDL wakes immediately for input; a quiet paused city needs only its next cadence.
-        wait_ms = IntClamp((int)((game->next_cadence_time - MonotonicSeconds()) * 1000) + 1,
-            0, CITY_CADENCE_INTERVAL_MS);
-      }
-      if (ui->startup_newspaper_open_at > 0)
-        wait_ms = IntMin(wait_ms, IntMax(0, (int)((ui->startup_newspaper_open_at - MonotonicSeconds()) * 1000) + 1));
-      bool batch_frame = city->game->spread_simulation && city->map_cell_count > CITY_MAP_CELL_COUNT;
-      if (batch_frame && city->settings.speed != CITY_SPEED_PAUSED && city->cadence_counter.tick_due)
-        wait_ms = IntMin(wait_ms, IntMax(0, (int)((next_frame_time - MonotonicSeconds()) * 1000)));
-      CityTooltip *tooltip = &ui->desktop.tooltip;
-      if (tooltip->pointer_valid && tooltip->text[0] && !tooltip->visible)
-        wait_ms = IntMin(wait_ms, IntMax(0, (int)((tooltip->show_at - MonotonicSeconds()) * 1000) + 1));
-      if (game->animation_token && game->animation_delay.active) {
-        u32 now = (u32)(u64)(ReadGameTime(game, GAME_TIME_REALTIME) * 1000);
-        i32 remaining = (i32)(game->animation_delay.deadline - now);
-        wait_ms = IntMin(wait_ms, IntMax(0, remaining));
-      }
-      if (game->delay_blocked) WaitForCityCanvasFrame(wait_ms);
-      double frame_started = 0;
-      for (i32 count = 0; count < 64 && !game->delay_blocked && !game->close_requested && !game->execution_failed &&
-          Sc2kSDLEvent(display, &event, count ? 0 : wait_ms); ++count) {
-        if (!count) {
-          frame_started = MonotonicSeconds();
-          SampleGameTime(game, frame_started);
-        }
-        // Redraw hover only when it crosses a cell or changes its footprint.
-        // Key releases need no frame unless their modifiers change the preview.
-        // Other release effects publish their own UI damage during dispatch.
-        bool release_changes_preview = event.kind == CANVAS_SDL_KEY_UP &&
-            (ui->placement_hover_shift != event.shift || ui->placement_hover_ctrl != (event.ctrl & 1));
-        if (event.kind != CANVAS_SDL_NONE &&
-            (event.kind != CANVAS_SDL_KEY_UP || release_changes_preview) &&
-            (event.kind != CANVAS_SDL_POINTER_MOVE || ui->desktop.dragging != CITY_CANVAS_DRAG_NONE ||
-                ui->pointer_stroke_count || ui->jukebox_slider || ui->options_slider || ui->pan_button))
-          dirty = 1;
-        DispatchCityCanvasEvent(city, &event);
-        if (live_script_path != NULL && event.kind == CANVAS_SDL_FOCUS_GAINED) {
-          if (!RunInputScript(game, live_script_path, city_path))
-            return false;
-          live_script_path = NULL;
-        }
-        dirty |= ui->placement_dirty || (ui->desktop.dirty.count != 0 || ui->desktop.window_damage.count != 0);
-      }
-      if (game->close_requested || game->execution_failed)
-        break;
-      if (!game->delay_blocked) {
-        CompleteCityAbandon(game);
-        CompleteCityWindowCallbacks(city);
-        CompleteCityScenarioSelection(city);
-        CompleteCityCreationWindow(city);
-        CompleteCityFileDialogs(city);
-      }
-      if (!frame_started) frame_started = MonotonicSeconds();
-      batch_frame = city->game->spread_simulation && city->map_cell_count > CITY_MAP_CELL_COUNT;
-      SampleGameTime(game, MonotonicSeconds());
-      bool poll_timers = !game->animation_delay.active || game->animation_delay.poll_timers;
-      i32 timer_ready = poll_timers && !ui->pointer_stroke_count && PollGameCadence(game, MonotonicSeconds());
-      if (timer_ready) {
-        if (game->delay_blocked)
-          UpdateCityCadence(city);
-        else {
-          UpdateCityCadence(game->city);
-          ApplicationBudgetPoll(city);
-        }
-      }
-      // Consume queued cadence work; the fastest speed retains tick_due for the next idle pass.
-      i32 idle_pending = game->idle_state != (u32)CITY_IDLE_PLAY ||
-          drawing->palette.fast_due == 1 || drawing->palette.slow_due == 1 ||
-          (city->settings.speed != CITY_SPEED_PAUSED && city->cadence_counter.tick_due != 0);
-      bool run_idle = !game->delay_blocked && !ui->pointer_stroke_count &&
-          (!ui->dialog_pause_requested || ui->dialog_pause_active) && (timer_ready || idle_pending);
-      if (run_idle && !batch_frame) {
-        RunGameIdle(game, (CityIdleInputs){true, true, true});
-        // A paused cadence still delivers commands, but unchanged pixels stay retained.
-        dirty |= game->idle_state != (u32)CITY_IDLE_PLAY;
-      }
-      if (Sc2kCanvasJukeboxTick(ui, (u32)(u64)(MonotonicSeconds() * 1000))) {
-        DirtyCityMusicWindows(game);
-        dirty = 1;
-      }
-      if (!game->delay_blocked) {
-        dirty |= PollCityToolbar(game, (u32)(u64)(MonotonicSeconds() * 1000));
-        dirty |= PollCityMapViewControls(city);
-        dirty |= PollCitySigns(city);
-      }
-      dirty |= PollCityMusic(game);
-      if (!game->delay_blocked && NativeAudioSoundFinished(audio)) {
-        CompleteCitySoundPlayback(game);
-        dirty = 1;
-      }
-      SampleGameTime(game, MonotonicSeconds());
-      double ui_time = ReadGameTime(game, GAME_TIME_REALTIME);
-      double world_time = ReadGameTime(game, GAME_TIME_UNPAUSED);
-      if (ui->startup_newspaper_open_at > 0 && ui_time >= ui->startup_newspaper_open_at &&
-          !game->delay_blocked && !ui->dialog_pause_requested && !game->close_requested && !game->execution_failed) {
-        int edition = ui->startup_newspaper_edition;
-        ui->startup_newspaper_open_at = 0;
-        OpenCityManualNewspaper(city, edition);
-        dirty = 1;
-      }
-      dirty |= StepCityAnimation(game);
-      bool palette_dirty = AnimateCityCanvasPalette(game, world_time);
-      dirty |= PrepareCityCanvasDamage(city);
-      dirty |= UpdateCityWindowTimers(game, ui_time);
-      dirty |= UpdateCityVehicleAnimation(city, world_time);
-      dirty |= UpdateCityRoadTraffic(city, (u32)(u64)(world_time * 256));
-      dirty |= UpdateCityPowerAnimation(drawing, city->settings.speed, world_time);
-      dirty |= UpdateCityCostTexts(drawing, ui_time);
-      dirty |= UpdateCityDemolitionEffects(drawing, ui_time);
-      dirty |= UpdateCityScreenShake(drawing, world_time);
-      if (dirty && !PrepareCityCanvas(city, display)) game->execution_failed = 1;
-      // Measure CPU preparation separately: SDL presentation may wait for vsync.
-      double frame_work = MonotonicSeconds() - frame_started;
-      if ((dirty || palette_dirty) && !game->execution_failed) {
-        if (PresentCityDesktop(city, display) != 0) game->execution_failed = 1;
-        else if (ui->startup_newspaper_open_at < 0) ui->startup_newspaper_open_at = MonotonicSeconds() + 0.5;
-      }
-      int refresh = drawing->options.refresh_rate;
-      double frame_interval = 1.0 / (refresh > 0 ? refresh : 60);
-      double remaining = frame_interval - frame_work;
-      next_frame_time = MonotonicSeconds() + (remaining > 0 ? remaining : 0);
-      if (batch_frame && run_idle && !game->execution_failed && !game->close_requested)
-        RunCitySimulationFrame(game, next_frame_time);
+  SetCityMapNavigationPresentation(game, true, true);
+  ui->command_display = display;
+  ui->display = display;
+  drawing->vehicles.enabled = true;
+  ConfigureCityDiagnostics(game);
+  if (drawing->options.fullscreen && Sc2kSDLFullscreen(display, 1))
+    fprintf(stderr, "Fullscreen: %s\n", Sc2kSDLError());
+  SyncCityInterface(game, display, 1);
+  GraphicsLoadingResult graphics = RunGraphicsLoading(game, display);
+  if (graphics != GRAPHICS_LOADING_READY) return graphics == GRAPHICS_LOADING_STOPPED;
+
+  SyncCityInterface(game, display, 1);
+  if (script_path != NULL && !RunInputScript(game, script_path, city_path)) return false;
+  for (int index = 0; index < frames && !game->execution_failed && !game->close_requested; ++index) {
+    i64 advanced = hooks && hooks->advance_phase ? hooks->advance_phase(game, context) :
+        AdvanceCitySimulationPhaseWithOptions(game->city, 0);
+    DeliverCitySimulationEvents(game, 0, advanced, false);
+  }
+  if (game->execution_failed || game->close_requested) return false;
+  game->host_start_time = MonotonicSeconds();
+  game->activation_context = display;
+  game->poll_activation = PollGameCanvasActivation;
+  StartGameCadence(game, game->host_start_time);
+  game->close_deadline = close_after ? game->host_start_time + close_after : 0;
+  if (!hooks) {
+    ui->terrain_setup_enabled = true;
+    ui->terrain_settings = (CityTerrainSettings){.seed = (u32)(u64)(MonotonicSeconds() * 1000000),
+        .features = kRiver, .hills = 12, .water = 5, .trees = 15, .width = 128, .height = 128,
+        .smoothness = CITY_TERRAIN_SMOOTH, .variety = CITY_TERRAIN_VARIETY_LOW,
+        .small_rivers = CITY_TERRAIN_SMALL_RIVERS_MEDIUM,
+        .climate = CITY_TERRAIN_NORMAL, .snow_coverage = 40, .desert_coverage = 50};
+    CopyText(ui->terrain_mayor, sizeof(ui->terrain_mayor), "Mayor");
+    if (show_startup_menu) {
+      game->idle_state = CITY_IDLE_STARTUP_MENU;
+      game->idle_entry = 1;
+      if (!OpenCityStartupMenu(city)) return false;
     }
+  }
+  if (audio->jukebox.playing) NativeAudioPlay(audio);
+  if (!RedrawCityCanvas(city, display))
+    return false;
+  if (open_newspaper >= 0) {
+    Sc2kSDLTitle(display, "SimCity newspaper lifetime diagnostic");
+    OpenCityManualNewspaper(city, open_newspaper);
+  }
+  double next_frame_time = MonotonicSeconds();
+  while (!game->close_requested && !game->execution_failed &&
+      (!close_after || MonotonicSeconds() - game->host_start_time < close_after)) {
+    PollGameSettings(game, MonotonicSeconds());
+    CanvasSDLEvent event;
+    i32 dirty = 0;
+    int wait_ms = 16;
+    // A cost label uses presentation time, including while the city is paused.
+    if (drawing->cost_texts_active)
+      wait_ms = IntMin(wait_ms,
+          IntMax(0, (int)((drawing->cost_text_time + 1.0 / 60 - MonotonicSeconds()) * 1000)));
+    if (city->settings.speed == CITY_SPEED_PAUSED && game->idle_state == (u32)CITY_IDLE_PLAY &&
+        !ui->music_press.active && !ui->viewport_pressed_window && !ui->signs.pressed_window &&
+        !ui->desktop.menu.pressed && !ui->button_feedback.repeating &&
+        !drawing->cost_texts_active &&
+        !ui->pointer_stroke_count &&
+        !audio->jukebox.playing && !audio->music_notify && !audio->sound_playing && !audio->cached_sound_playing) {
+      // SDL wakes immediately for input; a quiet paused city needs only its next cadence.
+      wait_ms = IntClamp((int)((game->next_cadence_time - MonotonicSeconds()) * 1000) + 1,
+          0, CITY_CADENCE_INTERVAL_MS);
+    }
+    wait_ms = LimitCityStartupNewspaperWait(ui, wait_ms);
+    bool batch_frame = city->game->spread_simulation && city->map_cell_count > CITY_MAP_CELL_COUNT;
+    if (batch_frame && city->settings.speed != CITY_SPEED_PAUSED && city->cadence_counter.tick_due)
+      wait_ms = IntMin(wait_ms, IntMax(0, (int)((next_frame_time - MonotonicSeconds()) * 1000)));
+    CityTooltip *tooltip = &ui->desktop.tooltip;
+    if (tooltip->pointer_valid && tooltip->text[0] && !tooltip->visible)
+      wait_ms = IntMin(wait_ms, IntMax(0, (int)((tooltip->show_at - MonotonicSeconds()) * 1000) + 1));
+    if (game->animation_token && game->animation_delay.active) {
+      u32 now = (u32)(u64)(ReadGameTime(game, GAME_TIME_REALTIME) * 1000);
+      i32 remaining = (i32)(game->animation_delay.deadline - now);
+      wait_ms = IntMin(wait_ms, IntMax(0, remaining));
+    }
+    if (game->delay_blocked) WaitForCityCanvasFrame(wait_ms);
+    double frame_started = 0;
+    for (i32 count = 0; count < 64 && !game->delay_blocked && !game->close_requested && !game->execution_failed &&
+        Sc2kSDLEvent(display, &event, count ? 0 : wait_ms); ++count) {
+      if (!count) {
+        frame_started = MonotonicSeconds();
+        SampleGameTime(game, frame_started);
+      }
+      // Redraw hover only when it crosses a cell or changes its footprint.
+      // Key releases need no frame unless their modifiers change the preview.
+      // Other release effects publish their own UI damage during dispatch.
+      bool release_changes_preview = event.kind == CANVAS_SDL_KEY_UP &&
+          (ui->placement_hover_shift != event.shift || ui->placement_hover_ctrl != (event.ctrl & 1));
+      if (event.kind != CANVAS_SDL_NONE &&
+          (event.kind != CANVAS_SDL_KEY_UP || release_changes_preview) &&
+          (event.kind != CANVAS_SDL_POINTER_MOVE || ui->desktop.dragging != CITY_CANVAS_DRAG_NONE ||
+              ui->pointer_stroke_count || ui->jukebox_slider || ui->options_slider || ui->pan_button))
+        dirty = 1;
+      DispatchCityCanvasEvent(city, &event);
+      if (live_script_path != NULL && event.kind == CANVAS_SDL_FOCUS_GAINED) {
+        if (!RunInputScript(game, live_script_path, city_path))
+          return false;
+        live_script_path = NULL;
+      }
+      dirty |= ui->placement_dirty || (ui->desktop.dirty.count != 0 || ui->desktop.window_damage.count != 0);
+    }
+    if (game->close_requested || game->execution_failed)
+      break;
+    if (!game->delay_blocked) {
+      CompleteCityAbandon(game);
+      CompleteCityWindowCallbacks(city);
+      CompleteCityScenarioSelection(city);
+      CompleteCityCreationWindow(city);
+      CompleteCityFileDialogs(city);
+    }
+    if (!frame_started) frame_started = MonotonicSeconds();
+    batch_frame = city->game->spread_simulation && city->map_cell_count > CITY_MAP_CELL_COUNT;
+    SampleGameTime(game, MonotonicSeconds());
+    bool poll_timers = !game->animation_delay.active || game->animation_delay.poll_timers;
+    i32 timer_ready = poll_timers && !ui->pointer_stroke_count && PollGameCadence(game, MonotonicSeconds());
+    if (timer_ready) {
+      if (game->delay_blocked)
+        UpdateCityCadence(city);
+      else {
+        UpdateCityCadence(game->city);
+        ApplicationBudgetPoll(city);
+      }
+    }
+    // Consume queued cadence work; the fastest speed retains tick_due for the next idle pass.
+    i32 idle_pending = game->idle_state != (u32)CITY_IDLE_PLAY ||
+        drawing->palette.fast_due == 1 || drawing->palette.slow_due == 1 ||
+        (city->settings.speed != CITY_SPEED_PAUSED && city->cadence_counter.tick_due != 0);
+    bool run_idle = !game->delay_blocked && !ui->pointer_stroke_count &&
+        (!ui->dialog_pause_requested || ui->dialog_pause_active) && (timer_ready || idle_pending);
+    if (run_idle && !batch_frame) {
+      RunGameIdle(game, (GameIdleInputs){true, true, true});
+      // A paused cadence still delivers commands, but unchanged pixels stay retained.
+      dirty |= game->idle_state != (u32)CITY_IDLE_PLAY;
+    }
+    if (Sc2kCanvasJukeboxTick(ui, (u32)(u64)(MonotonicSeconds() * 1000))) {
+      DirtyCityMusicWindows(game);
+      dirty = 1;
+    }
+    if (!game->delay_blocked) {
+      dirty |= PollCityToolbar(game, (u32)(u64)(MonotonicSeconds() * 1000));
+      dirty |= PollCityMapViewControls(city);
+      dirty |= PollCitySigns(city);
+    }
+    dirty |= PollCityMusic(game);
+    if (!game->delay_blocked && NativeAudioSoundFinished(audio)) {
+      CompleteCitySoundPlayback(game);
+      dirty = 1;
+    }
+    SampleGameTime(game, MonotonicSeconds());
+    double ui_time = ReadGameTime(game, GAME_TIME_REALTIME);
+    double world_time = ReadGameTime(game, GAME_TIME_UNPAUSED);
+    if (PollCityStartupNewspaper(city, ui_time)) dirty = 1;
+    dirty |= StepCityAnimation(game);
+    bool palette_dirty = AnimateCityCanvasPalette(game, world_time);
+    dirty |= PrepareCityCanvasDamage(city);
+    dirty |= UpdateCityWindowTimers(game, ui_time);
+    dirty |= UpdateCityVehicleAnimation(city, world_time);
+    dirty |= UpdateCityRoadTraffic(city, (u32)(u64)(world_time * 256));
+    dirty |= UpdateCityPowerAnimation(drawing, city->settings.speed, world_time);
+    dirty |= UpdateCityCostTexts(drawing, ui_time);
+    dirty |= UpdateCityDemolitionEffects(drawing, ui_time);
+    dirty |= UpdateCityScreenShake(drawing, world_time);
+    if (dirty && !PrepareCityCanvas(city, display)) game->execution_failed = 1;
+    // Measure CPU preparation separately: SDL presentation may wait for vsync.
+    double frame_work = MonotonicSeconds() - frame_started;
+    if ((dirty || palette_dirty) && !game->execution_failed) {
+      if (PresentCityDesktop(city, display) != 0) game->execution_failed = 1;
+      else ArmCityStartupNewspaper(ui);
+    }
+    int refresh = drawing->options.refresh_rate;
+    double frame_interval = 1.0 / (refresh > 0 ? refresh : 60);
+    double remaining = frame_interval - frame_work;
+    next_frame_time = MonotonicSeconds() + (remaining > 0 ? remaining : 0);
+    if (batch_frame && run_idle && !game->execution_failed && !game->close_requested)
+      RunCitySimulationFrame(game, next_frame_time);
+  }
 
   return true;
 }
@@ -566,7 +575,7 @@ static int CloseApplication(GameStorage *storage, CanvasSDL *display,
   ReleaseCityTickContinuations(city);
   ReleaseCityPostedCommands(game);
   ReleaseCityInterfacePresentation(game);
-  if (audio->live_open) NativeAudioClose(audio);
+  NativeAudioClose(audio);
   if (hooks && hooks->close_streams && !hooks->close_streams(context)) result = 1;
   if (display != NULL)
     Sc2kSDLClose(display);
@@ -601,6 +610,7 @@ int RunGameApplication(int argc, char **argv, const GameApplicationHooks *hooks,
       .audio = &storage->audio, .resources = &storage->assets, .idle_inputs = {true, true, false},
       .default_city_fixes = CITY_FIX_DEFAULT_MASK, .repair_save_headers = true};
   city->game = game;
+  city->drawing = game->drawing;
   city->fixes = game->default_city_fixes;
   Drawing *drawing = game->drawing;
   CityInterfaceState *ui = game->ui;
@@ -613,7 +623,7 @@ int RunGameApplication(int argc, char **argv, const GameApplicationHooks *hooks,
   ui->newspaper_timer_seconds = 60.0;
   ui->diagnostic_nested_newspaper = -1;
   audio->sound_tile = INVALID_TILE;
-  InitializeDrawing(drawing);
+  InitializeGameDrawing(game);
   game->present_map = ApplicationPresentMap;
   drawing->tile_damage_enabled = true;
   const char *assets = options.assets, *city_path = options.startup.city_path, *image_path = options.image_path;
@@ -669,7 +679,7 @@ int RunGameApplication(int argc, char **argv, const GameApplicationHooks *hooks,
   drawing->demolition_enabled = true;
   InitializeNativeCityPalette(drawing);
   InitializeCityNewspaperLayouts(drawing);
-  Sc2kSetCityMapClientRect(drawing, (CityRect){0, 0, kDefaultCityCanvasWidth, kDefaultCityCanvasHeight});
+  SetDrawingMapClientRect(drawing, (CityRect){0, 0, kDefaultCityCanvasWidth, kDefaultCityCanvasHeight});
   drawing->default_map_view->view_rect = (CityRect){0, 0, kDefaultCityCanvasWidth, kDefaultCityCanvasHeight};
   InitializeCityMapView(game, MapTileXY(city, city->geography.center_x, city->geography.center_y), 1);
   SetCityStatusPresentation(&ui->status, &ui->desktop, kDefaultCityCanvasWidth);
@@ -680,7 +690,7 @@ int RunGameApplication(int argc, char **argv, const GameApplicationHooks *hooks,
   ExecuteRecordedCityCommand(game, CITY_COMMAND_SET_SIMULATION_SPEED, 1, 0, 0);
   InitializeCityDisplayPalette(drawing, drawing->colors);
   if (!PrepareCityMapSpriteSources(game)) goto done;
-  LoadCityCursorToolIcons(game, drawing->colors);
+  PrepareCityToolCursors(game, drawing->colors);
   Sc2kCanvasDesktopInit(&ui->desktop);
   ui->desktop.interface = ui;
   ui->desktop.game = game;

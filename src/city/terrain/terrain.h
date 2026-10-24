@@ -12,10 +12,8 @@ enum {
   CITY_TERRAIN_DEFAULT_TREES = 15
 };
 
-// OpenSC2K's original map size is the reference spacing for feature density.
-
-enum { kTerrainEdge = 128, kTerrainLast = kTerrainEdge - 1,
-    kTerrainCells = kTerrainEdge * kTerrainEdge, kTerrainFeatureCount = 18 };
+// The terrain controls also use this boundary when encoding feature choices.
+enum { kTerrainFeatureCount = 18 };
 enum {
   kOcean = 1 << 0, kRiver = 1 << 1, kMeander = 1 << 2, kDelta = 1 << 3,
   kCrossing = 1 << 4, kBranch = 1 << 5, kRejoin = 1 << 6, kPlateau = 1 << 7,
@@ -75,6 +73,8 @@ typedef struct CityTerrainMap {
 } CityTerrainMap;
 bool PrepareCityTerrainMap(CityTerrainMap *map, int width, int height);
 void FinishCityTerrainMap(CityTerrainMap *map, const CityTerrainSettings *settings);
+// Prepare preview backing, copy/downsample live terrain and finish derived metadata. City is read-only.
+// False means preview backing could not be prepared.
 bool ReadCityTerrainPreview(const City *city, CityTerrainMap *map, const CityTerrainSettings *settings);
 void ReleaseCityTerrainMap(CityTerrainMap *map);
 u32 DisabledCityTerrainFeatures(u32 features);
@@ -85,8 +85,6 @@ int CityTerrainTileClimate(const CityTerrainMap *map, TileIndex tile);
 int TerrainSnowLineAt(const CitySnowClimate *snow, CityPoint position);
 int TerrainSnowNoiseSize(int width, int height);
 void InitializeTerrainSnowNoise(CitySnowClimate *snow, int width, int height);
-int TerrainClimateValue(const CitySnowClimate *snow, CityPoint position, bool moisture);
-int TerrainGrassPaletteAt(const CitySnowClimate *snow, CityPoint position);
 int TerrainBaseClimate(int climate);
 bool TerrainClimateSupportsSnow(int climate);
 int TerrainSnowClimate(int grass, int height_above_line);

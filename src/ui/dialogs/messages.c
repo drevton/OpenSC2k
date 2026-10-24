@@ -11,15 +11,12 @@
 #include "ui/dialogs/alerts.h"
 #include "city/presentation.h"
 #include "city/state.h"
-#include "city/saveload/services.h"
-#include "city/saveload/state.h"
 #include "base/text.h"
 #include "drawing/bitmaps.h"
 #include "drawing/maps/placement.h"
 #include "drawing/fonts/fonts.h"
 #include "drawing/raster/canvas_primitives.h"
 #include "drawing/state.h"
-#include "game/errors.h"
 #include "game/state.h"
 #include "ui/commands.h"
 #include "ui/dialogs/budget.h"
@@ -37,13 +34,29 @@ i32 Sc2kCanvasDesktopOpenNotice(CityCanvasDesktop *desktop, CityRect bounds,
       (Window){.kind = CITY_CANVAS_NOTICE, .bounds = bounds, .title = title, .message = message}, flags);
 }
 
+bool OpenCityNoticeWithCallback(City *city, const char *title, const char *text, u32 flags,
+    CityWindowCallback *callback, void *context) {
+  int slot = Sc2kCanvasDesktopOpenNotice(&city->game->ui->desktop, (CityRect){70, 65, 530, 395},
+      title, text, flags);
+  if (slot < 0) return false;
+  Window *window = &city->game->ui->desktop.windows[slot];
+  if (!AttachCityWindowCallback(window, callback, context)) {
+    Sc2kCanvasDesktopDismissWindow(&city->game->ui->desktop, window->window_id);
+    return false;
+  }
+  window->owned_message = DuplicateText(text);
+  window->message = window->owned_message;
+  ApplicationUpdateDialogPause(city);
+  return true;
+}
+
 i32 Sc2kCanvasDesktopOpenConfirm(CityCanvasDesktop *desktop, CityRect bounds,
     const char *title, const char *message, u32 flags) {
   return OpenCityMessageBox(desktop,
       (Window){.kind = CITY_CANVAS_CONFIRM, .bounds = bounds, .title = title, .message = message}, flags);
 }
 
-i32 Sc2kCanvasDesktopOpenAdvisor(CityCanvasDesktop *desktop, CityRect bounds,
+static i32 Sc2kCanvasDesktopOpenAdvisor(CityCanvasDesktop *desktop, CityRect bounds,
     const char *title, const char *message, const RunSprite *portrait, u32 flags) {
   return OpenCityMessageBox(desktop,
       (Window){.kind = CITY_CANVAS_ADVISOR, .bounds = bounds, .title = title, .message = message,
@@ -193,7 +206,7 @@ CityRect CityMessageBounds(const CityCanvasDesktop *desktop, const Window *windo
   return (CityRect){left, top, left + width, top + height};
 }
 
-CityRect CityCommandErrorBounds(Game *game, const char *summary, const char *detail) {
+static CityRect CityCommandErrorBounds(Game *game, const char *summary, const char *detail) {
   const CityCanvasDesktop *desktop = &game->ui->desktop;
   int width = IntMax(CityInterfaceTextWidth(desktop->interface_font, summary),
       CityInterfaceTextWidth(desktop->interface_font, detail)) + 24;
@@ -386,51 +399,4 @@ u32 OpenCityResourceAlert(City *city, int bitmap_id, int text_id) {
   u32 window_id = slot >= 0 ? city->game->ui->desktop.windows[slot].window_id : 0;
   ApplicationUpdateDialogPause(city);
   return window_id;
-}
-
-// Resolve a file error's resource text into a borrowed string or caller-provided fallback buffer. Truncated must
-// provide 256 bytes; the returned pointer must not outlive the resource owner or that buffer.
-static const char *ReadFileErrorText(u32 resource, char truncated[256]) {
-  const char *message = CityNoticeText(resource);
-  if (message == NULL)
-    return "";
-  if (strlen(message) <= 255)
-    return message; // Immutable literals outlive every dialog.
-  CopyText(truncated, 256, message);
-  return truncated;
-}
-
-// Native file errors use the host's description rather than stock MFC resource text. Requires attached presentation
-// owners; temporary formatted text is released by this function after the notice call returns.
-void ShowCityFileException(City *city, u32 resource, const CityFileExceptionState *exception, const char *path) {
-  char prefix_storage[256];
-  const char *prefix = ReadFileErrorText(resource, prefix_storage);
-  char *cause = exception && exception->os_error ? FormatCityErrorReason(strerror(exception->os_error)) : NULL;
-  const char *cause_text = cause ? cause : "";
-  const char *filename = path != NULL ? path : "";
-  size_t size = strlen(prefix) + strlen(filename) + strlen(cause_text) + 3;
-  char *message = malloc(size);
-  if (message == NULL) {
-    free(cause);
-    if (city->game->reconstruction_error == 0)
-      city->game->reconstruction_error = SC2K_ERROR_HOST_ALLOCATION_FAILURE;
-    return;
-  }
-  snprintf(message, size, "%s%s%s%s%s", prefix, *filename ? "\n" : "", filename,
-      *cause_text ? "\n" : "", cause_text);
-  ReportCityLoadError(city, resource, message);
-  free(cause);
-  free(message);
-}
-
-// Report a chunk-format error through the active file runtime and presentation boundary. File must belong to the
-// current operation; this records failure rather than repairing or reloading partial City data.
-void ReportCityChunkError(CityFileRuntime *file, u32 resource, int load_string) {
-  City *city = file->game->city;
-  if (!load_string) {
-    ShowCityFileException(city, resource, &file->error, NULL);
-  } else {
-    char text[256];
-    ReportCityLoadError(city, resource, ReadFileErrorText(resource, text));
-  }
 }

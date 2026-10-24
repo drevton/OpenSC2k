@@ -15,7 +15,7 @@
 
 // WinMM schedules the stream, while a worker refills two small buffers. Track cursors borrow Assets bytes;
 // no complete-song event array, temporary MIDI file, window callback or mutable global is needed.
-enum { kMidiTracks = 64, kMidiBufferWords = 256, kMidiPending = 0, kMidiFinished = 1, kMidiFailed = 8 };
+enum { kMidiTracks = 64, kMidiBufferWords = 256 };
 typedef struct {
   const u8 *at, *end;
   ByteSpan sysex;
@@ -177,17 +177,17 @@ static int RunWindowsMidi(void *context) {
         continue;
       }
       if (!FillMidiBuffer(midi, buffer)) {
-        SDL_AtomicSet(&midi->status, kMidiFailed);
+        SDL_AtomicSet(&midi->status, CITY_MUSIC_FAILED);
         return 0;
       }
       pending |= buffer->queued;
     }
     if (!pending) {
-      SDL_AtomicSet(&midi->status, kMidiFinished);
+      SDL_AtomicSet(&midi->status, CITY_MUSIC_FINISHED);
       return 0;
     }
     if (WaitForSingleObject(midi->wake, INFINITE) != WAIT_OBJECT_0) {
-      SDL_AtomicSet(&midi->status, kMidiFailed);
+      SDL_AtomicSet(&midi->status, CITY_MUSIC_FAILED);
       return 0;
     }
   }
@@ -230,7 +230,7 @@ bool StopWindowsMidi(WindowsMidi *midi) {
     }
     buffer->queued = false;
   }
-  SDL_AtomicSet(&midi->status, valid ? kMidiPending : kMidiFailed);
+  SDL_AtomicSet(&midi->status, valid ? CITY_MUSIC_PENDING : CITY_MUSIC_FAILED);
   return valid;
 }
 
@@ -348,7 +348,7 @@ bool PlayWindowsMidi(WindowsMidi *midi, ByteSpan song, double seconds, char *err
     if (!result) buffer->prepared = true;
     if (!result && !FillMidiBuffer(midi, buffer)) result = MMSYSERR_ERROR;
   }
-  SDL_AtomicSet(&midi->status, kMidiPending);
+  SDL_AtomicSet(&midi->status, CITY_MUSIC_PENDING);
   SDL_AtomicSet(&midi->stop, 0);
   if (!result) {
     midi->worker = SDL_CreateThread(RunWindowsMidi, "MIDI stream", midi);
@@ -378,6 +378,6 @@ bool ReadWindowsMidiPosition(WindowsMidi *midi, double *seconds) {
   return true;
 }
 
-int WindowsMidiCompletion(WindowsMidi *midi) {
-  return midi ? SDL_AtomicGet(&midi->status) : kMidiFailed;
+CityMusicCompletion WindowsMidiCompletion(WindowsMidi *midi) {
+  return midi ? SDL_AtomicGet(&midi->status) : CITY_MUSIC_FAILED;
 }

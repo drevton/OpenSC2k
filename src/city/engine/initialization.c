@@ -5,7 +5,7 @@
 
 #include "game/audio.h"
 #include "city/disasters/types.h"
-#include "city/economy/economy.h"
+#include "city/economy/history.h"
 #include "city/economy/facilities.h"
 #include "city/economy/tables.h"
 #include "city/economy/types.h"
@@ -31,7 +31,7 @@
 
 // Reset overlay, annual-facility, and city-event state for a new city. Requires allocated map/event storage; discards
 // old labels, facility instances and event records for a new City.
-void ResetNewCityOverlayAndEventState(City *city) {
+static void ResetNewCityOverlayAndEventState(City *city) {
   ResetCityMapAssociations(city);
   ResetCityFacilityState(city);
   ClearCityMapEvents(city);
@@ -320,7 +320,7 @@ void InitializeCitySetupState(City *city, int start_year, int economy_year, int 
   WriteHistorySample(city, CITY_HISTORY_GNP, 0, 3);
   WriteHistorySample(city, CITY_HISTORY_NATIONAL_POPULATION, 0, city->indicators.national_population);
   for (int index = 0; index < CITY_MILESTONE_COUNT; ++index) {
-    int due = Sc2kCrtRandRange(city, 20) + CityMilestoneDefaultYear(index);
+    int due = Sc2kCrtRandRange(city, 20) + kCityMilestoneBaseYears[index];
     city->economic_tables.milestone_years.due_year[index] = due < city->geography.start_year ? 0 : due;
   }
   RebuildCityUnlockState(city);

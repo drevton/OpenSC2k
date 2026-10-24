@@ -1,3 +1,5 @@
+#include "drawing/maps/map_view.h"
+#include "base/text.h"
 #include "assets/state.h"
 #include "game/audio.h"
 #include "audio/backend.h"
@@ -9,11 +11,9 @@
 #include "city/engine/city_types.h"
 #include "city/presentation.h"
 #include "drawing/bitmaps.h"
-#include "drawing/maps/map_render.h"
 #include "drawing/raster/screen_damage.h"
 #include "drawing/state.h"
 #include "game/commands.h"
-#include "game/graphics.h"
 #include "game/state.h"
 #include "ui/windows/window_internal.h"
 #include "ui/dialogs/budget.h"
@@ -32,6 +32,7 @@
 #include "ui/windows/controls.h"
 #include "ui/windows/state.h"
 #include "ui/windows/windows.h"
+#include "ui/text/text.h"
 
 // Application Options
 
@@ -179,7 +180,7 @@ static bool ApplyCitySettingValue(Game *game, const CitySetting *setting, int va
   }
   if (setting->command) {
     if (!RunCitySettingCommand(game, setting, value)) return false;
-  } else WriteCitySettingValue(game, setting, value, false);
+  } else WriteLocalSettingValue(game, setting, value);
   if (setting->effects & SETTING_SYNC_DISPLAY) SyncCityInterface(game, ui->display, 0);
   if (setting->effects & SETTING_REDRAW_INTERFACE) InvalidateCityInterface(game);
   if (setting->effects & SETTING_REDRAW_MAP) InvalidateCityMapViews(drawing);

@@ -7,6 +7,8 @@
 // Sign removal clears bit 0 explicitly. Other TileInfo bytes keep their shared/family meanings from tile_storage.h.
 
 #include "city/maps/labels.h"
+
+#include "city/events/events.h"
 #include "city/events/news.h"
 #include "city/economy/facilities.h"
 #include "audio/types.h"
@@ -23,16 +25,15 @@
 #include "game/audio.h"
 #include "city/state.h"
 #include "city/engine/commands.h"
-#include "city/economy/economy.h"
 #include "city/maps/layers.h"
 #include "city/maps/map.h"
-#include "city/saveload/file.h"
 #include "game/state.h"
-#include "assets/state.h"
 #include "game/observation.h"
 #include "base/text.h"
 
 // Sparse map associations. Bucket and record storage grows with placed objects, bounded by map area.
+// Hashing requires a nonzero power-of-two capacity, as allocated by the reservation functions.
+// Hash links terminate at zero. Sign links store the slot directly; facility links store slot + 1.
 static u32 AssociationBucket(TileIndex tile, int capacity) {
   u32 hash = tile ^ (tile >> 16);
   hash *= 0x7FEB352D;
@@ -69,17 +70,26 @@ bool ReserveCitySigns(City *city, int requested) {
   while (capacity < requested) capacity *= 2;
   CitySignRecord *records = calloc(capacity, sizeof(*records));
   u32 *buckets = calloc(capacity, sizeof(*buckets));
-  if (!records || !buckets) { free(records); free(buckets); return false; }
+  if (!records || !buckets) {
+    free(records);
+    free(buckets);
+    return false;
+  }
   for (int slot = 0; slot < capacity; ++slot) records[slot].tile = INVALID_TILE;
   if (signs->used) memcpy(records, signs->record, signs->used * sizeof(*records));
-  free(signs->record); free(signs->buckets);
-  signs->record = records; signs->buckets = buckets; signs->capacity = capacity;
+  // Publish only after all replacement storage is ready. The old sparse borrows end here.
+  free(signs->record);
+  free(signs->buckets);
+  signs->record = records;
+  signs->buckets = buckets;
+  signs->capacity = capacity;
   if (!signs->used) signs->used = 1;
   for (int slot = signs->used - 1; slot > 0; --slot) {
     CitySignRecord *record = &records[slot];
     if (record->tile == INVALID_TILE) continue;
     u32 *head = &buckets[AssociationBucket(record->tile, capacity)];
-    record->next = *head; *head = slot;
+    record->next = *head;
+    *head = slot;
   }
   return true;
 }
@@ -93,21 +103,32 @@ bool ReserveCityFacilities(City *city, int requested) {
   CityAnnualFacilityRecord *extra = calloc(capacity - CITY_FACILITY_RECORD_COUNT, sizeof(*extra));
   CityFacilityDetails *details = calloc(capacity, sizeof(*details));
   u32 *buckets = calloc(capacity, sizeof(*buckets));
-  if (!extra || !details || !buckets) { free(extra); free(details); free(buckets); return false; }
+  if (!extra || !details || !buckets) {
+    free(extra);
+    free(details);
+    free(buckets);
+    return false;
+  }
   for (int slot = 0; slot < capacity; ++slot) details[slot].tile = INVALID_TILE;
   if (facilities->capacity) {
     memcpy(details, facilities->details, facilities->capacity * sizeof(*details));
     memcpy(extra, facilities->extra, (facilities->capacity - CITY_FACILITY_RECORD_COUNT) * sizeof(*extra));
   }
-  free(facilities->extra); free(facilities->details); free(facilities->buckets);
-  facilities->extra = extra; facilities->details = details; facilities->buckets = buckets;
+  // Commit the sparse arrays after all allocations and copies succeed; fixed records stay in City.
+  free(facilities->extra);
+  free(facilities->details);
+  free(facilities->buckets);
+  facilities->extra = extra;
+  facilities->details = details;
+  facilities->buckets = buckets;
   facilities->capacity = capacity;
   if (!facilities->used) facilities->used = CITY_FACILITY_RECORD_RESERVED_COUNT;
   for (int slot = facilities->used - 1; slot >= CITY_FACILITY_RECORD_FIRST_DYNAMIC; --slot) {
-    CityFacilityDetails *record = &details[slot];
-    if (record->tile == INVALID_TILE || !ReadCityFacilityRecord(city, slot)->type) continue;
-    u32 *head = &buckets[AssociationBucket(record->tile, capacity)];
-    record->next = *head; *head = slot + 1;
+    CityFacilityDetails *detail = &details[slot];
+    if (detail->tile == INVALID_TILE || !ReadCityFacilityRecord(city, slot)->type) continue;
+    u32 *head = &buckets[AssociationBucket(detail->tile, capacity)];
+    detail->next = *head;
+    *head = slot + 1;
   }
   return true;
 }
@@ -115,10 +136,13 @@ bool ReserveCityFacilities(City *city, int requested) {
 // Release sparse storage without touching the fixed facility records. Shared-facility new-city resets preserve
 // unused payload fields in those records; final release clears them as well.
 static void ReleaseCityAssociationStorage(City *city) {
-  free(city->signs.record); free(city->signs.buckets);
+  free(city->signs.record);
+  free(city->signs.buckets);
   city->signs = (CitySigns){0};
   CityAnnualFacilities *facilities = &city->annual_facilities;
-  free(facilities->extra); free(facilities->details); free(facilities->buckets);
+  free(facilities->extra);
+  free(facilities->details);
+  free(facilities->buckets);
   facilities->extra = NULL;
   facilities->details = NULL;
   facilities->buckets = NULL;
@@ -142,28 +166,33 @@ void ResetCityMapAssociations(City *city) {
 }
 
 int ReadCitySignOverlay(const City *city, TileIndex tile) {
-  if (!(city->tile[tile].overlay & CITY_TILE_HAS_SIGN) || !city->signs.capacity) return 0;
-  for (u32 slot = city->signs.buckets[AssociationBucket(tile, city->signs.capacity)]; slot;
-      slot = city->signs.record[slot].next)
-    if (city->signs.record[slot].tile == tile) return CitySignOverlay(slot);
+  const CitySigns *signs = &city->signs;
+  if (!(city->tile[tile].overlay & CITY_TILE_HAS_SIGN) || !signs->capacity) return 0;
+  for (u32 slot = signs->buckets[AssociationBucket(tile, signs->capacity)]; slot;) {
+    const CitySignRecord *record = &signs->record[slot];
+    if (record->tile == tile) return CitySignOverlay(slot);
+    slot = record->next;
+  }
   return 0;
 }
 
 int ReadCityFacilityOverlay(const City *city, TileIndex tile) {
   int kind = ReadTile(city, tile);
   if (!IsTileKindFacility(kind)) return 0;
-  int category = kFacilityClassByTile[kind];
-  if (!city->individual_facilities && category >= CITY_FACILITY_INFO_SHARED_RECORD_FIRST)
-    return CityFacilityOverlay(category - (CITY_FACILITY_INFO_SHARED_RECORD_FIRST - 1));
+  int facility_class = kFacilityClassByTile[kind];
+  if (!city->individual_facilities && facility_class >= CITY_FACILITY_INFO_SHARED_RECORD_FIRST)
+    return CityFacilityOverlay(facility_class - (CITY_FACILITY_INFO_SHARED_RECORD_FIRST - 1));
   const CityAnnualFacilities *facilities = &city->annual_facilities;
   if (!facilities->capacity) return 0;
   TileIndex anchor = ResolveBulldozeFootprint(city, tile).start;
   if (anchor == INVALID_TILE) return 0;
-  for (u32 link = facilities->buckets[AssociationBucket(anchor, facilities->capacity)]; link;
-      link = facilities->details[link - 1].next)
-    if (facilities->details[link - 1].tile == anchor &&
-        ReadCityFacilityRecord(city, link - 1)->type != TK_CLEAR)
-      return CityFacilityOverlay(link - 1);
+  for (u32 link = facilities->buckets[AssociationBucket(anchor, facilities->capacity)]; link;) {
+    u32 slot = link - 1;
+    const CityFacilityDetails *detail = &facilities->details[slot];
+    if (detail->tile == anchor && ReadCityFacilityRecord(city, slot)->type != TK_CLEAR)
+      return CityFacilityOverlay(slot);
+    link = detail->next;
+  }
   return 0;
 }
 
@@ -181,16 +210,19 @@ CityOverlayName *CityOverlayNameAt(City *city, int overlay) {
 }
 
 int ReadCityBaseOverlay(const City *city, TileIndex tile) {
-  if (!city->native_map_storage) return city->tile[tile].overlay;
-  int effect = (city->tile[tile].overlay & CITY_TILE_EFFECT_MASK) >> CITY_TILE_EFFECT_SHIFT;
+  const TileInfo *tp = &city->tile[tile];
+  if (!city->native_map_storage) return tp->overlay;
+  int effect = (tp->overlay & CITY_TILE_EFFECT_MASK) >> CITY_TILE_EFFECT_SHIFT;
   if (effect) return CITY_OVERLAY_EVENT_END + effect - 1;
   int sign = ReadCitySignOverlay(city, tile);
   if (sign) return sign;
   // New records for ordinary utilities must not change legacy event/disaster admission.
-  if (city->individual_facilities && kFacilityClassByTile[ReadTile(city, tile)] == CITY_FACILITY_INFO_DEFAULT) return 0;
+  if (city->individual_facilities && kFacilityClassByTile[tp->kind] == CITY_FACILITY_INFO_DEFAULT) return 0;
   return ReadCityFacilityOverlay(city, tile);
 }
 
+// Descending insertion makes each rebuilt bucket traverse slots in ascending order.
+// Reserved shared facility slots are selected by class rather than indexed in the hash.
 void RebuildCityAssociationHashes(City *city) {
   CitySigns *signs = &city->signs;
   ++signs->revision;
@@ -201,44 +233,47 @@ void RebuildCityAssociationHashes(City *city) {
     CitySignRecord *record = &signs->record[slot];
     if (record->tile == INVALID_TILE) continue;
     u32 *head = &signs->buckets[AssociationBucket(record->tile, signs->capacity)];
-    record->next = *head; *head = slot;
+    record->next = *head;
+    *head = slot;
   }
   for (int slot = facilities->used - 1; slot >= CITY_FACILITY_RECORD_FIRST_DYNAMIC; --slot) {
-    CityFacilityDetails *record = &facilities->details[slot];
-    if (record->tile == INVALID_TILE || !ReadCityFacilityRecord(city, slot)->type) continue;
-    u32 *head = &facilities->buckets[AssociationBucket(record->tile, facilities->capacity)];
-    record->next = *head; *head = slot + 1;
+    CityFacilityDetails *detail = &facilities->details[slot];
+    if (detail->tile == INVALID_TILE || !ReadCityFacilityRecord(city, slot)->type) continue;
+    u32 *head = &facilities->buckets[AssociationBucket(detail->tile, facilities->capacity)];
+    detail->next = *head;
+    *head = slot + 1;
   }
 }
 
 static void UnlinkCitySign(City *city, int slot) {
   CitySigns *signs = &city->signs;
-  TileIndex tile = signs->record[slot].tile;
+  CitySignRecord *record = &signs->record[slot];
+  TileIndex tile = record->tile;
   if (tile == INVALID_TILE) return;
   u32 *link = &signs->buckets[AssociationBucket(tile, signs->capacity)];
   while (*link && *link != (u32)slot) link = &signs->record[*link].next;
-  if (*link) *link = signs->record[slot].next;
-  signs->record[slot].next = 0;
+  if (*link) *link = record->next;
+  record->next = 0;
 }
 
 void LinkCityFacility(City *city, int slot) {
   CityAnnualFacilities *facilities = &city->annual_facilities;
   if (slot < CITY_FACILITY_RECORD_FIRST_DYNAMIC) return;
-  CityFacilityDetails *record = &facilities->details[slot];
-  u32 *head = &facilities->buckets[AssociationBucket(record->tile, facilities->capacity)];
-  record->next = *head;
+  CityFacilityDetails *detail = &facilities->details[slot];
+  u32 *head = &facilities->buckets[AssociationBucket(detail->tile, facilities->capacity)];
+  detail->next = *head;
   *head = slot + 1;
 }
 
 static void UnlinkCityFacility(City *city, int slot) {
   CityAnnualFacilities *facilities = &city->annual_facilities;
   if (!facilities->capacity) return;
-  CityFacilityDetails *record = &facilities->details[slot];
-  if (record->tile == INVALID_TILE) return;
-  u32 *link = &facilities->buckets[AssociationBucket(record->tile, facilities->capacity)];
+  CityFacilityDetails *detail = &facilities->details[slot];
+  if (detail->tile == INVALID_TILE) return;
+  u32 *link = &facilities->buckets[AssociationBucket(detail->tile, facilities->capacity)];
   while (*link && *link != (u32)slot + 1) link = &facilities->details[*link - 1].next;
-  if (*link) *link = record->next;
-  record->next = 0;
+  if (*link) *link = detail->next;
+  detail->next = 0;
 }
 
 u8 ReadCityStockBaseOverlay(const City *city, TileIndex tile) {
@@ -249,18 +284,24 @@ u8 ReadCityStockBaseOverlay(const City *city, TileIndex tile) {
 // Zero clears only the stationary effect: signs and facility associations have independent lifetimes.
 void WriteOverlay(City *city, TileIndex tile, int value) {
   TileInfo *tp = &city->tile[tile];
-  if (!city->native_map_storage) { tp->overlay = value; return; }
+  if (!city->native_map_storage) {
+    tp->overlay = value;
+    return;
+  }
   if (IsCitySignOverlay(value)) {
+    CitySigns *signs = &city->signs;
     int slot = CitySignOverlaySlot(value);
-    assert(slot < city->signs.capacity);
+    assert(slot < signs->capacity);
     UnlinkCitySign(city, slot);
-    city->signs.record[slot].tile = tile;
-    city->signs.used = IntMax(city->signs.used, slot + 1);
-    if (slot == IntMax(city->signs.free_slot, 1)) city->signs.free_slot = slot + 1;
+    CitySignRecord *record = &signs->record[slot];
+    record->tile = tile;
+    signs->used = IntMax(signs->used, slot + 1);
+    if (slot == IntMax(signs->free_slot, 1)) signs->free_slot = slot + 1;
     tp->overlay |= CITY_TILE_HAS_SIGN;
-    ++city->signs.revision;
-    u32 *head = &city->signs.buckets[AssociationBucket(tile, city->signs.capacity)];
-    city->signs.record[slot].next = *head; *head = slot;
+    ++signs->revision;
+    u32 *head = &signs->buckets[AssociationBucket(tile, signs->capacity)];
+    record->next = *head;
+    *head = slot;
   } else if (!value || (value >= CITY_OVERLAY_EVENT_END && value <= CITY_OVERLAY_FIRE)) {
     tp->overlay = (tp->overlay & ~CITY_TILE_EFFECT_MASK) |
         (value ? (value - CITY_OVERLAY_EVENT_END + 1) << CITY_TILE_EFFECT_SHIFT : 0);
@@ -271,30 +312,35 @@ void WriteOverlay(City *city, TileIndex tile, int value) {
 bool ImportStockCityAssociations(City *city) {
   if (!ReserveCitySigns(city, CITY_OVERLAY_SIGN_COUNT + 1) || !ReserveCityFacilities(city, CITY_FACILITY_RECORD_COUNT))
     return false;
-  for (int slot = 0; slot < city->signs.capacity; ++slot) city->signs.record[slot].tile = INVALID_TILE;
-  for (int slot = 0; slot < city->annual_facilities.capacity; ++slot)
-    city->annual_facilities.details[slot].tile = INVALID_TILE;
-  city->signs.used = 1;
-  city->signs.free_slot = 1;
-  city->annual_facilities.free_slot = CITY_FACILITY_RECORD_FIRST_DYNAMIC;
-  city->annual_facilities.used = CITY_FACILITY_RECORD_COUNT;
-  for (TileIndex tile = 0; tile < (u32)city->map_cell_count; ++tile) {
-    int overlay = city->tile[tile].overlay;
-    city->tile[tile].overlay = 0;
+  CitySigns *signs = &city->signs;
+  CityAnnualFacilities *facilities = &city->annual_facilities;
+  for (int slot = 0; slot < signs->capacity; ++slot) signs->record[slot].tile = INVALID_TILE;
+  for (int slot = 0; slot < facilities->capacity; ++slot)
+    facilities->details[slot].tile = INVALID_TILE;
+  signs->used = 1;
+  signs->free_slot = 1;
+  facilities->free_slot = CITY_FACILITY_RECORD_FIRST_DYNAMIC;
+  facilities->used = CITY_FACILITY_RECORD_COUNT;
+  for (TileIndex tile = 0; tile < city->map_cell_count; ++tile) {
+    TileInfo *tp = &city->tile[tile];
+    int overlay = tp->overlay;
+    tp->overlay = 0;
     if (IsCitySignOverlay(overlay)) {
-      city->tile[tile].overlay = CITY_TILE_HAS_SIGN;
-      city->signs.record[overlay].tile = tile;
-      city->signs.used = IntMax(city->signs.used, overlay + 1);
+      tp->overlay = CITY_TILE_HAS_SIGN;
+      signs->record[overlay].tile = tile;
+      signs->used = IntMax(signs->used, overlay + 1);
     } else if (IsCityFacilityOverlay(overlay)) {
       int slot = CityFacilityOverlaySlot(overlay);
       TileIndex anchor = ResolveBulldozeFootprint(city, tile).start;
-      city->annual_facilities.details[slot].tile = anchor;
-      int kind = ReadCityFacilityRecord(city, slot)->type;
-      city->annual_facilities.details[slot].years =
-          kind >= TK_GAS_POWER_PLANT && kind <= TK_COAL_POWER_PLANT ? ReadCityFacilityRecord(city, slot)->age : 0;
-      city->annual_facilities.used = IntMax(city->annual_facilities.used, slot + 1);
+      CityFacilityDetails *detail = &facilities->details[slot];
+      detail->tile = anchor;
+      const CityAnnualFacilityRecord *facility = ReadCityFacilityRecord(city, slot);
+      int kind = facility->type;
+      detail->years =
+          kind >= TK_GAS_POWER_PLANT && kind <= TK_COAL_POWER_PLANT ? facility->age : 0;
+      facilities->used = IntMax(facilities->used, slot + 1);
     } else if (overlay >= CITY_OVERLAY_EVENT_END)
-      city->tile[tile].overlay = (overlay - CITY_OVERLAY_EVENT_END + 1) << CITY_TILE_EFFECT_SHIFT;
+      tp->overlay = (overlay - CITY_OVERLAY_EVENT_END + 1) << CITY_TILE_EFFECT_SHIFT;
   }
   RebuildCityAssociationHashes(city);
   return true;
@@ -308,29 +354,31 @@ void ClearCityOverlayNames(City *city) { memset(city->overlay_names.entry, 0, si
 // stale event associations without removing unrelated map overlays.
 void ClearOverlayAssociation(City *city, int overlay) {
   if (IsCitySignOverlay(overlay)) {
-    ++city->signs.revision;
+    CitySigns *signs = &city->signs;
+    ++signs->revision;
     int slot = CitySignOverlaySlot(overlay);
-    if (slot < city->signs.used) {
-      TileIndex tile = city->signs.record[slot].tile;
+    if (slot < signs->used) {
+      CitySignRecord *record = &signs->record[slot];
+      TileIndex tile = record->tile;
       if (IsMapTileValid(city, tile)) city->tile[tile].overlay &= ~CITY_TILE_HAS_SIGN;
       UnlinkCitySign(city, slot);
-      city->signs.record[slot].tile = INVALID_TILE;
+      record->tile = INVALID_TILE;
     }
-    city->signs.free_slot = IntMin(IntMax(city->signs.free_slot, 1), slot);
+    signs->free_slot = IntMin(IntMax(signs->free_slot, 1), slot);
     CityOverlayName *name = CityOverlayNameAt(city, overlay);
-    if (city->fixes & (1 << CITY_FIX_LABEL_CLEANUP)) memset(name, 0, sizeof(*name));
+    if (city->fixes & (1ull << CITY_FIX_LABEL_CLEANUP)) memset(name, 0, sizeof(*name));
     else name->character[0] = 0;
   } else if (IsCityFacilityOverlay(overlay)) {
-    int index = CityFacilityOverlaySlot(overlay);
-    if (index >= CITY_FACILITY_RECORD_FIRST_DYNAMIC) {
-      UnlinkCityFacility(city, index);
-      CityFacilityRecordAt(city, index)->type = TK_CLEAR;
-      city->annual_facilities.free_slot = IntMin(
-          IntMax(city->annual_facilities.free_slot, CITY_FACILITY_RECORD_FIRST_DYNAMIC), index);
+    int slot = CityFacilityOverlaySlot(overlay);
+    if (slot >= CITY_FACILITY_RECORD_FIRST_DYNAMIC) {
+      CityAnnualFacilities *facilities = &city->annual_facilities;
+      UnlinkCityFacility(city, slot);
+      CityFacilityRecordAt(city, slot)->type = TK_CLEAR;
+      facilities->free_slot = IntMin(IntMax(facilities->free_slot, CITY_FACILITY_RECORD_FIRST_DYNAMIC), slot);
       CityOverlayName *name = CityOverlayNameAt(city, overlay);
-      if (city->fixes & (1 << CITY_FIX_LABEL_CLEANUP)) memset(name, 0, sizeof(*name));
+      if (city->fixes & (1ull << CITY_FIX_LABEL_CLEANUP)) memset(name, 0, sizeof(*name));
       else name->character[0] = 0;
-      if (city->annual_facilities.capacity) city->annual_facilities.details[index].tile = INVALID_TILE;
+      if (facilities->capacity) facilities->details[slot].tile = INVALID_TILE;
     }
   } else if (IsCityEventOverlay(overlay)) {
     CityMapEvent *event = &city->events.event[CityEventOverlaySlot(overlay)];
@@ -339,10 +387,11 @@ void ClearOverlayAssociation(City *city, int overlay) {
   }
 }
 
-int FindFreeOverlayNameSlot(City *city) {
+int FindFreeOverlayNameSlot(const City *city) {
+  const CitySigns *signs = &city->signs;
   int limit = city->individual_facilities ? city->map_cell_count : CITY_OVERLAY_SIGN_COUNT;
-  for (int slot = city->individual_facilities ? IntMax(city->signs.free_slot, 1) : 1; slot <= limit; ++slot)
-    if (slot >= city->signs.used || city->signs.record[slot].tile == INVALID_TILE)
+  for (int slot = city->individual_facilities ? IntMax(signs->free_slot, 1) : 1; slot <= limit; ++slot)
+    if (slot >= signs->used || signs->record[slot].tile == INVALID_TILE)
       return CitySignOverlay(slot);
   return 0;
 }
@@ -439,11 +488,13 @@ static int CityMapLabelSlot(City *city, TileIndex tile) {
 static void FinishCityMapLabelChoice(City *city, TileIndex tile, int slot,
     const CityNameCommandInput *state, int answer) {
   if (answer == CITY_DIALOG_CANCEL) {
-    if (ReadCitySignOverlay(city, tile)) ClearOverlayAssociation(city, ReadCitySignOverlay(city, tile));
+    int current = ReadCitySignOverlay(city, tile);
+    if (current) ClearOverlayAssociation(city, current);
   } else if (state->length != 0) {
     WriteOverlay(city, tile, slot);
-    memcpy(CityOverlayNameAt(city, slot)->character, state->name.character, state->length);
-    CityOverlayNameAt(city, slot)->character[state->length] = 0;
+    CityOverlayName *name = CityOverlayNameAt(city, slot);
+    memcpy(name->character, state->name.character, state->length);
+    name->character[state->length] = 0;
   } else {
     ClearOverlayAssociation(city, slot);
     WriteOverlay(city, tile, CITY_OVERLAY_NONE);
@@ -452,7 +503,7 @@ static void FinishCityMapLabelChoice(City *city, TileIndex tile, int slot,
 
 // Resolve the label slot and apply a captured text answer to a valid tile. Invalidates its drawing and returns a
 // negative notice on slot failure; the text state is borrowed and copied into City storage.
-i64 ApplyCityMapLabelChoice(City *city, TileIndex tile, const CityNameCommandInput *state, int answer) {
+static i64 ApplyCityMapLabelChoice(City *city, TileIndex tile, const CityNameCommandInput *state, int answer) {
   InvalidateTile(city, tile);
   int slot = CityMapLabelSlot(city, tile);
   if (slot < 0) {
@@ -487,7 +538,7 @@ void EditCityOverlayNameAtTile(City *city, TileIndex tile) {
     ShowCityMessage(city, -slot);
     return;
   }
-  CityNameCommandInput state = {.name = (*CityOverlayNameAt(city, slot))};
+  CityNameCommandInput state = {.name = (*ReadCityOverlayName(city, slot))};
   while (state.length < CITY_OVERLAY_NAME_MAX_LENGTH && state.name.character[state.length] != 0)
     ++state.length;
   int answer = QueryCityOverlayNameDialog(city, slot, &state);
@@ -496,7 +547,7 @@ void EditCityOverlayNameAtTile(City *city, TileIndex tile) {
 
 // Apply a captured facility-name answer to the tile's live facility record. Requires a valid facility overlay and
 // bounded text state; ranking callbacks may run before the live record is read again.
-void ApplyCityFacilityLabelChoice(City *city, TileIndex tile, const CityNameCommandInput *state, int answer) {
+static void ApplyCityFacilityLabelChoice(City *city, TileIndex tile, const CityNameCommandInput *state, int answer) {
   InvalidateTile(city, tile);
   int slot = ReadCityFacilityOverlay(city, tile);
   if (!city->individual_facilities && slot == CITY_OVERLAY_NEWSPAPER_RANKING_FACILITY)
@@ -536,7 +587,7 @@ void EditCityOverlayLabelAtCell(City *city, TileIndex tile) {
     ShowCityTileInformationDialog(city, tile);
   } else {
     CityNameCommandInput state;
-    state.name = (*CityOverlayNameAt(city, slot));
+    state.name = (*ReadCityOverlayName(city, slot));
     state.length = (int)strlen((const char *)state.name.character);
     QueryCityOverlayNameDialog(city, slot, &state);
     // The original copies the dialog text back regardless of its return code.
@@ -548,8 +599,8 @@ void EditCityOverlayLabelAtCell(City *city, TileIndex tile) {
 // Copy the selected team's name and update the stadium's live record. Tile must still have a facility overlay and team
 // must select the team-name table; the caller validates the captured choice before entry.
 static void SetCityStadiumTeam(City *city, TileIndex tile, int team, const char *name) {
-  CopyText((char *)CityOverlayNameAt(city, CITY_TEAM_NAME_FIRST + team)->character,
-      sizeof(CityOverlayNameAt(city, 0)->character), name);
+  CityOverlayName *team_name = CityOverlayNameAt(city, CITY_TEAM_NAME_FIRST + team);
+  CopyText((char *)team_name->character, sizeof(team_name->character), name);
   int slot = ReadCityFacilityOverlay(city, tile);
   CityAnnualFacilityRecord *stadium = CityFacilityRecordAt(city, CityFacilityOverlaySlot(slot));
   stadium->stadium_team = team;

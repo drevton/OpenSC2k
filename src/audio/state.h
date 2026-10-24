@@ -69,7 +69,7 @@ typedef struct CityAudioState {
   bool fire_sound_paused, resume_fire_sound;
   u8 music_volume, master_volume;
   bool custom_soundfont;
-  char *soundfont_path;
+  char *soundfont_path; // Owned preference text, released when Audio closes.
   CityEffectVoice effect, click;
   _Atomic int effect_finished;
   CityEffectVoice effect_voices[CITY_EFFECT_VOICES];
@@ -80,12 +80,12 @@ typedef struct CityAudioState {
 // Initialize a fresh owner before devices are opened. This does not release or reset an existing backend.
 void InitializeCityAudioState(CityAudioState *audio);
 
+// Copy nonnull preference text without applying or validating it against a device. Does not change custom_soundfont.
+// The source may alias the current path. Allocation failure preserves the old path; Audio owns the successful copy.
+bool SetCitySoundFontPath(CityAudioState *audio, const char *path);
+
 // Preserve the live jukebox's playing choice after loading the saved music flag. Closed backends keep that flag;
 // no playback starts or stops here, so the codec retains its original word-by-word effect ordering.
 void RefreshCityLoadedMusicPreference(CityAudioState *audio);
-
-// Live overlapping effects query the mixer; otherwise use the single-effect controller's playback flag.
-bool IsCitySoundPlaying(const CityAudioState *audio);
-bool CanPlayCityToolSound(const CityAudioState *audio, int sound_id);
 
 #endif

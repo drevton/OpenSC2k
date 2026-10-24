@@ -51,8 +51,6 @@ enum {
 // tool artwork belongs to Drawing. Neither is saved City state.
 typedef struct {
   u32 *pixels;
-  u32 fallback[SC2K_CURSOR_ASSET_SPRITE_PIXELS];
-  bool fallback_ready;
 } CityCursorAssets;
 
 // Source loading replaces only Assets-owned pixels after validation. Game coordinates the composed Drawing cache.

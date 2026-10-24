@@ -4,7 +4,6 @@
 
 #include "city/engine/city_types.h"
 #include "city/events/events.h"
-#include "city/maps/layers.h"
 #include "city/state.h"
 #include "drawing/maps/map_view.h"
 #include "drawing/state.h"
@@ -74,33 +73,41 @@ static bool ReserveMapAnimationStorage(Game *game, void **records, int *capacity
 // A bounds-only traversal records the original painter-order RNG state once.
 // Every clipped repaint starts each animated overlay at that recorded state,
 // avoiding dependence on how screen damage was split into rectangles.
-void BeginCityMapAnimationCapture(Drawing *drawing) {
+SimulationRandomState BeginCityMapAnimationCapture(const City *city) {
+  Drawing *drawing = city->drawing;
+  SimulationRandomState before = city->random;
   drawing->animation.count = 0;
   drawing->animation.mode = ANIMATION_CAPTURE;
+  return before;
 }
 
-void EndCityMapAnimationCapture(const City *city, Drawing *drawing) {
+void EndCityMapAnimationCapture(City *city, SimulationRandomState before) {
+  Drawing *drawing = city->drawing;
   if (drawing->animation.count > 1)
     qsort(drawing->animation.records, drawing->animation.count, sizeof(MapAnimation), CompareMapAnimations);
   drawing->animation.random_after = city->random;
   drawing->animation.mode = ANIMATION_INACTIVE;
+  city->random = before;
 }
 
 void ReplayCityMapAnimations(Drawing *drawing) {
   drawing->animation.mode = ANIMATION_REPLAY;
 }
 
-void FinishCityMapAnimations(City *city, Drawing *drawing) {
+void FinishCityMapAnimations(City *city) {
+  Drawing *drawing = city->drawing;
   drawing->animation.mode = ANIMATION_INACTIVE;
   city->random = drawing->animation.random_after;
 }
 
-bool BeginCityMapOverlayAnimation(City *city, Drawing *drawing, int x, int y, int overlay) {
+bool BeginCityMapOverlayAnimation(City *city, TileIndex tile, int overlay) {
+  Drawing *drawing = city->drawing;
   if (drawing->animation.mode == ANIMATION_INACTIVE || !IsCityMapOverlayAnimated(city, overlay)) return false;
-  return BeginCityMapSpriteAnimation(city, drawing, MapTileXY(city, x, y));
+  return BeginCityMapSpriteAnimation(city, tile);
 }
 
-bool BeginCityMapSpriteAnimation(City *city, Drawing *drawing, TileIndex tile) {
+bool BeginCityMapSpriteAnimation(City *city, TileIndex tile) {
+  Drawing *drawing = city->drawing;
   if (drawing->animation.mode == ANIMATION_INACTIVE) return false;
   DrawingAnimations *animations = &drawing->animation;
   if (animations->mode == ANIMATION_CAPTURE) {
@@ -127,16 +134,18 @@ bool BeginCityMapSpriteAnimation(City *city, Drawing *drawing, TileIndex tile) {
   return true;
 }
 
-void EndCityMapSpriteAnimation(City *city, Drawing *drawing) {
+void EndCityMapSpriteAnimation(City *city) {
+  Drawing *drawing = city->drawing;
   if (drawing->animation.mode == ANIMATION_CAPTURE)
     drawing->sprite_damage_bounds = drawing->animation.saved_bounds;
   else
     city->random = drawing->animation.saved_random;
 }
 
-void PublishCityMapAnimationDamage(City *city, const CityMapViewConfig *view,
-    CityMapAnimationFootprints *previous, CityCanvasVisiblePaint mark, void *context) {
-  Drawing *drawing = city->game->drawing;
+void PublishCityMapAnimationDamage(City *city, CityMapAnimationFootprints *previous,
+    CityCanvasVisiblePaint mark, void *context) {
+  Drawing *drawing = city->drawing;
+  const CityMapViewConfig *view = drawing->default_map_view;
   int dx = drawing->map_state.origin_x - previous->origin_x;
   int dy = drawing->map_state.origin_y - previous->origin_y;
   bool animated = city->settings.speed > CITY_SPEED_PAUSED;

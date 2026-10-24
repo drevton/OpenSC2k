@@ -5,11 +5,15 @@
 
 typedef struct Game Game;
 
-// Borrowed pixels: composed tool images live in Drawing; plain arrows live in Assets.
+// Borrowed pixels: composed tool images and the missing-artwork fallback live in Drawing; loaded plain arrows
+// live in Assets. Source replacement or cache rebuilding invalidates the borrowed image.
 // Negative/out-of-range tool IDs use the plain gold arrow. Selected tools
 // retain the white pointer over their gold badge.
 const u32 *GetCityCursorSprite(Game *game, int tool);
-void LoadCityCursorToolIcons(Game *game, const u32 palette[256]);
+// Initialize base badges, then replace them from loaded map/interface artwork using the supplied palette.
+// Missing source/palette stops after initialization. Earlier badges survive a later failure, reported on Game.
+// Preparation performs no resource I/O or City mutation.
+void PrepareCityToolCursors(Game *game, const u32 palette[256]);
 // Select the tool image for software captures and propagate preparation failure to Game.
 void DrawCityCursor(Game *game, Canvas *canvas, i32 tool, i32 x, i32 y, i32 scale);
 

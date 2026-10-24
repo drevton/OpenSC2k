@@ -25,6 +25,10 @@ static inline void CopyText(char *destination, size_t capacity, const char *sour
 
 bool TextContains(const char *name, const char *filter, bool match_case);
 
+// Format signed decimal with comma-separated thousands; capacity must be positive.
+// Writes a terminated string or truncated prefix without allocation or locale state.
+void FormatGroupedInteger(char *output, size_t capacity, i64 value);
+
 // Owned variable-length text. Setters copy before freeing, so aliases are safe.
 // Allocation failure terminates the native process; callers do not branch on OOM.
 char *AllocateText(size_t bytes);

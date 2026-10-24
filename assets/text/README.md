@@ -3,7 +3,8 @@
 Interface text is defined directly in C. There is no string-ID catalog or string preprocessing step.
 
 - `src/assets/names.c`: calendar, tool, team, sport, tile, zone and rating names.
-- `src/assets/data.c`: facility information templates and newspaper heading, title and price variants.
+- `src/assets/facilities.c`: facility information templates and locale selection.
+- `src/assets/news.c`: newspaper articles, headings, titles, prices and resource lifetime.
 - `src/ui/dialogs/budget_host.c`: advisor recommendations, indexed by `CityBudgetAdvice`.
 - `src/ui/text/status.c`: weather and disaster descriptions.
 - `src/city/disasters/dispatch.c`: service alerts and severe weather warnings.

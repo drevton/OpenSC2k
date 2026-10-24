@@ -2,13 +2,10 @@
 #define SC2K_DOMAIN_SRC_UI_CHARTS_CHARTS_H
 
 #include "city/economy/types.h"
-#include "city/presentation.h"
-
-#include "city/saveload/file.h"
-#include "drawing/canvas.h"
 #include "city/types.h"
-#include "ui/windows/state.h"
+#include "ui/windows/types.h"
 
+typedef struct Game Game;
 typedef struct CityInterfaceState CityInterfaceState;
 
 // Canvas Ui Ids
@@ -63,22 +60,15 @@ typedef struct {
   int industry_maximum;
 } CityChartState;
 
-// Chart Primitives
-// Shared raster services preserve desktop clipping and independent UI scaling.
-void Sc2kCanvasChartFill(Canvas *canvas, CityRect rect, u32 color);
-void Sc2kCanvasChartText(Canvas *canvas, i32 x, i32 y, const char *text, u32 color);
-i32 Sc2kCanvasChartTextWidth(const char *text);
-void Sc2kCanvasChartFrame(Canvas *canvas, CityRect rect, const char *title);
-void Sc2kCanvasChartBox(Canvas *canvas, CityRect rect, u32 color, i32 raised);
-
 // Chart Canvas
 const CityCanvasChartControl *Sc2kCanvasChartControl(const CityChartState *charts, i32 code, i32 id);
 i32 Sc2kCanvasChartCode(WindowKind kind);
-void Sc2kCanvasDrawCharts(Canvas *canvas, const Window *window);
 bool Sc2kCanvasChartActionAt(const Window *window, i32 x, i32 y,
     i32 *code, i32 *control, i32 *value);
 
 // Chart Host
+// Refresh the cached values needed by a visible chart before painting it. Returns whether the requested panel was
+// handled; calculation may update the UI chart cache but does not advance simulation.
 bool PrepareCityChartPaintState(City *city, int code);
 bool BindCityChartPanels(City *city, CityCanvasDesktop *desktop);
 void UnbindCityChartPanels(City *city);

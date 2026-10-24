@@ -3,7 +3,8 @@
 
 #include "game/state.h"
 
-enum {
+// Named execution errors; the error record also accepts other nonzero backend codes.
+typedef enum GameError {
   SC2K_ERROR_GUEST_INTEGER_DIVIDE_BY_ZERO = -3,
   SC2K_ERROR_GUEST_ALLOCATION_FAILURE = -4,
   SC2K_ERROR_GUEST_BUFFER_TOO_SMALL = -5,
@@ -15,9 +16,9 @@ enum {
   SC2K_ERROR_HOST_ALLOCATION_FAILURE = -11,
   SC2K_ERROR_MAP_SPRITE_CAPACITY = -12,
   SC2K_ERROR_NUMBER_FORMAT = -130,
-};
+} GameError;
 
-// Preserve the first failure until the caller starts another operation.
+// Reset a recoverable operation's error record; a latched fatal execution failure remains set.
 static inline void ClearGameError(Game *game) {
   game->reconstruction_error = 0;
 }
@@ -26,6 +27,8 @@ static inline int GetGameError(const Game *game) {
   return game->reconstruction_error;
 }
 
+// Preserve the first error. Allocation failures always latch execution failure, even after another recorded error.
+// This changes Game state only; it does not open a dialog or invoke callbacks.
 static inline void SetGameError(Game *game, int error) {
   if (error != 0 && game->reconstruction_error == 0)
     game->reconstruction_error = error;

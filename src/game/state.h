@@ -49,7 +49,7 @@ typedef struct Game {
   CityFileRuntime *file;
   char *file_directory;
   CityResourceState *resources;
-  CityIdleInputs idle_inputs;
+  GameIdleInputs idle_inputs;
   double next_cadence_time;
   GameTiming timing;
   bool delay_blocked;

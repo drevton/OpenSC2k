@@ -1,7 +1,8 @@
+#include "game/city_lifecycle.h"
+
 #include "city/saveload/state.h"
 #include "city/engine/city_name.h"
 #include "city/engine/clock.h"
-#include "game/city_lifecycle.h"
 
 #include <string.h>
 
@@ -20,12 +21,13 @@
 #include "city/saveload/file.h"
 #include "city/saveload/runtime.h"
 #include "city/state.h"
+#include "drawing/cursors.h"
 #include "drawing/maps/map_view.h"
 #include "drawing/state.h"
 #include "game/application.h"
 #include "game/errors.h"
+#include "game/scripting.h"
 #include "game/state.h"
-#include "ui/console.h"
 #include "ui/state.h"
 #include "ui/text/text.h"
 #include "ui/tools/tools.h"
@@ -54,11 +56,7 @@ static bool LoadInitialGameCity(Game *game, const char *path) {
     return false;
   }
   InitializeCityFacilityInformation(resources, (const char *)city->country.character);
-  drawing->map_view_storage = (CityMapViewConfig){0};
-  drawing->drag_view_storage = (CityMapViewConfig){0};
-  drawing->default_map_view = &drawing->map_view_storage;
-  drawing->drag_map_view = &drawing->drag_view_storage;
-  drawing->default_map_view->zoom = CITY_MAP_ZOOM_LARGE;
+  InitializeDrawingMapViews(drawing);
   SetSimulationFrameTime(city, 0);
   InitializeCityNewsResources(resources);
   InitializeCityNews(city);
@@ -73,17 +71,17 @@ static bool LoadInitialGameCity(Game *game, const char *path) {
     drawing->map_state.sprite_metrics = resources->map_sprite_metrics;
     return !GetGameError(game);
   }
-  CityFile *file = CityFileRead(path);
-  if (file == NULL)
+  CityFile *archive = CityFileRead(path);
+  if (archive == NULL)
     return false;
   SetCityPathBytes(game, &game->city_path, (int)strlen(path), path);
-  bool scenario = CityFileHasChunk(file, "SCEN");
-  bool loaded = scenario || LoadCityArchive(city, file);
-  CityFileFree(file);
+  bool scenario = CityFileHasChunk(archive, "SCEN");
+  bool loaded = scenario || LoadCityArchive(city, archive);
+  CityFileFree(archive);
   if (!loaded)
     return false;
   drawing->map_state.sprite_metrics = resources->map_sprite_metrics;
-  Sc2kSetCityMapClientRect(drawing, (CityRect){0, 0, 600, 490});
+  SetDrawingMapClientRect(drawing, (CityRect){0, 0, 600, 490});
   // Pointer input can arrive before the first framebuffer allocation/draw.
   drawing->map_width = drawing->client_rect.right - drawing->client_rect.left;
   drawing->map_height = drawing->client_rect.bottom - drawing->client_rect.top;
@@ -119,7 +117,6 @@ bool InitializeGameCity(Game *game, const char *path) {
 void ReleaseGameCityAssets(Game *game) {
   CloseCityScripting(game);
   ReleaseCityAssets(game->resources);
-  game->drawing->cursors.initialized = false;
-  ++game->drawing->cursors.revision;
+  InvalidateCityCursorCache(&game->drawing->cursors);
   game->drawing->map_state.sprite_metrics = NULL;
 }

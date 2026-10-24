@@ -2,7 +2,7 @@
 #define SC2K_CITY_QUESTIONS_H
 
 #include "city/economy/types.h"
-#include "city/maps/map_types.h"
+#include "city/maps/labels.h"
 #include "city/types.h"
 
 // Native nonmodal questions retain the original caller's pending game context.
@@ -46,6 +46,8 @@ typedef struct {
   } context;
 } CityQuestion;
 
+// Reply text is borrowed for synchronous validation/application; length excludes a terminator.
+// Embedded zero bytes are rejected, and no input text pointer is retained by City.
 typedef struct {
   int answer;
   const u8 *text;
@@ -55,9 +57,13 @@ typedef struct {
 
 enum { CITY_PENDING_QUESTION_CAPACITY = 16 };
 
+// Count includes reserved opening slots, which are not yet replyable.
 int CityQuestionCount(const City *city);
-const CityQuestion *CityQuestionAt(const City *city, int index);
+
+// Borrow by identity, or return NULL. A found opening reservation is not an admitted reply.
+// Insertion, removal and callbacks can invalidate the pointer; retain the ID and look it up again afterward.
 const CityQuestion *FindCityQuestion(const City *city, int id);
+
 bool QueueCityFacilityNameQuestion(City *city, int id, TileIndex tile);
 enum {
   CITY_FACILITY_OPENING_READY = 1,

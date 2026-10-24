@@ -348,23 +348,6 @@ void DrawCityInterfaceClose(const CityInterfaceFont *font, Canvas *canvas, CityR
 
 // Overlay Font
 
-// Draw an empty box for unavailable characters, without embedding a second
-// pixel font. The packaged OpenTTD Sans rasters supply actual labels and metrics.
-void InitializeCityOverlayFont(CityOverlayFont *font) {
-  memset(font, 0, sizeof(*font));
-  for (int size = 0; size < CITY_OVERLAY_FONT_COUNT; ++size) {
-    for (int index = 0; index < CITY_OVERLAY_GLYPH_COUNT; ++index) {
-      CityOverlayGlyph *glyph = &font->glyphs[size * CITY_OVERLAY_GLYPH_COUNT + index];
-      glyph->advance = glyph->paint_advance = 6 + size;
-      if (index == 0) continue; // Space has no ink.
-      int width = 4 + size, height = 8 + size * 2;
-      for (int row = 2; row < height + 2; ++row)
-        glyph->rows[row] = row == 2 || row == height + 1 ?
-            (1 << width) - 1 : 1 | (1 << (width - 1));
-    }
-  }
-}
-
 const CityOverlayGlyph *CityOverlayFontGlyphs(const CityOverlayFont *font, int zoom) {
   if (zoom < 0 || zoom >= CITY_OVERLAY_FONT_COUNT) zoom = 0;
   return font->glyphs + zoom * CITY_OVERLAY_GLYPH_COUNT;

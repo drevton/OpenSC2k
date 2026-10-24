@@ -2,16 +2,10 @@
 #define SC2K_DOMAIN_SRC_CITY_ECONOMY_TABLES_H
 
 #include "city/economy/types.h"
-#include "city/economy/state.h"
-#include "city/types.h"
 
-// Tables
+// Base unlock years, before initialization adds its random delay.
 
-static inline int CityMilestoneDefaultYear(int index) {
-  static const u16 city_milestone_base_years[CITY_MILESTONE_COUNT] = {
-      1940, 1950, 1980, 1970, 2020, 2050, 1920, 1920, 1910, 1900, 1925, 1980, 1990, 2040, 2090, 2140, 2190};
-  return city_milestone_base_years[index];
-}
+extern const u16 kCityMilestoneBaseYears[CITY_MILESTONE_COUNT];
 
 // Fixed native storage for saved economy records. The three demand offsets
 // alias the first three signed words of the eight-word transport-bonus table.
@@ -40,11 +34,6 @@ typedef struct {
 
 // Coefficients
 
-typedef struct {
-  u8 statistic;
-  u8 divisor;
-  u16 multiplier;
-} CityAssetValueRule;
 enum {
   CITY_ECONOMY_POPULATION_CENTER = 5000000,
   CITY_ECONOMY_VALUE_CENTER = 3500000

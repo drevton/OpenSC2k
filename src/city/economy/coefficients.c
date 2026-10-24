@@ -1,5 +1,9 @@
 #include "city/economy/tables.h"
 
+const u16 kCityMilestoneBaseYears[CITY_MILESTONE_COUNT] = {
+  1940, 1950, 1980, 1970, 2020, 2050, 1920, 1920, 1910, 1900, 1925, 1980, 1990, 2040, 2090, 2140, 2190
+};
+
 #define SECTOR_DIVISORS {75, 75, 75, 75, -100, -1, -1, -2, -4, -1, -1000, -500, -400, -250, -250, -250}
 const CityAnnualSettlementFactors kAnnualSettlementFactors = {SECTOR_DIVISORS};
 const CityBudgetSectorDivisors kBudgetSectorDivisors = {SECTOR_DIVISORS};

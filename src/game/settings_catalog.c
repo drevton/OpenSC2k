@@ -1,15 +1,16 @@
-#include "game/commands.h"
-#include "ui/windows/controls.h"
-#include "city/engine/city_types.h"
+#include "game/settings.h"
+
 #include <stddef.h>
 
-#include "game/state.h"
 #include "audio/state.h"
+#include "city/engine/city_types.h"
+#include "city/fixes.h"
 #include "city/state.h"
-#include "drawing/state.h"
-#include "assets/state.h"
-#include "ui/state.h"
+#include "drawing/options.h"
+#include "game/state.h"
 #include "ui/dialogs/game_options.h"
+#include "ui/state.h"
+#include "ui/windows/controls.h"
 
 static const CityDropdownItem kScrollwheelChoices[] = {
   {"Scroll map", CITY_SCROLLWHEEL_SCROLL, CITY_DROPDOWN_PLAIN},
@@ -553,62 +554,3 @@ const CitySetting kCitySettings[] = {
 const int kCitySettingsCount = sizeof(kCitySettings) / sizeof(kCitySettings[0]);
 _Static_assert(sizeof(kCitySettings) / sizeof(kCitySettings[0]) <= GAME_OPTIONS_FIX - GAME_OPTIONS_SETTING,
     "advanced settings must fit the settings controls");
-
-static const void *CitySettingOwnerAddress(const Game *game, CitySettingOwner owner) {
-  switch (owner) {
-  case SETTING_GAME: return game;
-  case SETTING_CITY: return game->city;
-  case SETTING_UI: return game->ui;
-  case SETTING_AUDIO: return game->audio;
-  case SETTING_DISPLAY: return &game->drawing->options;
-  case SETTING_JUKEBOX: return &game->audio->jukebox;
-  }
-  return NULL;
-}
-
-int ReadCitySettingValue(const Game *game, const CitySetting *setting, bool defaults) {
-  if (defaults && setting->owner == SETTING_CITY) return ReadGameCityDefault(game, setting);
-  const u8 *field = (const u8 *)CitySettingOwnerAddress(game, setting->owner) + setting->offset;
-  int value;
-  switch (setting->type) {
-  case SETTING_BOOL: value = *(const bool *)field; break;
-  case SETTING_U8: value = *field; break;
-  case SETTING_I16: value = *(const i16 *)field; break;
-  case SETTING_I32: value = *(const i32 *)field; break;
-  case SETTING_U32: value = (int)*(const u32 *)field; break;
-  case SETTING_MASK:
-    value = (*(const u32 *)field & setting->mask) != 0;
-    break;
-  case SETTING_MASK64:
-    value = (*(const u64 *)field & setting->mask) != 0;
-    break;
-  }
-  return setting->inverted ? !value : value;
-}
-
-void WriteCitySettingValue(Game *game, const CitySetting *setting, int value, bool defaults) {
-  if (setting->inverted) value = !value;
-  if (defaults && setting->command == CITY_COMMAND_SET_FIX) {
-    game->default_city_fixes = (game->default_city_fixes & ~setting->mask) | (value ? setting->mask : 0);
-    return;
-  }
-  // Authoritative City fields are changed by resolved City commands only.
-  if (setting->owner == SETTING_CITY) return;
-  u8 *field = (u8 *)CitySettingOwnerAddress(game, setting->owner) + setting->offset;
-  switch (setting->type) {
-  case SETTING_BOOL: *(bool *)field = value != 0; break;
-  case SETTING_U8: *field = value; break;
-  case SETTING_I16: *(i16 *)field = value; break;
-  case SETTING_I32: *(i32 *)field = value; break;
-  case SETTING_U32: *(u32 *)field = value; break;
-  case SETTING_MASK: *(u32 *)field = (*(u32 *)field & ~setting->mask) | (value ? setting->mask : 0); break;
-  case SETTING_MASK64: *(u64 *)field = (*(u64 *)field & ~setting->mask) | (value ? setting->mask : 0); break;
-  }
-}
-
-bool RunCitySettingCommand(Game *game, const CitySetting *setting, int value) {
-  if (setting->toggle && ReadCitySettingValue(game, setting, false) == value) return true;
-  bool fix = setting->command == CITY_COMMAND_SET_FIX;
-  return RunCityCommand(game, setting->command, INVALID_TILE,
-      fix ? setting->parameter : setting->toggle ? 0 : value, fix ? value : 0, 0, NULL, NULL);
-}

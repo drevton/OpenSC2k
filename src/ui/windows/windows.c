@@ -2,7 +2,6 @@
 #include "ui/windows/windows.h"
 
 #include "assets/state.h"
-#include "drawing/bitmaps.h"
 #include "drawing/raster/canvas_primitives.h"
 #include "drawing/raster/canvas_raster_internal.h"
 #include "game/state.h"
@@ -20,7 +19,7 @@
 // Window policy is shared by opening, hit testing, resizing and tooltips.
 static const CityWindowTraits kWindowTraits[CITY_CANVAS_WINDOW_KIND_COUNT] = {
   [0] = {.procedure = DefaultWindowProcedure},
-  [CITY_CANVAS_NEWSPAPER] = {.procedure = NewspaperWindowProcedure,
+  [CITY_CANVAS_NEWSPAPER] = {.procedure = NewspaperWindowProcedure, .picture_images = 1,
       .flags = CITY_WINDOW_SINGLETON | CITY_WINDOW_DONE_BUTTON},
   [CITY_CANVAS_SIGN_LIST] = {.procedure = SignWindowProcedure, .update_categories = CITY_UPDATE_SIGNS,
       .flags = CITY_WINDOW_SINGLETON | CITY_WINDOW_RESIZABLE | CITY_WINDOW_SHADEABLE,
@@ -41,7 +40,8 @@ static const CityWindowTraits kWindowTraits[CITY_CANVAS_WINDOW_KIND_COUNT] = {
   [CITY_CANVAS_LAND_USE] = {.procedure = LandUseWindowProcedure,
       .update_categories = CITY_UPDATE_MAP | CITY_UPDATE_POPULATION,
       .flags = CITY_WINDOW_SINGLETON | CITY_WINDOW_DONE_BUTTON},
-  [CITY_CANVAS_JUKEBOX] = {.procedure = MusicWindowProcedure, .flags = CITY_WINDOW_SINGLETON},
+  [CITY_CANVAS_JUKEBOX] = {.procedure = MusicWindowProcedure, .flags = CITY_WINDOW_SINGLETON,
+      .picture_images = CITY_MUSIC_SPRITE_COUNT},
   [CITY_CANVAS_MUSIC_PROGRAMME] = {.procedure = MusicWindowProcedure, .flags = CITY_WINDOW_SINGLETON},
   [CITY_CANVAS_GAME_OPTIONS] = {.procedure = OptionsWindowProcedure,
       .flags = CITY_WINDOW_SINGLETON | CITY_WINDOW_RESIZABLE, .minimum_width = GAME_OPTIONS_MIN_WIDTH,
@@ -52,6 +52,7 @@ static const CityWindowTraits kWindowTraits[CITY_CANVAS_WINDOW_KIND_COUNT] = {
   [CITY_CANVAS_DEMOGRAPHICS] = {.procedure = ChartsWindowProcedure, .flags = CITY_WINDOW_SINGLETON,
       .update_categories = CITY_UPDATE_POPULATION},
   [CITY_CANVAS_NEIGHBORS] = {.procedure = ChartsWindowProcedure, .flags = CITY_WINDOW_SINGLETON,
+      .picture_images = CITY_CANVAS_NEIGHBOR_ICON_COUNT,
       .update_categories = CITY_UPDATE_NEIGHBORS | CITY_UPDATE_POPULATION},
   [CITY_CANVAS_INDUSTRY] = {.procedure = ChartsWindowProcedure, .flags = CITY_WINDOW_SINGLETON,
       .update_categories = CITY_UPDATE_INDUSTRY | CITY_UPDATE_FINANCES},
@@ -173,54 +174,6 @@ void DrawCityCanvasWindow(Game *game, Canvas *canvas, const Window *window) {
     probe.bounds.top += bounds.top; probe.bounds.bottom += bounds.top;
     *canvas->button_probe = probe;
   }
-}
-
-bool Sc2kCanvasClickWindow(Window *window, i32 x, i32 y) {
-  CityRect bounds = window->bounds;
-  if (!window->visible || !CanvasPointInRect(bounds, x, y))
-    return false;
-  if (window->kind == CITY_CANVAS_TOOL_STATUS)
-    return true;
-  if (CityWindowCloseAt(window, x, y))
-    window->visible = 0;
-  return true;
-}
-
-i32 Sc2kCanvasDesktopOpen(CityCanvasDesktop *desktop, Window window) {
-  // Persistent panels have one instance. Command prompts and startup dialogs retain
-  // separate callers, and additional map viewports are deliberately independent windows.
-  if (ReadCityWindowTraits(window.kind)->flags & CITY_WINDOW_SINGLETON) {
-    int existing = FocusCityCanvasWindowKind(desktop, window.kind);
-    if (existing >= 0) return existing;
-  }
-  if (desktop->count == CITY_CANVAS_WINDOW_CAPACITY)
-    return -1;
-  if (!window.procedure) window.procedure = ReadCityWindowTraits(window.kind)->procedure;
-  if (window.portrait || (desktop->game &&
-      (window.kind == CITY_CANVAS_NEWSPAPER || window.kind == CITY_CANVAS_NEIGHBORS ||
-          window.kind == CITY_CANVAS_JUKEBOX))) {
-    int images = window.kind == CITY_CANVAS_NEIGHBORS ? CITY_CANVAS_NEIGHBOR_ICON_COUNT :
-        window.kind == CITY_CANVAS_JUKEBOX ? CITY_MUSIC_SPRITE_COUNT : 1;
-    window.picture_drawing = (CitySpriteDrawing *)CreateCityWindowDrawing(desktop->game->drawing,
-        CITY_WINDOW_DRAWING_SPRITE, images);
-    if (!window.picture_drawing) return -1;
-  }
-  window.visible = 1;
-  window.window_id = ++desktop->next_window_id;
-  window.update_categories |= ReadCityWindowTraits(window.kind)->update_categories;
-  desktop->information_updates |= window.update_categories;
-  i32 index = desktop->count;
-  // Automatic status updates must not take keyboard focus from an existing editor.
-  if (window.kind == CITY_CANVAS_TOOL_STATUS) {
-    index = 0;
-    for (i32 next = desktop->count; next > 0; --next)
-      desktop->windows[next] = desktop->windows[next - 1];
-    if (desktop->dragging >= 0) ++desktop->dragging;
-  }
-  desktop->windows[index] = window;
-  ++desktop->count;
-  Sc2kDirtyMarkRect(&desktop->dirty, CanvasWindowPaintRect(&window));
-  return index;
 }
 
 void KeepCityWindowCaptionVisible(const CityCanvasDesktop *desktop, CityRect *b) {

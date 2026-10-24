@@ -1,7 +1,6 @@
 #ifndef SC2K_GAME_OPTIONS_H
 #define SC2K_GAME_OPTIONS_H
 
-#include "city/engine/commands.h"
 #include "city/types.h"
 #include "game/settings.h"
 

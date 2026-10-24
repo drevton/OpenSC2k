@@ -8,7 +8,6 @@ typedef struct CityTerrainSettings CityTerrainSettings;
 
 // Reset the allocated City's map metadata and gameplay accounts for new-city setup.
 // The simulation initializer retains terrain-editor account state according to Game's current idle mode.
-void ResetNewCityOverlayAndEventState(City *city);
 void InitializeNewCityDocument(City *city);
 void InitializeNewCitySimulationState(City *city);
 

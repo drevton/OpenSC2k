@@ -1,9 +1,15 @@
+#include "city/events/events.h"
+#include "drawing/maps/map_terrain.h"
+#include "drawing/sprites/surface.h"
+#include "drawing/maps/map_sprites.h"
+#include "drawing/maps/map_data.h"
 #include "city/maps/terrain.h"
 #include "city/presentation.h"
 #include <math.h>
 
 #include "assets/graphics.h"
 #include "assets/state.h"
+#include "city/infrastructure/bridges.h"
 #include "city/maps/layers.h"
 #include "city/maps/tile_storage.h"
 #include "drawing/maps/map_render.h"
@@ -45,7 +51,7 @@ static int DataOverlaySprite(const City *city, TileIndex tile, CityMapDataMode m
 }
 
 void DrawCityMapDataTile(City *city, int zoom, TileIndex tile, int screen_x, int screen_y) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   CityTileGeometry geometry = ReadCityMapViewGeometry(city, tile);
   int ground_y = screen_y - CityMapHeightStep(zoom) * geometry.surface_height;
   // Faces below a tile can intersect the clip even when its top is above it.
@@ -72,7 +78,7 @@ void DrawCityMapDataTile(City *city, int zoom, TileIndex tile, int screen_x, int
 
 // Render the selected city data layer at the active map zoom.
 void DrawCityMapData(City *city, int zoom) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   CityRect saved_clip = drawing->map_state.scan_clip;
   drawing->map_state.scan_clip.left -= 8 << zoom;
   drawing->map_state.scan_clip.bottom += 8 << zoom;
@@ -84,7 +90,7 @@ void DrawCityMapData(City *city, int zoom) {
 // where the surface view hides that drop with water or a bridge deck.
 static void DrawUnderworldGroundSkirt(City *city, TileIndex cell, int style, int zoom,
     int screen_x, int baseline, int base) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   int bottom = base;
   for (int side = 0; side < 2; ++side) {
     TileIndex neighbor = CityMapViewNeighbor(city, cell, side, 1 - side);
@@ -180,7 +186,7 @@ static int UnderworldRoadTunnelAxis(const City *city, TileIndex cell, int floor)
       int depth = (altitude & CITY_ALTITUDE_TUNNEL_MASK) >> CITY_ALTITUDE_TUNNEL_SHIFT;
       if (!depth || (altitude & CITY_ALTITUDE_LAND_MASK) - depth + 1 != floor) break;
       if (depth == CITY_TUNNEL_DEPTH_ENTRANCE) {
-        int facing = (ReadTileVariant(tp) + CityMapCameraRotation(city->game->drawing)) & 3;
+        int facing = (ReadTileVariant(tp) + CityMapCameraRotation(city->drawing)) & 3;
         if (tp->kind == TK_TUNNEL_ENTRANCE &&
             1 - (facing & 1) == (side >> 1)) return side >> 1;
         break;
@@ -213,7 +219,7 @@ static bool UnderworldPipeEasesAtEdge(const City *city, TileIndex tile, int side
 static void DrawBakedUnderworldPipe(City *city, TileIndex tile, const CityMapUnderworldPatch *patch,
     int connections, int zoom, int screen_x, int baseline) {
   if (!connections) return;
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   double center = CityMapUnderworldHeight(patch, 0.5, 0.5);
   bool flat = patch->coefficient[1][0] == 0 && patch->coefficient[0][1] == 0 &&
       patch->coefficient[1][1] == 0;
@@ -282,7 +288,7 @@ static void DrawBakedUnderworldPipe(City *city, TileIndex tile, const CityMapUnd
 
 // Ground, utilities, highlights and shadows are immutable offline artwork.
 void DrawCityMapUndergroundTile(City *city, int zoom, TileIndex cell, int screen_x, int screen_y) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   CityMapUnderworldPatch patch = CityMapUnderworldSurface(city, cell);
   int baseline = screen_y - patch.elevation * CityMapHeightStep(zoom);
   const TileInfo *tp = &city->tile[cell];
@@ -298,7 +304,7 @@ void DrawCityMapUndergroundTile(City *city, int zoom, TileIndex cell, int screen
   if (!drawing->map_state.networks_enabled) {
     DrawCityMapPlacementTile(city, cell);
     if (ReadOverlay(city, cell) != CITY_OVERLAY_NONE)
-      DrawCityMapOverlay(city, zoom, MapTileX(city, cell), MapTileY(city, cell), screen_x, baseline - (4 << zoom));
+      DrawCityMapOverlay(city, cell, zoom, (CityPoint){screen_x, baseline - (4 << zoom)});
     return;
   }
   int altitude = tp->altitude;
@@ -323,16 +329,122 @@ void DrawCityMapUndergroundTile(City *city, int zoom, TileIndex cell, int screen
     DrawCityMapSpriteAtBaseline(drawing, MapSpriteZoomIndex(CityMapViewTileSpriteIndex(city, cell), zoom),
         screen_x, baseline, CityMapViewTileFlip(city, cell));
   if (ReadOverlay(city, cell) != CITY_OVERLAY_NONE)
-    DrawCityMapOverlay(city, zoom, MapTileX(city, cell), MapTileY(city, cell), screen_x, baseline - (4 << zoom));
+    DrawCityMapOverlay(city, cell, zoom, (CityPoint){screen_x, baseline - (4 << zoom)});
 }
 
 // Bind underground artwork's palette before visiting visible tiles. This pass preserves the caller's scan clip.
 void DrawCityMapUnderground(City *city, int zoom) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   drawing->map_depth.underworld_palettes = city->game->resources->underworld_palettes;
   CityRect saved_clip = drawing->map_state.scan_clip;
   drawing->map_state.scan_clip.left -= 8 << zoom;
   drawing->map_state.scan_clip.bottom += 8 << zoom;
   PaintVisibleCityMapTiles(city, drawing->default_map_view, zoom);
   drawing->map_state.scan_clip = saved_clip;
+}
+
+// Native data previews use semantic colors independently of the compatibility palette.
+// Growth history deliberately uses the rubble color for trees while the other previews use green.
+static u32 CityMapPreviewGround(const City *city, TileIndex tile) {
+  const TileInfo *tp = &city->tile[tile];
+  if (HasTileWater(tp)) return 0xFF285A80;
+  if (IsTileKindTree(tp->kind)) return 0xFF304E38;
+  if (!IsTileKindUnbuilt(tp->kind)) return 0xFF505860;
+  CityTileGeometry geometry = ReadCityTileGeometry(city, tile);
+  int shade = 40 + IntMin(geometry.land_height, 31);
+  return 0xFF000000 | shade << 16 | (shade + 8) << 8 | shade;
+}
+
+static u32 CityMapPreviewZone(const TileInfo *tp, u32 ground) {
+  static const u32 kZoneColors[ZONE_RESERVED_FIRST] = {
+    [ZONE_RESIDENTIAL_LOW] = 0xFF54B85C, [ZONE_RESIDENTIAL_HIGH] = 0xFF278C39,
+    [ZONE_COMMERCIAL_LOW] = 0xFF559DE0, [ZONE_COMMERCIAL_HIGH] = 0xFF286DBD,
+    [ZONE_INDUSTRIAL_LOW] = 0xFFF0D05A, [ZONE_INDUSTRIAL_HIGH] = 0xFFCBA527,
+    [ZONE_MILITARY] = 0xFFCB6556, [ZONE_AIRPORT] = 0xFFAD7BC9, [ZONE_SEAPORT] = 0xFF55BFC5
+  };
+  int zone = ReadCityZoneKind(tp);
+  return zone > ZONE_NONE && zone < ZONE_RESERVED_FIRST ? kZoneColors[zone] : ground;
+}
+
+// Preserve the sixteen data levels; zero leaves the background visible.
+static u32 CityMapPreviewMetric(int value, u32 low, u32 high, u32 ground) {
+  int level = value >> 4;
+  if (!level) return ground;
+  u32 color = 0xFF000000;
+  for (int shift = 0; shift < 24; shift += 8)
+    color |= (((low >> shift & 255) * (15 - level) + (high >> shift & 255) * (level - 1)) / 14) << shift;
+  return color;
+}
+
+static u32 CityMapPreviewColor(const City *city, TileIndex tile, int selection) {
+  const TileInfo *tp = &city->tile[tile];
+  u32 ground = CityMapPreviewGround(city, tile), classes = ReadCityTileClasses(tp->kind);
+  const u32 highlight = 0xFFF4F0DC, supplied = 0xFF65D67B, missing = 0xFFE65C50;
+  const u32 low_warning = 0xFFC9B85B, high_warning = 0xFFE74232;
+  const u32 low_benefit = 0xFF344D3C, high_benefit = 0xFF65D67B;
+  switch (selection) {
+  case CITY_DATA_SELECTION_STRUCTURES: return ground;
+  case CITY_DATA_SELECTION_ZONES: return CityMapPreviewZone(tp, ground);
+  case CITY_DATA_SELECTION_ROADS:
+    return tp->kind != TK_CLEAR && ((classes & TCLASS_ROAD) ||
+        ((classes & TCLASS_NATIVE_BRIDGE) && !(classes & TCLASS_RAIL_BRIDGE)) ||
+        ReadCityBridgeUnderpass(tp) == CITY_BRIDGE_UNDERPASS_ROAD ||
+        IsTileKindMultiHighway(tp->kind) || IsTileKindStraightHighwayFamily(tp->kind)) ? highlight : ground;
+  case CITY_DATA_SELECTION_RAIL:
+    return (classes & (TCLASS_RAIL | TCLASS_RAIL_BRIDGE)) ||
+        ReadCityBridgeUnderpass(tp) == CITY_BRIDGE_UNDERPASS_RAIL ? highlight : ground;
+  case CITY_DATA_SELECTION_TRAFFIC: {
+    u32 background = classes & (TCLASS_ROAD | TCLASS_RAIL | TCLASS_NATIVE_BRIDGE | TCLASS_HIGHWAY) ? highlight : ground;
+    return CityMapPreviewMetric(ReadTrafficDensity(city, tile), low_warning, high_warning, background);
+  }
+  case CITY_DATA_SELECTION_POWER:
+    if (classes & TCLASS_POWER) return highlight;
+    if (tp->kind != TK_CLEAR && !IsTileKindExposedWater(tp->kind)) {
+      if (tp->flags & TF_POWERED) return supplied;
+      if (tp->flags & TF_POWERABLE) return missing;
+    }
+    return ground;
+  case CITY_DATA_SELECTION_WATER: {
+    int underground = ReadUnderground(city, tile);
+    if (underground >= TUK_PIPE_FIRST && underground <= TUK_SUBWAY_ACCESS) return highlight;
+    if ((tp->flags & TF_WATER_SERVICE) == TF_WATER_SERVICE) return 0xFF55BFC5;
+    return tp->flags & TF_PIPED ? missing : ground;
+  }
+  case CITY_DATA_SELECTION_DENSITY:
+    return CityMapPreviewMetric(ReadDensity(city, tile), 0xFF3B5474, 0xFF9FDBFF, ground);
+  case CITY_DATA_SELECTION_GROWTH: {
+    int history = ReadDensityHistory(city, tile);
+    if (history <= 124) return missing;
+    if (history > 130) return supplied;
+    return IsTileKindTree(tp->kind) ? 0xFF505860 : ground;
+  }
+  case CITY_DATA_SELECTION_CRIME:
+    return CityMapPreviewMetric(ReadCrime(city, tile), low_warning, high_warning, ground);
+  case CITY_DATA_SELECTION_POLLUTION:
+    return CityMapPreviewMetric(ReadPollution(city, tile), low_warning, high_warning, ground);
+  case CITY_DATA_SELECTION_LAND_VALUE:
+    return CityMapPreviewMetric(ReadLandValue(city, tile), low_benefit, high_benefit, ground);
+  case CITY_DATA_SELECTION_POLICE_COVERAGE:
+    return CityMapPreviewMetric(ReadPoliceCoverage(city, tile), low_benefit, high_benefit, ground);
+  case CITY_DATA_SELECTION_FIRE_COVERAGE:
+    return CityMapPreviewMetric(ReadFireCoverage(city, tile), low_benefit, high_benefit, ground);
+  case CITY_DATA_SELECTION_POLICE_STATIONS: return tp->kind == TK_POLICE_STATION ? highlight : ground;
+  case CITY_DATA_SELECTION_FIRE_STATIONS: return tp->kind == TK_FIRE_STATION ? highlight : ground;
+  case CITY_DATA_SELECTION_SCHOOLS: return tp->kind == TK_SCHOOL ? highlight : ground;
+  case CITY_DATA_SELECTION_COLLEGES: return tp->kind == TK_COLLEGE ? highlight : ground;
+  default: return ground;
+  }
+}
+
+bool BuildCityMapDataPreview(const City *city, int selection, u32 *pixels) {
+  bool changed = false;
+  for (int y = 0; y < 128; ++y)
+    for (int x = 0; x < 128; ++x) {
+      TileIndex tile = MapTileXY(city, y * city->map_width / 128, x * city->map_height / 128);
+      u32 color = CityMapPreviewColor(city, tile, selection);
+      int index = y * 128 + x;
+      changed |= pixels[index] != color;
+      pixels[index] = color;
+    }
+  return changed;
 }

@@ -8,6 +8,8 @@
 // zone[5..7] has no line-topology payload. Heights, utility flags, overlays and other underground bits are shared
 // as described in tile_storage.h. Bridge and highway crossings use their own modules' payloads, not these masks.
 
+#include "city/events/events.h"
+#include "drawing/maps/map_sprites.h"
 #include "city/engine/commands.h"
 #include "city/infrastructure/lines.h"
 #include "city/infrastructure/networks.h"
@@ -23,15 +25,62 @@
 #include "city/infrastructure/tunnels.h"
 #include "city/infrastructure/power_lines.h"
 #include "city/maps/layers.h"
+#include "city/maps/module.h"
 #include "city/maps/ground.h"
 #include "city/maps/water.h"
 #include "city/presentation.h"
 #include "city/state.h"
 #include "drawing/maps/map_terrain.h"
+#include "drawing/maps/map_camera.h"
 #include "drawing/maps/map_view.h"
 #include "drawing/maps/tables.h"
 #include "drawing/sprites/sprites.h"
 #include "game/state.h"
+
+// Find a valid tile's adjacent aligned rail incline and return its transition direction. Returns the routine's
+// no-transition value when none matches; neighbors outside the map are skipped.
+int FindCityRailTransition(const City *city, TileIndex tile) {
+  static const i8 kX[] = {0, 0, -1, 1}, kY[] = {-1, 1, 0, 0};
+  static const u8 kSlopes[] = {1, 3, 2, 4};
+  for (int side = 0; side < 4; ++side) {
+    TileIndex neighbor = GetRelativeTileOrInvalid(city, tile, kX[side], kY[side]);
+    if (neighbor != INVALID_TILE && ReadTile(city, neighbor) == TK_RAIL &&
+        ReadTerrainCode(&city->tile[neighbor]) == kSlopes[side]) return side;
+  }
+  return -1;
+}
+
+// Read the axis of the requested straight infrastructure family on a valid tile. Returns -1 when the family or stored
+// shape cannot represent a straight segment; does not infer a new connection.
+int ReadCityStraightLineAxis(const City *city, TileIndex tile, int family) {
+  int kind = ReadTile(city, tile);
+  if (family && (family == TK_POWER_LINE ? !IsTileKindPlainPowerLine(kind) : kind != family)) return -1;
+  if (kind == TK_HIGHWAY) return ReadCityHighwayAxis(&city->tile[tile]);
+  if (!IsTileKindPlainPowerLine(kind) && !IsTileKindPlainTransport(kind)) return -1;
+  int shape = ReadTerrainCode(&city->tile[tile]);
+  if (IsTileKindPlainPowerLine(kind)) {
+    if (shape >= CITY_TERRAIN_SHAPE_1 && shape <= CITY_TERRAIN_SHAPE_4) return -1;
+    if (shape >= CITY_TERRAIN_SHAPE_9 && shape <= CITY_TERRAIN_SHAPE_12) return 1;
+  } else {
+    if (kLineTerrainOverrideBySlope[shape]) return -1;
+    if (kind == TK_RAIL && FindCityRailTransition(city, tile) >= 0) return -1;
+  }
+  int mask = ReadTransportConnections(&city->tile[tile]);
+  if (!(mask & CONN_NS)) return 0;
+  if (!(mask & CONN_EW)) return 1;
+  return -1;
+}
+
+// Determine whether a valid plain transport tile is a bend or junction rather than a straight or sloped piece. Reads
+// stored connections and rail transitions without changing topology.
+bool IsCityLineBendOrJunction(const City *city, TileIndex tile) {
+  int kind = ReadTile(city, tile);
+  if (!IsTileKindPlainTransport(kind) ||
+      kLineTerrainOverrideBySlope[ReadTerrainCode(&city->tile[tile])]) return false;
+  if (kind == TK_RAIL && FindCityRailTransition(city, tile) >= 0) return false;
+  int mask = ReadTransportConnections(&city->tile[tile]);
+  return (mask & CONN_EW) && (mask & CONN_NS);
+}
 
 void TickCitySurfaceLineGround(City *city, TileIndex tile) {
   RefreshCityTileGroundCover(city, tile, false);
@@ -139,7 +188,7 @@ static int FindCitySurfaceConnections(const City *city, TileIndex tile_index, bo
         ReadTerrainCode(tp) == kSurfaceLineNeighbors[direction].slope)
       return kSurfaceLineNeighbors[direction].y ? CONN_NS : CONN_EW;
     if (!rail && neighbor == TK_HIGHWAY_ENTRANCE &&
-        (city->fixes & (1 << CITY_FIX_RAMP_CONNECTIONS))) {
+        (city->fixes & (1ull << CITY_FIX_RAMP_CONNECTIONS))) {
       int variant = ReadTileVariant(tp);
       bool south = variant == 0 || variant == 3;
       int road_direction = ReadCityHighwayRampMirror(tp) ?
@@ -285,7 +334,8 @@ void PlaceCityRailCell(City *city, TileIndex origin_tile) {
   PlaceCitySurfaceLineCell(city, origin_tile, true);
 }
 
-int CitySurfaceLineConnections(int layout) {
+// Source artwork to cardinal connections, independent of native tile-kind encoding.
+static int CitySurfaceLineConnections(int layout) {
   static const u8 kMasks[15] = {5, 10, 10, 5, 10, 5, 3, 6, 12, 9, 11, 7, 14, 13, 15};
   if (IsCityMapLineLayout(layout, CITY_MAP_TILE_SPRITE_ROAD_FIRST))
     return kMasks[layout - CITY_MAP_TILE_SPRITE_ROAD_FIRST];
@@ -570,10 +620,10 @@ CityMapSurface ResolveCitySurfaceLineViewGround(const City *city, TileIndex tile
 
 // OpenTTD omits a rear wall when the adjoining surface already covers it.
 // Inspect only the two adjacent cells, including their own foundations.
-int CitySurfaceLineFoundationBlock(const City *city, TileIndex tile, CityMapSurface surface) {
+static int CitySurfaceLineFoundationBlock(const City *city, TileIndex tile, CityMapSurface surface) {
   static const u8 kNearCorners[] = {1, 4}, kOppositeCorners[] = {2, 2};
   int block = 0;
-  int rotation = CityMapCameraRotation(city->game->drawing);
+  int rotation = CityMapCameraRotation(city->drawing);
   int slope = kFoundationSlopes[surface.shape];
   int height = ReadCityLandHeight(&city->tile[tile]) + surface.raised;
   for (int edge = 0; edge < 2; ++edge) {
@@ -633,7 +683,7 @@ bool DrawCitySurfaceLineSprite(Drawing *drawing, int id, int x, int baseline, in
 int DrawCityMapInfrastructureGround(City *city, TileIndex tile, int zoom, int screen_x, int ground_y,
     CityMapSurface surface,
     const CityTileGeometry *tile_geometry) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   CityTileGeometry geometry = *tile_geometry;
   if (!IsCityMapGroundPass(drawing))
     return ground_y - (surface.raised + (surface.shape == CITY_TERRAIN_SHAPE_13)) * CityMapHeightStep(zoom);
@@ -670,7 +720,7 @@ void DrawCityMapTransportArtwork(City *city, TileIndex tile, int layout, int zoo
     DrawCityBridgeDeckArtwork(city, tile, layout, zoom, x, baseline, ReadCityBridgeStyle(city, tile));
     return;
   }
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   int sprite = layout + CITY_MAP_SPRITES_PER_ZOOM * zoom;
   if (!IsCityMapGroundPass(drawing)) {
     bool surface = IsCityMapSurfaceLayout(layout) ||
@@ -680,7 +730,7 @@ void DrawCityMapTransportArtwork(City *city, TileIndex tile, int layout, int zoo
   }
   int flipped = IsCityMapMultiHighwayLayout(layout) ?
       CityHighwaySpriteFlip(city, tile, layout) : CityMapViewTileFlip(city, tile);
-  if ((city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE)) && layout < CITY_MAP_TILE_SPRITE_HIGHWAY_FIRST)
+  if ((city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) && layout < CITY_MAP_TILE_SPRITE_HIGHWAY_FIRST)
     sprite = CitySurfaceLineSprite(city, tile, layout, zoom, CityMapCameraRotation(drawing));
   DrawCitySurfaceLineSprite(drawing, sprite, x, baseline, flipped);
 }
@@ -689,10 +739,10 @@ void DrawCityMapTransportArtwork(City *city, TileIndex tile, int layout, int zoo
 // applied visibility, detail and clip checks. Preserve ground, selection, object and power-warning order.
 void DrawCityTransportTileFallback(City *city, TileIndex tile, int layout, int zoom, int screen_x, int ground_y,
     const CityTileGeometry *tile_geometry) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   const TileInfo *tp = &city->tile[tile];
   CityTileGeometry geometry = *tile_geometry;
-  bool native = city->fixes & (1 << CITY_FIX_NATIVE_LANDSCAPE);
+  bool native = city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE);
   int kind = tp->kind, terrain_code = CityMapDryGroundShape(city, tile, tile_geometry);
   int sprite_base = CITY_MAP_SPRITES_PER_ZOOM * zoom, half_width = 4 << zoom;
   int tile_sprite = MapSpriteZoomIndex(layout, zoom), terrain_sprite = -1;

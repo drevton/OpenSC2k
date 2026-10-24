@@ -1,8 +1,8 @@
 #include "drawing/palette.h"
+#include "drawing/sprites/surface.h"
 
 #include <string.h>
 
-#include "drawing/bitmaps.h"
 #include "drawing/state.h"
 
 enum { CITY_PALETTE_ENTRY_RESERVED = 1 };
@@ -143,10 +143,31 @@ DrawingPaletteChanges AdvanceDrawingAnimationPalette(Drawing *drawing, const u32
   return (DrawingPaletteChanges){palette_changed, water_changed};
 }
 
+void ConsumeDrawingPaletteDamage(Drawing *drawing, DrawingPaletteChanges changes,
+    CityCanvasVisiblePaint mark, void *context) {
+  u32 palette_changed = changes.global_buckets;
+  // Water cycles only update opaque indexed pixels. Blended map edges remain
+  // fixed RGB; interface bitmaps retain their ordinary global-palette dependencies.
+  if (palette_changed && drawing->animation_composite_rows) {
+    for (int y = 0; y < drawing->framebuffer.height;) {
+      if (!(drawing->animation_composite_rows[y] & palette_changed)) { ++y; continue; }
+      int first = y, left = drawing->framebuffer.width, right = 0;
+      do {
+        u32 bounds = drawing->animation_composite_bounds[y];
+        left = IntMin(left, bounds >> 16);
+        right = IntMax(right, bounds & 65535);
+        drawing->animation_composite_rows[y++] = 0;
+      } while (y < drawing->framebuffer.height && (drawing->animation_composite_rows[y] & palette_changed));
+      CityRect rect = {left, first, right, y};
+      MarkScreenDirty(&drawing->screen_damage, rect);
+      mark(rect, context);
+    }
+  }
+}
+
 bool ApplyDrawingAnimationPalette(Drawing *drawing, DrawingPaletteChanges changes) {
   u32 palette_changed = changes.global_buckets, water_changed = changes.water_buckets;
   u32 changed_buckets = palette_changed | water_changed;
-  if (palette_changed) InvalidateCityWindowPaletteBitmaps(drawing, palette_changed);
   memcpy(drawing->resolved_palette, drawing->colors, sizeof(drawing->colors));
   if (palette_changed) return AnimateSpriteSurfaceChanges(&drawing->screen_surface, changed_buckets);
   return water_changed && AnimateSpriteSurfaceWater(&drawing->screen_surface, water_changed);

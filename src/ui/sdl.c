@@ -1,3 +1,4 @@
+#include "drawing/sprites/preparation.h"
 #include "drawing/maps/map_view.h"
 #include "base/version.h"
 #include "ui/tools/types.h"

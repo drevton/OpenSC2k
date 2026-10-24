@@ -1,4 +1,5 @@
 #include "city/engine/clock.h"
+#include "city/economy/history.h"
 // Shared City event pool, per-tile hash and fixed-point movement.
 // Family handlers own behavior; this module owns record membership and updates events in stable slot order.
 
@@ -12,7 +13,6 @@
 #include "city/engine/city_types.h"
 #include "city/engine/random.h"
 #include "city/infrastructure/bridges.h"
-#include "city/maps/layers.h"
 #include "city/presentation.h"
 #include "city/state.h"
 
@@ -85,7 +85,7 @@ int CityEventSlotCapacity(int width, int height) {
 // Return the usable event-slot limit under the City's expanded-event policy and map profile. Requires initialized
 // geometry/capacity; retained records beyond a smaller profile remain owned even when new allocation is limited.
 int CityEventAllocationLimit(const City *city) {
-  return city->fixes & (1 << CITY_FIX_EXPANDED_EVENTS) ?
+  return city->fixes & (1ull << CITY_FIX_EXPANDED_EVENTS) ?
       IntMin(city->events.capacity, CityEventSlotCapacity(city->map_width, city->map_height)) :
       CITY_STOCK_EVENT_SLOT_COUNT;
 }
@@ -104,7 +104,7 @@ bool CanSpawnCityVehicle(const City *city, int type) {
   case CITY_MAP_EVENT_SUBWAY_ENGINE: count = city->disasters.tile237_count; stock_limit = 5; break;
   default: return false;
   }
-  if (!(city->fixes & (1 << CITY_FIX_EXPANDED_EVENTS))) return count < stock_limit;
+  if (!(city->fixes & (1ull << CITY_FIX_EXPANDED_EVENTS))) return count < stock_limit;
 
   static const struct {
     int area;

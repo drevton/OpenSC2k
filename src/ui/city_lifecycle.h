@@ -37,6 +37,12 @@ void CloseCityAuxiliaryPresentation(City *city);
 // The original save/question caller and its answer belong to comparison.
 void PrepareCityReplacementPresentation(City *city);
 
+// Clear replacement-specific sign, marker, cost and demolition presentation, then queue information refresh.
+// This consumes the accepted City's current state without changing simulation or host file state.
+void ResetCityReplacementPresentation(City *city);
+// Discard the main map cache and damage the default canvas after loading or replacing City.
+void InvalidateLoadedCityCanvas(City *city);
+
 // Close old windows and their temporary pauses before Game replaces the city.
 void CloseCityWindowsForReplacement(Game *game);
 

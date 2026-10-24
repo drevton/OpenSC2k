@@ -64,23 +64,4 @@ typedef enum CityMusicResourceId {
   CITY_MUSIC_SEQUENCE_COUNT = 5,
 } CityMusicResourceId;
 
-// Original sndPlaySound flags passed through the host audio service.
-typedef enum CitySoundPlaybackFlags {
-  CITY_SOUND_ASYNC = 0x01, CITY_SOUND_NO_DEFAULT = 0x02,
-  CITY_SOUND_MEMORY = 0x04, CITY_SOUND_LOOP = 0x08,
-  CITY_SOUND_PLAY_MEMORY = CITY_SOUND_ASYNC | CITY_SOUND_NO_DEFAULT | CITY_SOUND_MEMORY,
-  CITY_SOUND_PLAY_LOOP_MEMORY = CITY_SOUND_PLAY_MEMORY | CITY_SOUND_LOOP,
-  CITY_SOUND_REPLAY_LOOP_MEMORY = CITY_SOUND_ASYNC | CITY_SOUND_MEMORY | CITY_SOUND_LOOP,
-  CITY_SOUND_PLAY_LOOP_FILE = CITY_SOUND_ASYNC | CITY_SOUND_NO_DEFAULT | CITY_SOUND_LOOP,
-} CitySoundPlaybackFlags;
-
-// Sequence positions; resource filenames are a separate domain.
-typedef enum CityMusicSequencePosition {
-  CITY_MUSIC_SEQUENCE_TRACK_01 = 0,
-  CITY_MUSIC_SEQUENCE_TRACK_04 = 1,
-  CITY_MUSIC_SEQUENCE_TRACK_08 = 2,
-  CITY_MUSIC_SEQUENCE_TRACK_12 = 3,
-  CITY_MUSIC_SEQUENCE_TRACK_18 = 4,
-} CityMusicSequencePosition;
-
 #endif

@@ -6,6 +6,8 @@
 #include "drawing/fonts/fonts.h"
 #include "drawing/raster/canvas_primitives.h"
 #include "drawing/raster/canvas_raster_internal.h"
+#include "ui/menus/menu.h"
+#include "ui/windows/state.h"
 #include "ui/windows/windows.h"
 
 CityScrollbar ReadCityScrollbar(CityRect track, int count, int visible, int first, int minimum_thumb) {
@@ -220,7 +222,7 @@ static const Window *DropdownOwner(const CityCanvasDesktop *desktop) {
   return NULL;
 }
 
-CityRect CityDropdownBounds(const CityCanvasDesktop *desktop) {
+static CityRect CityDropdownBounds(const CityCanvasDesktop *desktop) {
   const CityDropdown *d = &desktop->dropdown;
   const Window *owner = DropdownOwner(desktop);
   if (!d->items || !owner) return (CityRect){0};

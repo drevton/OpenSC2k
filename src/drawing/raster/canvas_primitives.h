@@ -1,7 +1,7 @@
 #ifndef SC2K_CANVAS_PRIMITIVES_H
 #define SC2K_CANVAS_PRIMITIVES_H
 
-#include "drawing/canvas.h"
+#include "drawing/types.h"
 
 // Shared canvas colors and frames. Geometry follows the canvas transform and clip.
 extern const u32 canvas_dark;

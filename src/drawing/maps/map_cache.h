@@ -1,7 +1,10 @@
 #ifndef SC2K_DRAWING_MAPS_MAP_CACHE_H
 #define SC2K_DRAWING_MAPS_MAP_CACHE_H
 
-#include "drawing/sprites/sprites.h"
+#include "drawing/types.h"
+
+typedef struct Drawing Drawing;
+typedef struct SpriteSurface SpriteSurface;
 
 enum { CITY_MAP_CACHE_FRAGMENT_LIMIT = 1024 };
 

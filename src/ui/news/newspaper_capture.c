@@ -1,7 +1,8 @@
-#include "ui/news/newspaper_text.h"
+#include "ui/news/newspaper_capture.h"
+#include "ui/news/newspaper_state.h"
 
-#include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "assets/catalog.h"
@@ -9,17 +10,18 @@
 #include "assets/resources.h"
 #include "assets/state.h"
 #include "base/text.h"
-#include "city/economy/economy.h"
+#include "city/engine/clock.h"
 #include "city/engine/random.h"
 #include "city/events/news.h"
-#include "city/presentation.h"
 #include "city/state.h"
+#include "drawing/bitmaps.h"
 #include "drawing/state.h"
 #include "game/errors.h"
 #include "game/state.h"
-#include "ui/news/newspaper.h"
 
-// Newspaper template expansion and captured-page composition.
+// Newspaper page capture, preview composition and retained first-paint effects.
+
+enum { kNewspaperColorStartYear = 1990 };
 
 static const i16 kNewspaperPictureByGroup[68] = {
   0, 0, 404, 404, 405, 402, 406, 0, 0, 0, 0, 404,
@@ -29,11 +31,6 @@ static const i16 kNewspaperPictureByGroup[68] = {
   408, 403, 403, 403, 411, 411, 403, 403, 403, 403, 411, 410,
   401, 411, 404, 407, 407, 0, 0, 0,
 };
-
-static inline const u8 *NewspaperTemplate(const CityNewspaperResources *resources, int index) {
-  return resources->text + resources->offsets[index];
-}
-
 
 // Native capture pages share a regular grid. The publication window
 // independently lays out the complete articles with the bundled publication fonts.
@@ -69,177 +66,6 @@ void InitializeCityNewspaperLayouts(Drawing *drawing) {
   }
 }
 
-// Newspaper data is token bytecode. Only literal bytes carry the stock codepage.
-static int WriteNewspaperLiteral(char *output, u8 byte) {
-  if (byte == 0xD4 || byte == 0xD5) byte = '\'';
-  if (byte == 0xD2 || byte == 0xD3) byte = '"';
-  return WriteUtf8Character(output, DecodeOem437Byte(byte));
-}
-
-// Copy an authored UTF-8 headline or body, substituting the city name for '='. Comparison resources instead expand
-// stock article bytecode below. Output must fit the expanded text; the result is its last occupied byte index.
-int ExpandCityNewspaperTemplate(City *city, const CityNewspaperResources *resources, char *output, int template_id,
-    int article_index, int half) {
-  if (resources->articles) {
-    assert(template_id >= 0 && template_id < CITY_NEWS_EVENT_COUNT);
-    const CityNewspaperArticle *article = &resources->articles[template_id];
-    const char *source = half ? article->body : article->headline;
-    const char *name = CityNameText(&city->name);
-    size_t name_length = strlen(name);
-    int written = 0;
-    for (; *source; ++source) {
-      if (*source == '=') {
-        memcpy(output + written, name, name_length);
-        written += name_length;
-      } else {
-        output[written++] = *source;
-      }
-    }
-    return written - 1;
-  }
-  Drawing *drawing = city->game->drawing;
-  const u8 *source = NewspaperTemplate(resources, template_id);
-  CityNewsRecord *article = &city->news_records.record[article_index];
-  int written = 0;
-  int position = 0;
-  if (half == 1) {
-    while (source[position] != 0 && source[position] != '+')
-      ++position;
-    if (source[position] == 0)
-      return 0;
-    ++position;
-    half = 2;
-  }
-  while (source[position] != 0) {
-    u8 token = source[position];
-    if (half == 0 && token == '+')
-      break;
-    if (token == '$') {
-      int value = article->event_data;
-      if (value > 99) output[written++] = (char)('0' + value / 100 % 10);
-      if (value > 9) output[written++] = (char)('0' + value / 10 % 10);
-      output[written] = (char)('0' + value % 10);
-    } else if (token == '%' || token == '<') {
-      int maximum = source[++position];
-      int chosen = 0;
-      if (maximum >= 2)
-        chosen = Sc2kCrtRandRange(city, maximum - 1) + 2;
-      if (token == '<') {
-        if (article->article_cache[2] == 0xFF)
-          article->article_cache[2] = (u8)chosen;
-        chosen = article->article_cache[2];
-      }
-      if (chosen > 99) output[written++] = (char)('0' + chosen / 100 % 10);
-      if (chosen > 9) output[written++] = (char)('0' + chosen / 10 % 10);
-      output[written] = (char)('0' + chosen % 10);
-    } else if (token == '&') {
-      int group = source[++position];
-      if (resources->group_counts.value[group] <= article->event_data)
-        article->event_data = 0;
-      int next = resources->group_starts.value[group] + article->event_data;
-      written += ExpandCityNewspaperTemplate(city, resources, output + written, next, article_index, half);
-    } else if (token == '*' || token == '@' || token == '^' || token == '[') {
-      u8 group = source[++position];
-      int count = resources->group_counts.value[group];
-      int choice = Sc2kCrtRandRange(city, count);
-      if (token == '@' || token == '^') {
-        u8 *cached = &article->article_cache[token == '@' ? 1 : 0];
-        if (count <= *cached)
-          *cached = (u8)choice;
-        choice = *cached;
-      } else if (token == '[') {
-        i8 *cached = &drawing->newspaper.choices.choice[group];
-        if (*cached == -1)
-          *cached = (i8)choice;
-        choice = (u8)*cached;
-      }
-      int next = resources->group_starts.value[group] + choice;
-      written += ExpandCityNewspaperTemplate(city, resources, output + written, next, article_index, half);
-    } else if (token == '-') {
-      output[written++] = '\n';
-      for (int space = 0; space < 4; ++space)
-        output[written++] = ' ';
-      output[written] = ' ';
-    } else if (token == '=') {
-      memcpy(output + written, (CityNameText(&city->name)), (city->name.length) + 1);
-      written += ((city->name.length) - 1);
-    } else if (token == '>' || token == '~') {
-      const char *name = token == '~' ? (const char *)city->overlay_names.entry[0].character :
-          (const char *)city->overlay_names.entry[article->event_data + 251].character;
-      int length = strlen(name);
-      memcpy(output + written, name, (size_t)length + 1);
-      written += length - 1;
-    } else if (token == '\\') {
-      written += WriteNewspaperLiteral(output + written, source[++position]) - 1;
-    } else {
-      int expansion = resources->token_expansions.template_id[token];
-      if (expansion != 0)
-        written += ExpandCityNewspaperTemplate(city, resources, output + written, expansion, article_index, half);
-      else
-        written += WriteNewspaperLiteral(output + written, token) - 1;
-    }
-    ++position;
-    ++written;
-  }
-  return written - 1;
-}
-
-static int ChooseCityNewspaperTemplate(City *city, const CityNewspaperResources *resources, int article_index) {
-  int group = city->news_records.record[article_index].id;
-  int count = resources->group_counts.value[group];
-  int choice = Sc2kCrtRandRange(city, count);
-  return resources->group_starts.value[group] + choice;
-}
-
-// Choose and compose a ranked newspaper article.
-bool ComposeCityNewspaperArticle(City *city, const CityNewspaperResources *resources, int article_index, char *output) {
-  Drawing *drawing = city->game->drawing;
-  memset(drawing->newspaper.choices.choice, -1,
-      sizeof(drawing->newspaper.choices.choice));
-  int template_id = ChooseCityNewspaperTemplate(city, resources, article_index);
-  int length = ExpandCityNewspaperTemplate(city, resources, output, template_id, article_index, 0);
-  output[length + 1] = '\0';
-  int previous_alphanumeric = 0;
-  for (int index = 0; index < length; ++index) {
-    int character = (u8)output[index];
-    if (character == '\'') {
-      if (index != 0 && output[index - 1] == 'L')
-        previous_alphanumeric = 0;
-    } else if (previous_alphanumeric || character < 'a' || character > 'z') {
-      previous_alphanumeric = (character >= '0' && character <= '9') ||
-          (character >= 'A' && character <= 'Z') || (character >= 'a' && character <= 'z');
-    } else {
-      output[index] = (char)(character - 'a' + 'A');
-      previous_alphanumeric = 1;
-    }
-  }
-  return true;
-}
-
-// Compose the second half of a ranked article.
-int ComposeCityNewspaperArticleBody(City *city, const CityNewspaperResources *resources, int article_index,
-    char *output) {
-  int template_id = ChooseCityNewspaperTemplate(city, resources, article_index);
-  int length = ExpandCityNewspaperTemplate(city, resources, output, template_id, article_index, 1);
-  int size = length + 1;
-  output[size] = '\0';
-  int sentence_state = 0;
-  for (int index = 0; index < size; ++index) {
-    int character = (u8)output[index];
-    if (sentence_state < 2 || character < 'a' || character > 'z') {
-      if (character == ' ' || character == '.' || character == '!' || character == '?' ||
-          character == 0xD2 || character == '"')
-        ++sentence_state;
-      else
-        sentence_state = -(character == ',');
-    } else {
-      sentence_state = 0;
-      output[index] = (char)(character - 'a' + 'A');
-    }
-  }
-  return length;
-}
-
 // Discard whole trailing words until the platform's measured width fits.
 void TrimNewspaperHeadlineToWidth(char *text, int width, void *drawing_context) {
   int length = (int)strlen(text);
@@ -253,15 +79,6 @@ void TrimNewspaperHeadlineToWidth(char *text, int width, void *drawing_context) 
   }
 }
 
-
-void FormatCityNewspaperWeather(City *city, char *output) {
-  sprintf(output, "%d", (int)city->weather.temperature - 100);
-  strcat(output, "°F ");
-  sprintf(output + strlen(output), "%u", (u32)city->weather.wind);
-  strcat(output, "mph ");
-  sprintf(output + strlen(output), "%u", (u32)city->weather.rainfall);
-  strcat(output, "mm");
-}
 
 // Fill unused newspaper space using the saved layout and random generator.
 void DrawNewspaperFillerLines(City *city, NativeNewspaperDialog *capture, const CityRect *bounds) {
@@ -302,7 +119,7 @@ void DrawNewspaperFillerLines(City *city, NativeNewspaperDialog *capture, const 
 }
 
 // Choose the closest space around the article's midpoint.
-int FindNewspaperTextWrapPoint(const char *text) {
+static int FindNewspaperTextWrapPoint(const char *text) {
   int midpoint = (i8)text[0] / 2;
   int result = midpoint;
 
@@ -368,18 +185,14 @@ void DrawNewspaperArticleWithFiller(City *city, NativeNewspaperDialog *capture, 
 
 // Newspaper paint's persistent data and CRT random effects.
 void PaintCityNewspaperDialog(City *city, NativeNewspaperDialog *capture, CityNewspaperDialog *dialog) {
-  Drawing *drawing = city->game->drawing;
+  Drawing *drawing = city->drawing;
   CityResourceState *resources = city->game->resources;
   const CityNewspaperEdition *edition = &city->newspaper_editions.edition[dialog->edition_index];
   const CityNewspaperLayout *layout = &drawing->newspaper.layouts.style[edition->layout_style];
   const CityNewspaperFonts *fonts = &drawing->newspaper.fonts.style[edition->layout_style];
   const CityNewspaperAlignments *alignments = &drawing->newspaper.alignments.style[edition->layout_style];
-  int tick = (int)city->clock.tick;
-  int month = tick / 25;
-  city->clock.month = month % 12;
-  city->clock.quarter = ((month % 12 + 1) % 12) / 3;
-  city->clock.year = tick / 300;
-  u32 seed = (u32)(int)city->newspaper.random_base_seed + (u32)month + 500 * (u32)dialog->edition_index;
+  int months = UpdateCityCalendar(city, (int)city->clock.tick);
+  u32 seed = (u32)(int)city->newspaper.random_base_seed + (u32)months + 500 * (u32)dialog->edition_index;
   char article[2048] = {0};
   CityRect rect;
 
@@ -479,4 +292,118 @@ void PaintCityNewspaperDialog(City *city, NativeNewspaperDialog *capture, CityNe
     }
   }
   DrawNewspaperFillerLines(city, capture, &rect);
+}
+
+void InitializeCityNewspaperPageLayout(const Drawing *drawing, CityCanvasNewspaperPage *page, int layout_style,
+    const char *const *text) {
+  static const u8 kLayoutPanelIndex[7] = {4, 7, 8, 9, 10, 6, 5};
+  const CityNewspaperLayout *layout = &drawing->newspaper.layouts.style[layout_style];
+  const CityNewspaperFonts *fonts = &drawing->newspaper.fonts.style[layout_style];
+  page->picture_bounds = layout->panel[3];
+  page->masthead_bounds = layout->panel[0];
+  page->picture_visible = fonts->size[3] <= 0;
+  page->picture = NULL;
+  page->filler = NULL;
+  page->filler_count = 0;
+  page->text_runs = NULL;
+  page->text_run_count = 0;
+  for (i32 index = 0; index < 7; ++index) {
+    int panel_index = kLayoutPanelIndex[index];
+    page->panel[index].bounds = layout->panel[panel_index];
+    page->panel[index].font_size = fonts->size[panel_index];
+    page->panel[index].text = text[index];
+  }
+}
+
+// Newspaper Capture
+// Host capture of one authoritative newspaper paint; no cloned city or guessed bitmap selection.
+
+void NativeReleaseNewspaperPage(NativeNewspaperDialog *dialog) {
+  FreeRunSprite(dialog->picture);
+  dialog->picture = NULL;
+  dialog->page.picture = NULL;
+}
+
+// Keep full text outside City. Re-expansion uses a scalar City copy, including its
+// shared token choices; clicking a story never advances simulation RNG.
+static void CaptureReadableNewspaper(City *city, int edition_index, NativeNewspaperDialog *dialog) {
+  City preview = *city;
+  const CityNewspaperEdition *edition = &city->newspaper_editions.edition[edition_index];
+  static const u8 kReportTypes[] = {CITY_NEWS_FREDS_OPINION, CITY_NEWS_EDITOR_COMMENTARY,
+      CITY_NEWS_EDITOR_COMMENTARY, CITY_NEWS_OPINION_SURVEY, CITY_NEWS_OPINION_SURVEY, CITY_NEWS_ADVICE};
+  static const u8 kSlots[] = {0, 1, 2, 3, 4, 7, 8};
+  static const u8 kSeeds[] = {28, 49, 56, 63, 70, 42, 35};
+  preview.news_records.record[7].id = CITY_NEWS_WEATHER;
+  preview.news_records.record[7].event_data = city->weather.state;
+  preview.news_records.record[8].id = kReportTypes[edition->report_kind];
+  preview.news_records.record[8].event_data = city->newspaper.problems.category_order[0];
+  u32 seed = city->newspaper.random_base_seed + city->clock.tick / 25 + 500 * edition_index;
+  int next_ranked = 0;
+  for (int i = 0; i < 7; ++i) {
+    bool selected = false;
+    int first = i < 5 ? next_ranked : kSlots[i], end = i < 5 ? 7 : first + 1;
+    for (int slot = first; slot < end && !selected; ++slot) {
+      if (i < 5) next_ranked = slot + 1;
+      preview.random.crt = seed + kSeeds[i];
+      ComposeCityNewspaperArticle(&preview, &city->game->resources->newspaper, slot, dialog->articles[i].headline);
+      preview.random.crt = seed + kSeeds[i];
+      ComposeCityNewspaperArticleBody(&preview, &city->game->resources->newspaper, slot, dialog->articles[i].body);
+      selected = true;
+      // Different ranked topics can resolve to the same authored story. Compare the rendered text too.
+      for (int previous = 0; previous < i; ++previous)
+        if ((dialog->articles[i].headline[0] &&
+                !strcmp(dialog->articles[i].headline, dialog->articles[previous].headline)) ||
+            (dialog->articles[i].body[0] &&
+                !strcmp(dialog->articles[i].body, dialog->articles[previous].body))) selected = false;
+    }
+    if (!selected) dialog->articles[i].headline[0] = dialog->articles[i].body[0] = 0;
+  }
+  CopyText(dialog->articles[5].heading, sizeof(dialog->articles[5].heading),
+      kCityNewspaperWeatherHeadings[edition->subtitle_kind]);
+  CopyText(dialog->articles[6].heading, sizeof(dialog->articles[6].heading),
+      kCityNewspaperEditorialHeadings[edition->report_kind]);
+  dialog->reading = dialog->hovered = -1;
+  dialog->opening_frame = CITY_NEWSPAPER_OPENING_FRAMES;
+}
+
+bool NativeCaptureNewspaper(City *city, CityNewspaperDialog *paint, NativeNewspaperDialog *dialog) {
+  Drawing *drawing = city->drawing;
+  NativeReleaseNewspaperPage(dialog);
+  const char *text[7] = {0};
+  InitializeCityNewspaperPageLayout(drawing, &dialog->page,
+      city->newspaper_editions.edition[paint->edition_index].layout_style, text);
+  dialog->page.filler = dialog->filler;
+  dialog->page.text_runs = dialog->text_runs;
+  PaintCityNewspaperDialog(city, dialog, paint);
+  if (GetGameError(city->game))
+    return false;
+  CaptureReadableNewspaper(city, paint->edition_index, dialog);
+  if (!paint->picture) return true;
+  // Preserve the issue's color choice without copying image pixels. Grayscale
+  // issues own only a palette and a reference to the immutable source rows.
+  bool monochrome = city->geography.start_year + city->clock.year < kNewspaperColorStartYear;
+  if (monochrome) {
+    SpritePalette *palette = calloc(1, sizeof(*palette));
+    if (!palette) { SetGameError(city->game, SC2K_ERROR_HOST_ALLOCATION_FAILURE); return false; }
+    palette->references = 1;
+    for (int i = 0; i < 256; ++i) {
+      u32 rgb = paint->picture->palette->colors[i];
+      int gray = ((rgb >> 16 & 255) * 77 + (rgb >> 8 & 255) * 150 + (rgb & 255) * 29) / 256;
+      palette->colors[i] = gray * 0x010101;
+    }
+    dialog->picture = ReferenceRunSprite(paint->picture, palette, false);
+    FreeSpritePalette(palette);
+    if (!dialog->picture) { SetGameError(city->game, SC2K_ERROR_HOST_ALLOCATION_FAILURE); return false; }
+  } else dialog->picture = RetainRunSprite(paint->picture);
+  dialog->page.picture = dialog->picture;
+  return true;
+}
+
+// Manual previews use isolated scalar City state and borrow map layers for reads.
+bool ComposeCityNewspaperPreview(const City *city, int edition, NativeNewspaperDialog *dialog) {
+  City preview = *city;
+  CityNewspaperDialog paint = {0};
+  paint.edition_index = edition;
+  ClearGameError(city->game);
+  return NativeCaptureNewspaper(&preview, &paint, dialog);
 }

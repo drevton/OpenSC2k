@@ -71,9 +71,6 @@ i64 CmdSetSimulationSpeed(City *city, u32 flags, int speed, int reserved1, int r
 // Set a supported gameplay fix and refresh its derived state. TEST validates fix/Boolean/reserved values only.
 i64 CmdSetCityFix(City *city, u32 flags, int fix, int enabled, int reserved);
 
-// Timer
-i16 UpdateCityCadence(City *city);
-
 void SetCityTimerMode(City *city, int mode);
 
 #endif

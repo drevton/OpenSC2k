@@ -29,7 +29,13 @@
 
 // Bridge chooser state, layout, drawing and input.
 
-void Sc2kCanvasDrawSpanStyle(Canvas *canvas, CityRect bounds, const char *title, const char *message) {
+enum CitySpanSort { CITY_SPAN_SORT_COST, CITY_SPAN_SORT_NAME };
+
+static i32 Sc2kCanvasDesktopOpenSpanChoices(CityCanvasDesktop *desktop, CityRect bounds,
+    const char *title, const char *message, u32 styles, const u32 *prices);
+static i32 CitySpanChoiceAt(const Window *window, i32 x, i32 y);
+
+static void Sc2kCanvasDrawSpanStyle(Canvas *canvas, CityRect bounds, const char *title, const char *message) {
   static const char *const styles[CITY_ROAD_SPAN_STYLE_COUNT] = {"Basic", "Arch", "Decorated"};
   CanvasPanelFrame(canvas, bounds, title);
   CanvasBeveledBox(canvas, bounds.left + 9, bounds.top + 28, bounds.right - 9, bounds.top + 58,
@@ -46,7 +52,7 @@ void Sc2kCanvasDrawSpanStyle(Canvas *canvas, CityRect bounds, const char *title,
   CanvasTextAt(canvas, bounds.right - 59, bounds.bottom - 24, "Cancel", canvas_text);
 }
 
-int ReadCitySpanList(const Window *window, u8 order[CITY_SPAN_STYLE_COUNT]) {
+static int ReadCitySpanList(const Window *window, u8 order[CITY_SPAN_STYLE_COUNT]) {
   int count = 0;
   for (int style = 0; style < CITY_SPAN_STYLE_COUNT; ++style) {
     if (!(window->span_styles & (1 << style))) continue;
@@ -65,12 +71,13 @@ int ReadCitySpanList(const Window *window, u8 order[CITY_SPAN_STYLE_COUNT]) {
   return count;
 }
 
-int CitySpanVisibleRows(const Window *window) {
+static int CitySpanVisibleRows(const Window *window) {
   return IntMax(1, (window->bounds.bottom - window->bounds.top - CITY_SPAN_LIST_TOP -
       CITY_SPAN_FOOTER_HEIGHT) / CITY_SPAN_ROW_HEIGHT);
 }
 
-CityRect CitySpanControlBounds(const Window *window, int control) {
+// Nonnegative controls are visible row numbers; negative values are header/scroll controls.
+static CityRect CitySpanControlBounds(const Window *window, int control) {
   CityRect b = window->bounds;
   if (control >= 0) {
     int top = b.top + CITY_SPAN_LIST_TOP + control * CITY_SPAN_ROW_HEIGHT;
@@ -87,7 +94,7 @@ CityRect CitySpanControlBounds(const Window *window, int control) {
   }
 }
 
-CityRect CitySpanScrollThumb(const Window *window) {
+static CityRect CitySpanScrollThumb(const Window *window) {
   CityRect track = CitySpanControlBounds(window, CITY_CANVAS_SPAN_HIT_TRACK);
   u8 order[CITY_SPAN_STYLE_COUNT];
   int count = ReadCitySpanList(window, order), visible = CitySpanVisibleRows(window);
@@ -104,7 +111,7 @@ static void DrawBridgeArrow(Canvas *canvas, CityRect b, bool up, u32 ink) {
   }
 }
 
-void CanvasDrawSpanChoices(Canvas *canvas, const Window *window) {
+static void CanvasDrawSpanChoices(Canvas *canvas, const Window *window) {
   _Static_assert(CITY_BRIDGE_CHOICE_ICON_COUNT == CITY_BRIDGE_BITMAP_COUNT, "Bridge cache covers every style");
   NativeSpanDialog *dialog = window->city->game->ui->span.active;
   while (dialog->window_id != window->window_id) dialog = dialog->parent;
@@ -229,13 +236,12 @@ int CreateCitySpanWindow(City *city, NativeSpanDialog *dialog, int distance, int
   i32 index = Sc2kCanvasDesktopOpenSpanChoices(span->desktop,
       (CityRect){150, 40, 150 + CITY_SPAN_CHOICE_WIDTH, 40 + height}, title, dialog->message, styles, prices);
   if (index < 0) {
-    if (city->game->reconstruction_error == 0)
-      city->game->reconstruction_error = SC2K_ERROR_GUEST_ALLOCATION_FAILURE;
+    SetGameError(city->game, SC2K_ERROR_GUEST_ALLOCATION_FAILURE);
     return -1;
   }
   span->desktop->windows[index].city = city;
   span->desktop->windows[index].span_rail = rail;
-  dialog->drawing = (CityBridgeWindowDrawing *)CreateCityWindowDrawing(city->game->drawing,
+  dialog->drawing = (CityBridgeWindowDrawing *)CreateCityWindowDrawing(city->drawing,
       CITY_WINDOW_DRAWING_BRIDGE_CHOICES, 0);
   if (!dialog->drawing) {
     Sc2kCanvasDesktopDismissWindow(span->desktop, span->desktop->windows[index].window_id);
@@ -445,7 +451,8 @@ bool SpanWindowProcedure(Game *game, const Window *window, const WindowEvent *ev
   return false;
 }
 
-i32 Sc2kCanvasDesktopOpenSpanChoices(CityCanvasDesktop *desktop, CityRect bounds,
+// Return the desktop array index, or -1 when the styles/prices are invalid or opening fails.
+static i32 Sc2kCanvasDesktopOpenSpanChoices(CityCanvasDesktop *desktop, CityRect bounds,
     const char *title, const char *message, u32 styles, const u32 *prices) {
   if (styles == 0 || (styles & ~CITY_SPAN_STYLES_ALL) != 0 || prices == NULL)
     return -1;
@@ -457,7 +464,8 @@ i32 Sc2kCanvasDesktopOpenSpanChoices(CityCanvasDesktop *desktop, CityRect bounds
   return Sc2kCanvasDesktopOpen(desktop, window);
 }
 
-i32 CitySpanChoiceAt(const Window *window, i32 x, i32 y) {
+// Return a style index or a CityCanvasSpanHit sentinel.
+static i32 CitySpanChoiceAt(const Window *window, i32 x, i32 y) {
   CityRect bounds = window->bounds;
   if (window->span_styles) {
     if (CanvasCloseAt(bounds, x, y)) return CITY_CANVAS_SPAN_HIT_CANCEL;

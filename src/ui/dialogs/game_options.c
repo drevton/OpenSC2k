@@ -8,6 +8,7 @@
 #include "ui/state.h"
 #include "ui/windows/controls.h"
 #include "ui/windows/windows.h"
+#include "base/text.h"
 
 // Drawing subsystem: game options.
 
