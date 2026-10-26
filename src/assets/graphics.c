@@ -14,9 +14,46 @@
 #include "assets/state.h"
 #include "base/byte_order.h"
 #include "city/infrastructure/types.h"
-#include "drawing/sprites/sprites.h"
+#include "assets/run_sprite.h"
 
 // Graphics Assets
+
+bool ValidateSpriteVariants(SpriteVariants variants, int sprite_count, int header_count) {
+  int previous = -1;
+  for (u32 at = 0; at < variants.size;) {
+    if (variants.size - at < 4) return false;
+    const u8 *record = variants.data + at;
+    int sprite = ReadLE16(record), mask = record[2];
+    if (sprite <= previous || sprite >= sprite_count || !mask || (mask & ~15) || record[3]) return false;
+    previous = sprite;
+    at += 4;
+    for (int level = 0; level < 4; ++level) {
+      if (!(mask & (1 << level))) continue;
+      if (variants.size - at < 2) return false;
+      int header = ReadLE16(variants.data + at) & CITY_SPRITE_HEADER_MASK;
+      if (!header || header > header_count) return false;
+      at += 2;
+    }
+  }
+  return true;
+}
+
+u16 ResolveSpriteVariant(SpriteVariants variants, int sprite, int level, u16 fallback) {
+  // Preparation only. Painting uses the selected, prescaled image directly.
+  for (u32 at = 0; at < variants.size;) {
+    const u8 *record = variants.data + at;
+    int id = ReadLE16(record), mask = record[2];
+    if (id > sprite) break;
+    at += 4;
+    for (int bit = 0; bit < 4; ++bit) {
+      if (!(mask & (1 << bit))) continue;
+      if (id == sprite && bit == level) return ReadLE16(variants.data + at);
+      at += 2;
+    }
+    if (id == sprite) break;
+  }
+  return fallback;
+}
 
 // Read one native run image with validated dimensions. The caller owns the returned
 // reference; malformed offsets/runs and truncated input fail without retaining an image.
@@ -120,7 +157,7 @@ bool LoadCityInterfaceIcons(CityAssets *assets, u32 id) {
   if (!headers || headers > CITY_SPRITE_HEADER_MASK || size > count * 12 ||
       offset != ((first + size + 3) & ~3) || (u64)offset + headers * 12 > span.size) return false;
   CityInterfaceIcons icons = {.data = span, .variants = {data + first, size},
-      .lookup = (const u16 *)(data + 24), .count = count};
+      .lookup = data + 24, .count = count};
   if (!ValidateSpriteVariants(icons.variants, count, headers)) return false;
   for (u32 icon = 0; icon < count; ++icon) {
     u32 header = ReadLE16(data + 24 + icon * 2) & CITY_SPRITE_HEADER_MASK;
@@ -203,7 +240,7 @@ static RunSprite *ReadPicturePackImage(AssetFile *file, u32 asset_id, int index)
 // references; windows borrow them and the normal sprite drawer handles painting.
 bool LoadCityPictureAssets(CityAssets *assets, u32 asset_id) {
   RunSprite **images;
-  int count;
+  u32 count;
   switch (asset_id) {
   case CITY_ASSET_ILLUSTRATIONS:
     images = assets->illustrations;
@@ -225,7 +262,7 @@ bool LoadCityPictureAssets(CityAssets *assets, u32 asset_id) {
   u8 header[12];
   bool valid = ReadAssetFile(&file, header, sizeof(header)) == sizeof(header) &&
       !memcmp(header, "SC2KPIC1", 8) && ReadLE32(header + 8) == count;
-  for (int index = 0; valid && index < count; ++index) {
+  for (u32 index = 0; valid && index < count; ++index) {
     RunSprite *sprite = ReadPicturePackImage(&file, asset_id, index);
     if (!sprite) { valid = false; break; }
     FreeRunSprite(images[index]);

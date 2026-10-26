@@ -1,4 +1,5 @@
 #include "ui/windows/window_internal.h"
+#include "ui/windows/state.h"
 
 #include <string.h>
 

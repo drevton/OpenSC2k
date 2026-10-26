@@ -14,26 +14,31 @@ extern const CityDisasterPeriods kCityDefaultDisasterPeriods;
 
 // Dispatch
 
-void FailRadio(City *city, i32 outcome);
-void FinishCityMissionOutcome(City *city, int outcome);
 void ScheduleRandomDisaster(City *city, int kind);
 void ScheduleCenteredDisaster(City *city, int kind, int radius);
 void SchedulePollutionDisaster(City *city);
 void EvaluateCityProblemsAndRandomDisaster(City *city);
 i64 AdvanceCityDisasterEffects(City *city, bool terrain_water_allowed);
 
+// Advance stationary fire, riot, pollution and flood effects in live row order. Effects spreading into later tiles
+// are handled in this pass. Returns one when those markers were seen, not whether any tile changed. Cleanup and
+// sound rules still run when none were seen; this is separate from scheduled landscape visits and zone growth.
+i64 UpdateCityMapTileStates(City *city);
+
 // Effects apply the queued location immediately or resume City-owned disaster work. An i64 result may be
 // CITY_OPERATION_PENDING; resume that same effect after its delay instead of scheduling it again.
 // Successful effects return nonzero, and false/zero means no suitable target or event slot was found.
 
 i64 ApplyCityFireDisaster(City *city, bool fire_storm);
-bool ApplyCityMobileDisaster(City *city, bool monster);
 i64 ApplyCityRandomDisasterStrikes(City *city, bool delayed);
 bool ApplyDisasterCellEffect(City *city, TileIndex tile_index, int allow_low_tiles);
-void DemolishCityFootprintForDisaster(City *city, TileIndex tile, int animate,
-    int clear_overlays);
+// Remove a valid tile's selected structure, ignoring tunnels. Nonzero animate enables removal effects;
+// nonzero mark_fire marks the selected footprint's remaining dry cells with fire.
+// May consume City RNG; retains the most severe damage category after removal, using live zones for non-facilities.
+void DemolishCityFootprintForDisaster(City *city, TileIndex tile, int animate, int mark_fire);
 void ResolveDestroyedCityMapCell(City *city, TileIndex tile_index);
-void SpreadCityMapFireToCell(City *city, TileIndex tile_index, int maximum_power_level);
+// Flood markers spread through complete native tiles up to flood_level, measured in land-height levels.
+void SpreadCityFloodToCell(City *city, TileIndex tile_index, int flood_level);
 void SetCityMapOverlayIfReplaceable(City *city, TileIndex tile_index, u8 overlay);
 void ClearTransientCityMapOverlay(City *city, TileIndex tile_index);
 bool ApplyCityRiotDisaster(City *city);
@@ -45,7 +50,6 @@ i64 ApplyCityMeltdownDisaster(City *city);
 i64 ApplyCityHurricaneDisaster(City *city);
 i64 ApplyCityVolcanoDisaster(City *city, bool terrain_water_allowed);
 i64 ApplyCityEarthquakeDisaster(City *city);
-bool ApplyCityAirCrashDisaster(City *city);
 
 // Toggle random-disaster suppression; this does not cancel an active or explicitly requested disaster.
 // The command ignores map location and requires zero reserved fields. TEST leaves the rule unchanged.

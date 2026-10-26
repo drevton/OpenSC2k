@@ -5,11 +5,22 @@
 
 // Audio
 
+// Decoded sound effects are mono signed 16-bit little-endian PCM at this rate.
+// Asset validation and the output mixer share the same fixed recording format.
+enum { CITY_SOUND_SAMPLE_RATE = 44100 };
+
 // Playback tokens identify the current track; completion for an older token is ignored.
 enum { CITY_MUSIC_NO_TOKEN = UINT16_MAX };
 typedef enum CityMusicCompletion {
   CITY_MUSIC_PENDING = 0, CITY_MUSIC_FINISHED = 1, CITY_MUSIC_FAILED = 8
 } CityMusicCompletion;
+
+// One backend poll result and the playback token it belongs to. Pending has CITY_MUSIC_NO_TOKEN;
+// finished/failed retains the reported token even when the controller will reject it as stale.
+typedef struct CityMusicNotification {
+  CityMusicCompletion completion;
+  u16 token;
+} CityMusicNotification;
 
 typedef enum CityEffectPlayback {
   CITY_EFFECT_ONCE, CITY_EFFECT_LOOP, CITY_EFFECT_REPLAY_LOOP, CITY_EFFECT_STOP

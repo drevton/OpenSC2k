@@ -187,10 +187,8 @@ static void SelectCityFileBrowserEntry(CityFileBrowser *browser, int selected) {
   browser->select_all[1] = 0;
   char *path = NULL;
   FormatText(&path, "%s%s", browser->directory, entry->name);
-  char *native = DuplicateText(path);
-  free(path);
   CityFileSummary summary;
-  if (!ReadCityFileSummary(native, &summary)) {
+  if (!ReadCityFileSummary(path, &summary)) {
     CopyText(browser->details[browser->detail_count++], sizeof(browser->details[0]), "Unable to read game details");
   } else {
     snprintf(browser->details[browser->detail_count++], sizeof(browser->details[0]), "City: %s", summary.name);
@@ -221,7 +219,7 @@ static void SelectCityFileBrowserEntry(CityFileBrowser *browser, int selected) {
     snprintf(browser->details[browser->detail_count++], sizeof(browser->details[0]), "Revision: %s",
         summary.writer_version.revision[0] ? summary.writer_version.revision : "Unknown");
   }
-  free(native);
+  free(path);
   time_t timestamp = entry->modified;
   const struct tm *date = localtime(&timestamp);
   if (date) {
@@ -343,20 +341,20 @@ void ReleaseCityFileBrowser(CityFileBrowser *browser) {
 // Browser controls validate local choices; the dialog module owns their completion and save scopes.
 static WindowProcedure FileBrowserConfirmationWindowProcedure;
 
-static Window *FileBrowserWindow(City *city, const NativeFileDialog *dialog) {
-  return FindCityCanvasWindow(city->game->ui->file_dialog.desktop, dialog->window_id);
+static Window *FileBrowserWindow(const CityInterfaceState *ui, const NativeFileDialog *dialog) {
+  return FindCityCanvasWindow(ui->file_dialog.desktop, dialog->window_id);
 }
 
-static void DirtyFileBrowser(City *city, NativeFileDialog *dialog) {
-  Window *window = FileBrowserWindow(city, dialog);
+static void DirtyFileBrowser(Game *game, NativeFileDialog *dialog) {
+  Window *window = FileBrowserWindow(game->ui, dialog);
   if (!window) return;
   CityFileBrowser *browser = &dialog->browser;
   int focus = browser->focus == 1 ? 1 : 0;
   CityRect input = CityFileBrowserBounds(window, focus ? CITY_FILE_NAME : CITY_FILE_FILTER);
-  browser->text_scroll[focus] = CityTextBoxScroll(&city->game->resources->interface_font, input,
+  browser->text_scroll[focus] = CityTextBoxScroll(&game->resources->interface_font, input,
       focus ? browser->filename : browser->filter, browser->caret[focus], browser->text_scroll[focus]);
   browser->first = IntClamp(browser->first, 0, browser->visible_count - CityFileBrowserRows(window));
-  Sc2kDirtyMarkRect(&city->game->ui->file_dialog.desktop->dirty, window->bounds);
+  Sc2kDirtyMarkRect(&game->ui->file_dialog.desktop->dirty, window->bounds);
 }
 
 void SubmitCityFileDialog(City *city, NativeFileDialog *dialog, i32 accept, i32 overwrite) {
@@ -367,10 +365,8 @@ void SubmitCityFileDialog(City *city, NativeFileDialog *dialog, i32 accept, i32 
     return;
   }
   bool absolute = IsPathAbsolute(dialog->browser.filename);
-  char *entered = NULL;
-  FormatText(&entered, "%s%s", absolute ? "" : dialog->browser.directory, dialog->browser.filename);
-  char *destination = DuplicateText(entered);
-  free(entered);
+  char *destination = NULL;
+  FormatText(&destination, "%s%s", absolute ? "" : dialog->browser.directory, dialog->browser.filename);
   NormalizeFilePath(destination);
   if (!dialog->browser.open) {
     const char *extension = CityUsesSc2k(city) ? ".sc2k" : ".sc2";
@@ -424,7 +420,7 @@ void SubmitCityFileDialog(City *city, NativeFileDialog *dialog, i32 accept, i32 
 static void NavigateFileBrowser(City *city, NativeFileDialog *dialog, const char *directory) {
   if (!ReadCityFileBrowserDirectory(&dialog->browser, directory))
     PresentCityFileNotice(city, "The selected directory could not be opened completely.", true);
-  DirtyFileBrowser(city, dialog);
+  DirtyFileBrowser(city->game, dialog);
 }
 
 static void ActivateFileBrowserSelection(City *city, NativeFileDialog *dialog) {
@@ -462,11 +458,7 @@ static void ConfirmFileBrowserDelete(City *city, NativeFileDialog *dialog) {
   if (browser->selected < 0 || browser->selected >= browser->visible_count) return;
   const CityFileBrowserEntry *entry = &browser->entries[browser->visible[browser->selected]];
   if (entry->directory) return;
-  char *path = NULL;
-  FormatText(&path, "%s%s", browser->directory, entry->name);
-  free(dialog->delete_path);
-  dialog->delete_path = DuplicateText(path);
-  free(path);
+  FormatText(&dialog->delete_path, "%s%s", browser->directory, entry->name);
   Window window = {0};
   window.kind = CITY_CANVAS_CONFIRM;
   window.procedure = FileBrowserConfirmationWindowProcedure;
@@ -481,7 +473,7 @@ static void ConfirmFileBrowserDelete(City *city, NativeFileDialog *dialog) {
   }
 }
 
-static void EditFileBrowser(City *city, NativeFileDialog *dialog) {
+static void EditFileBrowser(Game *game, NativeFileDialog *dialog) {
   CityFileBrowser *browser = &dialog->browser;
   if (browser->focus == 0) FilterCityFileBrowser(browser);
   else {
@@ -489,7 +481,7 @@ static void EditFileBrowser(City *city, NativeFileDialog *dialog) {
     browser->detail_count = 0;
     browser->last_click_row = -1;
   }
-  DirtyFileBrowser(city, dialog);
+  DirtyFileBrowser(game, dialog);
 }
 
 // Handles this window's painting and input; paint coordinates are local to the window.
@@ -511,7 +503,7 @@ bool FileWindowProcedure(Game *game, const Window *window, const WindowEvent *ev
     if (input->button != CANVAS_SDL_BUTTON_LEFT) return false;
     int x = event->x, y = event->y;
     CityFilePresentation *files = &city->game->ui->file_dialog;
-    Window *target = FileBrowserWindow(city, dialog);
+    Window *target = FileBrowserWindow(game->ui, dialog);
     CityFileBrowser *browser = &dialog->browser;
     if (CanvasCloseAt(target->bounds, x, y)) { SubmitCityFileDialog(city, dialog, 0, 0); return true; }
     for (int control = 0; control < CITY_FILE_CONTROL_COUNT; ++control) {
@@ -531,7 +523,7 @@ bool FileWindowProcedure(Game *game, const Window *window, const WindowEvent *ev
         browser->focus = field;
         (field ? browser->filename : browser->filter)[0] = 0;
         browser->caret[field] = browser->text_scroll[field] = browser->select_all[field] = 0;
-        EditFileBrowser(city, dialog);
+        EditFileBrowser(game, dialog);
       } else if (control == CITY_FILE_SORT_NAME || control == CITY_FILE_SORT_DATE) {
         bool date = control == CITY_FILE_SORT_DATE;
         browser->descending = browser->sort_date == date ? !browser->descending : date;
@@ -571,7 +563,7 @@ bool FileWindowProcedure(Game *game, const Window *window, const WindowEvent *ev
         target->bounds.right = target->bounds.left + CITY_FILE_BROWSER_WIDTH;
         target->bounds.bottom = target->bounds.top + CITY_FILE_BROWSER_HEIGHT;
       } else Sc2kCanvasDesktopPointerDown(files->desktop, x, y);
-      DirtyFileBrowser(city, dialog);
+      DirtyFileBrowser(game, dialog);
       return true;
     }
     Sc2kCanvasDesktopPointerDown(files->desktop, x, y);
@@ -584,9 +576,9 @@ bool FileWindowProcedure(Game *game, const Window *window, const WindowEvent *ev
     else if (key == CITY_KEY_RETURN) ActivateFileBrowserSelection(city, dialog);
     else if (key == CITY_KEY_TAB) {
       browser->focus = browser->open ? (browser->focus == 0 ? 2 : 0) : (browser->focus + 1) % 3;
-      DirtyFileBrowser(city, dialog);
+      DirtyFileBrowser(game, dialog);
     } else if (key == CITY_KEY_UP || key == CITY_KEY_DOWN || key == CITY_KEY_PAGE_UP || key == CITY_KEY_PAGE_DOWN) {
-      Window *window = FileBrowserWindow(city, dialog);
+      Window *window = FileBrowserWindow(game->ui, dialog);
       int rows = CityFileBrowserRows(window);
       int delta = key == CITY_KEY_UP ? -1 : key == CITY_KEY_DOWN ? 1 : key == CITY_KEY_PAGE_UP ? -rows : rows;
       int selected = browser->selected < 0 ? 0 : browser->selected + delta;
@@ -594,14 +586,14 @@ bool FileWindowProcedure(Game *game, const Window *window, const WindowEvent *ev
       if (browser->visible_count) SelectCityFileBrowserEntry(browser, selected);
       browser->first = IntClamp(browser->first, selected - rows + 1, selected);
       browser->focus = 2;
-      DirtyFileBrowser(city, dialog);
+      DirtyFileBrowser(game, dialog);
     } else if (browser->focus <= 1) {
       int field = browser->focus;
       char *text = field ? browser->filename : browser->filter;
       bool changed = key == CITY_KEY_BACKSPACE || key == CITY_KEY_DELETE;
       if (HandleCityTextEditKey(text, &browser->caret[field], &browser->select_all[field], key)) {
-        if (changed) EditFileBrowser(city, dialog);
-        else DirtyFileBrowser(city, dialog);
+        if (changed) EditFileBrowser(game, dialog);
+        else DirtyFileBrowser(game, dialog);
       }
     } else if (key == CITY_KEY_BACKSPACE) {
       char *path = NULL;
@@ -620,7 +612,7 @@ bool FileWindowProcedure(Game *game, const Window *window, const WindowEvent *ev
     InsertCityTextInput(field ? browser->filename : browser->filter,
         field ? sizeof(browser->filename) : sizeof(browser->filter),
         &browser->caret[field], &browser->select_all[field], text, false);
-    EditFileBrowser(city, dialog);
+    EditFileBrowser(game, dialog);
     return true;
   }
   case CANVAS_SDL_SCROLL: {
@@ -630,7 +622,7 @@ bool FileWindowProcedure(Game *game, const Window *window, const WindowEvent *ev
       browser->wheel_remainder += delta;
       browser->first -= browser->wheel_remainder / 1024 * 3;
       browser->wheel_remainder %= 1024;
-      DirtyFileBrowser(city, dialog);
+      DirtyFileBrowser(game, dialog);
     }
     return true;
   }
@@ -638,7 +630,7 @@ bool FileWindowProcedure(Game *game, const Window *window, const WindowEvent *ev
   case CANVAS_SDL_POINTER_UP:
   case CANVAS_SDL_FOCUS_LOST: {
     CityFileBrowser *browser = &dialog->browser;
-    Window *target = FileBrowserWindow(city, dialog);
+    Window *target = FileBrowserWindow(game->ui, dialog);
     int y = event->y;
     bool dragging = input->kind == CANVAS_SDL_POINTER_MOVE;
     if (!browser->dragging_scroll) return false;
@@ -648,7 +640,7 @@ bool FileWindowProcedure(Game *game, const Window *window, const WindowEvent *ev
       CityScrollbar scrollbar = ReadCityScrollbar(track, browser->visible_count,
           CityFileBrowserRows(target), browser->first, 8);
       browser->first = CityScrollbarPosition(&scrollbar, y, browser->scrollbar_grab, CITY_SCROLLBAR_DRAG);
-      DirtyFileBrowser(city, dialog);
+      DirtyFileBrowser(game, dialog);
     }
     return true;
   }

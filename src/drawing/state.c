@@ -6,7 +6,7 @@
 #include "drawing/bitmaps.h"
 #include "drawing/display.h"
 #include "drawing/maps/map_damage.h"
-#include "drawing/maps/map_sprites.h"
+#include "drawing/maps/sprite_cache.h"
 #include "drawing/newspaper.h"
 
 void InitializeDrawing(Drawing *drawing) {
@@ -52,13 +52,6 @@ void InitializeDrawingDefaults(Drawing *drawing) {
     .surface = {0, 1, 1, 1, 1},
     .underground = {0, 0, 1, 0, 0}
   };
-}
-
-void ReleaseCityNewspaperOpening(Drawing *drawing) {
-  free(drawing->newspaper_opening.pixels);
-  drawing->newspaper_opening = (Canvas){0};
-  drawing->newspaper_opening_window = 0;
-  drawing->newspaper_opening_bounds = (CityRect){0};
 }
 
 void ReleaseDrawing(Drawing *drawing) {

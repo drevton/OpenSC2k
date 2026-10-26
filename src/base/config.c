@@ -32,18 +32,11 @@ static ConfigLine *FindConfigLine(const Config *config, const char *key) {
   return NULL;
 }
 
-bool HasConfigKey(const Config *config, const char *key) { return FindConfigLine(config, key) != NULL; }
-
-bool ReadConfigInteger(const Config *config, const char *key, i64 *value) {
-  ConfigLine *line = FindConfigLine(config, key);
-  if (!line || line->is_string) return false;
-  *value = line->integer;
-  return true;
-}
-
-const char *ReadConfigString(const Config *config, const char *key) {
-  ConfigLine *line = FindConfigLine(config, key);
-  return line && line->is_string ? line->string : NULL;
+ConfigValue ReadConfigValue(const Config *config, const char *key) {
+  const ConfigLine *line = FindConfigLine(config, key);
+  if (!line) return (ConfigValue){0};
+  return line->is_string ? (ConfigValue){.type = CONFIG_STRING, .string = line->string} :
+      (ConfigValue){.type = CONFIG_INTEGER, .integer = line->integer};
 }
 
 static bool ConfigKeyCharacter(char c) {

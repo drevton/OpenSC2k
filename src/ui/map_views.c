@@ -1,4 +1,5 @@
 #include "ui/windows/window_internal.h"
+#include "city/maps/map.h"
 #include "drawing/sprites/surface.h"
 #include "ui/map_visibility.h"
 #include "ui/map.h"
@@ -13,6 +14,7 @@
 #include "city/state.h"
 #include "drawing/display.h"
 #include "drawing/maps/map_cache.h"
+#include "drawing/maps/map_camera.h"
 #include "drawing/maps/map_animation.h"
 #include "drawing/maps/map_effects.h"
 #include "drawing/maps/map_events.h"
@@ -219,7 +221,7 @@ static CityPoint CityViewportTargetPosition(const City *city, const CityExtraMap
       bounds.top + (CITY_VIEWPORT_TOP * scale + 99) / 100 + view->scroll_pixels.y};
 }
 
-static bool PreserveCityViewportScrollSource(City *city) {
+static bool PreserveCityViewportScrollSource(const City *city) {
   Drawing *drawing = city->drawing;
   CityCanvasDesktop *desktop = &city->game->ui->desktop;
   for (int index = 0; index < CITY_EXTRA_MAP_VIEW_COUNT; ++index) {
@@ -240,7 +242,7 @@ static bool PreserveCityViewportScrollSource(City *city) {
 }
 
 bool BindCityMapTarget(const CityMapPaint *paint) {
-  City *city = paint->city;
+  const City *city = paint->city;
   Drawing *drawing = city->drawing;
   CityExtraMapView *view = paint->view;
   int magnification = drawing->default_map_view->magnified_large_zoom ? 2 : 1;
@@ -252,7 +254,7 @@ bool BindCityMapTarget(const CityMapPaint *paint) {
 
 static void PaintCityMapPixels(CityRect rect, void *context) {
   CityMapPaint *paint = context;
-  City *city = paint->city;
+  const City *city = paint->city;
   PaintDrawingMapPixels(rect, paint);
   if (!paint->view) DrawRetainedCityZoneCostLabel(city);
   // Composite toolbar/status controls after map painting instead of fragmenting
@@ -267,7 +269,7 @@ static void PaintCityMapPixels(CityRect rect, void *context) {
 
 static void RepaintCityMapDamage(CityRect screen, void *context) {
   CityMapPaint *paint = context;
-  City *city = paint->city;
+  const City *city = paint->city;
   Drawing *drawing = city->drawing;
   CityInterfaceState *ui = city->game->ui;
   CityExtraMapView *view = paint->view;
@@ -279,7 +281,7 @@ static void RepaintCityMapDamage(CityRect screen, void *context) {
 // The caller has bound this camera and published its sprite/effect damage.
 // Reuse retained pixels before repainting requests; animation replay ends after this camera.
 static void PaintCityMapViewCache(CityMapPaint *paint, bool preserved_source) {
-  City *city = paint->city;
+  const City *city = paint->city;
   Drawing *drawing = city->drawing;
   CityExtraMapView *view = paint->view;
   NativeMapCache *cache = view ? &view->cache : &drawing->main_cache;
@@ -294,10 +296,10 @@ static void PaintCityMapViewCache(CityMapPaint *paint, bool preserved_source) {
       &pixels, PaintCityMapPixels, paint);
   if (retained) VisitScreenRepaintDamage(&drawing->world_damage, RepaintCityMapDamage, paint,
       !drawing->disable_repaint_coalescing);
-  FinishCityMapAnimations(city);
+  FinishCityMapAnimations(drawing);
 }
 
-static bool RenderCityExtraMapViews(City *city, bool preserved_source) {
+static bool RenderCityExtraMapViews(const City *city, bool preserved_source) {
   Drawing *drawing = city->drawing;
   CityInterfaceState *ui = city->game->ui;
   CityMapViewConfig saved_view = *drawing->default_map_view;
@@ -341,7 +343,7 @@ restore:
   return success && GetGameError(city->game) == 0;
 }
 
-bool RenderCityMapViews(City *city) {
+bool RenderCityMapViews(const City *city) {
   Drawing *drawing = city->drawing;
   // Sprite footprints come from native render scratch.
   drawing->world_damage = drawing->screen_damage;
@@ -660,13 +662,12 @@ bool MapViewportWindowProcedure(Game *game, const Window *window, const WindowEv
     }
     return true;
   }
-  int x, y;
   if (input->kind != CANVAS_SDL_POINTER_DOWN && input->kind != CANVAS_SDL_POINTER_MOVE) return false;
-  CityInterfacePixels(game, input, &x, &y);
+  CityPoint pixels = CityInterfacePointerPixels(game, input);
   if (input->kind == CANVAS_SDL_POINTER_MOVE) {
     if (ui->panning_view == view && ui->pan_button) {
-      OffsetCityMapPixels(city, view, x - ui->pan_pointer.x, y - ui->pan_pointer.y);
-      ui->pan_pointer = (CityPoint){x, y};
+      OffsetCityMapPixels(city, view, pixels.x - ui->pan_pointer.x, pixels.y - ui->pan_pointer.y);
+      ui->pan_pointer = pixels;
       return true;
     }
     return ui->viewport_pressed_window == window->window_id && !ui->viewport_press_released;
@@ -697,7 +698,7 @@ bool MapViewportWindowProcedure(Game *game, const Window *window, const WindowEv
   if (window->shaded || !CanvasPointInRect(CityViewportContentBounds(window), event->x, event->y)) return false;
   ui->panning_view = view;
   ui->pan_button = input->button;
-  ui->pan_pointer = (CityPoint){x, y};
+  ui->pan_pointer = pixels;
   return true;
 }
 
@@ -712,12 +713,11 @@ bool HandleCityMainMapPan(City *city, const CanvasSDLEvent *input) {
     ui->pan_button = 0;
     return held;
   }
-  int x, y;
-  CityInterfacePixels(city->game, input, &x, &y);
+  CityPoint pixels = CityInterfacePointerPixels(city->game, input);
   if (ui->pan_button) {
     if (input->kind == CANVAS_SDL_POINTER_MOVE) {
-      OffsetCityMapPixels(city, NULL, x - ui->pan_pointer.x, y - ui->pan_pointer.y);
-      ui->pan_pointer = (CityPoint){x, y};
+      OffsetCityMapPixels(city, NULL, pixels.x - ui->pan_pointer.x, pixels.y - ui->pan_pointer.y);
+      ui->pan_pointer = pixels;
     }
     return true;
   }
@@ -726,6 +726,6 @@ bool HandleCityMainMapPan(City *city, const CanvasSDLEvent *input) {
     return false;
   ui->map_view_focus_window = 0;
   ui->pan_button = input->button;
-  ui->pan_pointer = (CityPoint){x, y};
+  ui->pan_pointer = pixels;
   return true;
 }

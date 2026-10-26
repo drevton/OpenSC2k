@@ -1,3 +1,5 @@
+#include "city/disasters/disasters.h"
+
 #include "city/maps/labels.h"
 #include "city/engine/random.h"
 #include "city/military.h"
@@ -8,15 +10,13 @@
 #include "city/engine/command_types.h"
 #include "city/events/news.h"
 #include "city/maps/tile_storage.h"
-#include "game/application.h"
-#include "city/maps/layers.h"
+#include "city/maps/map_types.h"
 #include "game/audio.h"
 #include "city/presentation.h"
 #include <stdio.h>
 #include <string.h>
 
 #include "game/observation.h"
-#include "city/disasters/disasters.h"
 #include "city/engine/commands.h"
 #include "city/economy/economy.h"
 #include "city/engine/simulation.h"
@@ -24,54 +24,9 @@
 #include "city/state.h"
 #include "city/saveload/file.h"
 #include "game/state.h"
-#include "assets/state.h"
-#include "assets/catalog.h"
 #include "base/text.h"
 
-static const char *const kProblemDescriptions[] = {
-  "More power plants needed",
-  "Residents want roads and rail",
-  "Residents want more police",
-  "More fire protection needed",
-  "City water shortage",
-  "More hospitals needed",
-  "Residents want more schools",
-  "Industry needs a seaport",
-  "Commerce needs an airport",
-  "Residents want a zoo",
-  "Residents want a stadium",
-  "Residents want a marina",
-  "Residents want more parks",
-  "Industry needs outside links",
-  "Commerce needs outside links",
-};
-static const char *const kWeatherWarnings[] = {
-  "Industry needs a seaport",
-  "Commerce needs an airport",
-  "Residents want a zoo",
-  "Residents want a stadium",
-  "Residents want a marina",
-  "Residents want more parks",
-  "Industry needs outside links",
-  "Commerce needs outside links",
-  "Brownouts in the city",
-  "Heavy snow expected",
-  "Hurricane approaching",
-  "Tornado risk reported",
-};
-
 // Dispatch
-
-// The actual caller resumes this cleanup only after its outcome notice closes. Outcome must be the captured result;
-// uses live state after dismissal and must not run while its notice still owns the caller.
-void FinishCityMissionOutcome(City *city, int outcome) {
-  city->mission.active = 0;
-  if (outcome != CITY_OUTCOME_MISSION_WON) {
-    city->game->city_active = false;
-    city->game->idle_state = CITY_IDLE_STARTUP_MENU;
-    city->game->idle_entry = 1;
-  }
-}
 
 // The original helper writes two coordinates and has no semantic return value. Location must be writable; coordinates
 // are stored without map validation so scheduling callers own their admission.
@@ -86,7 +41,7 @@ void SetDisasterLocation(CityDisasterLocation *location, int x, int y) {
 void ScheduleRandomDisaster(City *city, int kind) {
   int x = (i32)Sc2kCrtRandRange(city, city->map_width - 2) + 1;
   int y = (i32)Sc2kCrtRandRange(city, city->map_height - 2) + 1;
-  SetDisasterLocation((&city->disasters.location), x, y);
+  SetDisasterLocation(&city->disasters.location, x, y);
   city->disasters.pending_type = kind;
 }
 
@@ -96,7 +51,7 @@ void ScheduleRandomDisaster(City *city, int kind) {
 void ScheduleCenteredDisaster(City *city, int kind, int radius) {
   int x = city->geography.center_x + (Sc2kCrtRand(city) & CITY_CENTERED_DISASTER_ORIGIN_MASK) - radius;
   int y = city->geography.center_y + (Sc2kCrtRand(city) & CITY_CENTERED_DISASTER_ORIGIN_MASK) - radius;
-  SetDisasterLocation((&city->disasters.location), x, y);
+  SetDisasterLocation(&city->disasters.location, x, y);
   city->disasters.pending_type = kind;
 }
 
@@ -107,9 +62,11 @@ void SchedulePollutionDisaster(City *city) {
   int strongest = 0;
   int chosen_x = 0;
   int chosen_y = 0;
-  for (int y = 0; y < city->map_height / 2; ++y) {
-    for (int x = 0; x < city->map_width / 2; ++x) {
-      int value = ReadPollution(city, MapTileXY(city, (x) * 2, (y) * 2));
+  int width = city->map_width / 2, height = city->map_height / 2;
+  for (int y = 0; y < height; ++y) {
+    const CityHalfMapStatistics *row = &city->half[y * width];
+    for (int x = 0; x < width; ++x) {
+      int value = row[x].pollution;
       if (value < 150 || value <= strongest)
         continue;
       if (NextCityMapRandomModulo(city, 10) != 0)
@@ -121,54 +78,53 @@ void SchedulePollutionDisaster(City *city) {
   }
   if (strongest == 0 || chosen_x < 0 || chosen_x >= city->map_width || chosen_y < 0 || chosen_y >= city->map_height)
     return;
-  SetDisasterLocation((&city->disasters.location), chosen_x, chosen_y);
+  SetDisasterLocation(&city->disasters.location, chosen_x, chosen_y);
   city->disasters.pending_type = CITY_DISASTER_POLLUTION;
 }
 
 // City problem selection and the disaster gate. Requires current economy/weather metrics; selection may consume
 // deterministic RNG and only queues effects for the later dispatcher.
 void EvaluateCityProblemsAndRandomDisaster(City *city) {
-  CityEconomyMonths *economy = &city->economy;
-  CityStatistics *statistics = &city->statistics;
+  const CityEconomyMonths *economy = &city->economy;
+  const CityStatistics *statistics = &city->statistics;
   int problem = CITY_PROBLEM_NONE;
   u32 population = city->indicators.population;
   int monthly_arcology_population = (i32)city->indicators.arcology_population / 12;
+  // Preserve unsigned mixed comparisons after the existing signed sums and target divisions.
   if (city->weather.state >= CITY_WEATHER_BLIZZARD) {
     problem = CITY_PROBLEM_WEATHER;
-    if (city->weather.state < CITY_WEATHER_COUNT)
-      SetCityProblemNotice(city, kWeatherWarnings[city->weather.state]);
-    else
-      SetCityProblemNotice(city, ""); // Malformed saved weather has no description resource.
+    SetCityProblemNotice(city, problem);
   } else if (city->infrastructure.power_percent > 98) {
     problem = CITY_PROBLEM_POWER;
-  } else if (economy->sector[CITY_ECONOMY_ROADS].current_amount + statistics->value[TK_RAIL_STATION] +
-          statistics->value[TK_SUBWAY_STATION] <=
-      population / 100) {
+  } else if ((u32)(economy->sector[CITY_ECONOMY_ROADS].current_amount + statistics->value[TK_RAIL_STATION] +
+          statistics->value[TK_SUBWAY_STATION]) <= population / 100) {
     problem = CITY_PROBLEM_TRANSPORT;
   } else if (population < 1000) {
     problem = CITY_PROBLEM_NONE;
-  } else if (statistics->value[TK_PRISON] / 16 + statistics->value[TK_POLICE_STATION] / 9 <=
+  } else if ((u32)(statistics->value[TK_PRISON] / 16 + statistics->value[TK_POLICE_STATION] / 9) <=
       population / 20000) {
     problem = CITY_PROBLEM_POLICE;
-  } else if (statistics->value[TK_FIRE_STATION] / 9 <= population / 20000) {
+  } else if ((u32)(statistics->value[TK_FIRE_STATION] / 9) <= population / 20000) {
     problem = CITY_PROBLEM_FIRE_STATION;
   } else if (city->infrastructure.water_percent > 98) {
     problem = CITY_PROBLEM_WATER;
   } else if (population < 3000) {
     problem = CITY_PROBLEM_NONE;
-  } else if (statistics->value[TK_HOSPITAL] / 9 <= population / 25000) {
+  } else if ((u32)(statistics->value[TK_HOSPITAL] / 9) <= population / 25000) {
     problem = CITY_PROBLEM_HOSPITAL;
-  } else if (statistics->value[TK_SCHOOL] / 9 <= population / 20000) {
+  } else if ((u32)(statistics->value[TK_SCHOOL] / 9) <= population / 20000) {
     problem = CITY_PROBLEM_SCHOOL;
   } else if (population < 8000) {
     problem = CITY_PROBLEM_NONE;
   } else if (city->infrastructure.service_bonus_a + statistics->value[TK_CRANE] <
-      (int)(economy->sector[CITY_ECONOMY_INDUSTRIAL].current_amount - (u32)monthly_arcology_population) / 10000) {
-    problem = city->geography.ocean != 0 || city->geography.river != 0 ? CITY_PROBLEM_SEAPORT
-                                                                       : CITY_PROBLEM_INDUSTRIAL_CONNECTION;
+      (u32)((int)(economy->sector[CITY_ECONOMY_INDUSTRIAL].current_amount -
+          (u32)monthly_arcology_population) / 10000)) {
+    problem = city->geography.ocean != 0 || city->geography.river != 0
+        ? CITY_PROBLEM_SEAPORT : CITY_PROBLEM_INDUSTRIAL_CONNECTION;
   } else if (city->infrastructure.service_bonus_b + statistics->value[TK_RUNWAY_LAST] +
           statistics->value[TK_RUNWAY_FIRST] <
-      (int)(economy->sector[CITY_ECONOMY_COMMERCIAL].current_amount - (u32)monthly_arcology_population) / 2000) {
+      (u32)((int)(economy->sector[CITY_ECONOMY_COMMERCIAL].current_amount -
+          (u32)monthly_arcology_population) / 2000)) {
     problem = (city->unlocks.tools.shared.policy_availability_flags & CITY_AVAILABILITY_DISASTER_CHOICE) == 0
         ? CITY_PROBLEM_COMMERCIAL_CONNECTION
         : CITY_PROBLEM_AIRPORT;
@@ -178,16 +134,16 @@ void EvaluateCityProblemsAndRandomDisaster(City *city) {
     problem = (Sc2kCrtRand(city) & 3) + CITY_PROBLEM_ZOO;
   }
   if (problem == CITY_PROBLEM_NONE)
-    SetCityProblemNotice(city, "");
+    SetCityProblemNotice(city, problem);
   if (problem >= 0) {
-    SetCityProblemNotice(city, kProblemDescriptions[problem]);
+    SetCityProblemNotice(city, problem);
     InsertRankedCityEvent(city, (u32)problem + CITY_NEWS_POWER_SHORTAGE, 0);
   }
   InvalidateCityInformation(city->game, CITY_UPDATE_STATUS);
   if (city->indicators.event_flag != 0)
     return;
   int difficulty = city->indicators.difficulty;
-  CityDisasterPeriods *periods = &city->disasters.periods;
+  const CityDisasterPeriods *periods = &city->disasters.periods;
   int months = periods->months[difficulty];
   int elapsed_months = (i32)city->clock.tick / 25;
   if (elapsed_months < months)
@@ -384,11 +340,11 @@ i64 AdvanceCityDisasterEffects(City *city, bool terrain_water_allowed) {
     i64 scan = UpdateCityMapTileStates(city);
     city->disasters.map_update_pending = scan != 0;
     for (int slot = CITY_EVENT_SLOT_FIRST; slot < city->events.capacity; ++slot) {
-      CityMapEvent *event = &city->events.event[slot];
+      const CityMapEvent *event = &city->events.event[slot];
       if (event->type == CITY_MAP_EVENT_MONSTER || event->type == CITY_MAP_EVENT_TORNADO ||
           event->type == CITY_MAP_EVENT_EXPLOSION ||
-          (event->type == CITY_MAP_EVENT_HELICOPTER && event->next_slot == CITY_HELICOPTER_CRASH) ||
-          (event->type == CITY_MAP_EVENT_AIRPLANE && event->next_slot == CITY_AIRPLANE_CRASH)) {
+          (event->type == CITY_MAP_EVENT_HELICOPTER && event->state == CITY_HELICOPTER_CRASH) ||
+          (event->type == CITY_MAP_EVENT_AIRPLANE && event->state == CITY_AIRPLANE_CRASH)) {
         city->disasters.map_update_pending = 1;
         break;
       }
@@ -423,7 +379,7 @@ i64 AdvanceCityDisasterEffects(City *city, bool terrain_water_allowed) {
       [CITY_DISASTER_HURRICANE] = CITY_NEWS_HURRICANE,
       [CITY_DISASTER_HELICOPTER_CRASH] = CITY_NEWS_HELICOPTER_CRASH,
     };
-    int kind = city->disasters.last_type;
+    u16 kind = city->disasters.last_type;
     if (kind < sizeof(kDisasterNews) / sizeof(*kDisasterNews) && kDisasterNews[kind])
       InsertRankedCityEvent(city, kDisasterNews[kind], city->disasters.event_data);
   }
@@ -473,11 +429,14 @@ i64 CmdStartDisaster(City *city, u32 flags, TileIndex location,
     {CITY_DISASTER_MASS_RIOTS, SelectCityMassRiotsDisaster},
     {CITY_DISASTER_MELTDOWN, SelectCityMeltdownDisaster},
   };
-  if (!parameter2 && !parameter3) for (int index = 0; index < sizeof(kSelections) / sizeof(*kSelections); ++index) {
-    if (kind != kSelections[index].kind) continue;
-    if (flags & CITY_COMMAND_TEST) return 0;
-    kSelections[index].select(city);
-    return 1;
+  const int selection_count = sizeof(kSelections) / sizeof(*kSelections);
+  if (!parameter2 && !parameter3) {
+    for (int index = 0; index < selection_count; ++index) {
+      if (kind != kSelections[index].kind) continue;
+      if (flags & CITY_COMMAND_TEST) return 0;
+      kSelections[index].select(city);
+      return 1;
+    }
   }
   if (location != INVALID_TILE || parameter2 || parameter3 ||
       (kind != CITY_DISASTER_CRASH && kind != CITY_DISASTER_HELICOPTER_CRASH &&
@@ -494,11 +453,11 @@ i64 CmdStartDisaster(City *city, u32 flags, TileIndex location,
     event->previous_overlay = ReadCityStockBaseOverlay(city, tile);
     if (kind == CITY_DISASTER_HELICOPTER_CRASH) {
       event->type = CITY_MAP_EVENT_HELICOPTER;
-      event->state = event->next_slot = CITY_HELICOPTER_CRASH;
+      event->state = CITY_HELICOPTER_CRASH;
       event->height = 16;
     } else {
       event->type = CITY_MAP_EVENT_EXPLOSION;
-      event->next_slot = CITY_DISASTER_CRASH;
+      event->state = CITY_DISASTER_CRASH;
       event->direction = CITY_EXPLOSION_START;
       event->explosion.trigger_disaster = 1;
     }
@@ -518,14 +477,14 @@ void SelectCityFireDisaster(City *city) {
   city->disasters.pending_type = CITY_DISASTER_FIRE;
   int x = city->geography.center_x + (int)Sc2kCrtRandRange(city, CITY_FIRE_ORIGIN_SPAN) - CITY_FIRE_ORIGIN_RADIUS;
   int y = city->geography.center_y + (int)Sc2kCrtRandRange(city, CITY_FIRE_ORIGIN_SPAN) - CITY_FIRE_ORIGIN_RADIUS;
-  SetDisasterLocation((&city->disasters.location), x, y);
+  SetDisasterLocation(&city->disasters.location, x, y);
 }
 
 // Flooding targets the exact city center and consumes no random values. Queues only the pending location/type; the
 // later dispatcher owns map damage and timing.
 void SelectCityFloodDisaster(City *city) {
   city->disasters.pending_type = CITY_DISASTER_FLOOD;
-  SetDisasterLocation((&city->disasters.location), city->geography.center_x, city->geography.center_y);
+  SetDisasterLocation(&city->disasters.location, city->geography.center_x, city->geography.center_y);
 }
 
 // The dispatcher creates the airplane; this selector only queues it. Changes the pending disaster request only;
@@ -538,7 +497,7 @@ static void SelectCityInteriorDisaster(City *city, int type) {
   city->disasters.pending_type = type;
   int x = (int)Sc2kCrtRandRange(city, city->map_width - 2) + 1;
   int y = (int)Sc2kCrtRandRange(city, city->map_width - 2) + 1;
-  SetDisasterLocation((&city->disasters.location), x, y);
+  SetDisasterLocation(&city->disasters.location, x, y);
 }
 
 // Select an interior tile, drawing X before Y from the CRT generator. Delegates to SelectCityInteriorDisaster;
@@ -573,14 +532,14 @@ void SelectCityHurricaneDisaster(City *city) { city->disasters.pending_type = CI
 // when the dispatcher consumes it.
 void SelectCityMicrowaveDisaster(City *city) {
   city->disasters.pending_type = CITY_DISASTER_MICROWAVE;
-  SetDisasterLocation((&city->disasters.location), 0, 0);
+  SetDisasterLocation(&city->disasters.location, 0, 0);
 }
 
 // Pollution starts at the current developed city center. Queues the centered location/type without applying damage or
 // opening a notice.
 void SelectCityPollutionDisaster(City *city) {
   city->disasters.pending_type = CITY_DISASTER_POLLUTION;
-  SetDisasterLocation((&city->disasters.location), city->geography.center_x, city->geography.center_y);
+  SetDisasterLocation(&city->disasters.location, city->geography.center_x, city->geography.center_y);
 }
 
 // Select an interior tile, drawing X before Y. Delegates to SelectCityInteriorDisaster; arguments must satisfy that
@@ -593,7 +552,7 @@ void SelectCityVolcanoDisaster(City *city) {
 // owns traversal and random-strike state.
 void SelectCityFireStormDisaster(City *city) {
   city->disasters.pending_type = CITY_DISASTER_FIRE_STORM;
-  SetDisasterLocation((&city->disasters.location), city->geography.center_x, city->geography.center_y);
+  SetDisasterLocation(&city->disasters.location, city->geography.center_x, city->geography.center_y);
 }
 
 // Major flooding selects an interior tile, drawing X before Y. Delegates to SelectCityInteriorDisaster; arguments must
@@ -606,14 +565,14 @@ void SelectCityMajorFloodDisaster(City *city) {
 // strikes and temporary update-gate cleanup.
 void SelectCityMassRiotsDisaster(City *city) {
   city->disasters.pending_type = CITY_DISASTER_MASS_RIOTS;
-  SetDisasterLocation((&city->disasters.location), city->geography.center_x, city->geography.center_y);
+  SetDisasterLocation(&city->disasters.location, city->geography.center_x, city->geography.center_y);
 }
 
 // The dispatcher finds a nuclear-plant origin later. Stores the pending request; nuclear-plant search and damage
 // belong to dispatch rather than this selector.
 void SelectCityMeltdownDisaster(City *city) {
   city->disasters.pending_type = CITY_DISASTER_MELTDOWN;
-  SetDisasterLocation((&city->disasters.location), 0, 0);
+  SetDisasterLocation(&city->disasters.location, 0, 0);
 }
 
 // Tables

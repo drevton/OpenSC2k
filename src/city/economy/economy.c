@@ -2,6 +2,7 @@
 
 #include <string.h>
 
+#include "base/integer.h"
 #include "base/fixed.h"
 #include "city/economy/budget.h"
 #include "city/economy/facilities.h"
@@ -13,12 +14,55 @@
 #include "city/engine/weather.h"
 #include "city/events/news.h"
 #include "city/maps/layers.h"
+#include "city/maps/map_types.h"
+#include "city/maps/water.h"
 #include "city/maps/tile_storage.h"
 #include "city/maps/trees.h"
 #include "city/presentation.h"
-#include "city/saveload/map_format.h"
 #include "city/state.h"
 #include "game/audio.h"
+
+// Reset the current economy for new-city setup without changing treasury, neighbor accounts or calendar state.
+// Only month zero is initialized; later monthly records retain their existing values until normal bookkeeping.
+void InitializeNewCityEconomy(City *city) {
+  static const u8 kDefaultRates[CITY_ECONOMY_SECTOR_COUNT] = {
+    [CITY_ECONOMY_RESIDENTIAL] = 7,
+    [CITY_ECONOMY_COMMERCIAL] = 7,
+    [CITY_ECONOMY_INDUSTRIAL] = 7,
+    [CITY_ECONOMY_ORDINANCES] = 1,
+    [CITY_ECONOMY_BONDS] = 0,
+    [CITY_ECONOMY_POLICE] = 100,
+    [CITY_ECONOMY_FIRE] = 100,
+    [CITY_ECONOMY_HEALTH] = 100,
+    [CITY_ECONOMY_SCHOOLS] = 100,
+    [CITY_ECONOMY_COLLEGES] = 100,
+    [CITY_ECONOMY_ROADS] = 100,
+    [CITY_ECONOMY_HIGHWAYS] = 100,
+    [CITY_ECONOMY_BRIDGES] = 100,
+    [CITY_ECONOMY_RAIL] = 100,
+    [CITY_ECONOMY_SUBWAY] = 100,
+    [CITY_ECONOMY_TUNNELS] = 100,
+  };
+  memset(city->economic_tables.sector_rates.offsets.value, 0, sizeof(city->economic_tables.sector_rates.offsets.value));
+  for (int sector = 0; sector < CITY_INDUSTRY_COUNT; ++sector) {
+    city->industry_demand.value[sector] = 0;
+    city->industry_baseline.value[sector] = 7;
+    city->industry_accounts.value[sector] = 0;
+  }
+  memset(city->economic_tables.bond_rates.rate, 0, sizeof(city->economic_tables.bond_rates.rate));
+  city->indicators.bond_rate_total = 0;
+  city->indicators.bond_count = 0;
+  for (int sector = 0; sector < CITY_ECONOMY_SECTOR_COUNT; ++sector) {
+    EconomySector *economy = &city->economy.sector[sector];
+    u32 default_rate = kDefaultRates[sector];
+    economy->monthly_amount[0] = 0;
+    economy->monthly_rate[0] = default_rate;
+    economy->current_amount = 0;
+    economy->current_rate = default_rate;
+    economy->accumulated = 0;
+    economy->projected_annual_total = 0;
+  }
+}
 
 // Apply the January settlement gate and prepare the year's budget bookkeeping. Returns false outside the due January
 // boundary; a true result means the caller must continue the settlement sequence once.
@@ -27,7 +71,7 @@ bool BeginCityAnnualSettlement(City *city) {
   CityEconomyMonths *economy = &city->economy;
   for (int sector = 0; sector < CITY_ECONOMY_SECTOR_COUNT; ++sector) {
     EconomySector *account = &economy->sector[sector];
-    int divisor = 12 * kAnnualSettlementFactors.factor[sector];
+    int divisor = 12 * kCityEconomySectorDivisors[sector];
     if (divisor != 0)
       city->indicators.cash = AddInt64Clamped(city->indicators.cash, account->accumulated / divisor);
     account->accumulated = 0;
@@ -56,22 +100,22 @@ bool PrepareCityFiscalWarning(City *city) {
   return true;
 }
 
-// Stock statistics can fund more than one network: crossings and tunnel mouths
+// Counter groups can fund more than one network: crossings and tunnel mouths
 // intentionally occur in separate sectors. Ranges within each sector are disjoint.
 static const struct { u8 sector, first, last; } kMaintenanceRanges[] = {
-  {CITY_ECONOMY_ROADS, TKL_ROAD_EAST_WEST, TKL_ROAD_LAST},
-  {CITY_ECONOMY_ROADS, TKL_TUNNEL_ENTRANCE_FIRST, TKL_ROAD_RAIL_CROSSING_LAST},
-  {CITY_ECONOMY_ROADS, TKL_HIGHWAY_ROAD_CROSSING_FIRST, TKL_HIGHWAY_ROAD_CROSSING_LAST},
-  {CITY_ECONOMY_ROADS, TKL_HIGHWAY_ENTRANCE_93, TKL_HIGHWAY_ENTRANCE_LAST},
-  {CITY_ECONOMY_RAIL, TKL_RAIL_FIRST, TKL_RAIL_TRANSITION_62},
-  {CITY_ECONOMY_RAIL, TKL_ROAD_RAIL_CROSSING_FIRST, TKL_RAIL_POWER_CROSSING_LAST},
-  {CITY_ECONOMY_RAIL, TKL_HIGHWAY_RAIL_CROSSING_FIRST, TKL_HIGHWAY_RAIL_CROSSING_LAST},
-  {CITY_ECONOMY_RAIL, TKL_SUBWAY_TO_RAIL_FIRST, TKL_SUBWAY_TO_RAIL_LAST},
-  {CITY_ECONOMY_BRIDGES, TKL_SUSPENSION_BRIDGE_FIRST, TKL_POWER_LINE_BRIDGE},
-  {CITY_ECONOMY_BRIDGES, TKL_HIGHWAY_BRIDGE_FIRST, TKL_HIGHWAY_BRIDGE_LAST},
-  {CITY_ECONOMY_HIGHWAYS, TKL_HIGHWAY_FIRST, TKL_HIGHWAY_LAST},
-  {CITY_ECONOMY_HIGHWAYS, TKL_HIGHWAY_INCLINE_FIRST, TKL_HIGHWAY_BRIDGE_LAST},
-  {CITY_ECONOMY_TUNNELS, TKL_TUNNEL_ENTRANCE_FIRST, TKL_TUNNEL_ENTRANCE_LAST},
+  {CITY_ECONOMY_ROADS, TSTAT_ROAD, TSTAT_ROAD_LAST},
+  {CITY_ECONOMY_ROADS, TSTAT_TUNNEL_ENTRANCE, TSTAT_ROAD_RAIL_CROSSING_LAST},
+  {CITY_ECONOMY_ROADS, TSTAT_HIGHWAY_ROAD, TSTAT_HIGHWAY_ROAD_LAST},
+  {CITY_ECONOMY_ROADS, TSTAT_HIGHWAY_ENTRANCE, TSTAT_HIGHWAY_ENTRANCE_LAST},
+  {CITY_ECONOMY_RAIL, TSTAT_RAIL, TSTAT_RAIL_LAST},
+  {CITY_ECONOMY_RAIL, TSTAT_ROAD_RAIL_CROSSING, TSTAT_RAIL_POWER_CROSSING_LAST},
+  {CITY_ECONOMY_RAIL, TSTAT_HIGHWAY_RAIL, TSTAT_HIGHWAY_RAIL_LAST},
+  {CITY_ECONOMY_RAIL, TSTAT_SUBWAY_TO_RAIL, TSTAT_SUBWAY_TO_RAIL_LAST},
+  {CITY_ECONOMY_BRIDGES, TSTAT_ROAD_BRIDGE, TSTAT_WATER_POWER_LINE},
+  {CITY_ECONOMY_BRIDGES, TSTAT_HIGHWAY_BRIDGE, TSTAT_HIGHWAY_BRIDGE_LAST},
+  {CITY_ECONOMY_HIGHWAYS, TSTAT_HIGHWAY, TSTAT_HIGHWAY_LAST},
+  {CITY_ECONOMY_HIGHWAYS, TSTAT_HIGHWAY_INCLINE, TSTAT_HIGHWAY_BRIDGE_LAST},
+  {CITY_ECONOMY_TUNNELS, TSTAT_TUNNEL_ENTRANCE, TSTAT_TUNNEL_ENTRANCE_LAST},
 };
 
 // Reload live month, rates and amounts after any settlement warning. Requires current settlement state; updates
@@ -268,7 +312,7 @@ CityMilestoneNotice BeginCityEconomyPrimary(City *city) {
       {CITY_HISTORY_CRIME, CITY_NEWS_HIGH_CRIME, CITY_NEWS_LOW_CRIME},
     };
     for (size_t i = 0; i < sizeof(kHistoryMetricNews) / sizeof(*kHistoryMetricNews); ++i) {
-      int threshold = (int)ReadHistorySample(city, kHistoryMetricNews[i].series, 0);
+      int threshold = (int)city->history[kHistoryMetricNews[i].series].sample[0];
       if ((int)(Sc2kCrtRand(city) & 0x7F) < threshold) {
         InsertRankedCityEvent(city, kHistoryMetricNews[i].high, 0);
       }
@@ -363,8 +407,8 @@ static void AdjustIndustryDemand(int *deficits, u32 flags, u32 education, bool p
 // callers supply values whose result fits i32.
 static i32 EconomyChange(u32 value, int multiplier) { return (i32)((i64)value * multiplier / 1200); }
 
-// Update secondary economy accounts and industry demand. Requires current population, industry and annual metrics;
-// edits demand and economy values with integer simulation arithmetic.
+// Advance accounts, industry demand/allocation and age cohorts from current population and annual metrics.
+// Keep the phases in order: later work observes the live state and random streams left by earlier phases.
 void UpdateCityEconomySecondary(City *city) {
   {
     int economy_trend = city->indicators.national_economy_trend;
@@ -436,19 +480,21 @@ void UpdateCityEconomySecondary(City *city) {
     }
   }
   {
-    int offset = city->geography.start_year;
-    int year = city->clock.tick / CITY_TICKS_PER_YEAR;
-    int row = (offset - 1900) / 50 + year / 50;
-    int remainder = year % 50;
+    int start_year = city->geography.start_year;
+    int elapsed_years = city->clock.tick / CITY_TICKS_PER_YEAR;
+    // The start year selects the initial era; only elapsed years supply progress within an era.
+    int era = (start_year - CITY_INDUSTRY_WEIGHT_BASE_YEAR) / CITY_INDUSTRY_WEIGHT_INTERVAL_YEARS +
+        elapsed_years / CITY_INDUSTRY_WEIGHT_INTERVAL_YEARS;
+    int years_into_era = elapsed_years % CITY_INDUSTRY_WEIGHT_INTERVAL_YEARS;
     u32 weights[CITY_INDUSTRY_COUNT];
-    for (int i = 0; i < CITY_INDUSTRY_COUNT; ++i) {
-      if (row < 4) {
-        u32 before = kIndustryYearWeights[row].value[i];
-        u32 after = kIndustryYearWeights[row + 1].value[i];
-        u32 weighted = before * (50 - remainder) + after * remainder;
-        weights[i] = weighted / 50;
+    for (int industry = 0; industry < CITY_INDUSTRY_COUNT; ++industry) {
+      if (era < CITY_INDUSTRY_WEIGHT_ERA_COUNT - 1) {
+        u32 before = kIndustryYearWeights[era][industry];
+        u32 after = kIndustryYearWeights[era + 1][industry];
+        u32 weighted = before * (CITY_INDUSTRY_WEIGHT_INTERVAL_YEARS - years_into_era) + after * years_into_era;
+        weights[industry] = weighted / CITY_INDUSTRY_WEIGHT_INTERVAL_YEARS;
       } else {
-        weights[i] = kIndustryYearWeights[4].value[i];
+        weights[industry] = kIndustryYearWeights[CITY_INDUSTRY_WEIGHT_ERA_COUNT - 1][industry];
       }
     }
     for (int entry = 0; entry < CITY_INDUSTRY_COUNT; ++entry) {

@@ -4,6 +4,12 @@
 #include "base/types.h"
 #include "base/version.h"
 
+// Stock XLAB slots reserve a length byte and one spare byte beyond the text limit.
+enum {
+  CITY_OVERLAY_LEGACY_NAME_BYTES = 25,
+  CITY_OVERLAY_LEGACY_NAME_MAX_LENGTH = CITY_OVERLAY_LEGACY_NAME_BYTES - 2,
+};
+
 // Shared admission limit for native scalar and ground extension packets carried by stock archives.
 enum { CITY_SAVE_EXTENSION_LIMIT = 128 * 1024 * 1024 };
 
@@ -17,16 +23,15 @@ typedef struct {
   char revision[SC2K_GIT_REVISION_CAPACITY];
 } CityFileVersion;
 
-// Version words in the original scenario's raw tagged chunks.
+// Stock scenario tagged records use these versions and bounded payload sizes.
 enum {
   CITY_SCENARIO_METADATA_VERSION = 128,
   CITY_SCENARIO_PREVIEW_VERSION = 128,
   CITY_SCENARIO_INSTRUCTIONS_VERSION = 129,
   CITY_SCENARIO_INSTRUCTION_BYTES = 768,
+  CITY_SCENARIO_PICTURE_BYTES = 4300,
 };
 
-// Original file exception cause IDs, retained at import/comparison boundaries. Native error dialogs use
-// CityFileExceptionState.os_error for the host's description; comparison selects the original cause text.
 typedef enum CityFileExceptionCause {
   CITY_FILE_CAUSE_NONE = 0,
   CITY_FILE_CAUSE_GENERIC = 1,
@@ -47,7 +52,7 @@ typedef enum CityFileExceptionCause {
 
 typedef struct CityFileExceptionState {
   i32 cause;
-  i32 os_error; // Native errno; comparison adapters retain stock Win32 error values.
+  i32 os_error; // Native errno.
 } CityFileExceptionState;
 
 // MISC word positions are file-format IDs, independent of guest addresses.
@@ -61,6 +66,8 @@ typedef enum CityMiscWordIndex {
   CITY_MISC_WORD_ACCOUNT_NAMES_FIRST = 438,
   CITY_MISC_WORD_ECONOMY_FIRST = 479,
   CITY_MISC_WORD_ECONOMY_END = 911,
+  CITY_MISC_WORD_SOUND_ENABLED = 1022,
+  CITY_MISC_WORD_MUSIC_ENABLED = 1023,
   CITY_MISC_WORD_NEWSPAPER_EDITION = 1027,
   CITY_MISC_WORD_SAVED_VIEW_POSITION = 1028,
   CITY_MISC_WORD_SAVED_VIEW_MODE = 1029,

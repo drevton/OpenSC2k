@@ -11,7 +11,7 @@
 #include "city/infrastructure/bridges.h"
 #include "city/infrastructure/lines.h"
 #include "city/infrastructure/surface_lines.h"
-#include "city/maps/layers.h"
+#include "city/maps/terrain.h"
 #include "city/state.h"
 #include "drawing/maps/map_depth.h"
 #include "drawing/maps/map_events.h"
@@ -238,9 +238,10 @@ i32 CityMapOverlayDepth(const City *city, TileIndex tile) {
 }
 
 bool UpdateCityVehicleAnimation(const City *city, double now) {
-  DrawingVehicles *vehicles = &city->drawing->vehicles;
-  if (!city->drawing->map_state.vehicles_enabled ||
-      !vehicles->enabled || !PrepareCityEventDrawingStorage(city)) return false;
+  Drawing *drawing = city->drawing;
+  DrawingVehicles *vehicles = &drawing->vehicles;
+  if (!drawing->map_state.vehicles_enabled ||
+      !vehicles->enabled || !PrepareDrawingEventStorage(drawing, city->events.capacity)) return false;
   bool reset = !vehicles->initialized || vehicles->rotation != city->geography.rotation || now < vehicles->time;
   bool paused = city->settings.speed <= CITY_SPEED_PAUSED;
   bool changed = false;
@@ -255,7 +256,7 @@ bool UpdateCityVehicleAnimation(const City *city, double now) {
     VehiclePosition3D before = motion->offset;
     int previous_heading = motion->train_heading;
     bool spinning = !paused && IsMapTileValid(city, event->tile) &&
-        ((event->type == CITY_MAP_EVENT_HELICOPTER && event->next_slot != CITY_HELICOPTER_ON_GROUND) ||
+        ((event->type == CITY_MAP_EVENT_HELICOPTER && event->state != CITY_HELICOPTER_ON_GROUND) ||
             event->type == CITY_MAP_EVENT_MAXIS_MAN);
     vehicles->animating |= spinning;
     changed |= spinning && rotor_changed;
@@ -372,7 +373,7 @@ bool UpdateCityVehicleAnimation(const City *city, double now) {
 }
 
 // Train artwork uses registered wheel centers, independently of rail tile sprites.
-void DrawCityMapTrain(City *city, TileIndex tile, int zoom, int slot) {
+void DrawCityMapTrain(const City *city, TileIndex tile, int zoom, int slot) {
   Drawing *drawing = city->drawing;
   if (!drawing->map_state.tile_details_enabled ||
       (!drawing->sprite_damage_bounds && drawing->map_depth.phase == MAP_DEPTH_GROUND)) return;

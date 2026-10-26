@@ -1,38 +1,33 @@
 #include "game/update.h"
 
 #include "base/time.h"
-#include "game/palette.h"
-#include "game/city_lifecycle.h"
-#include "game/commands.h"
-#include "ui/city_lifecycle.h"
-
-// Game startup, presentation cadence and simulation scheduling.
 #include "city/disasters/types.h"
-#include "game/application.h"
-#include "ui/input.h"
-#include "city/engine/simulation.h"
-
 #include "city/engine/city_types.h"
-#include "game/state.h"
+#include "city/engine/simulation.h"
 #include "city/events/events.h"
 #include "city/presentation.h"
+#include "city/saveload/path.h"
 #include "city/state.h"
-#include "city/saveload/file.h"
+#include "drawing/state.h"
+#include "game/application.h"
+#include "game/audio.h"
+#include "game/city_lifecycle.h"
+#include "game/commands.h"
 #include "game/errors.h"
 #include "game/observation.h"
-#include "game/audio.h"
-#include "audio/state.h"
-#include "drawing/state.h"
+#include "game/palette.h"
+#include "game/state.h"
+#include "ui/city_lifecycle.h"
+#include "ui/commands.h"
+#include "ui/dialogs/dialogs.h"
 #include "ui/map.h"
 #include "ui/news/newspaper.h"
 #include "ui/startup/startup.h"
-#include "drawing/maps/map_render.h"
-#include "ui/charts/charts.h"
-#include "ui/commands.h"
-#include "ui/dialogs/dialogs.h"
 #include "ui/state.h"
-#include "ui/windows/windows.h"
 #include "ui/tools/tools.h"
+#include "ui/windows/windows.h"
+
+// Game startup, presentation cadence and simulation scheduling.
 
 // Input advances a waiting startup screen; SDL already dispatches controls.
 void RecordGameInput(Game *game) {
@@ -44,7 +39,6 @@ void HandleApplicationActivation(Game *game, int active) {
   City *city = game->city;
   Drawing *drawing = game->drawing;
   CityInterfaceState *ui = game->ui;
-  CityAudioState *audio = game->audio;
   if (game->exit_requested)
     return;
   game->ranked_events_suppressed = active == 0;
@@ -55,11 +49,10 @@ void HandleApplicationActivation(Game *game, int active) {
         RefreshActiveCityPalette(game);
       Sc2kDirtyMarkRect(&ui->desktop.dirty, drawing->client_rect);
       SetCityToolsVisible(game, true);
-      if (audio->music_active == 0)
-        PlayNextCityEventMusicSequence(game);
+      MaybePlayCityMusic(game, true);
       PlayCitySound(city, INVALID_TILE, CITY_SOUND_ACTIVATION_REQUEST);
     }
-    SetCityCursor(city, CITY_CURSOR_ARROW, 1);
+    SetCityCursor(city, CITY_CURSOR_ARROW, CITY_CURSOR_RESTORE);
   } else if (active == 0 && drawing->palette.background_enabled == 1) {
     drawing->palette.background_enabled = 0;
     StopCityMusicSequence(game);
@@ -69,8 +62,6 @@ void HandleApplicationActivation(Game *game, int active) {
   }
 }
 
-// Poll one pending activation input, notifying observers before applying its UI effects. The installed comparison
-// adapter retains its own input stream; ordinary polling leaves unrelated events queued.
 void PumpGameActivation(Game *game) {
   const GameObservation *observer = game->observation;
   if (observer && observer->pump_activation) {
@@ -91,15 +82,7 @@ void UpdateGame(Game *game) {
   City *city = game->city;
   Drawing *drawing = game->drawing;
   CityInterfaceState *ui = game->ui;
-  i32 animated_fast = drawing->palette.fast_due == 1;
-  if (animated_fast) {
-    AnimateCityPalette(game, 0);
-    drawing->palette.fast_due = 0;
-  }
-  if (drawing->palette.slow_due == 1) {
-    AnimateCityPalette(game, 1);
-    drawing->palette.slow_due = 0;
-  }
+  bool animated_fast = AnimateDueCityPalettes(game);
   if (game->idle_state == CITY_IDLE_TOOL_PREVIEW) {
     if (city->settings.timer_mode == CITY_TIMER_STOPPED) {
       if (game->idle_inputs.active_view != 0) UpdateCityMapToolPreview(game);
@@ -114,7 +97,7 @@ void UpdateGame(Game *game) {
     if (city->tick_continuations) return;
     if (game->exit_requested) return;
     if (game->idle_entry != 0) {
-      u32 path_mode = game->path_open_flag;
+      CityPathOpenMode path_mode = game->path_open_flag;
       if (path_mode == CITY_PATH_OPEN_NONE) {
         if (game->observation && game->observation->choose_startup_menu) {
           ui->startup_choice = game->observation->choose_startup_menu(city);
@@ -170,7 +153,7 @@ void UpdateGame(Game *game) {
       case CITY_STARTUP_EDIT_MAP:
         game->idle_state = CITY_IDLE_TERRAIN;
         RunCityTerrainEditorSetup(city);
-        game->idle_state = (u32)CITY_IDLE_PLAY;
+        game->idle_state = CITY_IDLE_PLAY;
         break;
       case CITY_STARTUP_LOAD_SCENARIO:
         game->idle_state = CITY_IDLE_LOAD_SCENARIO;
@@ -196,9 +179,9 @@ void UpdateGame(Game *game) {
   if (game->idle_state == CITY_IDLE_COMMAND_LINE_FILE) {
     if (game->idle_entry != 0) {
       game->idle_entry = 0;
-      SetCityCursor(city, ui->selected_cursor, 1);
+      SetCityCursor(city, ui->selected_cursor, CITY_CURSOR_RESTORE);
       ui->wait_cursor_active = 0;
-      SetCityCursor(city, ui->selected_cursor, 1);
+      SetCityCursor(city, ui->selected_cursor, CITY_CURSOR_RESTORE);
 
       bool opening_city = game->path_open_flag == CITY_PATH_OPEN_CITY;
       if (opening_city) {
@@ -289,29 +272,8 @@ void CompleteCityIdleSimulation(Game *game, u32 options) {
 }
 
 void AdvanceGameCadencePresentation(Game *game, u32 counter, bool animate) {
-  CityAudioState *audio = game->audio;
-  CityPaletteState *palette = &game->drawing->palette;
-  if (animate) {
-    if (counter % 8 == 0) {
-      palette->slow_due = 1;
-    }
-    palette->fast_due = 1;
-  }
-  if (palette->direct_animation != 0) {
-    if (palette->fast_due == 1) {
-      AnimateCityPalette(game, 0);
-      palette->fast_due = 0;
-    }
-    if (palette->slow_due == 1) {
-      AnimateCityPalette(game, 1);
-      palette->slow_due = 0;
-    }
-  }
-  if (audio->sound_delay != 0) {
-    --audio->sound_delay;
-    if (audio->sound_delay == 0)
-      CompleteCitySoundPlayback(game);
-  }
+  AdvanceCityPaletteCadence(game, counter, animate);
+  AdvanceCitySoundCadence(game);
 }
 
 // Simulation passes must not append their feedback to the surrounding player command.
@@ -338,7 +300,7 @@ void RunCitySimulationFrame(Game *game, double deadline) {
     if (game->execution_failed) break;
     City *city = game->city;
     if (game->close_requested || game->idle_blocked || game->delay_blocked ||
-        game->idle_state != (u32)CITY_IDLE_PLAY || city->settings.speed == CITY_SPEED_PAUSED ||
+        game->idle_state != CITY_IDLE_PLAY || city->settings.speed == CITY_SPEED_PAUSED ||
         city->settings.timer_mode != CITY_TIMER_RUNNING || !city->cadence_counter.tick_due ||
         (!city->simulation_work.phase && city->settings.speed != CITY_SPEED_UNLIMITED)) break;
   } while (MonotonicSeconds() < deadline);
@@ -352,12 +314,5 @@ void RunGameIdle(Game *game, GameIdleInputs inputs) {
   game->idle_inputs = previous;
   DeliverCitySimulationEvents(game, 0, 1, false);
   if (game->observation) return;
-  City *city = game->city;
-  CityInterfaceState *ui = game->ui;
-  if (ui->newspaper_month != city->clock.month) {
-    ui->newspaper_month = city->clock.month;
-    if (!city->newspaper.enabled && !ui->newspaper_delivery_disabled &&
-        (ui->newspaper_month == CITY_MONTH_APRIL || ui->newspaper_month == CITY_MONTH_AUGUST))
-      OpenCityManualNewspaper(city, city->newspaper.edition_index);
-  }
+  UpdateCityPeriodicNewspaper(game);
 }

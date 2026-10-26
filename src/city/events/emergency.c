@@ -5,12 +5,13 @@
 #include "city/events/emergency.h"
 
 #include <assert.h>
+#include <string.h>
 
 #include "assets/resource_types.h"
 #include "game/audio.h"
 #include "city/events/events.h"
 #include "city/engine/commands.h"
-#include "city/maps/layers.h"
+#include "city/maps/terrain.h"
 #include "city/military.h"
 #include "city/presentation.h"
 #include "city/state.h"
@@ -87,6 +88,36 @@ void InitializeCityEmergencyDispatchState(City *city) {
   }
 }
 
+// Create one police/fire/military marker at a valid tile. Its remaining fields start at zero.
+// A full pool in event mode reclaims the last slot before checking occupancy; keep that removal and earlier damage
+// even if no marker is installed. The dispatch caller owns service admission and previous-marker bookkeeping.
+static void CreateDispatchMarker(City *city, TileIndex tile_index, int type) {
+  assert(tile_index < (u32)city->map_cell_count);
+  int slot;
+  int limit = CityEventAllocationLimit(city);
+  for (slot = CITY_EVENT_SLOT_FIRST; slot < limit; ++slot) {
+    if (city->events.event[slot].type == CITY_MAP_EVENT_UNUSED)
+      break;
+    InvalidateCityMapEvent(city, slot);
+  }
+  if (slot == limit) {
+    if (city->settings.timer_mode != CITY_TIMER_EVENT)
+      return;
+    slot = limit - 1;
+    ClearCityMapEventSlot(city, slot);
+  }
+  if (ReadOverlay(city, tile_index) != 0)
+    return;
+
+  CityMapEvent *event = &city->events.event[slot];
+  memset(event, 0, sizeof(*event));
+  event->type = (u8)type;
+  event->tile = tile_index;
+  event->previous_overlay = ReadCityEventUnderlay(city, tile_index);
+  LinkCityMapEvent(city, slot);
+  InvalidateCityMapEvent(city, slot);
+}
+
 // Dispatch one police, fire or military unit to a valid tile, recycling its old
 // marker. The service must be supported; warnings retain their original ordering
 // and callbacks may change City state before the dispatch continues.
@@ -154,7 +185,7 @@ void DispatchCityService(City *city, TileIndex tile_index, int service) {
     }
   }
 
-  CreateCityMapEventAtTile(city, tile_index, style->event_type, 0);
+  CreateDispatchMarker(city, tile_index, style->event_type);
   previous_y[index] = point.y;
   previous_x[index] = point.x;
 }

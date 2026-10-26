@@ -1,5 +1,5 @@
 #include "city/events/news.h"
-#include "city/economy/history.h"
+#include "city/economy/types.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -109,7 +109,7 @@ void FinishCityNewspaperInitialization(City *city, int edition_index) {
   rankings->record[8].id = kSpecialReportGroup[edition->report_kind];
   rankings->record[8].event_data = (u8)city->newspaper.problems.category_order[0];
   int music = NextCityMapRandomModulo(city, 5);
-  PlayCityEventMusicById(city->game, CITY_MUSIC_TRACK_00 + kMusicTrack[music]);
+  MaybePlayCityEventMusic(city->game, CITY_MUSIC_TRACK_00 + kMusicTrack[music]);
 }
 
 // Rank the seven city problems for the newspaper. Applies ranking once and returns whether its parade notice is due;
@@ -119,15 +119,15 @@ bool BeginCityNewspaperProblemRankings(City *city) {
   const CityEconomyMonths *economy = &city->economy;
   // Stored weights use signed low words. Multiply the unsigned saved rate before narrowing.
   int weights[7] = {
-      (i16)ReadHistorySample(city, CITY_HISTORY_TRAFFIC, 0),
-      (i16)ReadHistorySample(city, CITY_HISTORY_POLLUTION, 0),
-      (i16)ReadHistorySample(city, CITY_HISTORY_CRIME, 0),
+      (i16)city->history[CITY_HISTORY_TRAFFIC].sample[0],
+      (i16)city->history[CITY_HISTORY_POLLUTION].sample[0],
+      (i16)city->history[CITY_HISTORY_CRIME].sample[0],
       (i16)(3 * economy->sector[CITY_ECONOMY_RESIDENTIAL].current_rate),
       (i16)city->indicators.unemployment,
       city->indicators.workforce_education <= 100 ? 100 - city->indicators.workforce_education : 0,
       city->indicators.workforce_life_expectancy <= 70 ? 70 - city->indicators.workforce_life_expectancy : 0,
   };
-  int total = (i16)((u16)ReadHistorySample(city, CITY_HISTORY_LAND_VALUE, 0) + 50);
+  int total = (i16)((u16)city->history[CITY_HISTORY_LAND_VALUE].sample[0] + 50);
   int counts[7] = {0};
   for (int index = 0; index < 7; ++index) {
     total = (i16)(total + weights[index]);
@@ -190,19 +190,23 @@ void FinishCityNewspaperRanksAndF3Records(City *city) {
     CityAnnualFacilityRecord *facility = CityFacilityRecordAt(city, index);
     if (facility->type != TK_MAYORS_HOUSE)
       continue;
-    facility->value_04 = city->infrastructure.mayor_rating;
-    if (facility->value_06 != 0) {
-      --facility->value_06;
+    facility->mayors_house_approval = city->infrastructure.mayor_rating;
+    if (facility->mayors_house_staff != 0) {
+      --facility->mayors_house_staff;
       ++facility->age;
     }
   }
+}
+
+bool AreCityNewsResourcesAvailable(const City *city) {
+  return city->game->resources->news_resources_unavailable == 0;
 }
 
 // Subtract each ranked article's decay and reorder those records by descending score.
 // Requires initialized article records and ranking resources.
 void DecayCityNewsRankings(City *city) {
   const CityResourceState *assets = city->game->resources;
-  if (assets->news_resources_unavailable)
+  if (!AreCityNewsResourcesAvailable(city))
     return;
   CityNewsRecords *rankings = &city->news_records;
   for (int index = 0; index < CITY_NEWS_RANKED_COUNT; ++index) {
@@ -227,7 +231,7 @@ void DecayCityNewsRankings(City *city) {
 bool RecordRankedCityEvent(City *city, int event_code, u8 event_data) {
   if (city->game->ranked_events_suppressed != 0) return false;
   const CityResourceState *assets = city->game->resources;
-  if (assets->news_resources_unavailable != 0) return false;
+  if (!AreCityNewsResourcesAvailable(city)) return false;
   CityNewsRecords *rankings = &city->news_records;
   int severity = assets->rankings.event_severity[event_code];
   int insert = 0;
@@ -279,8 +283,6 @@ static int WriteNewspaperLiteral(char *output, u8 byte) {
   return WriteUtf8Character(output, DecodeOem437Byte(byte));
 }
 
-// Copy an authored UTF-8 headline or body, substituting the city name for '='. Comparison resources instead expand
-// stock article bytecode below. Output must fit the expanded text; the result is its last occupied byte index.
 int ExpandCityNewspaperTemplate(City *city, const CityNewspaperResources *resources, char *output, int template_id,
     int article_index, int half) {
   if (resources->articles) {

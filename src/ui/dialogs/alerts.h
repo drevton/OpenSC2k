@@ -9,8 +9,7 @@
 typedef struct City City;
 
 // Canvas presentation receives the City whose services and UI it uses.
-// The unlock offer must journal an actual command-16 answer before returning;
-// ranked events retain the current-edition newspaper constructor/modal/destructor.
+// The unlock offer must journal an actual command-16 answer before returning.
 
 void PresentCityAnnualBudget(City *city);
 void PresentCityMissionOutcome(City *city, i32 outcome);
@@ -23,7 +22,6 @@ int CreateCityResourceAlert(City *city, int bitmap_id, int text_id);
 u32 OpenCityResourceAlert(City *city, int bitmap_id, int text_id);
 void PresentCityResourceAlert(City *city, i32 bitmap_id, i32 text_id);
 i32 ChooseCityStadiumPlacementDialog(City *city, CityCanvasStadiumRequest *request);
-void PresentRankedCityEvent(City *city, u32 event_code, u32 event_data);
 
 void ShowCityMissionOutcome(City *city, int outcome);
 

@@ -32,19 +32,32 @@ typedef struct {
 
 // Operations use the City's existing Drawing owner and keep City state unchanged.
 // Presentation seconds in wrapping Q8, converted once by the host caller. Returns whether car visuals changed.
-bool UpdateCityRoadTraffic(City *city, u32 now);
+bool UpdateCityRoadTraffic(const City *city, u32 now);
 // Seed newly exposed camera strips from traffic density. Index 0 is the main view; positive indexes are auxiliary
 // views. The caller supplies the previous published camera, or an empty camera for an initial population.
-void PopulateCityRoadTrafficView(City *city, int index, CityMapCamera previous, CityMapCamera view);
+void PopulateCityRoadTrafficView(const City *city, int index, CityMapCamera previous, CityMapCamera view);
 // Use the bound map target/camera and its current sprite-preparation pass. Collection selects the object phase;
 // drawing one slot requires a valid active car. Display rules suppress collection when vehicles are hidden.
-void CollectCityRoadTraffic(City *city, int zoom);
-void DrawCityRoadCar(City *city, int slot, int zoom);
+void CollectCityRoadTraffic(const City *city, int zoom);
+void DrawCityRoadCar(const City *city, int slot, int zoom);
 // Refresh cached paths/surface poses after road edits, including while paused, and remove invalid routes.
-void RefreshCityRoadTrafficPoses(City *city);
+void RefreshCityRoadTrafficPoses(const City *city);
 // Exact prepared sprite bounds in framebuffer pixels, relative to the viewport origin.
 // pixel_scale is physical pixels per logical map pixel. This allocates/prepares nothing; unavailable art,
 // inactive/invalid cars and unsupported zooms return empty bounds.
 CityRect CityRoadCarPixelBounds(const City *city, const RoadCar *car, CityMapCamera view, int pixel_scale);
+
+// The map-window frontend implements these synchronous traffic presentation services.
+// It resolves live window occlusion, magnification and viewport geometry from the supplied car/camera data.
+
+// A decorative car's tile vicinity must reach an unobscured map window at large zoom.
+// Height uses 1/256 map levels. view_index zero selects the main map; other indices select Drawing's extra views.
+// Read-only. Requires attached Drawing/UI, a valid tile and view_index in 0..CITY_EXTRA_MAP_VIEW_COUNT.
+bool IsCityRoadCarInView(const City *city, TileIndex tile, int height, CityMapCamera view, int view_index);
+
+// Project both borrowed footprints into each visible map window and update screen damage synchronously.
+// Either car may be NULL or inactive, contributing no bounds. Requires attached Drawing; disabled damage or a
+// missing UI is a no-op. Viewport geometry may be synchronized, but the cars and City simulation remain unchanged.
+void PublishCityRoadCarDamage(const City *city, const RoadCar *previous, const RoadCar *current);
 
 #endif

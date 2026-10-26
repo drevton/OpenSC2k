@@ -33,8 +33,6 @@ void OpenCityScenarioFromPath(City *city, const char *path);
 void ResetCityConstructionToolOptions(Game *game);
 // Close auxiliary panels in order and stop sound before an accepted replacement.
 void CloseCityAuxiliaryPresentation(City *city);
-// Prepare an already accepted replacement: clear the local prompt flag, close auxiliaries and stop sound.
-// The original save/question caller and its answer belong to comparison.
 void PrepareCityReplacementPresentation(City *city);
 
 // Clear replacement-specific sign, marker, cost and demolition presentation, then queue information refresh.
@@ -45,6 +43,11 @@ void InvalidateLoadedCityCanvas(City *city);
 
 // Close old windows and their temporary pauses before Game replaces the city.
 void CloseCityWindowsForReplacement(Game *game);
+
+// Resume detached window callbacks, scenario selection, city creation and file-dialog callers in that order.
+// Each step keeps its own command-depth/admission rules; this adds no outer guard or repetition.
+// Call after input delivery or from unblocked host polling. Shutdown uses its separate cleanup phases below.
+void CompleteCityPendingWindows(Game *game);
 
 // Shutdown keeps these UI phases around Game's existing owner teardown boundaries.
 // Begin closes content windows and manual budget while presentation is still available.

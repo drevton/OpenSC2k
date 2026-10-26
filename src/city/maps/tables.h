@@ -10,28 +10,17 @@ enum { CITY_TERRAIN_RAISE_LEVEL = 50 };
 extern const i8 kCardinalNeighborY[4];
 extern const i8 kCardinalNeighborX[4];
 
-// Rotation Tables
-
-// Include the original zero padding, but never neighboring lookup data.
-enum {
-  CITY_TILE_ROTATION_COUNT = 256,
-  CITY_TERRAIN_ROTATION_COUNT = 72,
-  CITY_UNDERGROUND_ROTATION_COUNT = 40
-};
-
-typedef struct {
-  u8 tile_counterclockwise[CITY_TILE_ROTATION_COUNT];
-  u8 terrain_counterclockwise[CITY_TERRAIN_ROTATION_COUNT];
-  u8 underground_counterclockwise[CITY_UNDERGROUND_ROTATION_COUNT];
-  u8 terrain_clockwise[CITY_TERRAIN_ROTATION_COUNT];
-  u8 underground_clockwise[CITY_UNDERGROUND_ROTATION_COUNT];
-} CityMapRotationTables;
-
-// Borrowed immutable artwork mappings, independent of map storage.
-const CityMapRotationTables *ReadCityMapRotationTables(void);
-
+// Eight adjacent cells clockwise from north: N, NE, E, SE, S, SW, W, NW.
+// Even entries are cardinal directions; generation and climate scans retain this order.
+// Keep these small constants visible to the compiler for neighbor-loop folding and unrolling.
+static const i8 kClockwiseNeighborX[8] = {0, 1, 1, 1, 0, -1, -1, -1};
+static const i8 kClockwiseNeighborY[8] = {-1, -1, 0, 1, 1, 1, 0, -1};
 
 // Terrain Tables
+
+// Shared native vertex order: (0,0), (0,1), (1,1), (1,0). Raised-corner bit indexes use this order.
+static const i8 kTerrainCornerX[4] = {0, 0, 1, 1};
+static const i8 kTerrainCornerY[4] = {0, 1, 1, 0};
 
 // Immutable numerical data, independent of executable backing and original element widths.
 // Raised-corner bits follow vertex offsets (0,0), (0,1), (1,1), (1,0). Index by terrain shape 0..15.

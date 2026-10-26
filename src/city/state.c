@@ -1,3 +1,6 @@
+#include "city/state.h"
+#include "city/terrain/climate.h"
+
 #include "city/maps/labels.h"
 #include "city/engine/city_name.h"
 #include "city/engine/simulation_state.h"
@@ -7,18 +10,16 @@
 #include "city/events/news.h"
 #include "city/engine/random.h"
 #include "city/economy/facilities.h"
-#include "city/military.h"
 #include "city/economy/types.h"
 #include "city/events/events.h"
 #include "city/maps/tile_storage.h"
-#include "city/state.h"
+#include "city/maps/map.h"
 
 #include <stdlib.h>
 #include <string.h>
 
 #include "city/disasters/disasters.h"
 #include "city/saveload/file.h"
-#include "city/saveload/map_format.h"
 
 // Compute the single backing allocation for the requested map, event pool, histories and working layers. Dimensions
 // and capacity must be supported; the returned byte count includes required alignment but allocates nothing.
@@ -85,7 +86,7 @@ void BindOwnedSimulationMapLayers(City *city) {
 // Reset landscape generation metadata, independent RNG/cursors and incremental simulation work. Requires initialized
 // City storage; does not allocate or preserve an in-progress map-processing pass.
 static void ResetCityLandscapeState(City *city) {
-  InitializeCityMapFormat(city);
+  city->native_map_storage = true;
   city->snow.line = CITY_SNOW_LINE_DISABLED;
   city->terrain_climate = CITY_TERRAIN_SIMCITY;
   city->desert_limit = 0;
@@ -189,7 +190,6 @@ void InitializeSimulation(City *city, void *map_storage) {
   InitializeCityDefaults(city);
   BindOwnedSimulationMapLayers(city);
   city->unlock_bonus_answer = -1;
-  city->pointer_command.release_flags = CITY_DRAG_INPUT_RELEASE;
   city->map_changes.enabled = true;
   city->map_changes.full = true;
 }

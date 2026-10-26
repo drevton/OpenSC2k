@@ -1,3 +1,5 @@
+#include "city/saveload/map_format.h"
+
 #include "city/events/events.h"
 #include "city/infrastructure/lines.h"
 #include "city/infrastructure/surface_lines.h"
@@ -5,6 +7,7 @@
 #include "city/maps/ground.h"
 #include "city/economy/facilities.h"
 #include "city/maps/buildings.h"
+#include "city/maps/labels.h"
 #include "city/infrastructure/bridges.h"
 #include "city/infrastructure/highways.h"
 #include "city/infrastructure/power_lines.h"
@@ -13,21 +16,65 @@
 #include "city/infrastructure/types.h"
 #include "city/maps/map_types.h"
 #include "city/maps/tile_storage.h"
-#include "city/terrain/terrain.h"
+#include "city/terrain/climate.h"
 #include "city/tools/types.h"
 #include "city/state.h"
 #include "city/growth/growth.h"
 #include "city/engine/simulation.h"
 #include "city/maps/layers.h"
-#include "city/maps/module.h"
+#include "city/maps/map.h"
 #include "city/maps/tables.h"
 #include "city/tools/tools.h"
 #include "city/saveload/city_file_internal.h"
-#include "city/saveload/map_format.h"
+#include "city/saveload/map_native.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 #include "base/byte_order.h"
+
+// Counter slots and range endpoints agree with stock layout; direction/style splitting happens only during export.
+_Static_assert((int)TSTAT_CLEAR == 0 &&
+    (int)TSTAT_RUBBLE == TKL_RUBBLE_FIRST &&
+    (int)TSTAT_PARK == TKL_PARK &&
+    (int)TSTAT_POWER_LINE == TKL_POWER_LINE_EAST_WEST &&
+    (int)TSTAT_ROAD == TKL_ROAD_EAST_WEST &&
+    (int)TSTAT_ROAD_LAST == TKL_ROAD_LAST &&
+    (int)TSTAT_RAIL == TKL_RAIL_FIRST &&
+    (int)TSTAT_RAIL_LAST == TKL_RAIL_TRANSITION_62 &&
+    (int)TSTAT_TUNNEL_ENTRANCE == TKL_TUNNEL_ENTRANCE_FIRST &&
+    (int)TSTAT_TUNNEL_ENTRANCE_LAST == TKL_TUNNEL_ENTRANCE_LAST &&
+    (int)TSTAT_ROAD_POWER_CROSSING == TKL_ROAD_POWER_CROSSING_FIRST &&
+    (int)TSTAT_ROAD_RAIL_CROSSING == TKL_ROAD_RAIL_CROSSING_FIRST &&
+    (int)TSTAT_ROAD_RAIL_CROSSING_LAST == TKL_ROAD_RAIL_CROSSING_LAST &&
+    (int)TSTAT_RAIL_POWER_CROSSING == TKL_RAIL_POWER_CROSSING_FIRST &&
+    (int)TSTAT_RAIL_POWER_CROSSING_LAST == TKL_RAIL_POWER_CROSSING_LAST &&
+    (int)TSTAT_HIGHWAY == TKL_HIGHWAY_FIRST &&
+    (int)TSTAT_HIGHWAY_ROAD == TKL_HIGHWAY_ROAD_CROSSING_FIRST &&
+    (int)TSTAT_HIGHWAY_ROAD_LAST == TKL_HIGHWAY_ROAD_CROSSING_LAST &&
+    (int)TSTAT_HIGHWAY_RAIL == TKL_HIGHWAY_RAIL_CROSSING_FIRST &&
+    (int)TSTAT_HIGHWAY_RAIL_LAST == TKL_HIGHWAY_RAIL_CROSSING_LAST &&
+    (int)TSTAT_HIGHWAY_POWER == TKL_HIGHWAY_POWER_CROSSING_FIRST &&
+    (int)TSTAT_HIGHWAY_LAST == TKL_HIGHWAY_LAST &&
+    (int)TSTAT_ROAD_BRIDGE == TKL_SUSPENSION_BRIDGE_FIRST &&
+    (int)TSTAT_ROAD_BRIDGE_HEAD == TKL_ROAD_BRIDGE_DECK &&
+    (int)TSTAT_RAIL_BRIDGE == TKL_RAIL_BRIDGE_FIRST &&
+    (int)TSTAT_RAIL_BRIDGE_HEAD == TKL_RAIL_BRIDGE_LAST &&
+    (int)TSTAT_WATER_POWER_LINE == TKL_POWER_LINE_BRIDGE &&
+    (int)TSTAT_HIGHWAY_ENTRANCE == TKL_HIGHWAY_ENTRANCE_93 &&
+    (int)TSTAT_HIGHWAY_ENTRANCE_LAST == TKL_HIGHWAY_ENTRANCE_LAST &&
+    (int)TSTAT_HIGHWAY_INCLINE == TKL_HIGHWAY_INCLINE_FIRST &&
+    (int)TSTAT_HIGHWAY_BEND == TKL_HIGHWAY_BEND_FIRST &&
+    (int)TSTAT_HIGHWAY_JUNCTION == TKL_HIGHWAY_JUNCTION &&
+    (int)TSTAT_HIGHWAY_BRIDGE == TKL_HIGHWAY_BRIDGE_FIRST &&
+    (int)TSTAT_HIGHWAY_BRIDGE_LAST == TKL_HIGHWAY_BRIDGE_LAST &&
+    (int)TSTAT_SUBWAY_TO_RAIL == TKL_SUBWAY_TO_RAIL_FIRST &&
+    (int)TSTAT_SUBWAY_TO_RAIL_LAST == TKL_SUBWAY_TO_RAIL_LAST,
+    "simulation counter slots agree with stock family bases");
+
+// Stock files use four rubble artwork IDs. Native tiles use TK_RUBBLE with separate appearance metadata.
+static bool IsLegacyRubbleKind(int kind) {
+  return kind >= TKL_RUBBLE_FIRST && kind <= TKL_RUBBLE_LAST;
+}
 
 // Map a compact native highway family kind to its paired stock artwork base. Kind must be a straight highway family;
 // orientation is projected separately and no footprint is decoded.
@@ -49,11 +96,12 @@ static int NativeHighwayKind(int kind) {
   return kKinds[(kind - TKL_HIGHWAY_FIRST) >> 1];
 }
 
-// Map a native transport/crossing kind to its fixed stock artwork family base. Input uses native kinds; unlisted kinds
-// are returned unchanged and direction/axis are added only when projecting the complete tile.
+// Map a native kind to its stock artwork family base. Unlisted kinds use unchanged IDs;
+// direction and appearance are added only when projecting the complete tile.
 static int LegacyBaseKind(int kind) {
   if (IsTileKindShoreTree(kind)) return CityTreeTile(CityTreeCount(kind));
   switch (kind) {
+  case TK_RUBBLE: return TKL_RUBBLE_FIRST;
   case TK_WATER: case TK_RIVER: case TK_WATER_BANK: return TK_CLEAR;
   case TK_PARK: return TKL_PARK;
   case TK_POWER_LINE: case TK_POWER_LINE_TOWER: return TKL_POWER_LINE_EAST_WEST;
@@ -158,12 +206,6 @@ static u8 LegacyPowerTileKind(int mask, int shape) {
   return TKL_POWER_LINE_EAST_WEST + kPowerOffsets[mask];
 }
 
-// Test whether a stock artwork kind belongs to rubble. Input is a legacy kind; this predicate neither reads City
-// metadata nor changes recovery state.
-bool IsLegacyRubbleKind(int kind) {
-  return kind >= TK_RUBBLE && kind <= TKL_RUBBLE_LAST;
-}
-
 // Test whether a stock artwork kind is a tunnel entrance. Input uses stock encoding and the result has no map or
 // tunnel-search side effects.
 static bool IsLegacyTunnelEntranceKind(int kind) {
@@ -182,11 +224,10 @@ static bool IsCitySurfaceTransportArtwork(int artwork) {
   return artwork >= TKL_ROAD_EAST_WEST && artwork <= TKL_RAIL_TRANSITION_62;
 }
 
-// These ranges belong to SC2 files and the stock artwork catalog. Native maps store only the first kind, with its
-// variant in zone bits 4–5. Returns the native base-kind projection for a stock range; input remains a legacy kind
-// throughout classification.
+// Decode stock rubble, tunnel, ramp and subway-connection ranges to their native kind.
+// Complete-record conversion installs appearance and facing separately; classification reads stock IDs throughout.
 static int NativeVariantKindFromLegacy(int kind) {
-  if (kind >= TK_RUBBLE && kind <= TKL_RUBBLE_LAST) return TK_RUBBLE;
+  if (IsLegacyRubbleKind(kind)) return TK_RUBBLE;
   if (kind >= TKL_SUBWAY_TO_RAIL_FIRST && kind <= TKL_SUBWAY_TO_RAIL_LAST)
     return TK_SUBWAY_TO_RAIL;
   if (IsLegacyTunnelEntranceKind(kind))
@@ -196,8 +237,8 @@ static int NativeVariantKindFromLegacy(int kind) {
   return -1;
 }
 
-// Move a stock variant-kind choice into the native zone metadata bits. Kind and zone must describe the same imported
-// cell; returns the translated zone byte without writing map storage.
+// Project a native variant kind's zoning to stock XZON. Keep the lower zoning bits;
+// stock subway connections also need the full corner mask. Does not write map storage.
 static int LegacyVariantZone(int kind, int zone) {
   return (zone & CITY_ZONE_KIND_MASK) | (kind == TK_SUBWAY_TO_RAIL ? CITY_ZONE_CORNER_MASK : 0);
 }
@@ -338,7 +379,7 @@ void WriteLegacyCityTerrainCode(City *city, TileIndex tile, int value) {
   else if (was_wet) WriteGroundKind(tp, CITY_GROUND_GRASS);
   if (was_wet && !wet) {
     tp->flags &= ~TF_SALTWATER;
-    if (CityTileCanStoreBuildingStage(tp)) tp->altitude &= CITY_ALTITUDE_CLEAR_WATER;
+    if (IsTileKindDryBuilding(tp->kind)) tp->altitude &= CITY_ALTITUDE_CLEAR_WATER;
   }
 }
 
@@ -445,10 +486,11 @@ int ReadLegacyTerrainCode(const City *city, TileIndex tile) {
 // Ordinary native kinds select structural stock pieces. Drawbridges additionally project their moving centre leaf.
 static int ProjectStyledCityBridgeKind(const City *city, TileIndex tile) {
   assert(IsMapTileValid(city, tile));
-  int kind = ReadTile(city, tile);
+  const TileInfo *tp = &city->tile[tile];
+  int kind = tp->kind;
   if (IsTileKindHighwayBridge(kind))
     return TKL_HIGHWAY_BRIDGE_FIRST + ReadCityHighwayBridgePiece(city, tile);
-  bool head = IsCityBridgeHead(&city->tile[tile]);
+  bool head = IsCityBridgeHead(tp);
   if (ReadCityBridgeStyle(city, tile) == BRIDGE_STYLE_DRAWBRIDGE) {
     if (head) return TKL_ROAD_BRIDGE_DECK;
     if (CityDrawbridgeCenter(city, tile) == tile)
@@ -463,50 +505,52 @@ static int ProjectStyledCityBridgeKind(const City *city, TileIndex tile) {
 // Codecs handle byte order, RLE and containers; stock map projections live here.
 static u8 ProjectLegacyCityTileKind(const City *city, TileIndex tile) {
   assert(IsMapTileValid(city, tile));
-  int kind = ReadTile(city, tile);
+  const TileInfo *tp = &city->tile[tile];
+  int kind = tp->kind;
   if (!city->native_map_storage) return kind;
   if (IsTileKindShoreTree(kind)) return CityTreeTile(CityTreeCount(kind));
   if (IsTileKindBridge(kind)) return ProjectStyledCityBridgeKind(city, tile);
-  int zone = ReadTileZoneByte(&city->tile[tile]);
-  int construction = CityBuildingConstructionKind(&city->tile[tile]);
+  int zone = ReadTileZoneByte(tp);
+  int construction = CityBuildingConstructionKind(tp);
   if (construction) return construction;
   if (kind == TK_HYDRO_POWER) return CityHydroSpriteKind(city, zone);
   if (IsTileKindStraightHighwayFamily(kind))
-    return LegacyHighwayBase(kind) + ReadCityHighwayAxis(&city->tile[tile]);
+    return LegacyHighwayBase(kind) + ReadCityHighwayAxis(tp);
   if (IsTileKindMultiHighway(kind)) {
-    int shape = ReadCityHighwayFootprintShape(&city->tile[tile]);
+    int shape = ReadCityHighwayFootprintShape(tp);
     return TKL_HIGHWAY_ENTRANCE_93 + shape;
   }
   if (IsTileKindVariant(kind))
-    return LegacyBaseKind(kind) + ReadTileVariant(&city->tile[tile]);
-  if (IsTileKindGroundCrossing(kind)) return LegacyBaseKind(kind) + ReadCityCrossingAxis(&city->tile[tile]);
+    return LegacyBaseKind(kind) + ReadTileVariant(tp);
+  if (IsTileKindGroundCrossing(kind)) return LegacyBaseKind(kind) + ReadCityCrossingAxis(tp);
   if (IsTileKindPlainTransport(kind))
     return LegacyTransportTileKind(city, tile, kind, zone >> CITY_ZONE_METADATA_SHIFT);
-  if (IsCityWaterPowerLine(&city->tile[tile])) return TKL_POWER_LINE_BRIDGE;
-  return IsTileKindPlainPowerLine(kind) ? LegacyPowerTileKind(ReadTransportConnections(&city->tile[tile]),
-      ReadTerrainCode(&city->tile[tile])) : LegacyBaseKind(kind);
+  if (IsTileKindWaterPowerLine(tp->kind)) return TKL_POWER_LINE_BRIDGE;
+  return IsTileKindPlainPowerLine(kind) ?
+      LegacyPowerTileKind(ReadTransportConnections(tp), ReadTerrainCode(tp)) : LegacyBaseKind(kind);
 }
 
 // Project a valid native tile's zone/footprint metadata to the stock byte representation. Bridge style must match its
 // span when relevant; City storage remains native and unchanged.
 static u8 ProjectLegacyCityTileZone(const City *city, TileIndex tile, int bridge_style) {
-  int kind = ReadTile(city, tile), zone = ReadTileZoneByte(&city->tile[tile]);
-  if (!city->native_map_storage) return city->tile[tile].zone;
+  const TileInfo *tp = &city->tile[tile];
+  int kind = tp->kind, zone = ReadTileZoneByte(tp);
+  if (!city->native_map_storage) return tp->zone;
   if (IsTileKindBridge(kind)) {
     // Retain the stock projection's one-based extension style payload.
     if (!IsTileKindHighwayBridge(kind)) return (bridge_style + 1) << CITY_ZONE_METADATA_SHIFT;
-    return CityHighwayCornerMask(city, CityBridgeHighwayZone(city, tile));
+    return CityHighwayCornerMask(city, tile) << CITY_ZONE_METADATA_SHIFT;
   }
   if (IsTileKindVariant(kind)) return LegacyVariantZone(kind, zone);
   if (IsTileKindSingleTileFootprint(kind) || IsTileKindStraightHighwayFamily(kind))
     return (zone & CITY_ZONE_KIND_MASK) | CITY_ZONE_CORNER_MASK;
   if (IsTileKindHighwayFootprint(kind))
-    return (zone & CITY_ZONE_KIND_MASK) | CityHighwayCornerMask(city, zone);
+    return (zone & CITY_ZONE_KIND_MASK) | (CityHighwayCornerMask(city, tile) << CITY_ZONE_METADATA_SHIFT);
   if (kind == TK_CLEAR || IsTileKindExposedWater(kind) || IsTileKindTree(kind) || IsTileKindPowerLine(kind) ||
       IsTileKindGroundCrossing(kind) || IsTileKindPlainTransport(kind)) return zone & CITY_ZONE_KIND_MASK;
   if (IsTileKindBuilding(kind))
     return (zone & CITY_ZONE_KIND_MASK) |
-        CityBuildingCornerMask(city, tile, &city->tile[0].terrain, sizeof(TileInfo));
+        (CityBuildingCornerMask(city, tile) << CITY_ZONE_METADATA_SHIFT);
   return zone;
 }
 
@@ -514,26 +558,21 @@ static u8 ProjectLegacyCityTileZone(const City *city, TileIndex tile, int bridge
 // the renderer.
 bool LegacyCityTileFlip(const City *city, TileIndex tile) {
   assert(IsMapTileValid(city, tile));
-  int kind = ReadTile(city, tile), zone = ReadTileZoneByte(&city->tile[tile]);
-  if (IsCityWaterPowerLine(&city->tile[tile]))
-    return (ReadTransportConnections(&city->tile[tile]) & CONN_NS) != 0;
+  const TileInfo *tp = &city->tile[tile];
+  int kind = tp->kind, zone = ReadTileZoneByte(tp);
+  if (IsTileKindWaterPowerLine(tp->kind))
+    return (ReadTransportConnections(tp) & CONN_NS) != 0;
   if (IsTileKindBridge(kind))
     return (zone & CITY_BRIDGE_AXIS_MASK) != 0;
-  if (kind == TK_HIGHWAY_ENTRANCE) return ReadCityHighwayRampMirror(&city->tile[tile]);
+  if (kind == TK_HIGHWAY_ENTRANCE) return ReadCityHighwayRampMirror(tp);
   if (IsTileKindHighwayAxis(kind)) {
-    int axis = ReadCityHighwayAxis(&city->tile[tile]);
+    int axis = ReadCityHighwayAxis(tp);
     return IsTileKindStraightHighwayFamily(kind) ? false :
         axis ^ LegacyHighwayAxis(ProjectLegacyCityTileKind(city, tile), 0);
   }
   if (IsTileKindBuilding(kind))
     return (DecodeBuildingOrientation(zone) - city->geography.rotation) & 1;
   return false;
-}
-
-// Project a valid native tile to a stock kind for retained codecs/artwork algorithms. Returns a byte-compatible value
-// without rewriting the City's stored kind or variant metadata.
-static u8 LegacyCityTileKind(const City *city, TileIndex tile) {
-  return ProjectLegacyCityTileKind(city, tile);
 }
 
 // Project one complete valid native tile into a stock-format record. Returns a value and leaves source metadata
@@ -563,7 +602,7 @@ static u8 ExportCityMapByte(const City *city, const CityFileChunkSpec *spec, Til
 
 // Export a bounded schema-selected map chunk using complete-record stock projection. Bytes must hold size output bytes
 // and spec/size must fit the source; native tiles remain unchanged throughout traversal.
-void ExportCityMapChunk(City *city, const CityFileChunkSpec *spec, u8 *bytes, u32 size) {
+void ExportCityMapChunk(const City *city, const CityFileChunkSpec *spec, u8 *bytes, u32 size) {
   if (spec->storage == CITY_FILE_TILE && spec->conversion == CITY_FILE_BYTES)
     for (TileIndex tile = 0; tile < size; ++tile) bytes[tile] = ExportCityMapByte(city, spec, tile);
   else if (spec->storage == CITY_FILE_TILE && spec->conversion == CITY_FILE_WORDS16) {
@@ -571,94 +610,7 @@ void ExportCityMapChunk(City *city, const CityFileChunkSpec *spec, u8 *bytes, u3
       TileInfo record = TranslateCityTileToLegacy(city, tile);
       memcpy(bytes + 2 * tile, &record.altitude, sizeof(record.altitude));
     }
-  } else CopyCityFileChunkBytes(city, spec, bytes, size, CITY_FILE_EXPORT);
-}
-
-// Validate native tile discriminators and footprint topology directly, without a stock projection or staging map.
-bool ValidateCityTileRecords(const City *city) {
-  TileIndex cells = city->map_cell_count;
-  bool valid = true;
-  // Validate local discriminators before inspecting neighboring geometry.
-  for (TileIndex tile = 0; tile < cells && valid; ++tile) {
-    const TileInfo *tp = &city->tile[tile];
-    valid = (tp->zone & CITY_TILE_SLOPED) ? ReadTerrainCode(tp) >= 1 &&
-        ReadTerrainCode(tp) <= CITY_TERRAIN_SHAPE_13 : ReadCityZoneKind(tp) <= ZONE_SEAPORT;
-    if (!(ReadCityTileClasses(tp->kind) & ~CITY_TILE_MODULE_MASK) && tp->kind != TK_CLEAR &&
-        !IsTileKindExposedWater(tp->kind) && tp->kind != TK_RADIOACTIVE_WASTE) valid = false;
-    if (IsCityBridgeHead(tp)) {
-      int style = ReadTileBridgeStyle(tp);
-      if (IsTileKindHighwayBridge(tp->kind)) {
-        valid = valid && (style == HIGHWAY_BRIDGE_STYLE_STANDARD || style == HIGHWAY_BRIDGE_STYLE_REINFORCED);
-      } else {
-        valid = valid && style < BRIDGE_STYLE_COUNT &&
-            (style != BRIDGE_STYLE_DRAWBRIDGE || tp->kind == TK_ROAD_BRIDGE_HEAD) &&
-            !(tp->altitude & CITY_BRIDGE_HIGHWAY_PHASE_MASK);
-      }
-    }
-  }
-  for (TileIndex tile = 0; tile < cells && valid; ++tile) {
-    const TileInfo *tp = &city->tile[tile];
-    int kind = tp->kind, ground = ReadGroundKind(tp), metadata = tp->terrain & 240;
-    bool bridge = IsTileKindBridge(kind), head = IsCityBridgeHead(tp), wet = HasTileWater(tp);
-    if (IsTileKindShoreBank(kind)) {
-      valid = valid && ground <= CITY_GROUND_SHORE;
-    } else if (wet) {
-      valid = valid && (tp->terrain & 15) <= TK_WATER_BANK - TK_WATER &&
-          (!IsTileKindExposedWater(kind) || !(tp->terrain & 15));
-    } else {
-      valid = valid && ground <= CITY_GROUND_SHORE;
-      if (ground >= CITY_GROUND_ROUGH && ground <= CITY_GROUND_RECOVERY_LAST &&
-          kind != TK_CLEAR && !IsTileKindTree(kind) && !bridge && !IsTileKindGroundTransport(kind)) valid = false;
-    }
-    if (IsTileKindShoreTree(kind)) {
-      CityTileGeometry geometry = ReadCityTileGeometry(city, tile);
-      valid = valid && geometry.land_height == geometry.water_height && geometry.land_shape != CITY_TERRAIN_FLAT;
-    }
-    if (IsTileKindTree(kind)) {
-      valid = valid && ReadTreeSpecies(tp) < CityTreeSpeciesCount(ReadCityTileBaseClimate(city, tp)) &&
-          ReadTreeGrowth(tp) <= CITY_TREE_DEAD && ground != CITY_GROUND_ROCKS;
-    } else if (kind != TK_CLEAR && kind != TK_WATER_BANK)
-      valid = valid && !(tp->zone & (CITY_TILE_GROWTH_MASK & ~(kind == TK_WIND_POWER ? CITY_WIND_MODERN_MASK : 0)));
-    if (bridge) {
-      int allowed = CITY_BRIDGE_AXIS_MASK | (head ? CITY_BRIDGE_HEAD_FACING_MASK : 0) |
-          (IsTileKindHighwayBridge(kind) ? CITY_BRIDGE_HIGHWAY_RIGHT : 0);
-      valid = valid && !ReadCityZoneKind(tp) && !(metadata & ~allowed) && ValidateCityBridgeSpan(city, tile);
-    } else if (kind == TK_CLEAR || IsTileKindExposedWater(kind)) valid = valid && !metadata;
-    else if (IsTileKindGroundCrossing(kind)) valid = valid && !(metadata & ~CITY_CROSSING_AXIS_MASK);
-    else if (IsTileKindVariant(kind)) valid = valid && !(metadata & ~(CITY_TILE_VARIANT_MASK |
-        (kind == TK_HIGHWAY_ENTRANCE ? CITY_HIGHWAY_RAMP_MIRROR_MASK : 0)));
-    else if (IsTileKindSingleTileFootprint(kind)) valid = valid && !metadata;
-    if (IsTileKindPlainPowerLine(kind) && !wet)
-      valid = valid && ReadTransportConnections(tp) == FindCityPowerConnectionMask(city, tile);
-    if (!valid) break;
-    if (IsTileKindHighwayFootprint(kind)) {
-      CityRect bounds = CityHighwayFootprintBounds(city, tile, &city->tile[0].terrain, sizeof(TileInfo));
-      int width = bounds.right - bounds.left, height = bounds.bottom - bounds.top;
-      bool rectangle = width == 2 && height == 2;
-      if (IsTileKindStraightHighwayFamily(kind)) rectangle |= ReadCityHighwayAxis(tp) ?
-          width == 2 && height == 1 : width == 1 && height == 2;
-      valid = valid && rectangle && bounds.left >= 0 && bounds.top >= 0 &&
-          bounds.right <= city->map_width && bounds.bottom <= city->map_height;
-      if (valid) for (int dy = 0; dy < height; ++dy) for (int dx = 0; dx < width; ++dx) {
-        const TileInfo *other = &city->tile[MapTileXY(city, bounds.left + dx, bounds.top + dy)];
-        int expected = (dx ? CITY_BUILDING_CONTINUE_X : 0) | (dy ? CITY_BUILDING_CONTINUE_Y : 0);
-        valid = valid && (IsTileKindStraightHighwayFamily(kind) ?
-            IsTileKindStraightHighwayFamily(other->kind) : other->kind == kind) &&
-            (other->terrain & CITY_BUILDING_CONTINUATION_MASK) == expected &&
-            !((other->terrain ^ tp->terrain) & CITY_HIGHWAY_ORIENTATION_MASK);
-      }
-    }
-    if (IsTileKindBuilding(kind)) {
-      CityPoint point = MapTilePt(city, tile);
-      if (metadata & CITY_BUILDING_CONTINUE_X) valid = valid && point.x > 0 &&
-          ReadTile(city, tile - 1) == kind &&
-          !((city->tile[tile - 1].terrain ^ tp->terrain) & CITY_BUILDING_ORIENTATION_MASK);
-      if (metadata & CITY_BUILDING_CONTINUE_Y) valid = valid && point.y > 0 &&
-          ReadTile(city, tile - city->map_width) == kind &&
-          !((city->tile[tile - city->map_width].terrain ^ tp->terrain) & CITY_BUILDING_ORIENTATION_MASK);
-    }
-  }
-  return valid;
+  } else ReadCityFileChunkBytes(city, spec, bytes, size);
 }
 
 // Native planes are applied after stock records, retaining partial writes on an invalid extension.
@@ -708,7 +660,7 @@ static int LegacyRectangleCorners(const City *city, int dx, int dy, int size) {
 // Decode a valid stock building cell and its continuation/variant metadata into caller-owned result. Source map must
 // remain unchanged during the whole conversion pass; false declines unsupported or malformed building geometry.
 static bool TranslateLegacyBuilding(const City *city, TileIndex tile, TileInfo *result) {
-  int kind = ReadTile(city, tile), size = kCityBuildingFootprintSize[kind - TK_RESIDENTIAL_FIRST];
+  int kind = city->tile[tile].kind, size = kCityBuildingFootprintSize[kind - TK_RESIDENTIAL_FIRST];
   CityPoint point = MapTilePt(city, tile);
   int corners = city->tile[tile].zone & CITY_ZONE_CORNER_MASK;
   for (int dy = 0; dy < size; ++dy) for (int dx = 0; dx < size; ++dx) {
@@ -716,7 +668,7 @@ static bool TranslateLegacyBuilding(const City *city, TileIndex tile, TileInfo *
     if (left < 0 || top < 0 || left + size > city->map_width || top + size > city->map_height ||
         corners != LegacyRectangleCorners(city, dx, dy, size)) continue;
     TileIndex anchor = MapTileXY(city, left, top);
-    if (ReadTile(city, anchor) != kind || (city->tile[anchor].zone & CITY_ZONE_CORNER_MASK) !=
+    if (city->tile[anchor].kind != kind || (city->tile[anchor].zone & CITY_ZONE_CORNER_MASK) !=
         LegacyRectangleCorners(city, 0, 0, size)) continue;
     bool complete = true, submerged = false;
     int water_height = -1, water_flags = 0, water_ground = TK_WATER, minimum_height = 31;
@@ -772,7 +724,7 @@ clear:
 // Derive a valid stock highway cell's footprint offsets from unchanged stock artwork/flags. Returns coordinates used
 // by the decoder; does not alter the source or search a native footprint.
 static CityPoint LegacyHighwayOffsets(const City *city, TileIndex tile) {
-  int kind = ReadTile(city, tile);
+  int kind = city->tile[tile].kind;
   if (kind <= TKL_HIGHWAY_LAST) {
     // Stock straight highways have an implicit 2x2 grid. Decode it once.
     CityPoint point = MapTilePt(city, tile);
@@ -787,7 +739,7 @@ static CityPoint LegacyHighwayOffsets(const City *city, TileIndex tile) {
 // Decode one valid stock highway cell into a staged native record. Source neighbors must remain in stock form until
 // conversion completes; returns whether this family handled the tile.
 static bool TranslateLegacyHighway(const City *city, TileIndex tile, TileInfo *result) {
-  int kind = ReadTile(city, tile);
+  int kind = city->tile[tile].kind;
   CityPoint offset = LegacyHighwayOffsets(city, tile);
   if (offset.x < 0) return false;
   int dx = offset.x, dy = offset.y;
@@ -812,7 +764,7 @@ static bool TranslateLegacyHighway(const City *city, TileIndex tile, TileInfo *r
 // Test whether a valid cell in the unchanged stock map belongs to a highway bridge. This classification is read-only
 // and is not suitable for a partially converted native map.
 static bool IsLegacyHighwayWaterCell(const City *city, TileIndex tile) {
-  int kind = ReadTile(city, tile);
+  int kind = city->tile[tile].kind;
   if (kind >= TKL_HIGHWAY_BRIDGE_FIRST && kind <= TKL_HIGHWAY_BRIDGE_LAST) return true;
   if (kind < TKL_HIGHWAY_FIRST || kind > TKL_HIGHWAY_LAST) return false;
   CityPoint point = MapTilePt(city, tile);
@@ -828,12 +780,30 @@ static bool IsLegacyHighwayWaterCell(const City *city, TileIndex tile) {
 static bool IsLegacyHighwayBridgeCell(const City *city, TileIndex tile) {
   if (IsLegacyHighwayWaterCell(city, tile)) return true;
   const TileInfo *tp = &city->tile[tile];
-  if (tp->kind < TKL_HIGHWAY_FIRST || tp->kind > TKL_HIGHWAY_LAST) return false;
+  bool incline = tp->kind >= TKL_HIGHWAY_INCLINE_FIRST && tp->kind <= TKL_HIGHWAY_INCLINE_LAST;
+  if (!incline && (tp->kind < TKL_HIGHWAY_FIRST || tp->kind > TKL_HIGHWAY_LAST)) return false;
   int axis = LegacyHighwayAxis(tp->kind, tp->flags);
+  if (incline) {
+    // Keep complete bank-approach footprints with the bridge, including a dry ramp beyond a wet end piece.
+    // Native heads stay on the outer dry banks; both approaches and the middle share one span.
+    CityPoint offset = LegacyHighwayOffsets(city, tile);
+    if (offset.x < 0) return false;
+    CityPoint origin = MapTilePt(city, tile);
+    origin.x -= offset.x;
+    origin.y -= offset.y;
+    for (int side = -1; side <= 1; side += 2) {
+      int along = side < 0 ? -1 : 2;
+      TileIndex next = MapTileXYOrInvalid(city, origin.x + (axis ? offset.x : along),
+          origin.y + (axis ? along : offset.y));
+      if (next != INVALID_TILE && IsLegacyHighwayWaterCell(city, next) &&
+          LegacyHighwayAxis(city->tile[next].kind, city->tile[next].flags) == axis) return true;
+    }
+    return false;
+  }
   for (int side = -1; side <= 1; side += 2) {
     TileIndex next = GetRelativeTileOrInvalid(city, tile, side * !axis, side * axis);
     if (next != INVALID_TILE && IsLegacyHighwayWaterCell(city, next) &&
-        LegacyHighwayAxis(ReadTile(city, next), city->tile[next].flags) == axis) return true;
+        LegacyHighwayAxis(city->tile[next].kind, city->tile[next].flags) == axis) return true;
   }
   return false;
 }
@@ -878,6 +848,11 @@ static bool TranslateLegacyHighwayBridge(const City *city, TileIndex tile, TileI
   if (head) result->altitude = (result->altitude & CITY_ALTITUDE_CLEAR_WATER) |
       (phase ? CITY_BRIDGE_HIGHWAY_PHASE_MASK : 0);
   if (head) result->terrain = (result->terrain & 15) | HIGHWAY_BRIDGE_STYLE_STANDARD << 4;
+  else if (LegacySourceWaterKind(city, tile) == CITY_WATER_NONE) {
+    // Dry ramp cells become middle pieces; their stock water-height field may be zero.
+    result->altitude = (result->altitude & CITY_ALTITUDE_CLEAR_WATER) |
+        ReadCityLandHeight(&city->tile[first]) << CITY_ALTITUDE_WATER_SHIFT;
+  }
   result->flags &= ~CITY_LEGACY_MAP_FLAG_ROTATED;
   return true;
 }
@@ -902,7 +877,7 @@ static bool TranslateLegacySurfaceBridge(const City *city, TileIndex tile, TileI
   assert(IsMapTileValid(city, tile));
   static const i8 kSteps[4][2] = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
   TileIndex member = tile;
-  int kind = ReadTile(city, tile), axis;
+  int kind = city->tile[tile].kind, axis;
   bool rail;
   if (IsLegacySurfaceBridge(kind)) {
     rail = kind >= TKL_RAIL_BRIDGE_FIRST;
@@ -911,8 +886,8 @@ static bool TranslateLegacySurfaceBridge(const City *city, TileIndex tile, TileI
     bool found = false;
     for (int direction = 0; direction < 4; ++direction) {
       TileIndex neighbor = GetRelativeTileOrInvalid(city, tile, kSteps[direction][0], kSteps[direction][1]);
-      if (neighbor == INVALID_TILE || !IsLegacySurfaceBridge(ReadTile(city, neighbor))) continue;
-      rail = ReadTile(city, neighbor) >= TKL_RAIL_BRIDGE_FIRST;
+      if (neighbor == INVALID_TILE || !IsLegacySurfaceBridge(city->tile[neighbor].kind)) continue;
+      rail = city->tile[neighbor].kind >= TKL_RAIL_BRIDGE_FIRST;
       axis = direction >= 2;
       int base = rail ? TKL_RAIL_FIRST : TKL_ROAD_EAST_WEST;
       if ((!IsTileKindUnbuilt(kind) && (kind < base || kind >= base + 15)) ||
@@ -929,7 +904,7 @@ static bool TranslateLegacySurfaceBridge(const City *city, TileIndex tile, TileI
   for (int side = -1; side <= 1; side += 2) {
     TileIndex current = member;
     for (;;) {
-      int piece = ReadTile(city, current);
+      int piece = city->tile[current].kind;
       if (!rail && (piece == TKL_RAISING_BRIDGE_CLOSED || piece == TKL_RAISING_BRIDGE_OPEN))
         style = BRIDGE_STYLE_DRAWBRIDGE;
       else if (!rail && style != BRIDGE_STYLE_DRAWBRIDGE && piece <= TKL_SUSPENSION_BRIDGE_LAST)
@@ -940,8 +915,8 @@ static bool TranslateLegacySurfaceBridge(const City *city, TileIndex tile, TileI
     }
     int base = rail ? TKL_RAIL_FIRST : TKL_ROAD_EAST_WEST;
     if (next != INVALID_TILE &&
-        (IsTileKindUnbuilt(ReadTile(city, next)) ||
-            (ReadTile(city, next) >= base && ReadTile(city, next) < base + 15)) &&
+        (IsTileKindUnbuilt(city->tile[next].kind) ||
+            (city->tile[next].kind >= base && city->tile[next].kind < base + 15)) &&
         LegacySourceWaterKind(city, next) == CITY_WATER_NONE) current = next;
     if (side < 0) first = current; else last = current;
   }
@@ -1008,6 +983,11 @@ bool TranslateCityTileFromLegacy(const City *city, TileIndex tile, TileInfo *res
     if (kind <= TKL_HIGHWAY_LAST) {
       result->kind = NativeHighwayKind(kind);
       result->zone |= LegacyHighwayAxis(kind, result->flags) << CITY_HIGHWAY_ORIENTATION_SHIFT;
+      // A bank head can consume one row or column of a stock 2x2 block. Reanchor its remaining highway strip.
+      if ((result->zone & CITY_BUILDING_CONTINUE_X) && IsLegacyHighwayBridgeCell(city, tile - 1))
+        result->zone &= ~CITY_BUILDING_CONTINUE_X;
+      if ((result->zone & CITY_BUILDING_CONTINUE_Y) &&
+          IsLegacyHighwayBridgeCell(city, tile - city->map_width)) result->zone &= ~CITY_BUILDING_CONTINUE_Y;
     } else {
       int shape = kind - TKL_HIGHWAY_ENTRANCE_93;
       result->kind = CityHighwayFootprintKind(shape);
@@ -1059,7 +1039,7 @@ water_kind:
   result->flags &= ~(CITY_LEGACY_MAP_FLAG_ROTATED | CITY_LEGACY_MAP_FLAG_WATER);
   // Dry stock buildings have no construction-stage payload. Normalize that
   // unused water-height field at import, before gameplay reads native records.
-  if (CityTileCanStoreBuildingStage(result)) result->altitude &= CITY_ALTITUDE_CLEAR_WATER;
+  if (IsTileKindDryBuilding(result->kind)) result->altitude &= CITY_ALTITUDE_CLEAR_WATER;
   int shape = result->terrain & CITY_TERRAIN_SHAPE_MASK;
   int metadata = result->zone & CITY_ZONE_METADATA_MASK;
   int ground = HasTileWater(result) ? (IsTileKindExposedWater(result->kind) ? 0 :
@@ -1068,12 +1048,6 @@ water_kind:
   result->terrain = metadata | ground;
   result->zone = shape ? CITY_TILE_SLOPED | shape : result->zone & CITY_ZONE_KIND_MASK;
   return true;
-}
-
-// Reset native map-format metadata to its initialization defaults. Requires a City owner; this changes format state
-// rather than converting the contents of map arrays.
-void InitializeCityMapFormat(City *city) {
-  city->native_map_storage = true;
 }
 
 // Mark map storage as stock source before loading its records. Call before boundary conversion; native
@@ -1099,8 +1073,8 @@ bool ConvertCityMapToNative(City *city) {
       return false;
     }
     sloped_zones += (city->tile[tile].zone & CITY_ZONE_KIND_MASK) && ReadTerrainCode(&converted[tile]);
-    cleared += ReadTile(city, tile) >= TK_RESIDENTIAL_FIRST && converted[tile].kind == TK_CLEAR;
-    submerged += ReadTile(city, tile) != TK_CLEAR && IsTileKindExposedWater(converted[tile].kind);
+    cleared += city->tile[tile].kind >= TK_RESIDENTIAL_FIRST && converted[tile].kind == TK_CLEAR;
+    submerged += city->tile[tile].kind != TK_CLEAR && IsTileKindExposedWater(converted[tile].kind);
   }
   // Stock coastlines can have dry, flat land at the waterline. Preserve that layout
   // while still allowing water to reclaim neighboring shore slopes.
@@ -1113,6 +1087,42 @@ bool ConvertCityMapToNative(City *city) {
   city->native_map_storage = true;
   RecountCityTileStatistics(city);
   InvalidateMap(city);
+  return true;
+}
+
+// Stock association bytes are converted once after geometry and event stacks have been decoded.
+bool ImportStockCityAssociations(City *city) {
+  if (!ReserveCitySigns(city, CITY_OVERLAY_SIGN_COUNT + 1) || !ReserveCityFacilities(city, CITY_FACILITY_RECORD_COUNT))
+    return false;
+  CitySigns *signs = &city->signs;
+  CityAnnualFacilities *facilities = &city->annual_facilities;
+  for (int slot = 0; slot < signs->capacity; ++slot) signs->record[slot].tile = INVALID_TILE;
+  for (int slot = 0; slot < facilities->capacity; ++slot)
+    facilities->details[slot].tile = INVALID_TILE;
+  signs->used = 1;
+  signs->free_slot = 1;
+  facilities->free_slot = CITY_FACILITY_RECORD_FIRST_DYNAMIC;
+  facilities->used = CITY_FACILITY_RECORD_COUNT;
+  for (TileIndex tile = 0; tile < city->map_cell_count; ++tile) {
+    TileInfo *tp = &city->tile[tile];
+    int overlay = tp->overlay;
+    tp->overlay = 0;
+    if (IsCitySignOverlay(overlay)) {
+      tp->overlay = CITY_TILE_HAS_SIGN;
+      signs->record[overlay].tile = tile;
+      signs->used = IntMax(signs->used, overlay + 1);
+    } else if (IsCityFacilityOverlay(overlay)) {
+      int slot = CityFacilityOverlaySlot(overlay);
+      TileIndex anchor = ResolveBulldozeFootprint(city, tile).start;
+      CityFacilityDetails *detail = &facilities->details[slot];
+      detail->tile = anchor;
+      const CityAnnualFacilityRecord *facility = ReadCityFacilityRecord(city, slot);
+      detail->years = IsTileKindAgingPowerPlant(facility->type) ? facility->age : 0;
+      facilities->used = IntMax(facilities->used, slot + 1);
+    } else if (overlay >= CITY_OVERLAY_EVENT_END)
+      tp->overlay = (overlay - CITY_OVERLAY_EVENT_END + 1) << CITY_TILE_EFFECT_SHIFT;
+  }
+  RebuildCityAssociationHashes(city);
   return true;
 }
 
@@ -1129,12 +1139,6 @@ bool ImportCityMapFormat(City *city) {
   return true;
 }
 
-// Project a valid native bridge cell into its stock artwork kind using stored span metadata. Span must be consistent;
-// this conversion does not change bridge topology or the stored native kind.
-static int LegacyCityBridgeKind(const City *city, TileIndex tile) {
-  return IsTileKindBridge(ReadTile(city, tile)) ? ProjectStyledCityBridgeKind(city, tile) : ReadTile(city, tile);
-}
-
 // Decode the fixed stock tile-count block into caller-owned count storage. Bytes must contain the whole block in its
 // expected byte order; output is replaced without modifying a live map.
 void DecodeCityLegacyTileCounts(const u8 *bytes, CityTileCounts *counts) {
@@ -1144,7 +1148,7 @@ void DecodeCityLegacyTileCounts(const u8 *bytes, CityTileCounts *counts) {
     counts->value[slot] = value;
   }
   static const u8 kFamilies[][2] = {
-      {TK_RUBBLE, TKL_RUBBLE_LAST},
+      {TKL_RUBBLE_FIRST, TKL_RUBBLE_LAST},
       {TKL_POWER_LINE_EAST_WEST, TKL_POWER_LINE_LAST},
       {TKL_ROAD_EAST_WEST, TKL_ROAD_LAST},
       {TKL_RAIL_FIRST, TKL_RAIL_TRANSITION_62},
@@ -1180,7 +1184,7 @@ void ReadCityLegacyTileCounts(const City *city, u32 counts[TK_COUNT]) {
   bool highway_bridges = counts[TKL_HIGHWAY_BRIDGE_FIRST] != 0;
   counts[TKL_HIGHWAY_BRIDGE_LAST] = 0;
   bool transport = counts[TKL_POWER_LINE_EAST_WEST] || counts[TKL_ROAD_EAST_WEST] || counts[TKL_RAIL_FIRST];
-  bool variants = counts[TK_RUBBLE] || counts[TKL_TUNNEL_ENTRANCE_FIRST] ||
+  bool variants = counts[TKL_RUBBLE_FIRST] || counts[TKL_TUNNEL_ENTRANCE_FIRST] ||
       counts[TKL_HIGHWAY_ENTRANCE_93] || counts[TKL_SUBWAY_TO_RAIL_FIRST];
   bool crossings = counts[TKL_ROAD_POWER_CROSSING_FIRST] || counts[TKL_ROAD_RAIL_CROSSING_FIRST] ||
       counts[TKL_RAIL_POWER_CROSSING_FIRST];
@@ -1203,7 +1207,7 @@ void ReadCityLegacyTileCounts(const City *city, u32 counts[TK_COUNT]) {
     const TileInfo *tp = &city->tile[tile];
     if (ReadCityZoneKind(tp) == ZONE_MILITARY) continue;
     if (highway_bridges && IsTileKindHighwayBridge(tp->kind)) {
-      if (LegacyCityBridgeKind(city, tile) == TKL_HIGHWAY_BRIDGE_LAST) {
+      if (ProjectStyledCityBridgeKind(city, tile) == TKL_HIGHWAY_BRIDGE_LAST) {
         --counts[TKL_HIGHWAY_BRIDGE_FIRST];
         ++counts[TKL_HIGHWAY_BRIDGE_LAST];
       }
@@ -1211,7 +1215,7 @@ void ReadCityLegacyTileCounts(const City *city, u32 counts[TK_COUNT]) {
         (transport && (IsTileKindPlainTransport(tp->kind) || IsTileKindPlainPowerLine(tp->kind))) ||
         (crossings && IsTileKindGroundCrossing(tp->kind)) ||
         (highway_shapes && IsTileKindMultiHighway(tp->kind))) {
-      int legacy = LegacyCityTileKind(city, tile), statistic = CityTileStatisticAt(city, tile);
+      int legacy = ProjectLegacyCityTileKind(city, tile), statistic = ReadCityTileStatisticsKey(city, tp);
       if (legacy != statistic) {
         --counts[statistic];
         ++counts[legacy];
@@ -1226,32 +1230,4 @@ void ReadCityLegacyTileCounts(const City *city, u32 counts[TK_COUNT]) {
       ++counts[base + 1];
     }
   }
-}
-
-// Keep established simulation counters independent of native-only storage IDs. Kind must be a supported native
-// statistics input; returns the compatibility counter key without changing any count.
-int CityTileStatisticsKind(const City *city, int kind) {
-  if (!city->native_map_storage) return kind;
-  if (kind == TK_POWER_LINE_WATER || kind == TK_POWER_LINE_TOWER_WATER) return TKL_POWER_LINE_BRIDGE;
-  if (IsTileKindPlainPowerLine(kind)) return TKL_POWER_LINE_EAST_WEST;
-  if (kind == TK_RAIL) return TKL_RAIL_FIRST;
-  if (IsTileKindStraightHighwayFamily(kind)) return LegacyHighwayBase(kind);
-  if (!IsTileKindBridge(kind)) return LegacyBaseKind(kind);
-  switch (CityBridgeHeadKind(kind)) {
-  case TK_ROAD_BRIDGE_HEAD:
-    return IsTileKindBridgeHead(kind) ? TKL_ROAD_BRIDGE_DECK : TKL_SUSPENSION_BRIDGE_FIRST;
-  case TK_RAIL_BRIDGE_HEAD:
-    return IsTileKindBridgeHead(kind) ? TKL_RAIL_BRIDGE_LAST : TKL_RAIL_BRIDGE_FIRST;
-  default:
-    return TKL_HIGHWAY_BRIDGE_FIRST;
-  }
-}
-
-// Read the statistics kind associated with a valid native tile and its stored variant/progress. Returns the counter
-// key used by simulation bookkeeping; no counter or tile is changed.
-int CityTileStatisticAt(const City *city, TileIndex tile) {
-  const TileInfo *tp = &city->tile[tile];
-  if (city->native_map_storage && IsCityWaterPowerLine(tp)) return TKL_POWER_LINE_BRIDGE;
-  int construction = CityBuildingConstructionKind(tp);
-  return construction ? construction : CityTileStatisticsKind(city, tp->kind);
 }

@@ -1,3 +1,5 @@
+#include "city/engine/questions.h"
+
 #include "city/maps/labels.h"
 #include "city/economy/budget.h"
 #include "city/events/news.h"
@@ -8,15 +10,11 @@
 #include "city/maps/tile_storage.h"
 #include "city/tools/types.h"
 #include "city/presentation.h"
-#include "city/engine/questions.h"
 
 #include <string.h>
 
-#include "city/economy/economy.h"
 #include "city/engine/commands.h"
 #include "city/state.h"
-#include "game/state.h"
-#include "assets/state.h"
 #include "base/text.h"
 
 int CityQuestionCount(const City *city) { return city->question_count; }
@@ -152,14 +150,14 @@ bool QueueCityBudgetAdvisorQuestion(City *city, int id, i32 budget_session,
   CityBudgetAdvice advice = SelectCityBudgetAdvisorMessage(city, category);
   city->questions[city->question_count++] = (CityQuestion){.id = id,
       .kind = CITY_QUESTION_BUDGET_ADVISOR,
-      .context.budget_advisor = {budget_session, category, CITY_BUDGET_ADVISOR_PORTRAIT_FIRST + category,
-          advice, parent_question, helper_enabled}};
+      .context.budget_advisor = {.budget_session = budget_session, .category = category, .advice = advice,
+          .parent_question = parent_question, .helper_enabled = helper_enabled}};
   return true;
 }
 
 // Check identity, reply readiness and the selected answer against the pending question. Opening reservations and
 // unsupported choices are rejected without changing City or consuming the question.
-bool CanReplyToCityQuestion(City *city, int id, CityQuestionReply reply) {
+bool CanReplyToCityQuestion(const City *city, int id, CityQuestionReply reply) {
   const CityQuestion *question = FindCityQuestion(city, id);
   if (question == NULL || (reply.answer != CITY_DIALOG_OK && reply.answer != CITY_DIALOG_CANCEL) || reply.length < 0 ||
       reply.length > CITY_OVERLAY_NAME_MAX_LENGTH ||
@@ -181,9 +179,9 @@ bool CanReplyToCityQuestion(City *city, int id, CityQuestionReply reply) {
   }
 }
 
-// Apply one admitted reply using the captured pending question context. Returns false for a rejected choice; callbacks
-// may change City, so the real continuation uses live state and does not retry the initiating action.
-static bool ApplyCityQuestionReply(City *city, int id, CityQuestionReply reply,
+// Apply one pending reply without repeating its initiating action. Accepted stadium actions preserve the question
+// array for removal below; a rejected action can run nested commands and returns without touching that array again.
+bool ApplyCityQuestionReply(City *city, int id, CityQuestionReply reply,
     void (*assign_team)(City *, TileIndex, int, const char *)) {
   if (!CanReplyToCityQuestion(city, id, reply)) return false;
   const CityQuestion *question = FindCityQuestion(city, id);
@@ -239,12 +237,6 @@ i64 ReplyToCityQuestion(City *city, int id, CityQuestionReply reply) {
       reply.answer != CITY_DIALOG_CANCEL && reply.selection == -1;
   if (!ApplyCityQuestionReply(city, id, reply, ApplyCityStadiumTeamChoice)) return CITY_COMMAND_COST_INVALID;
   return rejected_team ? -CITY_NOTICE_SELECT_VALID_STADIUM_SPORT : 1;
-}
-
-// Diagnostic callers retain the original blocking warning and consumed result. Returns the result of
-// ApplyCityQuestionReply unchanged; its input and side-effect contract applies.
-bool ReplyToQuestion(City *city, int id, CityQuestionReply reply) {
-  return ApplyCityQuestionReply(city, id, reply, AcceptCityStadiumTeamDialog);
 }
 
 // Apply a shared reply to the matching pending question identity. Rejects unsupported reply fields or stale/unready

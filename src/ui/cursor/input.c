@@ -1,3 +1,5 @@
+#include "ui/cursor/input.h"
+
 #include "ui/map_visibility.h"
 #include "ui/cursor/cursor.h"
 
@@ -12,7 +14,15 @@
 #include "ui/state.h"
 #include "ui/text/status.h"
 #include "ui/text/text.h"
+#include "ui/tools/tools.h"
 #include "ui/tools/types.h"
+
+CityPoint CityInterfacePointerPixels(const Game *game, const CanvasSDLEvent *event) {
+  const Drawing *drawing = game->drawing;
+  CityPoint point = {event->x * drawing->map_pixel_scale, event->y * drawing->map_pixel_scale};
+  if (game->ui->display) Sc2kSDLFramebufferPointer(game->ui->display, &point.x, &point.y);
+  return point;
+}
 
 void SetCityMapCursorPosition(CityInterfaceState *ui, int x, int y) {
   ui->map_cursor_position = (CityPoint){x, y};
@@ -58,16 +68,13 @@ void RefreshCityCursorStatus(City *city, int mode) {
   RefreshCityStatusPanel(city, &city->game->ui->status,
       city->settings.speed, mode);
 }
-void InvalidateCityMapSelection(City *city, const CityRect *rect) {
-  InvalidateCityMap(city->game, rect);
-}
 
 void Sc2kRefreshCityStatusPanel(City *city) {
   RefreshCityCursorStatus(city, 0);
 }
 
 // Install or restore the city's selected cursor.
-u32 SetCityCursor(City *city, int cursor_id, int restore) {
+u32 SetCityCursor(City *city, int cursor_id, CityCursorAction action) {
   CityInterfaceState *ui = city->game->ui;
   u32 ranked_events_suppressed = city->game->ranked_events_suppressed;
   if (ui->wait_cursor_active != 0) {
@@ -78,7 +85,7 @@ u32 SetCityCursor(City *city, int cursor_id, int restore) {
     } while (count == 0);
     return (u32)count;
   }
-  if (restore == 0 || ranked_events_suppressed != 0) {
+  if (action == CITY_CURSOR_SELECT || ranked_events_suppressed != 0) {
     u32 result = ranked_events_suppressed;
     ui->cursor_id = cursor_id;
     if (ranked_events_suppressed == 0) {
@@ -100,17 +107,6 @@ u32 SetCityCursor(City *city, int cursor_id, int restore) {
 u32 UpdateCityMapCursor(Game *game) {
   City *city = game->city;
   CityInterfaceState *ui = game->ui;
-  static const u8 kCityToolCursors[20] = {
-      CITY_CURSOR_DEMOLISH, CITY_CURSOR_TREE, CITY_CURSOR_DISPATCH, CITY_CURSOR_POWER, CITY_CURSOR_WATER_UTILITY,
-      CITY_CURSOR_REWARDS, CITY_CURSOR_ROAD, CITY_CURSOR_RAIL, CITY_CURSOR_PORT, CITY_CURSOR_RESIDENTIAL,
-      CITY_CURSOR_COMMERCIAL, CITY_CURSOR_INDUSTRIAL, CITY_CURSOR_EDUCATION, CITY_CURSOR_CIVIC,
-      CITY_CURSOR_RECREATION, CITY_CURSOR_SIGN, CITY_CURSOR_QUERY, CITY_CURSOR_CENTER, CITY_CURSOR_ARROW,
-      CITY_CURSOR_ARROW};
-  static const u8 kCityTerrainToolCursors[11] = {
-      CITY_CURSOR_ARROW, CITY_CURSOR_RAISE_TERRAIN, CITY_CURSOR_LOWER_TERRAIN, CITY_CURSOR_STRETCH_TERRAIN,
-      CITY_CURSOR_LEVEL_TERRAIN, CITY_CURSOR_WATER, CITY_CURSOR_RIVER, CITY_CURSOR_TREE, CITY_CURSOR_FOREST,
-      CITY_CURSOR_CENTER, CITY_CURSOR_PORT};
-
   int cursor_id = CITY_CURSOR_ARROW;
   if (ui->pointer_mode == CITY_MAP_POINTER_HOVER) {
     if (city->settings.timer_mode == CITY_TIMER_STOPPED) {
@@ -137,12 +133,12 @@ u32 UpdateCityMapCursor(Game *game) {
   if (pointer_x < window_rect.left || pointer_x >= window_rect.right ||
       pointer_y < window_rect.top || pointer_y >= window_rect.bottom)
     return 0;
-  return SetCityCursor(city, cursor_id, 0);
+  return SetCityCursor(city, cursor_id, CITY_CURSOR_SELECT);
 }
 
 // Restore the selected cursor after a dialog, retaining wait and suppression policy.
 void RestoreCityCursorAfterDialog(City *city) {
-  SetCityCursor(city, CITY_CURSOR_ARROW, 1);
+  SetCityCursor(city, CITY_CURSOR_ARROW, CITY_CURSOR_RESTORE);
 }
 
 // Select the host tool cursor only over an unobscured, interactive map.

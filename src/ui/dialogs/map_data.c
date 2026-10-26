@@ -348,9 +348,9 @@ static void ReleaseMapDataDrawing(City *city, void *context) {
   ReleaseCityWindowDrawing(&pixels->base);
 }
 
-void SetCityMapDataPresentation(City *city, CityCanvasDesktop *desktop) {
-  city->game->ui->map_data.desktop = desktop;
-  city->game->ui->map_data.isometric = true;
+void SetCityMapDataPresentation(CityInterfaceState *ui, CityCanvasDesktop *desktop) {
+  ui->map_data.desktop = desktop;
+  ui->map_data.isometric = true;
 }
 int ReadCityMapDataSelection(const CityMapDataState *state) {
   return state->group * CITY_DATA_SELECTION_STRIDE + state->option;
@@ -414,7 +414,6 @@ bool ToggleCityMapDataDialog(City *city) {
         rect.right - window->bounds.left, rect.bottom - window->bounds.top};
   }
   state->refresh_enabled = state->visible;
-  Drawing *drawing = city->drawing;
   RefreshCityMapViews(city->game);
   return state->visible;
 }
@@ -467,7 +466,7 @@ void ApplyCityMapDataModeSelection(Drawing *drawing, int selection) {
     [CITY_DATA_SELECTION_LAND_VALUE] = CITY_DATA_MODE_LAND_VALUE + 1,
     [CITY_DATA_SELECTION_FIRE_COVERAGE] = CITY_DATA_MODE_FIRE_COVERAGE + 1,
   };
-  if (selection >= 0 && selection < sizeof(kModes) && kModes[selection])
+  if ((unsigned)selection < sizeof(kModes) / sizeof(kModes[0]) && kModes[selection])
     drawing->map_state.data_mode = kModes[selection] - 1;
   if (previous != drawing->map_state.data_mode && drawing->map_state.data_overlay_enabled)
     InvalidateCityMapViews(drawing);

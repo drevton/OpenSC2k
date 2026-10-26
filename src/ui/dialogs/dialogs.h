@@ -61,6 +61,9 @@ typedef struct {
   int next_token;
 } CityMissionPresentation;
 
+// For a supported low-word outcome, play its cue and retain the caller through the notice, then finish the mission.
+// Requires the attached UI owner; each notice keeps its existing pause and dismissal lifetime.
+void FailRadio(City *city, i32 outcome);
 void WaitForCityMissionNotice(City *city, u32 window_id, int outcome);
 void WaitForCityResourceAlert(City *city, u32 window_id, int bitmap_id, int text_id);
 void WaitForCityTextNotice(City *city, u32 window_id, int resource);

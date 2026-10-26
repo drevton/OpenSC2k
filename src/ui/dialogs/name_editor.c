@@ -11,6 +11,7 @@
 #include "assets/state.h"
 #include "base/text.h"
 #include "city/economy/facilities.h"
+#include "city/engine/commands.h"
 #include "city/engine/questions.h"
 #include "city/maps/map.h"
 #include "city/presentation.h"
@@ -107,7 +108,8 @@ static void OpenCityLabelEditor(City *city, NativeLabelDialog *pending, const Ci
     pending->window_id = city->game->ui->desktop.windows[opened].window_id;
   else if (facility) {
     CityCommand cancel = pending->command;
-    cancel.parameter2 = CITY_DIALOG_CANCEL;
+    if (cancel.id == CITY_COMMAND_REPLY_TO_QUESTION) cancel.parameter2 = CITY_DIALOG_CANCEL;
+    else cancel.parameter3 = CITY_DIALOG_CANCEL;
     ExecuteRecordedCityCommandWithPayload(city->game, cancel, NULL, 0, (const u8 *)"", 0);
   }
   pending->opening = false;
@@ -138,7 +140,8 @@ static void CompleteCityFacilityNotice(City *city, void *context) {
 }
 
 void PresentCityLabelEditor(City *city, TileIndex tile, bool facility) {
-  int x = MapTileX(city, tile), y = MapTileY(city, tile);
+  CityCommand command = EncodeCityCommand(city,
+      facility ? CITY_COMMAND_EDIT_FACILITY_LABEL : CITY_COMMAND_EDIT_MAP_LABEL, tile, CITY_DIALOG_OK, 0, 0);
   ApplicationUpdateDialogPause(city);
   if (!IsMapTileValid(city, tile))
     return;
@@ -150,8 +153,7 @@ void PresentCityLabelEditor(City *city, TileIndex tile, bool facility) {
   if (!facility &&
       (!CanEditCityMapSign(city, tile) ||
           (slot == CITY_OVERLAY_NONE && FindFreeOverlayNameSlot(city) == 0))) {
-    ExecuteRecordedCityCommandWithPayload(city->game, (CityCommand){CITY_COMMAND_EDIT_MAP_LABEL, x, y, 1}, NULL, 0,
-        (const u8 *)"", 0);
+    ExecuteRecordedCityCommandWithPayload(city->game, command, NULL, 0, (const u8 *)"", 0);
     return;
   }
   for (i32 index = 0; index < CITY_NAME_EDITOR_CAPACITY; ++index) {
@@ -159,8 +161,7 @@ void PresentCityLabelEditor(City *city, TileIndex tile, bool facility) {
     if (pending->window_id || pending->continuation || pending->opening)
       continue;
     pending->opening = true;
-    pending->command = (CityCommand){facility ? CITY_COMMAND_EDIT_FACILITY_LABEL : CITY_COMMAND_EDIT_MAP_LABEL,
-        x, y, 1};
+    pending->command = command;
     if (facility && !city->game->observation) {
       OpenCityLabelEditor(city, pending, CityOverlayNameAt(city, slot), true);
       return;
@@ -216,7 +217,6 @@ void AnswerCityLabelEditor(City *city, NativeLabelDialog *pending, bool accept) 
 }
 
 void PresentCityStadiumTeamDialog(City *city, TileIndex tile) {
-  int x = MapTileX(city, tile), y = MapTileY(city, tile);
   ApplicationUpdateDialogPause(city);
   for (i32 index = 0; index < CITY_NAME_EDITOR_CAPACITY; ++index) {
     NativeStadiumDialog *pending = &city->game->ui->stadium_dialogs[index];
@@ -245,7 +245,7 @@ void PresentCityStadiumTeamDialog(City *city, TileIndex tile) {
     window.text_caret = strlen(pending->name);
     window.stadium_team_choices = available;
     window.stadium_team_selection = -1;
-    for (i32 team = 0; team < 5; ++team)
+    for (i32 team = 0; team < CITY_TEAM_NAME_COUNT; ++team)
       window.stadium_team_labels[team] = kCitySports[team];
     i32 opened = Sc2kCanvasDesktopOpen(&city->game->ui->desktop, window);
     if (opened >= 0)
@@ -259,8 +259,8 @@ void PresentCityStadiumTeamDialog(City *city, TileIndex tile) {
 
 static void SelectCityStadiumTeam(City *city, NativeStadiumDialog *pending, Window *window, int team) {
   window->stadium_team_selection = team;
-  if (pending->command.id == CITY_COMMAND_ASSIGN_STADIUM_TEAM) pending->command.parameter1 = team;
-  else pending->command.parameter3 = team;
+  // Stadium assignments and question replies both carry the selected team in the last record field.
+  pending->command.parameter3 = team;
   CopyText(pending->name, sizeof(pending->name),
       (const char *)CityOverlayNameAt(city, CITY_TEAM_NAME_FIRST + team)->character);
   Sc2kDirtyMarkRect(&city->game->ui->desktop.dirty, window->bounds);
@@ -324,8 +324,8 @@ bool NameEditorWindowProcedure(Game *game, const Window *window, const WindowEve
     else if (stadium && (key == CITY_KEY_UP || key == CITY_KEY_DOWN)) {
       int direction = key == CITY_KEY_DOWN ? 1 : -1;
       int start = target->stadium_team_selection;
-      if (start == -1 && direction < 0) start = 5;
-      for (int team = start + direction; team >= 0 && team < 5; team += direction)
+      if (start == -1 && direction < 0) start = CITY_TEAM_NAME_COUNT;
+      for (int team = start + direction; team >= 0 && team < CITY_TEAM_NAME_COUNT; team += direction)
         if (target->stadium_team_choices & (1 << team)) {
           SelectCityStadiumTeam(city, stadium, target, team);
           break;

@@ -5,15 +5,22 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "terrain.h"
+#include "city/terrain/types.h"
+#include "city/maps/tile_storage.h"
+#include "city/maps/tables.h"
 
 // OpenSC2K terrain port; see LICENSE.OpenSC2K and README.md.
 // The original map size is the reference spacing for generator feature density.
 enum { kTerrainEdge = 128, kTerrainLast = kTerrainEdge - 1,
     kTerrainCells = kTerrainEdge * kTerrainEdge };
 
+enum { kGeneratedSeaLevel = 4, kConstructionLandOffset = 3 };
+
 enum {
   kSaltWater = 1, kSaltyChannel = 2, kWater = 4, kTreeFirst = 6, kTreeLast = 12,
+  // Water placed on existing ground keeps its local bed; broad carved river/lake beds retain their depth.
+  kGroundLevelWater = 8,
+  kInclinedWater = 16, // Water follows the bed, unlike a submerged bank slope.
   kRiverWater = 32, // Generation-only channel identity, independent of salinity and slope.
   kFlat = 0, kDeepWater = 0x10, kShore = 0x20, kForbiddenCoast = 0x2e,
   kSurfaceWater = 0x30, kWaterfall = 0x3e
@@ -47,8 +54,13 @@ typedef struct {
   bool ocean, river;
   u8 height_shift; // Supported power-of-two axes; uses existing tail padding.
 } TerrainWork;
-static const int kNeighborX[8] = {0, 1, 1, 1, 0, -1, -1, -1};
-static const int kNeighborY[8] = {-1, -1, 0, 1, 1, 1, 0, -1};
+
+// Decode the packed water-surface level of a valid generation-array index. Requires initialized altitude bytes; this
+// reads generator encoding rather than native City geometry.
+static inline int ReadGeneratedWaterHeight(const TerrainWork *work, int at) {
+  return (work->altitude[at] & CITY_ALTITUDE_WATER_MASK) >> CITY_ALTITUDE_WATER_SHIFT;
+}
+
 static const int kNeighborMasks[8] = {3, 2, 6, 4, 12, 8, 9, 1};
 static const Fixed kTerrainPi = 205887;
 static inline int TerrainMainRiverCount(const TerrainWork *work) {
@@ -109,8 +121,16 @@ TerrainNoise MakeTerrainNoise(u32 seed, Fixed frequency, int octaves);
 Fixed SampleTerrainNoise(const TerrainNoise *noise, Fixed x, Fixed y);
 void CarveTerrainFeatures(TerrainWork *work, u32 generation_seed);
 void TerrainWaterDistances(TerrainWork *work);
+// Height grading accepts a complete work-sized plane, including scratch; slope repair reuses queue and seen.
+// Both require initialized heights. Repair can preserve water while correcting dry-land saddles.
+void GradeTerrainHeights(const TerrainWork *work, int *heights);
+void FillUnsupportedTerrainSlopes(TerrainWork *work, bool preserve_water);
+// Water stages require allocated work with supported dimensions and run after initial carving, grading and tiling.
+// Ponds and streams reuse scratch/queue/seen; stream routing also writes initially zeroed water_marks and can
+// temporarily replace heights with heap positions. Final water normalization rebuilds heights and bed slopes.
+void ScatterTerrainFreshwater(TerrainWork *work, u32 seed);
+void AddTerrainStreams(TerrainWork *work, int density, u32 seed);
+void ConnectTerrainWaterfalls(TerrainWork *work);
+void SetGeneratedWaterElevations(TerrainWork *work);
 void ApplyTerrainElevation(TerrainWork *work, Fixed angle, Fixed phase, const TerrainNoise *noise);
-// Generation samples the prepared temperature/moisture lattice without changing it.
-int TerrainClimateValue(const CitySnowClimate *snow, CityPoint position, bool moisture);
-int TerrainGrassPaletteAt(const CitySnowClimate *snow, CityPoint position);
 #endif

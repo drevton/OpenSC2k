@@ -14,6 +14,9 @@ CityNewspaperInitialization BeginCityNewspaperDialog(City *city, CityNewspaperDi
 void InitializeCityNewspaperDialog(City *city, CityNewspaperDialog *dialog);
 void DestroyCityNewspaperWindow(City *city, CityNewspaperDialog *dialog);
 
+// The event is already ranked in City. Native presentation captures its current edition before entering the paused
+// caller; event_code/data identify that caller for retained presenters, rather than selecting another native page.
+void PresentRankedCityEvent(City *city, u32 event_code, u32 event_data);
 i32 RunPausedCityNewspaperDialog(City *city, CityNewspaperDialog *dialog);
 bool ChooseCityNewspaperModal(City *city, CityNewspaperDialog *dialog);
 // Retained disaster presentation advances the pending effects, then waits for its newspaper.
@@ -28,6 +31,9 @@ void ArmCityStartupNewspaper(CityInterfaceState *ui);
 // Attempt due delivery only when host/dialog gates allow it. Clear the deadline before opening so nested work may
 // schedule another edition. True requests repaint even if opening fails; blocked work keeps its deadline.
 bool PollCityStartupNewspaper(City *city, double now);
+// Ordinary native idle calls this after pending simulation events are delivered. Remember the new month before
+// opening an April/August fallback edition; unchanged months and disabled local delivery do not open a page.
+void UpdateCityPeriodicNewspaper(Game *game);
 // True transfers callback delivery through opening/window completion, which may occur before return.
 // False retains no callback/context and leaves cleanup to the caller.
 bool OpenCityNewspaperWithCallback(City *city, int edition, bool automatic,

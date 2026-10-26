@@ -7,11 +7,12 @@
 #include <assert.h>
 #include <string.h>
 
-#include "game/audio.h"
-#include "city/disasters/types.h"
+#include "audio/types.h"
+#include "city/disasters/disasters.h"
 #include "city/engine/random.h"
 #include "city/engine/commands.h"
 #include "city/maps/layers.h"
+#include "city/maps/map.h"
 #include "city/presentation.h"
 #include "city/state.h"
 
@@ -157,15 +158,15 @@ static const u8 kCityAirplaneCollisionHeights[TK_PLYMOUTH_ARCOLOGY - TK_RESIDENT
   [TK_DESALINATION_PLANT - TK_RESIDENTIAL_FIRST - 1] = 5,
 };
 
-static const u8 kCityEventDirectionSearchOrder[7] = {
+static const u8 kCityAircraftHeadingSearchOrder[7] = {
   1, 7, 2, 6, 3, 5, 4
 };
 
-static const i8 kCityEventDestinationYOffset[8] = {
+static const i8 kCityAircraftProbeY[8] = {
   0, 3, 3, 3, 0, -3, -3, -3
 };
 
-static const i8 kCityEventDestinationXOffset[8] = {
+static const i8 kCityAircraftProbeX[8] = {
   -3, -3, 0, 3, 3, 3, 0, -3
 };
 
@@ -185,28 +186,27 @@ void TrySpawnCityHelicopter(City *city, TileIndex tile_index) {
   memset(event, 0, sizeof(*event));
   event->type = CITY_MAP_EVENT_HELICOPTER;
   event->direction = CITY_HEADING_SOUTH;
-  event->next_slot = CITY_HELICOPTER_TAKEOFF;
+  event->state = CITY_HELICOPTER_TAKEOFF;
   event->tile = tile_index;
   event->height = 0;
-  SetCityMapEventTarget(city, event, 128, 128);
+  event->helicopter.motion = (CityMapEventMotion){.offset_x = 128, .offset_y = 128};
   event->helicopter.destination_y = Sc2kCrtRandRange(city, city->map_height);
   event->helicopter.destination_x = Sc2kCrtRandRange(city, city->map_width);
   event->previous_overlay = overlay;
-  ++city->disasters.type2_count;
+  ++city->disasters.helicopter_count;
   ResetCityHelicopterSoundTiming(city);
   LinkCityMapEvent(city, slot);
   InvalidateTile(city, tile_index);
   InvalidateCityMapEvent(city, slot);
 }
 
-// Decode the approach-waypoint offset for an airplane record's stored direction. Event and x/y outputs must be valid;
-// writes only the two integer outputs without changing motion or drawing random values.
-void ReadCityAirplaneApproachOffset(const CityMapEvent *event, int *x, int *y) {
+// Decode signed approach-waypoint offsets in whole map tiles for a valid airplane record's stored runway heading.
+// Returns a value without changing the event or consuming RNG.
+CityPoint ReadCityAirplaneApproachOffset(const CityMapEvent *event) {
   static const i8 kOffsetX[4] = {16, 0, -16, 0};
   static const i8 kOffsetY[4] = {0, -16, 0, 16};
-  int axis = (event->next_slot >> 5) & 3;
-  *x = kOffsetX[axis];
-  *y = kOffsetY[axis];
+  int axis = (event->state >> 5) & 3;
+  return (CityPoint){kOffsetX[axis], kOffsetY[axis]};
 }
 
 // Spawn an airplane on a runway or at the map border with that runway as its target.
@@ -225,14 +225,14 @@ void TrySpawnCityAirplane(City *city, TileIndex tile_index, int axis) {
   CityMapEvent *event = &events->event[slot];
   memset(event, 0, sizeof(*event));
   event->type = CITY_MAP_EVENT_AIRPLANE;
-  SetCityMapEventTarget(city, event, 128, 128);
+  event->airplane.motion = (CityMapEventMotion){.offset_x = 128, .offset_y = 128};
   if (Sc2kCrtRandRange(city, 10) >= 5) {
     event->tile = tile_index;
     event->airplane.destination_y = 20;
     event->airplane.destination_x = 20;
     event->direction = axis;
     event->height = 0;
-    event->next_slot = CITY_AIRPLANE_TAKEOFF;
+    event->state = CITY_AIRPLANE_TAKEOFF;
     event->previous_overlay = overlay;
     LinkCityMapEvent(city, slot);
     InvalidateTile(city, tile_index);
@@ -260,7 +260,7 @@ void TrySpawnCityAirplane(City *city, TileIndex tile_index, int axis) {
       break;
     }
     event->height = 16;
-    event->next_slot = 16 * axis + 3;
+    event->state = 16 * axis + CITY_AIRPLANE_APPROACH;
     event->airplane.destination_y = point.y;
     event->airplane.destination_x = point.x;
     TileIndex event_tile = event->tile;
@@ -268,8 +268,59 @@ void TrySpawnCityAirplane(City *city, TileIndex tile_index, int axis) {
     LinkCityMapEvent(city, slot);
     InvalidateTile(city, event_tile);
   }
-  ++city->disasters.type1_count;
+  ++city->disasters.airplane_count;
   InvalidateCityMapEvent(city, slot);
+}
+
+// Create a crashing airplane over a randomly selected unmarked tile in the central map region.
+// Returns false if no tile or event slot is available; search probes still consume their draws.
+bool ApplyCityAirCrashDisaster(City *city) {
+  bool found = false;
+  int y;
+  int x;
+  int probes = 0;
+  bool bounded = (city->fixes & (1ull << CITY_FIX_BOUNDED_DISASTER_SEARCH)) != 0;
+  do {
+    y = NextCityMapRandomModulo(city, city->map_height / 2) + city->map_height / 4;
+    x = NextCityMapRandomModulo(city, city->map_width / 2) + city->map_width / 4;
+    found = ReadOverlay(city, MapTileXY(city, x, y)) == 0;
+    // Preserve ordinary stock choices and RNG consumption. Only a failed search
+    // falls back to a bounded scan; no temporary map-sized buffer is needed.
+    if (bounded && ++probes == 64 && !found) {
+      int end_y = city->map_height / 4 + city->map_height / 2;
+      int end_x = city->map_width / 4 + city->map_width / 2;
+      for (y = city->map_height / 4; y < end_y && !found; ++y) {
+        for (x = city->map_width / 4; x < end_x; ++x) {
+          if (ReadOverlay(city, MapTileXY(city, x, y)) == 0) {
+            found = true;
+            break;
+          }
+        }
+        if (found) break;
+      }
+      if (!found) return false;
+    }
+  } while (!found);
+
+  CityMapEvents *events = &city->events;
+  int slot = FindFreeCityEventSlot(city);
+  if (slot == 0)
+    return false;
+  CityMapEvent *event = &events->event[slot];
+  TileIndex tile_index = MapTileXY(city, x, y);
+  memset(event, 0, sizeof(*event));
+  event->type = CITY_MAP_EVENT_AIRPLANE;
+  event->tile = tile_index;
+  SetCityMapEventTarget(city, event, 128, 128);
+  event->height = 16;
+  event->previous_overlay = 0;
+  event->state = CITY_AIRPLANE_CRASH;
+  LinkCityMapEvent(city, slot);
+  InvalidateCityMapEvent(city, slot);
+  SetDisasterLocation(&city->disasters.location, x, y);
+  if (city->settings.auto_goto != 0)
+    CenterCityMapOnEvent(city, x, y);
+  return true;
 }
 
 // Materialize the waypoint when leaving the approach stage. Event must be an approaching airplane; transforms its
@@ -277,10 +328,9 @@ void TrySpawnCityAirplane(City *city, TileIndex tile_index, int axis) {
 static void FinishCityAirplaneApproach(CityMapEvent *event) {
   if (event->type != CITY_MAP_EVENT_AIRPLANE ||
       (event->state & CITY_AIRPLANE_STAGE_MASK) != CITY_AIRPLANE_APPROACH) return;
-  int x, y;
-  ReadCityAirplaneApproachOffset(event, &x, &y);
-  event->airplane.destination_y += y;
-  event->airplane.destination_x += x;
+  CityPoint offset = ReadCityAirplaneApproachOffset(event);
+  event->airplane.destination_y += offset.y;
+  event->airplane.destination_x += offset.x;
 }
 
 // Set a helicopter on this tile to its crash state and play its stage cue. Invalid tiles and other event types
@@ -305,27 +355,26 @@ i64 CmdCrashCityHelicopterAtTile(City *city, u32 flags, TileIndex tile) {
   return 1;
 }
 
-// Probe the next directional event position for an arcology-or-later special building. Requires a valid event slot and
-// heading; off-map targets return false and this does not move the event.
-static bool IsCityEventDirectionBlockedBySpecialTile(City *city, int slot, int direction) {
-  CityMapEvent *event = &city->events.event[slot];
-  CityPoint position = ReadCityMapEventPosition(city, event);
-  int y = position.y + kCityEventDestinationYOffset[direction];
-  int x = position.x + kCityEventDestinationXOffset[direction];
+// Probe three map tiles from the event's world position in a valid eight-way heading. Arcologies block the heading;
+// off-map targets return false. Reads tile kinds without moving the event or consuming RNG.
+static bool IsCityAircraftHeadingBlocked(const City *city, CityPoint position, int direction) {
+  int y = position.y + kCityAircraftProbeY[direction];
+  int x = position.x + kCityAircraftProbeX[direction];
   TileIndex target = MapTileXYOrInvalid(city, x, y);
-  return target != INVALID_TILE && IsTileKindArcology(ReadTile(city, target));
+  return target != INVALID_TILE && IsTileKindArcology(city->tile[target].kind);
 }
 
-// Search the fixed heading order when the current event direction encounters a special-building obstruction. Requires
-// a valid event slot and direction; stores the first unblocked heading without drawing random values.
-static void FindNextValidCityEventDirection(City *city, int slot) {
-  CityMapEvent *event = &city->events.event[slot];
-  if (!IsCityEventDirectionBlockedBySpecialTile(city, slot, event->direction))
+// Search the fixed relative heading order from a live event's unchanged position. Store the first unblocked heading,
+// or the final attempted heading if all are blocked. Only event->direction changes; no RNG is consumed.
+static void FindNextValidCityAircraftHeading(const City *city, CityMapEvent *event) {
+  CityPoint position = ReadCityMapEventPosition(city, event);
+  int original_direction = event->direction;
+  if (!IsCityAircraftHeadingBlocked(city, position, original_direction))
     return;
-  int direction = event->direction;
+  int direction = original_direction;
   for (int index = 0; index < 7; ++index) {
-    direction = (kCityEventDirectionSearchOrder[index] + event->direction) & 7;
-    if (!IsCityEventDirectionBlockedBySpecialTile(city, slot, direction))
+    direction = (kCityAircraftHeadingSearchOrder[index] + original_direction) & CITY_HEADING_MASK;
+    if (!IsCityAircraftHeadingBlocked(city, position, direction))
       break;
   }
   event->direction = (u8)direction;
@@ -357,57 +406,53 @@ static int CityAircraftManhattanDistance(int x, int y, int target_x, int target_
 // consistent target data; may move, convert or clear the event and adjust active counters.
 void UpdateCityMapAirplane(City *city, int slot) {
   CityMapEvent *event = &city->events.event[slot];
-  CityPoint position = ReadCityMapEventPosition(city, event);
-  ++city->disasters.type1_count;
+  ++city->disasters.airplane_count;
 
-  TileIndex event_tile = event->tile;
-  int tile = ReadTile(city, event_tile);
+  const TileInfo *tp = &city->tile[event->tile];
+  int kind = tp->kind;
   // Stock excludes the first house kind from building collision handling.
-  if (IsTileKindBuilding(tile) && tile != TK_LOWER_CLASS_HOMES_FIRST &&
-      ReadCityZoneKind(&city->tile[event_tile]) != ZONE_AIRPORT) {
-    if (IsTileKindArcology(tile)) {
+  if (IsTileKindBuilding(kind) && kind != TK_LOWER_CLASS_HOMES_FIRST && ReadCityZoneKind(tp) != ZONE_AIRPORT) {
+    if (IsTileKindArcology(kind)) {
       FinishCityAirplaneApproach(event);
       event->type = CITY_MAP_EVENT_EXPLOSION;
-      event->next_slot = CITY_DISASTER_CRASH;
+      event->state = CITY_DISASTER_CRASH;
       event->explosion.trigger_disaster = NextCityMapRandomModulo(city, 16) == 0;
       event->direction = CITY_EXPLOSION_START;
       return;
     }
-    if (kCityAirplaneCollisionHeights[tile - TK_RESIDENTIAL_FIRST - 1] > event->height) {
+    if (kCityAirplaneCollisionHeights[kind - TK_RESIDENTIAL_FIRST - 1] > event->height) {
       FinishCityAirplaneApproach(event);
       event->type = CITY_MAP_EVENT_EXPLOSION;
-      event->next_slot = CITY_DISASTER_CRASH;
+      event->state = CITY_DISASTER_CRASH;
       event->explosion.trigger_disaster = 1;
       event->direction = CITY_EXPLOSION_START;
       return;
     }
   }
 
-  switch (event->next_slot & CITY_AIRPLANE_STAGE_MASK) {
+  switch (event->state & CITY_AIRPLANE_STAGE_MASK) {
   case CITY_AIRPLANE_TAKEOFF:
     AdvanceCityMapEventPosition(city, CITY_MAP_EVENT_AIRPLANE, slot, event->direction);
     if (event->type == CITY_MAP_EVENT_UNUSED) return;
-    position = ReadCityMapEventPosition(city, event);
     if (event->height == 0)
       PlayCityAirplaneSound(city, slot, CITY_SOUND_AIRPLANE_TAKEOFF);
     if (event->height >= 14)
-      event->next_slot = CITY_AIRPLANE_CRUISE;
+      event->state = CITY_AIRPLANE_CRUISE;
     else
       ++event->height;
     break;
   case CITY_AIRPLANE_LANDING:
     AdvanceCityMapEventPosition(city, CITY_MAP_EVENT_AIRPLANE, slot, event->direction);
     if (event->type == CITY_MAP_EVENT_UNUSED) return;
-    position = ReadCityMapEventPosition(city, event);
     --event->height;
     if (event->height == 0) {
       TileIndex landing_tile = event->tile;
       PlayCityAirplaneSound(city, slot, CITY_SOUND_AIRPLANE_LANDING);
-      if (ReadTile(city, landing_tile) == TK_RUNWAY_FIRST) {
+      if (city->tile[landing_tile].kind == TK_RUNWAY_FIRST) {
         ClearCityMapEventSlot(city, slot);
       } else {
         event->type = CITY_MAP_EVENT_EXPLOSION;
-        event->next_slot = CITY_DISASTER_CRASH;
+        event->state = CITY_DISASTER_CRASH;
         event->explosion.trigger_disaster = 1;
         event->direction = CITY_EXPLOSION_START;
       }
@@ -415,19 +460,18 @@ void UpdateCityMapAirplane(City *city, int slot) {
     break;
   case CITY_AIRPLANE_CRUISE:
     event->direction = (u8)RandomlyPerturbCityEventHeading(city, event->direction, 5);
-    FindNextValidCityEventDirection(city, slot);
+    FindNextValidCityAircraftHeading(city, event);
     AdvanceCityMapEventPosition(city, CITY_MAP_EVENT_AIRPLANE, slot, event->direction);
     if (event->type == CITY_MAP_EVENT_UNUSED) return;
-    position = ReadCityMapEventPosition(city, event);
     break;
   case CITY_AIRPLANE_APPROACH: {
-    int offset_x, offset_y;
-    ReadCityAirplaneApproachOffset(event, &offset_x, &offset_y);
-    int target_x = event->airplane.destination_x + offset_x;
-    int target_y = event->airplane.destination_y + offset_y;
+    CityPoint position = ReadCityMapEventPosition(city, event);
+    CityPoint offset = ReadCityAirplaneApproachOffset(event);
+    int target_x = event->airplane.destination_x + offset.x;
+    int target_y = event->airplane.destination_y + offset.y;
     int direction = CityAirplaneApproachHeading(position.x, position.y, target_x, target_y);
     event->direction = (u8)direction;
-    FindNextValidCityEventDirection(city, slot);
+    FindNextValidCityAircraftHeading(city, event);
     AdvanceCityMapEventPosition(city, CITY_MAP_EVENT_AIRPLANE, slot, event->direction);
     if (event->type == CITY_MAP_EVENT_UNUSED) return;
     position = ReadCityMapEventPosition(city, event);
@@ -435,9 +479,9 @@ void UpdateCityMapAirplane(City *city, int slot) {
     if (CityAircraftManhattanDistance(position.x, position.y, target_x, target_y) < 2 &&
         MapTileXYOrInvalid(city, target_x, target_y) != INVALID_TILE) {
       FinishCityAirplaneApproach(event);
-      int orientation = event->next_slot >> 4;
+      int orientation = event->state >> 4;
       event->direction = (u8)TurnCityEventHeadingToward(direction, orientation);
-      event->next_slot = 16 * orientation + CITY_AIRPLANE_ALIGN_RUNWAY;
+      event->state = 16 * orientation + CITY_AIRPLANE_ALIGN_RUNWAY;
       switch (orientation) {
       case CITY_HEADING_WEST:
         event->airplane.destination_x -= 6;
@@ -458,6 +502,7 @@ void UpdateCityMapAirplane(City *city, int slot) {
     break;
   }
   case CITY_AIRPLANE_ALIGN_RUNWAY: {
+    CityPoint position = ReadCityMapEventPosition(city, event);
     int direction =
         SteerCityEventTowardPoint(event->direction, position.x, position.y,
             event->airplane.destination_x, event->airplane.destination_y);
@@ -467,9 +512,9 @@ void UpdateCityMapAirplane(City *city, int slot) {
     position = ReadCityMapEventPosition(city, event);
     if (CityAircraftManhattanDistance(position.x, position.y,
             event->airplane.destination_x, event->airplane.destination_y) < 2) {
-      int orientation = event->next_slot >> 4;
+      int orientation = event->state >> 4;
       event->direction = (u8)orientation;
-      event->next_slot = CITY_AIRPLANE_LANDING;
+      event->state = CITY_AIRPLANE_LANDING;
       if (orientation == CITY_HEADING_WEST || orientation == CITY_HEADING_EAST)
         MoveCityMapEvent(city, slot, MapTileXY(city, position.x, event->airplane.destination_y));
       else if (orientation == CITY_HEADING_SOUTH || orientation == CITY_HEADING_NORTH)
@@ -486,10 +531,9 @@ void UpdateCityMapAirplane(City *city, int slot) {
       event->direction = (u8)((direction + 1) & 7);
       AdvanceCityMapEventPosition(city, CITY_MAP_EVENT_AIRPLANE, slot, direction);
       if (event->type == CITY_MAP_EVENT_UNUSED) return;
-      position = ReadCityMapEventPosition(city, event);
     } else {
       event->type = CITY_MAP_EVENT_EXPLOSION;
-      event->next_slot = CITY_DISASTER_CRASH;
+      event->state = CITY_DISASTER_CRASH;
       event->explosion.trigger_disaster = 1;
       event->direction = CITY_EXPLOSION_START;
     }
@@ -503,35 +547,35 @@ void UpdateCityMapAirplane(City *city, int slot) {
 // final state.
 void UpdateCityMapHelicopter(City *city, int slot) {
   CityMapEvent *event = &city->events.event[slot];
-  CityPoint position = ReadCityMapEventPosition(city, event);
-  ++city->disasters.type2_count;
+  ++city->disasters.helicopter_count;
 
-  if (IsTileKindArcology(ReadTile(city, event->tile))) {
+  if (IsTileKindArcology(city->tile[event->tile].kind)) {
     event->type = CITY_MAP_EVENT_EXPLOSION;
-    event->next_slot = CITY_DISASTER_CRASH;
+    event->state = CITY_DISASTER_CRASH;
     event->explosion.trigger_disaster = 0;
     event->direction = CITY_EXPLOSION_START;
     return;
   }
 
-  switch (event->next_slot) {
+  switch (event->state) {
   case CITY_HELICOPTER_TAKEOFF:
     event->direction = (u8)((event->direction + 1) & 7);
     if (event->height >= 10)
-      event->next_slot = CITY_HELICOPTER_FLY_TO_TARGET;
+      event->state = CITY_HELICOPTER_FLY_TO_TARGET;
     else
       ++event->height;
     break;
   case CITY_HELICOPTER_FLY_TO_TARGET: {
+    CityPoint position = ReadCityMapEventPosition(city, event);
     event->direction =
         SteerCityEventTowardPoint(event->direction, position.x, position.y,
             event->helicopter.destination_x, event->helicopter.destination_y);
-    FindNextValidCityEventDirection(city, slot);
+    FindNextValidCityAircraftHeading(city, event);
     AdvanceCityMapEventPosition(city, CITY_MAP_EVENT_HELICOPTER, slot, event->direction);
     if (event->type == CITY_MAP_EVENT_UNUSED) return;
     position = ReadCityMapEventPosition(city, event);
 
-    if (ReadTrafficDensity(city, MapTileXY(city, (position.x >> 1) * 2, (position.y >> 1) * 2)) >= 0xAA)
+    if (ReadTrafficDensity(city, event->tile) >= 0xAA)
       PlayCityAmbientSound(city, event->tile, CITY_SOUND_HELICOPTER_FLIGHT);
 
     if (CityAircraftManhattanDistance(position.x, position.y,
@@ -547,9 +591,9 @@ void UpdateCityMapHelicopter(City *city, int slot) {
 
       if ((Sc2kCrtRand(city) & 1) != 0) {
         TileIndex event_tile = event->tile;
-        if (ReadTile(city, event_tile) == TK_CLEAR &&
+        if (city->tile[event_tile].kind == TK_CLEAR &&
             ReadTerrainCode(&city->tile[event_tile]) == CITY_TERRAIN_FLAT)
-          event->next_slot = CITY_HELICOPTER_LANDING;
+          event->state = CITY_HELICOPTER_LANDING;
       }
     }
     break;
@@ -557,13 +601,13 @@ void UpdateCityMapHelicopter(City *city, int slot) {
   case CITY_HELICOPTER_LANDING:
     event->direction = (u8)((event->direction + 1) & 7);
     if (event->height <= 2)
-      event->next_slot = CITY_HELICOPTER_ON_GROUND;
+      event->state = CITY_HELICOPTER_ON_GROUND;
     else
       --event->height;
     break;
   case CITY_HELICOPTER_ON_GROUND:
     if (Sc2kCrtRandRange(city, 20) == 0)
-      event->next_slot = CITY_HELICOPTER_TAKEOFF;
+      event->state = CITY_HELICOPTER_TAKEOFF;
     break;
   case CITY_HELICOPTER_CRASH:
     event->direction = (u8)((event->direction + 2) & 7);
@@ -571,7 +615,7 @@ void UpdateCityMapHelicopter(City *city, int slot) {
       PlayCityAmbientSound(city, event->tile, CITY_SOUND_AIRCRAFT_CRASH);
     if (event->height <= 2) {
       event->type = CITY_MAP_EVENT_EXPLOSION;
-      event->next_slot = CITY_DISASTER_HELICOPTER_CRASH;
+      event->state = CITY_DISASTER_HELICOPTER_CRASH;
       event->explosion.trigger_disaster = 1;
       event->direction = CITY_EXPLOSION_START;
     } else {

@@ -2,6 +2,9 @@
 #define SC2K_CITY_SAVELOAD_INPUT_H
 
 #include "base/types.h"
+#include <stdio.h>
+
+typedef struct CityLoadStream CityLoadStream;
 
 typedef enum CityFileInputKind {
   CITY_FILE_INPUT_PLATFORM,
@@ -10,11 +13,12 @@ typedef enum CityFileInputKind {
 } CityFileInputKind;
 
 // Initialize the selected backend before use. PLATFORM borrows an observed load-stream wrapper; STDIO borrows FILE*.
-// MEMORY borrows size readable bytes with position <= size. Keep that backing storage alive until reads finish.
+// Select load_stream for PLATFORM and stdio_stream for STDIO. MEMORY borrows size readable bytes with position <= size.
+// Keep that backing storage alive until reads finish.
 // None of these operations opens or closes the backend. Zero-initialize unused fields.
 typedef struct CityFileInput {
   CityFileInputKind kind;
-  void *stream;
+  union { CityLoadStream *load_stream; FILE *stdio_stream; };
   const u8 *bytes;
   u32 size;
   u32 position;

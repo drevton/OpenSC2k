@@ -35,8 +35,6 @@ void InitializeCityAudioState(CityAudioState *audio) {
     .cached_sound_id = -1,
     .preloaded_sound_id = -1,
     .transient_sound_id = -1,
-    // Native device open enables overlapping effects; headless comparison
-    // owners explicitly retain the original single-effect controller.
     .overlapping_effects = false,
     .ambient_sounds = true,
     .music_device = CITY_MUSIC_NO_TOKEN,
@@ -48,12 +46,6 @@ void InitializeCityAudioState(CityAudioState *audio) {
   NormalizeFilePath(audio->music_directory.text);
   for (int index = 0; index <= CITY_SOUND_COUNT; ++index)
     audio->timing.ticks[index] = kCitySoundDurationMilliseconds[index] / CITY_CADENCE_INTERVAL_MS + 1;
-}
-
-// A live backend keeps its current jukebox playback choice when MISC supplies a saved music gate. Closed backends
-// retain the loaded gate. This only updates the flag; the codec controls any following stop call.
-void RefreshCityLoadedMusicPreference(CityAudioState *audio) {
-  if (audio->live_open) audio->music_enabled = audio->jukebox.playing != 0;
 }
 
 bool SetCitySoundFontPath(CityAudioState *audio, const char *path) {

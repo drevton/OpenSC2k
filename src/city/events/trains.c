@@ -8,36 +8,23 @@
 #include <assert.h>
 #include <string.h>
 
-#include "game/audio.h"
+#include "audio/types.h"
 #include "city/engine/random.h"
 #include "city/infrastructure/lines.h"
+#include "city/infrastructure/networks.h"
 #include "city/infrastructure/surface_lines.h"
-#include "city/maps/layers.h"
+#include "city/maps/tile_storage.h"
+#include "city/maps/tables.h"
 #include "city/presentation.h"
+#include "city/maps/kinds.h"
+#include "city/maps/map.h"
 #include "city/state.h"
 
-static const u8 kCityEventTile237DirectionOrderA[4] = {
-  0, 1, 3, 2
-};
-
-static const u8 kCityEventTile237DirectionOrderB[4] = {
-  0, 3, 1, 2
-};
-
-static const i8 kCityEventTile237DirectionYOffset[4] = {
-  0, 1, 0, -1
-};
-
-static const i8 kCityEventTile237DirectionXOffset[4] = {
-  -1, 0, 1, 0
-};
-
-static const i8 kCityTrainSpawnYStep[4] = {
-  0, 1, 0, -1
-};
-
-static const i8 kCityTrainSpawnXStep[4] = {
-  -1, 0, 1, 0
+// Try straight, the two quarter turns in the selected order, then reverse.
+// One orientation draw chooses the row before checking any candidate tile.
+static const u8 kCityTrainExitTurnOrder[2][4] = {
+  {0, 3, 1, 2},
+  {0, 1, 3, 2},
 };
 
 // Train updates consume all 16 low-nibble direction values; only entries 0..3 are cardinal directions.
@@ -57,25 +44,26 @@ static const u8 kCityTrainUpdateAnimation[64] = {
 
 // Admit a candidate rail/rail-bridge tile for a surface engine, or subway/connector tile for a subway engine.
 // Invalid or event-occupied tiles are rejected. This query neither reserves the destination nor consumes RNG.
-static bool CanCityTrainEnterTile(City *city, TileIndex tile_index, int event_type) {
+static bool CanCityTrainEnterTile(const City *city, TileIndex tile_index, int event_type) {
   if (!IsMapTileValid(city, tile_index) || IsCityEventOrMarkerOverlay(ReadOverlay(city, tile_index)))
     return false;
 
-  int tile = ReadTile(city, tile_index);
+  const TileInfo *tp = &city->tile[tile_index];
+  int kind = tp->kind;
   if (event_type == CITY_MAP_EVENT_TRAIN_ENGINE) {
-    return (ReadCityTileClasses(tile) & (TCLASS_RAIL | TCLASS_RAIL_BRIDGE)) != 0;
+    return (ReadCityTileClasses(kind) & (TCLASS_RAIL | TCLASS_RAIL_BRIDGE)) != 0;
   }
 
-  int underground = ReadUnderground(city, tile_index);
-  if (!IsSubwayTile(underground))
-    return IsTileKindTrainTransition(tile);
+  int underground = ReadTileUndergroundKind(tp);
+  if (!IsUndergroundKindSubway(underground))
+    return IsTileKindTrainTransition(kind);
   return true;
 }
 
 // Copy the movement state of a linked event and advance its type. Both slots must be valid linked-event records;
 // copied movement state is reindexed without transferring pool ownership.
 static void CopyCityTrainCoachState(City *city, int source_slot, int destination_slot) {
-  CityMapEvent *source = &city->events.event[source_slot];
+  const CityMapEvent *source = &city->events.event[source_slot];
   CityMapEvent *destination = &city->events.event[destination_slot];
   MoveCityMapEvent(city, destination_slot, source->tile);
   destination->train.next_tile = source->train.next_tile;
@@ -119,15 +107,13 @@ void SwapCityTrainEnds(City *city, int first_slot, int second_slot) {
 // Choose an eligible adjacent tile in the event's randomized direction order.
 static i32 FindCityTrainExitDirection(City *city, TileIndex tile_index, int direction, int event_type) {
   assert(IsMapTileValid(city, tile_index));
-  int order = NextEventOrientationRandom(city, 2);
+  const u8 *turns = kCityTrainExitTurnOrder[NextEventOrientationRandom(city, 2) != 0];
   for (int attempt = 0; attempt < 4; ++attempt) {
-    int turn =
-        order != 0 ? kCityEventTile237DirectionOrderA[attempt] : kCityEventTile237DirectionOrderB[attempt];
-    int candidate_direction = (turn + direction) & 3;
+    int candidate_direction = (turns[attempt] + direction) & 3;
     TileIndex target = GetRelativeTileOrInvalid(city, tile_index,
-        kCityEventTile237DirectionXOffset[candidate_direction], kCityEventTile237DirectionYOffset[candidate_direction]);
+        kCardinalNeighborX[candidate_direction], kCardinalNeighborY[candidate_direction]);
     if (target == INVALID_TILE) continue;
-    if (CanCityTrainEnterTile(city, target, event_type) && !IsCityEventOrMarkerOverlay(ReadOverlay(city, target)))
+    if (CanCityTrainEnterTile(city, target, event_type))
       return candidate_direction;
   }
   return -1;
@@ -141,10 +127,11 @@ static bool TryCreateCityTrain(City *city, TileIndex tile_index) {
   if (!CanSpawnCityVehicle(city, CITY_MAP_EVENT_TRAIN_ENGINE) ||
       point.y < 2 || point.y > city->map_height - 4 || point.x < 2 || point.x > city->map_width - 4)
     return false;
-  int tile = ReadTile(city, tile_index);
-  int mask = ReadTransportConnections(&city->tile[tile_index]);
-  bool slope = kLineTerrainOverrideBySlope[ReadTerrainCode(&city->tile[tile_index])] != 0;
-  if (tile != TK_RAIL || (!slope && (FindCityRailTransition(city, tile_index) >= 0 ||
+  const TileInfo *tp = &city->tile[tile_index];
+  int kind = tp->kind;
+  int mask = ReadTransportConnections(tp);
+  bool slope = kLineTerrainOverrideBySlope[ReadTerrainCode(tp)] != 0;
+  if (kind != TK_RAIL || (!slope && (FindCityRailTransition(city, tile_index) >= 0 ||
           mask == 7 || mask == 11 || mask >= 13)) || ReadOverlay(city, tile_index) != 0)
     return false;
 
@@ -155,7 +142,8 @@ static bool TryCreateCityTrain(City *city, TileIndex tile_index) {
 
   CityMapEvents *events = &city->events;
   int free_slots = 0;
-  for (int slot = CITY_EVENT_SLOT_FIRST; slot < CityEventAllocationLimit(city); ++slot)
+  int limit = CityEventAllocationLimit(city);
+  for (int slot = CITY_EVENT_SLOT_FIRST; slot < limit; ++slot)
     free_slots += events->event[slot].type == CITY_MAP_EVENT_UNUSED;
   if (free_slots < 3) return false;
   int first_slot = FindFreeCityEventSlot(city);
@@ -177,10 +165,13 @@ static bool TryCreateCityTrain(City *city, TileIndex tile_index) {
   first->tile = tile_index;
   second->tile = tile_index;
   third->tile = tile_index;
-  SetCityMapEventTarget(city, first, point.x + kCityTrainSpawnXStep[event_direction],
-      point.y + kCityTrainSpawnYStep[event_direction]);
-  SetCityMapEventTarget(city, second, point.x, point.y);
-  SetCityMapEventTarget(city, third, point.x, point.y);
+  first->train.next_tile = MapTileXY(city, point.x + kCardinalNeighborX[event_direction],
+      point.y + kCardinalNeighborY[event_direction]);
+  second->train.next_tile = tile_index;
+  third->train.next_tile = tile_index;
+  first->coordinate_flags = CITY_EVENT_TARGET_TILE;
+  second->coordinate_flags = CITY_EVENT_TARGET_TILE;
+  third->coordinate_flags = CITY_EVENT_TARGET_TILE;
   first->height = 0;
   second->height = 0;
   third->height = 0;
@@ -193,7 +184,7 @@ static bool TryCreateCityTrain(City *city, TileIndex tile_index) {
   LinkCityMapEvent(city, second_slot);
   LinkCityMapEvent(city, third_slot);
   InvalidateTile(city, tile_index);
-  ++city->disasters.tile237_count;
+  ++city->disasters.train_count;
   return true;
 }
 
@@ -211,16 +202,17 @@ void TrySpawnCityStationTrains(City *city, TileIndex tile_index) {
 
 // Detect removed track beneath a train. Surface rails, rail bridges, subway track and connectors keep it alive;
 // this query does not test event occupancy or change the tile.
-static bool IsCityTrainTrackRemoved(City *city, TileIndex tile_index) {
+static bool IsCityTrainTrackRemoved(const City *city, TileIndex tile_index) {
   if (!IsMapTileValid(city, tile_index))
     return false;
-  int tile = ReadTile(city, tile_index);
-  if (ReadCityTileClasses(tile) & (TCLASS_RAIL | TCLASS_RAIL_BRIDGE))
+  const TileInfo *tp = &city->tile[tile_index];
+  int kind = tp->kind;
+  if (ReadCityTileClasses(kind) & (TCLASS_RAIL | TCLASS_RAIL_BRIDGE))
     return false;
-  int underground = ReadUnderground(city, tile_index);
-  if (IsSubwayTile(underground))
+  int underground = ReadTileUndergroundKind(tp);
+  if (IsUndergroundKindSubway(underground))
     return false;
-  return !IsTileKindTrainTransition(tile);
+  return !IsTileKindTrainTransition(kind);
 }
 
 // Move a train or subway engine with its two linked cars. Slot must identify an engine; missing, reused or aliased
@@ -259,7 +251,7 @@ void UpdateCityMapTrain(City *city, int slot) {
     int probe_y = y + station_probe_step[orientation][1];
     int probe_x = x + station_probe_step[orientation][0];
     TileIndex probe = MapTileXYOrInvalid(city, probe_x, probe_y);
-    if (probe != INVALID_TILE && ReadTile(city, probe) == TK_RAIL_STATION)
+    if (probe != INVALID_TILE && city->tile[probe].kind == TK_RAIL_STATION)
       return;
   }
 
@@ -273,7 +265,7 @@ void UpdateCityMapTrain(City *city, int slot) {
     }
     for (int car = 0; car < 3; ++car)
       ClearCityMapEventSlot(city, train_slots[car]);
-    --city->disasters.tile237_count;
+    --city->disasters.train_count;
     CreateCityMapEffectEvent(city, current_tile, 0, 0, 0);
     return;
   }
@@ -293,7 +285,7 @@ void UpdateCityMapTrain(City *city, int slot) {
   y = target_y;
   x = target_x;
   int direction = engine->direction & 0x0F;
-  int tile = ReadTile(city, next_tile);
+  int tile = city->tile[next_tile].kind;
   if (IsTileKindTrainTransition(tile))
     engine->type =
         original_type == CITY_MAP_EVENT_TRAIN_ENGINE ? CITY_MAP_EVENT_SUBWAY_ENGINE : CITY_MAP_EVENT_TRAIN_ENGINE;

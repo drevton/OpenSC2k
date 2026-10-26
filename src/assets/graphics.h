@@ -279,7 +279,7 @@ enum { CITY_HELICOPTER_ROTOR_FRAMES = 8, CITY_HELICOPTER_ROTOR_FPS = 24 };
 
 enum { CITY_INTRO_IMAGE_COUNT = 16, CITY_INTRO_DIGIT_FIRST = 4, CITY_INTRO_CITY_ART = 15 };
 typedef struct RunSprite RunSprite;
-typedef struct { RunSprite *images[CITY_INTRO_IMAGE_COUNT]; } CityIntroArt;
+typedef struct CityIntroArt { RunSprite *images[CITY_INTRO_IMAGE_COUNT]; } CityIntroArt;
 
 // Native map toolbar artwork, in assets/ui/map-data/icons.svg and icons.dat order.
 typedef enum CityMapIcon {
@@ -334,11 +334,11 @@ u16 ResolveSpriteVariant(SpriteVariants variants, int sprite, int level, u16 fal
 typedef struct CityInterfaceIcons {
   ByteSpan data;
   SpriteVariants variants;
-  const u16 *lookup;
+  const u8 *lookup; // Borrowed little-endian references; the pack need not align this table.
   RunSprite **images;
   u16 count, header_count;
 } CityInterfaceIcons;
-typedef struct {
+typedef struct CityLandscapeSprite {
   RunSprite *sprite;
   u16 scale, baseline;
   i16 offset_x;
@@ -449,6 +449,8 @@ enum {
   CITY_CIVIC_VIEWS = 4,
   CITY_LANDSCAPE_SMALL_PARK_FIRST = CITY_LANDSCAPE_CIVIC_FIRST + CITY_CIVIC_KIND_COUNT * CITY_CIVIC_VIEWS,
   CITY_LANDSCAPE_POWER_SMOKE_FIRST = CITY_LANDSCAPE_SMALL_PARK_FIRST + CITY_CIVIC_VIEWS,
+  // Emitter profile order in the native graphics pack, independent of tile kinds and sprite IDs.
+  CITY_POWER_SMOKE_OIL = 0, CITY_POWER_SMOKE_NUCLEAR = 1, CITY_POWER_SMOKE_COAL = 2,
   CITY_POWER_SMOKE_KINDS = 3,
   CITY_POWER_SMOKE_DARK = 0,
   CITY_POWER_SMOKE_STEAM = 1,
@@ -522,10 +524,19 @@ enum {
   CITY_UNDERWORLD_SOIL, CITY_UNDERWORLD_DRY_SERVICE, CITY_UNDERWORLD_WATER_SERVICE, CITY_UNDERWORLD_SUBMERGED,
 };
 
-// Decode retained graphics bytes; missing or invalid data fails.
-bool LoadCityLandscapeAssets(CityResourceState *assets);
-// Catalog lookup accepts geometric layouts, never gameplay kinds.
-int CityBuildingArtworkSourceFirst(int layout);
+// Decode retained tile bindings and landscape bytes. Missing or invalid data fails; startup loading can retain
+// newly read bindings, variant/height metadata and vehicle colors after failure.
+// Images and their smoke/building/ground metadata are installed only after complete validation and cursor close.
+// Assets owns installed image references and borrows index/variant bytes from the retained pack blocks.
+// kind_sprites borrows TK_COUNT native-kind bindings supplied by the coordinator for validation; it is not retained.
+// Loading uses no Drawing state, cache, source-selection operation or I/O beyond the preloaded asset cursor.
+bool LoadCityLandscapeAssets(CityResourceState *assets, const u16 kind_sprites[]);
+// First native landscape source for an unzoomed building catalog-cache slot, or -1 for other sprites.
+// This fixed source-family mapping does not resolve resource aliases or inspect installed assets.
+int CityBuildingArtworkSourceFirst(int sprite);
+// Load every required demolition frame before replacing the installed set. Dimensions/anchors and direct color
+// runs are validated; fixed local staging retains new images until close succeeds. Failure releases those images
+// and preserves all installed frames. Assets owns the installed images.
 bool LoadCityDemolitionAssets(CityResourceState *assets);
 void ReleaseCitySpriteAssets(CityResourceState *assets);
 

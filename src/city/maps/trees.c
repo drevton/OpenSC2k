@@ -8,8 +8,9 @@
 // altitude[0..4] is land height and [10..14] can describe an independent road tunnel below;
 // altitude[5..9] is not tree age or construction progress. Shared flags, overlay and underground follow tile_storage.h.
 
-#include "drawing/maps/map_sprites.h"
 #include "city/maps/trees.h"
+
+#include "drawing/maps/map_sprites.h"
 #include "city/maps/terrain.h"
 #include "city/maps/tables.h"
 #include "city/maps/ground.h"
@@ -18,16 +19,22 @@
 #include <assert.h>
 
 #include "game/audio.h"
+#include "assets/state.h"
+#include "assets/resource_types.h"
 #include "city/engine/commands.h"
 #include "city/engine/random.h"
+#include "city/events/events.h"
+#include "city/events/news.h"
 #include "city/maps/layers.h"
+#include "city/maps/water.h"
 #include "city/maps/map.h"
 #include "city/presentation.h"
 #include "city/state.h"
-#include "city/terrain/terrain.h"
+#include "city/terrain/climate.h"
 #include "drawing/maps/map_camera.h"
 #include "drawing/maps/map_view.h"
-#include "drawing/sprites/sprites.h"
+#include "assets/run_sprite.h"
+#include "drawing/sprites/preparation.h"
 
 // Select natural tree aging and reseeding. Invalid or reserved values fail before TEST or mutation.
 i64 CmdSetTreeLifecycle(City *city, u32 flags, int enabled, int reserved1, int reserved2) {
@@ -190,9 +197,11 @@ static CityCommandCost GetCityTreeRectangleCost(const City *city, TileIndex star
       (options & CITY_TREE_SPECIES_MASK) > 12)
     return quote;
   CityRect bounds = MapTileRectangle(city, start, end);
-  for (int y = bounds.top; y < bounds.bottom; ++y)
-    for (int x = bounds.left; x < bounds.right; ++x)
-      if (CanPlaceCityTree(city, MapTileXY(city, x, y), options)) quote.cost += CITY_TREE_PLANT_COST;
+  for (int y = bounds.top; y < bounds.bottom; ++y) {
+    TileIndex tile = MapTileXY(city, bounds.left, y);
+    for (int x = bounds.left; x < bounds.right; ++x, ++tile)
+      if (CanPlaceCityTree(city, tile, options)) quote.cost += CITY_TREE_PLANT_COST;
+  }
   quote.error = !quote.cost ? CityTreePlacementError(city, start, options) : CITY_COMMAND_COST_OK;
   return quote;
 }
@@ -207,21 +216,24 @@ i64 CmdPlantTreesRect(City *city, u32 flags, TileIndex location, TileIndex end, 
   if (!quote.cost) return 1;
   CityRect bounds = MapTileRectangle(city, location, end);
   int species = options & CITY_TREE_SPECIES_MASK;
-  for (int y = bounds.top; y < bounds.bottom; ++y)
-    for (int x = bounds.left; x < bounds.right; ++x) {
-      TileIndex tile = MapTileXY(city, x, y);
+  int climate = (options & CITY_TREE_CLIMATE_MASK) >> CITY_TREE_CLIMATE_SHIFT;
+  bool remove = (options & CITY_TREE_REMOVE) != 0;
+  for (int y = bounds.top; y < bounds.bottom; ++y) {
+    TileIndex tile = MapTileXY(city, bounds.left, y);
+    for (int x = bounds.left; x < bounds.right; ++x, ++tile) {
       if (!CanPlaceCityTree(city, tile, options)) continue;
-      int kind = ReadTile(city, tile);
-      int replacement = options & CITY_TREE_REMOVE ? ReadCityWaterGroundKind(&city->tile[tile]) :
-          TreeKindAtCount(&city->tile[tile], IsTileKindTree(kind) ? CityTreeCount(kind) + 1 : 1);
+      TileInfo *tp = &city->tile[tile];
+      int kind = tp->kind;
+      int replacement = remove ? ReadCityWaterGroundKind(tp) :
+          TreeKindAtCount(tp, IsTileKindTree(kind) ? CityTreeCount(kind) + 1 : 1);
       ReplaceCityTileAndStatistics(city, tile, replacement);
-      if (!(options & CITY_TREE_REMOVE)) {
-        int climate = (options & CITY_TREE_CLIMATE_MASK) >> CITY_TREE_CLIMATE_SHIFT;
+      if (!remove) {
         int chosen = species ? species - 1 : RandomCityTreeSpecies(city, climate);
-        WriteTreeSpecies(&city->tile[tile], chosen);
+        WriteTreeSpecies(tp, chosen);
       }
       InvalidateTile(city, tile);
     }
+  }
   PlayCitySound(city, location, CITY_SOUND_TREE_OR_ZONE_PLACEMENT);
   InvalidateCityInformation(city->game, CITY_UPDATE_STATUS);
   return true;
@@ -366,7 +378,7 @@ void GrowCityStockTrees(City *city, TileIndex tile_index) {
   else if (direction == CITY_TREE_PROBE_WEST && x > 0)
     --x;
   TileIndex neighbor_index = MapTileXY(city, x, y);
-  u32 neighbor_tile = ReadTile(city, neighbor_index);
+  u32 neighbor_tile = city->tile[neighbor_index].kind;
   if (HasTileWater(&city->tile[neighbor_index]) || !IsTileKindUnbuilt(neighbor_tile) ||
       neighbor_tile == TK_TREE_LAST || neighbor_tile == TK_RADIOACTIVE_WASTE)
     return;
@@ -536,6 +548,25 @@ int CityTreeGroundOffset(int terrain, int zoom) {
   return (__builtin_popcount(corners) * CityMapHeightStep(zoom) + 2) >> 2;
 }
 
+// Every species uses its climate's common crop, keeping tree sizes and ground alignment.
+bool DrawCityTreePreview(const CityAssets *assets, Canvas *canvas, SpriteImage *cache, CityRect bounds,
+    int species) {
+  int art = kCityTreeArtLayouts[species * 4][0];
+  const RunSprite *sprite = assets->landscape[CITY_LANDSCAPE_TREE_FIRST +
+      art * CITY_LANDSCAPE_TREE_STAGES + CITY_TREE_GROWN].sprite;
+  if (!sprite || bounds.right <= bounds.left || bounds.bottom <= bounds.top) return true;
+  CityRect source = assets->tree_preview_bounds[species >= 20 ? 2 : species >= 12 ? 1 : 0];
+  int source_width = source.right - source.left, source_height = source.bottom - source.top;
+  if (source_width <= 0 || source_height <= 0) return true;
+  int width = bounds.right - bounds.left, height = bounds.bottom - bounds.top;
+  if ((i64)width * source_height > (i64)height * source_width) width = height * source_width / source_height;
+  else height = width * source_height / source_width;
+  bounds.left += (bounds.right - bounds.left - width) >> 1;
+  bounds.right = bounds.left + width;
+  bounds.top = bounds.bottom - height;
+  return DrawCanvasSpriteImage(canvas, cache, sprite, source, bounds, 0);
+}
+
 // Draw the tree silhouettes over the already-painted ground. The caller applies visibility policy and supplies
 // camera-relative slope/screen coordinates. Drawing decides whether each sprite is collected or rasterized now.
 static void DrawCityTrees(const City *city, TileIndex tile, int zoom, int screen_x, int ground_y, int land_shape) {
@@ -598,7 +629,7 @@ static void DrawCityTrees(const City *city, TileIndex tile, int zoom, int screen
 }
 
 // Trees share natural terrain painting, then add their own silhouettes only when that layer is visible.
-static bool DrawCityTreeTile(City *city, TileIndex tile, int zoom, int screen_x, int ground_y,
+static bool DrawCityTreeTile(const City *city, TileIndex tile, int zoom, int screen_x, int ground_y,
     const CityTileGeometry *geometry) {
   if (!DrawCityGroundTile(city, tile, zoom, screen_x, ground_y, geometry)) return false;
   Drawing *drawing = city->drawing;
@@ -615,6 +646,22 @@ static void TickTreeTile(City *city, TileIndex tile) {
   if ((cycle & 15) == 15) GrowCityTrees(city, tile);
 }
 
+// A protest can reject removal after payment. Keep the charge, show the notice and add the news event
+// before returning the failure. Successful removal restores the ground before showing its first effect.
+static i64 ClearTreeTile(City *city, u32 flags, TileIndex tile) {
+  if (flags & CITY_COMMAND_TEST) return CITY_COMMAND_COST_OK;
+  if (Sc2kCrtRandRange(city, 20) == 0) {
+    StopCitySound(city->game, CITY_SOUND_BULLDOZER_WORK);
+    PlayCitySound(city, tile, CITY_SOUND_DEMOLITION);
+    ShowCityResourceAlertDialog(city, CITY_BITMAP_NOTICE_403, CITY_NOTICE_TREE_REMOVAL_PROTEST);
+    InsertRankedCityEvent(city, CITY_NEWS_TREE_REMOVAL_PROTEST, 0);
+    return CITY_COMMAND_COST_BLOCKED;
+  }
+  ClearCityGroundTile(city, tile);
+  ShowCityDemolitionEffect(city, tile, false);
+  return 1;
+}
+
 const TileModule kCityTreeModule = {
-  .tick = TickTreeTile, .draw = DrawCityTreeTile, .draw_ground = DrawCityGroundSurface,
+  .clear = ClearTreeTile, .tick = TickTreeTile, .draw = DrawCityTreeTile, .draw_ground = DrawCityGroundSurface,
 };

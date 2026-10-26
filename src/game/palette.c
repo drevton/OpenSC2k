@@ -4,7 +4,6 @@
 #include "city/state.h"
 #include "drawing/palette.h"
 #include "drawing/state.h"
-#include "game/application.h"
 #include "game/state.h"
 #include "game/timing.h"
 #include "ui/state.h"
@@ -14,7 +13,7 @@
 int AnimateCityPalette(Game *game, int slow_palette) {
   Drawing *drawing = game->drawing;
   CityPaletteState *state = &drawing->palette;
-  int idle_state = game->idle_state;
+  CityApplicationIdleState idle_state = game->idle_state;
   if (game->city->settings.speed == CITY_SPEED_PAUSED && state->direct_animation == 0 &&
       idle_state == CITY_IDLE_PLAY)
     return -1;
@@ -24,6 +23,29 @@ int AnimateCityPalette(Game *game, int slow_palette) {
   if (drawing->display_palette != NULL)
     ApplyAnimatedCityPalette(state, drawing->display_palette);
   return 0;
+}
+
+bool AnimateDueCityPalettes(Game *game) {
+  CityPaletteState *palette = &game->drawing->palette;
+  bool fast = palette->fast_due == 1;
+  if (fast) {
+    AnimateCityPalette(game, 0);
+    palette->fast_due = 0;
+  }
+  if (palette->slow_due == 1) {
+    AnimateCityPalette(game, 1);
+    palette->slow_due = 0;
+  }
+  return fast;
+}
+
+void AdvanceCityPaletteCadence(Game *game, u32 counter, bool animate) {
+  CityPaletteState *palette = &game->drawing->palette;
+  if (animate) {
+    if (counter % 8 == 0) palette->slow_due = 1;
+    palette->fast_due = 1;
+  }
+  if (palette->direct_animation) AnimateDueCityPalettes(game);
 }
 
 // Bracket one background-palette request without retaining presentation work.

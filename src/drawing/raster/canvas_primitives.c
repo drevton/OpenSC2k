@@ -1,5 +1,6 @@
 #include "drawing/raster/canvas_primitives.h"
 
+#include <math.h>
 #include <stdlib.h>
 
 #include "drawing/fonts/fonts.h"
@@ -90,6 +91,18 @@ void DrawCanvasLine(Canvas *canvas, int x0, int y0, int x1, int y1, u32 color, i
     i64 twice = 2 * error;
     if (twice >= dy) { error += dy; x0 += sx; }
     if (twice <= dx) { error += dx; y0 += sy; }
+  }
+}
+
+void DrawCanvasStipple(Canvas *canvas, CityRect bounds, u32 background, u32 foreground) {
+  CityRect pixels = CanvasRasterRect(canvas, bounds);
+  if (pixels.left >= pixels.right || pixels.top >= pixels.bottom) return;
+  CanvasRasterFill(canvas, pixels, background);
+  // The background fill already cleared palette identities for the whole clipped rectangle.
+  for (int y = pixels.top; y < pixels.bottom; ++y) {
+    u32 *row = canvas->pixels + (size_t)y * canvas->stride;
+    for (int x = pixels.left + ((pixels.left + y) & 1); x < pixels.right; x += 2)
+      row[x] = foreground;
   }
 }
 
@@ -211,6 +224,52 @@ void DrawCityCheckbox(Canvas *canvas, CityRect bounds, bool checked, u32 face, u
   if (checked) bounds.left = bounds.right - thumb_width;
   else bounds.right = bounds.left + thumb_width;
   DrawCanvasFrame(canvas, bounds, 0xFFE8B810, 0xFFFCF880, 0xFFB87818, !pressed);
+}
+
+void DrawCanvasChoiceMarker(Canvas *canvas, CityRect row, bool circle, u32 fill, u32 rim) {
+  CanvasRaster raster = CanvasRasterView(canvas);
+  float scale = (float)raster.numerator / raster.denominator;
+  float center_x = (row.left + 5.5f + raster.origin_x) * scale + raster.offset_x;
+  float center_y = ((row.top + row.bottom) * 0.5f + raster.origin_y) * scale + raster.offset_y;
+  float radius = 3.75f * scale, inner_radius = 3 * scale;
+  CityRect clip = CanvasRasterRect(canvas, (CityRect){row.left + 1, row.top, row.left + 10, row.bottom});
+  // Rasterize at final display resolution. Only the edge pixels blend, so
+  // circles stay round at fractional and high UI scales without a bitmap.
+  for (int y = clip.top; y < clip.bottom; ++y) for (int x = clip.left; x < clip.right; ++x) {
+    float dx = fabsf(x + 0.5f - center_x), dy = fabsf(y + 0.5f - center_y);
+    float distance = circle ? sqrtf(dx * dx + dy * dy) : fmaxf(dx, dy);
+    int outer = IntMax(0, IntMin(255, (int)((radius + 0.5f - distance) * 255)));
+    if (!outer) continue;
+    int inner = IntMax(0, IntMin(255, (int)((inner_radius + 0.5f - distance) * 255)));
+    size_t index = (size_t)y * canvas->stride + x;
+    u32 background = canvas->pixels[index], color = 0xFF000000;
+    for (int shift = 0; shift <= 16; shift += 8)
+      color |= (((fill >> shift & 255) * inner + (rim >> shift & 255) * (outer - inner) +
+          (background >> shift & 255) * (255 - outer) + 127) / 255) << shift;
+    canvas->pixels[index] = color;
+    if (canvas->palette_indices && (!canvas->palette_rows || canvas->palette_rows[y]))
+      canvas->palette_indices[(size_t)y * canvas->index_stride + x] = 0;
+  }
+}
+
+void DrawCanvasLoadingProgress(Canvas *canvas, CityRect bounds, int percent, u32 fill, u32 empty) {
+  int left = bounds.left, top = bounds.top;
+  int width = bounds.right - left, height = bounds.bottom - top;
+  double radius = height / 2.0;
+  for (int y = IntMax(0, top - 1); y < IntMin(canvas->height, top + height + 1); ++y)
+    for (int x = IntMax(0, left - 1); x < IntMin(canvas->width, left + width + 1); ++x) {
+      double dx = fmax(left + radius - x - .5, x + .5 - (left + width - radius));
+      double dy = y + .5 - (top + radius);
+      double coverage = fmax(0, fmin(1, radius + .5 - hypot(fmax(0, dx), dy)));
+      if (!coverage) continue;
+      u32 color = x < left + width * percent / 100 ? fill : empty;
+      size_t index = (size_t)y * canvas->stride + x;
+      u32 background = canvas->pixels[index], result = 0xFF000000;
+      for (int shift = 0; shift <= 16; shift += 8)
+        result |= (u32)((color >> shift & 255) * coverage + (background >> shift & 255) * (1 - coverage) + .5)
+            << shift;
+      canvas->pixels[index] = result;
+    }
 }
 
 // Canvas Raster

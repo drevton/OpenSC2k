@@ -99,13 +99,8 @@ i32 MaybePlayCityEventMusic(Game *game, int event_id) {
   return (i32)PlayCityMusicTrack(game, track);
 }
 
-bool PlayCityEventMusicById(Game *game, int event_id) {
-  MaybePlayCityEventMusic(game, event_id);
-  return true;
-}
-
 // Advance the five-entry event-music sequence and dispatch its track.
-bool PlayNextCityEventMusicSequence(Game *game) {
+void PlayNextCityEventMusicSequence(Game *game) {
   CityAudioState *audio = game->audio;
   static const u16 kSequenceTracks[CITY_MUSIC_SEQUENCE_COUNT] = {
     CITY_MUSIC_TRACK_01, CITY_MUSIC_TRACK_04, CITY_MUSIC_TRACK_08, CITY_MUSIC_TRACK_12, CITY_MUSIC_TRACK_18
@@ -113,8 +108,8 @@ bool PlayNextCityEventMusicSequence(Game *game) {
   int sequence = audio->music_sequence_index % CITY_MUSIC_SEQUENCE_COUNT;
   audio->music_sequence_index = sequence + 1;
   if (sequence < 0)
-    return true;
-  return PlayCityEventMusicById(game, kSequenceTracks[sequence]);
+    return;
+  MaybePlayCityEventMusic(game, kSequenceTracks[sequence]);
 }
 
 // Select the next cue or consume the speed-scaled random choice after the caller admits an idle schedule.
@@ -130,7 +125,7 @@ void SelectScheduledCityMusic(Game *game, bool advance_sequence) {
     speed = CITY_SPEED_SLOW;
   int divisor = 8 * (3 * speed - 3);
   if (Sc2kCrtRandRange(city, divisor) == 0)
-    PlayCityEventMusicById(game, Sc2kCrtRandRange(city, CITY_MUSIC_TRACK_COUNT));
+    MaybePlayCityEventMusic(game, Sc2kCrtRandRange(city, CITY_MUSIC_TRACK_COUNT));
 }
 
 // Native scheduling reads its playback gate from the Audio owner.
@@ -138,7 +133,7 @@ void MaybePlayCityMusic(Game *game, bool advance_sequence) {
   if (!game->audio->music_active) SelectScheduledCityMusic(game, advance_sequence);
 }
 
-bool ToggleCityMusicPreference(Game *game) {
+void ToggleCityMusicPreference(Game *game) {
   CityAudioState *audio = game->audio;
   audio->music_enabled = audio->music_enabled == 0;
   if (audio->live_open) {
@@ -148,15 +143,31 @@ bool ToggleCityMusicPreference(Game *game) {
   else
     StopCityMusicSequence(game);
   StoreGameSettings(game);
-  return true;
+}
+
+CitySavedAudioFields ReadCitySavedAudio(const Game *game) {
+  return (CitySavedAudioFields){game->audio->enabled, game->audio->music_enabled};
+}
+
+void ApplyCitySavedSoundPreference(Game *game, u32 enabled) {
+  game->audio->enabled = enabled;
+}
+
+void ApplyCitySavedMusicPreference(Game *game, u32 enabled) {
+  game->audio->music_enabled = enabled;
+}
+
+void RestoreCityLoadedMusicPreference(Game *game) {
+  CityAudioState *audio = game->audio;
+  if (audio->live_open) audio->music_enabled = audio->jukebox.playing != 0;
+  if (!audio->music_enabled) StopCityMusicSequence(game);
 }
 
 bool PollCityMusic(Game *game) {
   if (!game->audio->live_open) return false;
-  u16 device;
-  CityMusicCompletion notification = NativeAudioMusicNotification(game->audio, &device);
-  if (notification == CITY_MUSIC_PENDING) return false;
-  CompleteCityMusic(game, notification, device);
+  CityMusicNotification notification = NativeAudioMusicNotification(game->audio);
+  if (notification.completion == CITY_MUSIC_PENDING) return false;
+  CompleteCityMusic(game, notification.completion, notification.token);
   return true;
 }
 
@@ -179,7 +190,7 @@ static int CitySoundReplayThreshold(const CityAudioState *audio, int sound_id) {
 }
 
 // Play a sound event, interrupting or queuing playback as needed.
-void PlayCitySoundEvent(City *city, TileIndex tile, int sound_id) {
+void PlayCitySound(City *city, TileIndex tile, int sound_id) {
   Game *game = city->game;
   CityAudioState *audio = game->audio;
   const CityInterfaceState *ui = game->ui;
@@ -219,31 +230,25 @@ void PlayCitySoundEvent(City *city, TileIndex tile, int sound_id) {
   }
 }
 
-bool PlayCitySound(City *city, TileIndex tile, int sound_id) {
-  PlayCitySoundEvent(city, tile, sound_id);
-  return true;
-}
-
 void ResetCityHelicopterSoundTiming(City *city) {
   city->game->audio->helicopter_sound_deadline = SimulationFrameTime(city);
 }
 
-bool PlayCityAmbientSound(City *city, TileIndex tile, int sound_id) {
+void PlayCityAmbientSound(City *city, TileIndex tile, int sound_id) {
   CityAudioState *audio = city->game->audio;
   if (audio->live_open && (sound_id == CITY_SOUND_EXPLOSION || sound_id == CITY_SOUND_AIRCRAFT_CRASH)) {
-    if (!audio->ambient_sounds || !IsCityMapSoundVisible(city, tile)) return true;
+    if (!audio->ambient_sounds || !IsCityMapSoundVisible(city, tile)) return;
     u32 now = (u32)(u64)(ReadGameTime(city->game, GAME_TIME_UNPAUSED) * 1000);
-    if (audio->ambient_impact_deadline && (i32)(now - audio->ambient_impact_deadline) < 0) return true;
+    if (audio->ambient_impact_deadline && (i32)(now - audio->ambient_impact_deadline) < 0) return;
     // A crash and its following explosion are one audible incident. Share the gate across event slots and IDs.
     audio->ambient_impact_deadline = now + 10000;
   }
   if (sound_id == CITY_SOUND_HELICOPTER_FLIGHT) {
     u32 now = SimulationFrameTime(city);
-    if ((i32)(now - audio->helicopter_sound_deadline) <= 0) return true;
+    if ((i32)(now - audio->helicopter_sound_deadline) <= 0) return;
     audio->helicopter_sound_deadline = now + 5000;
   }
-  if (audio->ambient_sounds) PlayCitySoundEvent(city, tile, sound_id);
-  return true;
+  if (audio->ambient_sounds) PlayCitySound(city, tile, sound_id);
 }
 
 void PlayCityAirplaneSound(City *city, int slot, int sound_id) {
@@ -302,6 +307,14 @@ bool PlayCitySoundWithDelay(Game *game, int sound_id, int repetitions) {
     }
   }
   return true;
+}
+
+void AdvanceCitySoundCadence(Game *game) {
+  CityAudioState *audio = game->audio;
+  if (audio->sound_delay != 0) {
+    --audio->sound_delay;
+    if (audio->sound_delay == 0) CompleteCitySoundPlayback(game);
+  }
 }
 
 // Clear playback state and resume a queued or cached sound when appropriate.
@@ -366,7 +379,7 @@ void StopCitySoundIfLastMatches(Game *game, int sound_id) {
 }
 
 // Stop a matching sound and clear its cached or queued playback.
-void StopCitySoundEvent(Game *game, int sound_id) {
+void StopCitySound(Game *game, int sound_id) {
   CityAudioState *audio = game->audio;
   if (sound_id == CITY_SOUND_FIRE) audio->resume_fire_sound = false;
   if (audio->live_open && audio->overlapping_effects) {
@@ -389,11 +402,6 @@ void StopCitySoundEvent(Game *game, int sound_id) {
   }
 }
 
-bool StopCitySound(Game *game, int sound_id) {
-  StopCitySoundEvent(game, sound_id);
-  return true;
-}
-
 // Fire follows world pause; UI effects and music keep their independent playback.
 void SyncCityFireSoundPause(Game *game) {
   CityAudioState *audio = game->audio;
@@ -407,7 +415,7 @@ void SyncCityFireSoundPause(Game *game) {
         (audio->cached_sound_id == CITY_SOUND_FIRE && audio->cached_sound_playing) ||
         audio->queued_sound == CITY_SOUND_FIRE;
     bool resume = playing || audio->resume_fire_sound;
-    if (playing) StopCitySoundEvent(game, CITY_SOUND_FIRE);
+    if (playing) StopCitySound(game, CITY_SOUND_FIRE);
     audio->resume_fire_sound = resume;
   } else if (audio->resume_fire_sound) {
     audio->resume_fire_sound = false;
@@ -415,12 +423,11 @@ void SyncCityFireSoundPause(Game *game) {
   }
 }
 
-bool ToggleCitySoundPreference(Game *game) {
+void ToggleCitySoundPreference(Game *game) {
   game->audio->enabled = game->audio->enabled == 0;
   if (game->audio->enabled != 0)
     CompleteCitySoundPlayback(game);
   else
     StopAllCitySound(game);
   StoreGameSettings(game);
-  return true;
 }

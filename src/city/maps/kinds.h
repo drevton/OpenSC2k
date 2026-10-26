@@ -77,6 +77,12 @@ static SC2K_FORCE_INLINE bool IsTileKindBuilding(int kind) {
   return kind >= TK_RESIDENTIAL_FIRST && kind != TK_PARK;
 }
 
+// Dry buildings use the altitude water-height field for construction progress.
+// Water-class facilities keep a water plane.
+static SC2K_FORCE_INLINE bool IsTileKindDryBuilding(int kind) {
+  return IsTileKindBuilding(kind) && (ReadCityTileClasses(kind) & TCLASS_WATER) == 0;
+}
+
 static SC2K_FORCE_INLINE bool IsTileKindZoneBuilding(int kind) {
   return kind >= TK_RESIDENTIAL_FIRST && kind < TK_HYDRO_POWER;
 }
@@ -87,6 +93,22 @@ static SC2K_FORCE_INLINE bool IsTileKindFacility(int kind) {
 
 static SC2K_FORCE_INLINE bool IsTileKindPowerPlant(int kind) {
   return kind >= TK_HYDRO_POWER && kind <= TK_COAL_POWER_PLANT && kind != TK_PARK;
+}
+
+// Plants with an annual operating-age counter and renewal/demolition handling.
+static SC2K_FORCE_INLINE bool IsTileKindAgingPowerPlant(int kind) {
+  switch (kind) {
+  case TK_GAS_POWER_PLANT:
+  case TK_OIL_POWER_PLANT:
+  case TK_NUCLEAR_POWER_PLANT:
+  case TK_SOLAR_POWER_PLANT:
+  case TK_MICROWAVE_POWER_PLANT:
+  case TK_FUSION_POWER_PLANT:
+  case TK_COAL_POWER_PLANT:
+    return true;
+  default:
+    return false;
+  }
 }
 
 // The final reward category includes the Braun Llama Dome.
@@ -117,9 +139,10 @@ static SC2K_FORCE_INLINE bool IsTileKindTreeOrPark(int kind) {
 }
 
 // Power lines precede this category; road, rail, highways, bridges, entrances
-// and buildings belong to it. Stored transport kinds need not be adjacent.
+// and buildings belong to it. Exclude landscape kinds interleaved with transport,
+// including shoreline trees and the small park.
 static SC2K_FORCE_INLINE bool IsTileKindTransportOrBuilding(int kind) {
-  return kind >= TK_ROAD && kind != TK_PARK;
+  return kind >= TK_ROAD && !IsTileKindLandscape(kind);
 }
 
 static SC2K_FORCE_INLINE bool IsTileKindTunnel(int kind) {
@@ -211,15 +234,17 @@ static SC2K_FORCE_INLINE bool IsTileKindPlainPowerLine(int kind) {
   return kind >= TK_POWER_LINE && kind <= TK_POWER_LINE_TOWER_WATER;
 }
 
-static SC2K_FORCE_INLINE bool IsTileKindPlainTransport(int kind) {
-  return kind == TK_ROAD || kind == TK_RAIL;
+// These power-line properties depend only on the kind, not connection, altitude or service fields.
+static SC2K_FORCE_INLINE bool IsTileKindWaterPowerLine(int kind) {
+  return IsTileKindPlainPowerLine(kind) && (ReadCityTileClasses(kind) & TCLASS_WATER) != 0;
 }
 
-// Underground classification also accepts an unnarrowed replacement value.
-static SC2K_FORCE_INLINE bool IsSubwayTile(int kind) {
-  return (kind >= TUK_SUBWAY_FIRST && kind <= TUK_SUBWAY_LAST) ||
-      kind == TUK_SUBWAY_ACCESS || kind == TUK_SUBWAY_EW_PIPE_NS ||
-      kind == TUK_SUBWAY_NS_PIPE_EW || kind == TUK_MISSILE_SILO;
+static SC2K_FORCE_INLINE bool IsTileKindPowerLineTower(int kind) {
+  return kind == TK_POWER_LINE_TOWER || kind == TK_POWER_LINE_TOWER_WATER;
+}
+
+static SC2K_FORCE_INLINE bool IsTileKindPlainTransport(int kind) {
+  return kind == TK_ROAD || kind == TK_RAIL;
 }
 
 // Native route families. Bridge decks/underpasses are resolved separately.

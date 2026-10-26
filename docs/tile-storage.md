@@ -1,9 +1,8 @@
 # City tile storage
 
 Current implementation reference, checked 2026-10-21. Bit numbers start at zero.
-City always stores native tile encoding, including during stock comparison. Complete stock
-records are translated at import/export and comparison boundaries; City fixes select behavior. The earlier [bit audit](../reports/2026-10-10-tile-metadata-bits.md)
-describes the isolation work before these payload meanings were assigned.
+City always stores native tile encoding. Complete stock records are translated at
+import/export boundaries; City fixes select behavior.
 
 Each tile-family source begins with its native `TileInfo` storage contract. These describe the actual stored bits,
 including fields shared with other families, rather than the composed legacy bytes returned by compatibility helpers.
@@ -24,7 +23,7 @@ The common field map is beside `TileInfo` in [tile_storage.h](../src/city/maps/t
 | Underground networks | [networks.c](../src/city/infrastructure/networks.c) |
 
 Shared processing modules also describe the fields they use: geometry in `maps/terrain.c`, region/cover in
-`maps/state.c`, sign/effect bits in `maps/labels.c` and `maps/tile_scan.c`, service flags in
+`maps/state.c`, sign/effect bits in `maps/labels.c` and `disasters/tile_effects.c`, service flags in
 `infrastructure/utilities.c`, route storage in `infrastructure/transport.c`, and zoning in `growth/zoning.c`.
 
 ## Layout and indexing
@@ -94,8 +93,8 @@ The record has natural two-byte alignment, no padding, and eight records per ali
 cache line. Compile-time assertions freeze its size and every field offset. Underground fills byte 7,
 previously padding after the climate field was removed. Its separate array and City pointer are gone,
 saving one byte per tile: 16 KiB at 128×128 and 16 MiB at 4096×4096. Scratch and coarse layers stay contiguous.
-Save files and comparison checkpoints retain their existing separate byte planes; codecs gather
-or scatter record members at that boundary. XUND still preserves all eight underground bits.
+Stock save codecs gather or scatter record members into separate byte planes at that boundary.
+XUND still preserves all eight underground bits. Native saves write complete TileInfo records.
 
 ## Surface tile: `tiles[tile].kind` / XBLD
 
@@ -108,12 +107,20 @@ Gameplay uses named category predicates such as `IsTileKindBuilding`, `IsTileKin
 `IsTileKindTunnel` and `IsTileKindGroundCrossing`. Contiguous family checks live with those predicates;
 callers do not infer a category from the ID of an unrelated kind. Native kinds 19–26 are independent
 of the stock crossings, ramps and subway entrances in IDs 67–111. Codecs map those families explicitly.
-Simulation statistics retain their established stock category slots through `CityTileStatisticsKind`;
+Simulation statistics retain their established stock category slots through `CityTileStatisticsKey`;
 maintenance and asset-value calculations use those slots, not native kind ordering.
+`ReadCityTileStatisticsKey` borrows a tile record and resolves its surface slot, including construction progress.
+Both queries are declared by the map interface; bridge underpasses are counted separately.
+Landscape predicates read the stored kind; a small park's native kind 199 projects to counter slot 13.
+`IsFlatDryTile` checks native land shape and kind-based water presence independently of the occupant.
+`IsFlatDryUnbuiltTile` adds the unbuilt-kind requirement; demolition can use the geometry check for buildings too.
+Environment classification also uses stored kinds; statistics keys only index pollution and density contributions.
+Shoreline trees are landscape rather than transport/buildings. Occupation counts include water power lines
+but exclude unzoned shoreline trees, consistently during environment updates and loaded-map recounts.
 
 The entire byte is a native tile kind, not a bitset or sprite ID. Infrastructure and landscape kinds
-occupy 0–49, leaving 50–111 available. Existing building IDs 112–255 stay fixed. Small park alone
-moves from 13 to the retired native slot 199; stock park 13 still imports/exports as park, and stock
+occupy 0–53, including shore trees at 50–53; 54–111 remain available. Existing building IDs 112–255 stay fixed.
+Small park moves from 13 to the retired native slot 199; stock park 13 still imports/exports as park, and stock
 hydro artwork 199 still decodes as hydro. Explicit predicates preserve the small park’s landscape
 behavior and exclude it from facility and power-plant ranges.
 
@@ -363,7 +370,7 @@ Head altitude bit 9 retains the phase of the original alternating two-cell artwo
 groups relative to the lower-coordinate end. New bridges use phase zero.
 Rendering and SC2 export reconstruct 106/107; native gameplay and demolition
 use the native bridge family. Native statistics aggregate the two old pieces,
-and SC2/comparison export splits their counts back by the derived piece.
+and SC2 export splits their counts back by the derived piece.
 Native save validation rejects 106/107 as stored kinds; older project saves
 containing them are not migrated. Highway footprint updates accept only land
 and junction selectors, while span construction owns native bridge placement.
@@ -505,10 +512,16 @@ bottom-right; they short-circuit when local continuation bits already exclude th
 without generating or rotating a legacy corner mask. The ordinary growth scan selects physical
 corner 3 directly, preserving its previous rotation-relative scan mask.
 
-`ReadFootprintCorners` remains for callers needing the complete old four-corner mask, including
-exact-mask comparisons. `CityBuildingCornerMask` supplies that mask for SC2 export using direct
-right/bottom neighbour reads and one rotation of the completed nibble. Neither helper searches
-for the anchor. `GetBuildingStartTile(city, tile)` returns the
+`ReadFootprintCorners` returns the complete rotation-relative `CityFootprintCornerMask` in its
+low four bits, including for exact-mask comparisons. `CityBuildingCornerMask` derives those
+bits using direct right/bottom neighbour reads and one rotation of the completed nibble.
+`CityHighwayCornerMask` derives the same mask from the highway's bounds or continuation links,
+including bridge-lane resolution. `IsCityHighwayFootprintCorner` tests a physical corner directly;
+the shared footprint layer delegates both highway queries to that module. The stock codec
+shifts these masks into XZON's upper nibble; native callers do not use the stock corner encoding.
+Footprint queries take City and TileIndex and read City's own tile records; they do not accept
+a separate metadata plane or stride. Neither building helper searches for the anchor.
+`GetBuildingStartTile(city, tile)` returns the
 top-left `TileIndex` by following the left/up links. Single-cell buildings return themselves
 without reading footprint links; highway sections use their stored rectangular footprint.
 The helper does not return dimensions or depend on view rotation.
@@ -523,20 +536,24 @@ Physical map rotation transforms facing and continuation links before
 moving tile kinds, using existing rotation scratch. It preserves the payload roles of clear,
 tree and infrastructure tiles.
 
-`GetBuildingFootprintDimensions(kind, facing)` reads the same square-size table for every kind
-in the building range, 112–255. It returns a `CityPoint` with width in `x` and height in `y`,
-both `int` fields. Parks return 1×1; kinds outside the building range otherwise return zero
-dimensions. Facing is reserved for future rectangular footprints and currently does not affect
-the square dimensions. `MapTilePt(city, tile)` returns a tile's x/y coordinates as a `CityPoint`.
+`GetBuildingFootprintSize(kind)` returns the square side length in tiles from
+`kCityBuildingFootprintSize` for every kind in the building range, 112–255. The small park
+returns one; other kinds outside the building range return zero. Facing selects artwork without
+changing this size.
+`ReadBuildingOrientation(city, tile)` belongs to `buildings.h`: it reads stored facing for
+buildings and uses the City's default placement facing for other occupants. Building drawing
+privately combines that facing with the current camera rotation when choosing artwork.
+
+`MapTilePt(city, tile)` returns a tile's x/y coordinates as a `CityPoint`.
 `MapTileXYOrInvalid(city, x, y)` converts optional coordinates to a `TileIndex`, returning
 `INVALID_TILE` outside the map. Use `MapTileXY` when coordinates are already known to be valid.
 `GetRelativeTileOrInvalid(city, tile, x, y)` applies x/y offsets from a valid tile and returns
 `INVALID_TILE` if the destination falls outside the map, without wrapping between rows.
 Existing building definitions retain their square sizes, including the 4x4 special buildings.
-Native ground/selection traversal, construction progress and demolition use separate width and
-height. The original positional square-size table remains unchanged for stock algorithms/codecs.
-Rectangular artwork and placement definitions still need to be authored before adding a new
-non-square building; changing a dimension entry alone does not provide those assets.
+Native building ground/selection traversal and construction progress use that side length.
+Demolition's `CityTileArea` retains separate width and height for rectangular highway spans.
+The square-size table is also shared with stock codecs. Non-square buildings would require
+new footprint definitions, artwork and placement support.
 
 `ReadFootprintCorners` returns zero for trees, native rubble, tunnels, ramps, clear tiles, bridges and power-line tiles
 except highway/power crossings, whose bits belong to the highway footprint. Their wire support is always a span
@@ -547,24 +564,6 @@ remain shared record queries. Tree count changes retain species. Category change
 initialize the new interpretation explicitly in `ChangeCityLandscapeTile`, called by
 `ReplaceCityTileAndStatistics`. Actual low-nibble zoning remains independent, including under trees.
 Camera rotation transforms connection masks for drawing without changing stored tiles.
-
-Gameplay uses one native footprint layout: building/highway continuation links and explicit
-highway axes. Stock files are identified at the import boundary by `native_map_storage == false`;
-the loader converts the complete stock map before simulation rebuilding. Comparison imports stock
-records through the same boundary and runs gameplay on native records. Earlier project-specific
-save layouts have no compatibility guarantee. Native imports convert complete legacy footprints
-using their original corner markers and sizes. `TranslateCityTileFromLegacy` reads the unchanged
-source map and writes a complete eight-byte result, including kind and flags, into a temporary output
-map. Import copies the records back and recounts kinds only after the entire conversion succeeds.
-Simulation rebuilding then runs on native records, followed by native landscape initialization.
-The temporary map is freed immediately; current-format imports need no conversion buffer. Straight
-highways use the stock 2×2 grid only during import. Incomplete highway footprints and wet building
-footprints are rejected. Incomplete dry multi-cell buildings, including isolated interiors in shipped
-`SYDNEY.SC2` and overwritten loading bays in `JUNETOWN.SC2`, are cleared tile by tile. Terrain and
-zoning remain intact; obsolete building utility flags and construction metadata are removed. Complete
-footprints and their neighboring tiles remain unchanged. Loading displays the number of cleared tiles;
-this transient diagnostic count is not saved.
-
 
 With **Compact highway placement** enabled, a straight highway segment occupies one cell
 along its axis and two across it: 1×2 on X, 2×1 on Y. A placement can start on any map cell.
@@ -618,8 +617,7 @@ incline; drawing resolves its base from the highest ground in the bounded footpr
 (one level below its top for an incline). Each ground cell draws at its actual
 height, and picking still follows that ground surface. No deck-height payload or
 additional tile bits are stored. Disabling the option restores stock grading for
-future placements; existing terrain is not reconstructed. Stock comparison sets
-the fix mask to zero and retains its original grading.
+future placements; existing terrain is not reconstructed.
 
 All land highway shapes store orientation 0–3 in terrain bits 4–5. Opposite orientations
 share an axis: 0/2 use X and 1/3 use Y. Bits 6–7 retain the footprint continuation
@@ -652,16 +650,6 @@ Sources: [zone constants](../src/city/maps/tile_storage.h), [metadata accessors]
 [footprint searches/demolition](../src/city/tools/demolition.c), [placement](../src/city/infrastructure/lines.c).
 
 ## Terrain: `tiles[tile].terrain` / XTER
-
-Permanent water presence comes from `TCLASS_WATER` in the existing immutable kind-class table.
-`HasTileWater(tp)` performs the shared inline lookup. `TK_CLEAR`, trees and bridge heads are dry.
-Water kinds are exposed `TK_WATER` (2), `TK_RIVER` (3), `TK_WATER_BANK` (4), power lines 16–17,
-bridge middles 47–49, hydro plants 198,
-piers 223 and the whole marina footprint 248. Marina placement/import initializes one water plane across all nine cells.
-There is no per-tile water flag and no new presence bit in terrain's upper nibble.
-The stock verifier explicitly enables a guarded marina placement repair in Unicorn memory:
-successful placement gives all nine cells the same water plane and salinity before the final redraw.
-Placement admission, rejection continuations and RNG consumption remain unchanged.
 
 Stock import converts unsupported submerged occupants, including trees and ordinary buildings, to
 exposed water of the same underlying kind, retaining its geometry and showing a warning with the converted tile count.
@@ -777,25 +765,13 @@ the absolute construction year, with 1980 as the first modern year. The ground n
 available for snow/desert cover. Category changes clear the design bit; stock projection omits it.
 Pure stock imports use the old design because individual turbine dates are absent.
 
-Water and ground heights remain in ALTM. `TK_WATER` has a level surface. Water banks show
-raised shoreline corners only where the bed minimum equals the waterline; fully submerged banks
-remain level. Rivers use their stored bed slope for rapids at the waterline, independently of salinity.
-Hydro plants use surface kind 198, distinct from the water/ground geometry beneath them. Terrain bit 4
-stores mirroring and bit 5 selects the original hydro sprite pair (198/199); bits 6–7 remain clear.
-Import combines the old kind and orientation into this payload. Drawing and SC2 export select the
-original sprite ID from it. Power production and facility counts use the single native kind.
-Native statistics count kind 198; SC2 export splits its original counters when hydro plants exist.
-Both orientations contribute $400 to city assets, without a map scan. Comparison runs explicitly
-repair stock kind198 valuation to $400 in Unicorn; the shared coal construction price remains $4000.
-
 `ReadTerrainCode` decodes the zone/slope byte. `WriteTerrainCode` preserves its growth/timing bits
 and leaves ground and occupant metadata untouched. Grass recovery is `8 → 9 → A → 0`.
 `BeginCityGroundRecovery` starts at bare grass, or immediately recovered ground in terrain edit mode.
 Snow has four stored coverage states and approaches the elevation target during landscape visits;
 desert uses half/full ground states. Cover changes do not modify species, tree growth or permanent region.
 
-SC2 files and comparison transport retain combined XTER codes 16–69 and the original bit-7 metadata.
-The City behind comparison transport uses explicit native bed slopes.
+SC2 files retain combined XTER codes 16–69 and the original bit-7 metadata.
 Their decoder and connection-pattern projection live in `file/city/map_legacy.c`. Import resolves missing
 channel bed shapes once against the unchanged source records, stages all results, then publishes native slopes.
 Legacy waterfall beds follow the decoded river slope; their native water datum becomes the slope's base.
@@ -807,9 +783,7 @@ Only wet bank codes 48–61 and 64–69 participate; waterfalls, unknown codes, 
 unchanged. The pass preserves XTER bit 7 and uses the same bank calculation as stock export.
 It runs in memory once at the native import boundary, without modifying the source file, allocating
 a map layer, or borrowing climate/recovery bits. Native saves retain their existing geometry.
-Diagnostic replay also uses native tile storage. With the native-landscape fix disabled it skips this
-normalization; comparisons enabling the repair must explicitly normalize their stock baseline too. Exact original bytes for stale
-banks are intentionally outside the native round-trip contract.
+Exact original bytes for stale banks are outside the native round-trip contract.
 
 Native landscaping edits shared vertices and encodes each affected tile as its minimum height
 plus raised-corner shape. Diamond mode edits all four vertices; point mode edits the north vertex
@@ -863,14 +837,13 @@ land. Ordinary water selects `TK_WATER_BANK` when sloping ground reaches the wat
 exposed river beds become dry, with banks drawn by adjoining river tiles. Existing water keeps its
 local level during terrain refreshes. Callers select whether existing sloped rapids survive an edit:
 landscaping disables preservation, while river creation and terrain rebuilding retain it. Callers
-invalidate changed tiles explicitly. Legacy channel connectivity is reconstructed only for SC2 export,
-comparison transport and stock-art presentation. Native geometry needs no additional map storage.
+invalidate changed tiles explicitly. Legacy channel connectivity is reconstructed for SC2 export.
+Native geometry needs no additional map storage.
 Native underground drawing, picking and selection use the stored ground minimum and slope directly,
 including submerged beds and ground under bridge approaches. The bilinear patch is built from that tile's
 four stored corner bits; neighboring tiles do not raise or reshape it. Water changes the underground
 palette rather than replacing the bed with a flat water-height plane. Utilities follow the same patch.
 Neighbor reads remain for utility connections and exposed soil faces, not for reconstructing ground.
-Legacy diagnostic storage retains its separate terrain/artwork interpretation.
 Native generation resolves unsupported opposite-corner saddles after its final water carving and
 bank grading, before encoding the stored bed slopes. This reuses the bounded generation queue;
 it does not replace an unsupported saddle with an all-corners-raised cap during encoding or drawing.
@@ -963,12 +936,6 @@ Records contain the eight-byte simulation payload, a footprint tile key, a separ
 age and a bounded name. The original payload's `age` byte retains its type-specific meaning, such as
 school quality. Sparse pools grow with placed objects and are bounded by map area; there is no
 map-sized facility index or sign array. Demolition releases the record; plant renewal resets its age.
-
-“Individual facility records” in SimCity 2000 fixes selects this behavior. Disabling it restores the
-stock ten reserved slots, shared category records and 150-record allocation limit. Shared slots resolve
-from building kind; individual slots resolve through the footprint hash. Comparison explicitly disables
-the option. Both modes use the same native tile encoding. Stock codecs project IDs 1–50 for signs,
-51–200 for facilities, 201–240 for events and 250–255 for connection/effect markers.
 
 Native saves serialize facility records/ages and sign tile/text records, then rebuild both hashes on
 load. Hash buckets and links are never saved. See [native saves](sc2k-native.md).
@@ -1074,13 +1041,20 @@ Clearing an exposed water tile and clearing a bridge underpass are raw edits in 
 the tool handler owns admission/payment and reconnects neighboring networks after the edit.
 Cell and neighbor order are significant: rubble selection consumes RNG during traversal.
 
-Physical terrain queries and reconstruction live in `city/maps/terrain.c`, declared in `maps/map.h`.
+Physical terrain queries and reconstruction live in `city/maps/terrain.c`, declared in `maps/terrain.h`.
 `ReadCityTerrainVertexHeight` samples shared corners for the edit planner using the same corner masks as map geometry.
 `RecalculateTerrainCell` preserves stored native slopes and water levels after removing incompatible construction;
-`RebuildCityTerrainCell` and `RefreshTerrainNeighborhood` reconstruct corners from tile minima for generation and
-disaster callers. Edit admission, propagation, prices and payment remain in `city/tools/terrain.c`.
+`RefreshTerrainNeighborhood` reconstructs corners from tile minima for generation and disaster callers.
+Edit admission, propagation, prices and payment remain in `city/tools/terrain.c`.
 
-River conversion and stream placement belong to `city/maps/water.c`, declared in `maps/water.h`.
+Water-kind transitions, shoreline reclamation, river conversion and stream placement belong to
+`city/maps/water.c`, declared in `maps/water.h`. `SetCityTerrainWater` preserves the supplied water level and
+salinity while resolving compatible occupant kinds; its callers own old/new invalidation. Shoreline reclamation
+retains its bounded damage and tree/bare-ground recovery rules. Geometry decoding remains in `maps/terrain.c`.
+Terrain editing, vertex sampling, shoreline reclamation and bridge-shore rebuilding share the native corner order
+in `maps/tables.h`, without retaining another per-tile representation.
+Camera shape and underground-kind rotations are private Drawing lookups in `drawing/maps/map_coordinates.c`.
+City's `maps/tables.c` contains shared native terrain and neighbor data, not artwork-ID rotation tables.
 `CreateCityRiverTile` converts an admitted dry tile to fresh river at its bed height while preserving the slope.
 Existing water is unchanged. `CmdPlaceStream` retains its source admission and execution RNG sequence.
 Stock regrade offsets used by codecs and compatibility tables live in `saveload/terrain_format.h`, separately
@@ -1090,12 +1064,6 @@ editor sea level belongs to terrain edits that change vertices, so deleting a hi
 Flat dry tree tiles accept zoning without removing their trees or local species/growth metadata. Preview, quotes
 and execution use the same admission predicate. The sorted ground pass paints the zone wash beneath the tree
 silhouettes, including when the tree layer is hidden; placement selection is still painted once.
-
-Native tree and bulldozer operations take explicit options. The Shift/Alt/selected-price adapters and the retained
-zoning drag caller live in [city/comparison/tool_placement.c](../src/city/comparison/tool_placement.c), outside
-normal play. Core zoning separates preparation from applying the live construction state; it never collects pointer
-input. A retained drag can overwrite that working state through nested commands, so its adapter pays the live cost
-and applies the same live state after dragging. Raw zoning quotes are const queries and perform no payment.
 
 Building footprints, construction progress, purchase definitions, placement and drawing live together in
 [city/maps/buildings.c](../src/city/maps/buildings.c), with contracts in
@@ -1117,19 +1085,6 @@ aging notices and finish the same scan. The facility module also restores reward
 shared demolition replaces cells and clears their overlay associations. Allocation retains its slot reuse and RNG
 rules. Tools own only selection
 policy; their mapping uses named group/variant initializers, and the facility class table uses named tile kinds.
-
-Newspaper problem ranking, article-score decay and event insertion live in
-[city/events/news.c](../src/city/events/news.c), with their state and public contracts in `news.h`. The City-owned
-`news_records` contains seven ranked articles plus two composition slots; each `CityNewsRecord` retains its
-8-byte ID/score/data/cache layout. Comparison root labels retain their original transport names. Historical
-series and chart calculations stay in `economy/history.c`; `RecordCityMonthlyHistory` owns sample advancement,
-while `DecayCityNewsRankings` subtracts the per-article baseline and reorders the ranked records. Neither operation
-is a facility-ranking pass. Insertion and notice/continuation ordering remain unchanged. Startup calls `InitializeCityNews`,
-which sets the existing news flags, seeds the CRT generator from the signed low word of logical time and consumes
-122 draws to initialize/shuffle six stored editions. Edition records remain five bytes each; the shuffle and byte
-swap helpers are private to the news module. No runtime buffers are allocated by this initializer. `CITY_NEWSPAPER_EDITION_COUNT`
-defines the six valid edition indexes (0..5) for storage, initialization, scripting and diagnostic admission.
-`IsCityNewspaperEditionValid` rejects negative indexes and the nonexistent seventh edition before replay dispatch.
 
 The deterministic RNG interface and its three-stream `SimulationRandomState` are declared in
 `city/engine/random.h`; implementations and all three seed functions live in `random.c`. Callers include that
@@ -1225,11 +1180,10 @@ visits them in isometric order. It has no enable switch, fixed-size fallback sca
 Map passes restore the caller's scan clip. Animation capture uses that clip with an empty raster paint rectangle,
 and no longer separately prepares the same event anchors before entering the shared traversal.
 The old repaint-from-tile adapters and cumulative diagnostic counters were removed; frame statistics still count
-tile visits and visible visits in the common traversal. Stock-facing per-tile and full-map adapters remain optional.
+tile visits and visible visits in the common traversal.
 Data-map tiles also receive their zoom, `TileIndex` and unelevated screen origin directly from this traversal.
 Intensity/service/growth artwork selection is separate from tile composition; no per-tile cursor or derived zoom
-values remain in Drawing. The original 28-byte data-view record, including reserved words, lives entirely in
-comparison world storage and is no longer synthesized from seven native fields.
+values remain in Drawing.
 The underground painter uses the same explicit tile/origin contract and binds its own palette before traversal.
 It directly composes the baked underground artwork; the unreachable catalog-based fallback and its terrain table
 have been removed. Camera geometry exposes the shared drawing/picking/selection profiles in `map_camera.h`,
@@ -1323,10 +1277,10 @@ Sources: [landscape traversal](../src/city/maps/state.c), [tree behavior and dra
 [clear_cmd.cpp](https://github.com/OpenTTD/OpenTTD/blob/master/src/clear_cmd.cpp),
 [tree_cmd.cpp](https://github.com/OpenTTD/OpenTTD/blob/master/src/tree_cmd.cpp).
 
-## Saving and comparison
+## Saving
 
-Native `.sc2k` saves write little-endian records directly into individually Zstandard-compressed
-RIFF chunks. `TILE` contains the contiguous eight-byte row-major records; `HALF` and `QUAR` store
+Native `.sc2k` saves write little-endian records into RIFF chunks within one Zstandard stream.
+`TILE` contains the contiguous eight-byte row-major records; `HALF` and `QUAR` store
 coarse statistics at their actual resolution. `META` contains fixed scalar settings and the 64-bit
 fixes mask; `CLIM` stores the climate/snow lattice. Scratch data and remaining simulation fields
 belong to `NRTS`. Native reload validates tile discriminators and topology directly, without a
@@ -1350,17 +1304,9 @@ this projection but cannot simulate native landscape state. Optional stock exten
 
 Stock map translation is centralized in `src/city/saveload/map_legacy.c`. Streaming and
 archive-backed stock SC2 use the same full-record projection. XZON reconstructs stock corner
-masks and XBIT reconstructs orientation. `TranslateCityTileToLegacy` is also used at comparison
-boundaries. Native City records remain unchanged; parks and subway/rail transitions regain the
+masks and XBIT reconstructs orientation. Native City records remain unchanged; parks and subway/rail transitions regain the
 stock all-corners marker only in the exported record. Native `.sc2k` saves do not use this conversion.
 Earlier project layouts need no migration.
-
-Native resume fingerprints cover META and data chunks, including CLIM when present. Stock comparison
-sets City fixes to zero and disables tree lifecycle and other simulation improvements. Its City
-keeps native encoding: imported stock planes are collected into complete records before conversion,
-and exports/checkpoints project them back through `TranslateCityTileToLegacy`. The optional bridge
-audit packs its historical diagnostic records into a separate transport buffer without changing City.
-Enabled gameplay improvements remain rejected by stock checkpoint admission.
 
 ## Landscape behavior and encoding
 
@@ -1444,7 +1390,7 @@ is required; earlier project encodings have no compatibility branch.
 Native ordinary roads use kind 17 and rails use kind 18. Terrain bits 4–7 store
 west/south/east/north connections as 1/2/4/8; low-nibble zoning is independent.
 `ReadTransportConnections` and `WriteTransportConnections` access this payload.
-This connection encoding is unconditional, including during stock comparison.
+This connection encoding is unconditional.
 Crossings, bridges, tunnels and subway access retain their kinds
 and their existing metadata. No climate or orientation bits store ordinary connections.
 
@@ -1460,7 +1406,7 @@ reconstructs the directional layouts and their individual tile counters from tho
 masks. Native saves retain the base kinds and masks directly.
 
 `TranslateCityTileToLegacy` projects stored connections to stock layouts for rendering,
-retained orientation-based algorithms, routes and comparison. Terrain supplies climbing
+retained orientation-based algorithms and routes. Terrain supplies climbing
 shapes. Stock projection reconstructs transition IDs from an adjoining incline; native
 sprite selection uses the flat connection mask directly and does not scan neighbors for
 those retired transitions. No rail transition kind or extra metadata is retained in native tiles.
@@ -1476,37 +1422,13 @@ translation and supplies the connection and projection helpers.
 SC1 files and their ten-bit tile importer are unsupported. Only stock SC2 import/export
 and the current native format are maintained. Failed SC2 loads do not probe another file format.
 
-`src/city/saveload/map_legacy.c` owns stock SC2/native tile conversion,
-terrain and water decoding, directional road/rail/power layouts, entrance variants,
-hydro orientations and counters, building/highway footprint projection, bridge
-packing and XGND validation. Native initialization and ground-extension encoding remain in
-`map_native.c`. The shared `map_format.h` interface exposes stock IDs and conversion operations to explicit codec
-and compatibility callers, without importing City or other owner definitions. Engine headers do not publish those
-IDs. Highway span classification reads native geometry directly: flat land, shore, water or steep terrain, rather
-than indexing a stock terrain table. The single
-`City.native_map_storage` distinguishes unfinished stock file decoding from complete native tile
-encoding. Both terrain generators build native records throughout: the original 128-square command
-keeps its height, smoothing, carving and progress stages without entering stock storage or converting
-the finished map. Water planes, salinity and slopes use native terrain geometry. Ocean propagation
-marks only water, and channel carving stores the river bed and water level directly.
-Gameplay, drawing, bridge metadata, rotation, events and growth assume native records. Format checks
-remain in import/export codecs; stock maps are converted before loaded-state simulation rebuilding.
-Terrain and bridge formats cannot be selected independently. Native geometry, map mutations and simulation
-remain owned by City.
+New map backing starts in native encoding directly in City's landscape reset, without a codec setter.
+`InstallCityTerrainMap` belongs to `maps/state.c`, declared in `maps/map.h`: it installs a prepared generated or
+file-derived terrain map after the caller resets City. Stock terrain inputs retain their conversion and partial-write
+failure path. Success retains statistics, generator RNG, climate and geography updates before Game refreshes the
+viewport. Economy/date initialization remains in `engine/initialization.c` and does not import stock tile codecs.
 
-The diagnostic native command stream and its independent
-`NativeStockVerifier(native_bridge_storage=True)` policy can explicitly compare packed bridge storage.
-The retired alternate reference-library build is no longer used. Other tile families keep
-the stock representation in this focused mode. Original piece/zone/approach state
-is retained locally so open bascules and partially removed spans export exactly.
-Stock has no climate plane; this mode uses a converter-private bridge-metadata marker to
-disambiguate reclaimed IDs from unconverted directional road/rail IDs. These
-payloads are separate from native tile storage. The converter stages
-one bounded map copy at the diagnostic export boundary, never during drawing.
-
-Each checkpoint compares the canonical stock planes and the raw packed records.
-The expected packed records come independently from original executable state in
-`sc2k_re/tile_format.py`, not from candidate bytes or the C converter. The focused
-pointer-span checker accepts `--native-storage --lifecycle` for accept/cancel,
-following ticks, both rotations and demolition. This does not admit all native
-landscape/gameplay options, which still require their own oracle evidence.
+Terrain output storage and climate finalization live in `city/terrain/map.c`, separate from generation work.
+`ResetCityTerrainMap` reuses or replaces the five-plane backing while clearing all bytes and metadata; rejected
+sizes or allocation failure retain the old output. Successful reset/release expire borrowed views. Live preview
+capture remains a read-only City map operation, declared beside terrain installation in `maps/map.h`.

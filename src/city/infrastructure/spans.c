@@ -7,6 +7,7 @@
 #include "city/infrastructure/power_lines.h"
 #include "city/engine/commands.h"
 #include "city/maps/layers.h"
+#include "city/maps/map.h"
 #include "city/presentation.h"
 #include "city/saveload/map_format.h"
 #include "city/state.h"
@@ -35,13 +36,8 @@ const u16 kSpanCostPerCell[CITY_SPAN_STYLE_COUNT] = {
   [CITY_SPAN_TUBULAR_SILICON] = 128,
 };
 
-const char *const kCitySpanNames[CITY_SPAN_STYLE_COUNT] = {
-  "Raised power lines", "Rail bridge", "Causeway", "Raising bridge", "Suspension bridge",
-  "Highway bridge", "Reinforced highway", "Wooden", "Concrete", "Girder, steel (arched)",
-  "Suspension, concrete", "Suspension, steel", "Suspension, yellow steel",
-  "Cantilever, steel", "Cantilever, brown steel", "Cantilever, red steel",
-  "Girder, steel", "Tubular, steel", "Tubular, yellow steel", "Tubular, silicon"
-};
+// Direction offsets from City.geography.rotation, shared by native and legacy shoreline searches.
+static const i8 kSpanDirectionPreference[4] = {0, 2, 1, -1};
 
 // Water kinds identify the crossing; water height supplies its level. Terrain codes describe the bed or shoreline, not
 // a different kind of bridge.
@@ -53,10 +49,11 @@ static int NativeSpanBankStyles(const City *city, TileIndex tile, int water, int
   if (HasTileWater(tp) ||
       (shape != CITY_TERRAIN_FLAT && !inclined_bank) || height < water || height > water + 1 ||
       ReadCityZoneKind(tp) == ZONE_MILITARY) return 0;
-  int kind = ReadTile(city, tile);
+  int kind = tp->kind;
   if (IsTileKindUnbuilt(kind)) return CITY_SPAN_STYLE_POWER_MASK | CITY_SPAN_STYLE_RAIL_MASK |
       CITY_SPAN_STYLE_ROAD_MASK;
-  if (ReadCityStraightLineAxis(city, tile, TK_POWER_LINE) == 0) return CITY_SPAN_STYLE_POWER_MASK;
+  if (IsTileKindPlainPowerLine(kind) && ReadCityStraightLineAxis(city, tile) == 0)
+    return CITY_SPAN_STYLE_POWER_MASK;
   // A rising or supported head needs a straight road/track. Junctions are
   // permitted only on banks already level with the deck.
   if (height == water && IsCityLineBendOrJunction(city, tile)) return 0;
@@ -66,8 +63,8 @@ static int NativeSpanBankStyles(const City *city, TileIndex tile, int water, int
   return 0;
 }
 
-// Search native level-water geometry for compatible banks in an admitted direction. Requires a valid origin and
-// supported style mask; returns an error-bearing span value without building or charging.
+// Search native level-water geometry for compatible banks. Requires a valid origin and CityInfrastructureDirection;
+// returns a span with an optional notice code, without building or charging.
 static CityInfrastructureSpan FindNativeWaterSpan(const City *city, TileIndex origin, int direction) {
   CityInfrastructureSpan span = {.start = origin, .end = INVALID_TILE, .error_tile = INVALID_TILE, .direction = direction,
       .error = CITY_NOTICE_NEEDS_OPPOSITE_SHORE};
@@ -79,9 +76,11 @@ static CityInfrastructureSpan FindNativeWaterSpan(const City *city, TileIndex or
   int styles = NativeSpanBankStyles(city, span.start, water, direction);
   if (!styles) return span;
   span.length = 1;
-  TileIndex tile = start;
+  CityPoint point = MapTilePt(city, start);
   for (;;) {
-    tile = GetRelativeTileOrInvalid(city, tile, dx, dy);
+    point.x += dx;
+    point.y += dy;
+    TileIndex tile = MapTileXYOrInvalid(city, point.x, point.y);
     if (tile == INVALID_TILE) return span;
     ++span.length;
     CityTileGeometry geometry = ReadCityTileGeometry(city, tile);
@@ -94,7 +93,7 @@ static CityInfrastructureSpan FindNativeWaterSpan(const City *city, TileIndex or
       span.error = 0;
       return span;
     }
-    if (!IsTileKindExposedWater(ReadTile(city, tile))) {
+    if (!IsTileKindExposedWater(city->tile[tile].kind)) {
       span.error = CITY_NOTICE_CROSSING_BLOCKED;
       return span;
     }
@@ -115,49 +114,47 @@ bool IsCityInfrastructureSpanWater(const City *city, TileIndex tile) {
 }
 
 // Find a supported crossing from a candidate tile and direction, optionally choosing an admitted direction. Invalid
-// origins return an unavailable span; search is read-only and retains specific blocker/error data for its caller.
+// origins return an unavailable span; search is read-only and retains notice codes for its caller.
 CityInfrastructureSpan FindCityInfrastructureSpan(const City *city, TileIndex origin_tile, int direction,
     bool choose_direction) {
   CityInfrastructureSpan span = {.start = origin_tile, .end = INVALID_TILE, .error_tile = INVALID_TILE,
       .direction = direction};
   if (!IsMapTileValid(city, origin_tile)) return span;
-  CityPoint origin_point = MapTilePt(city, origin_tile);
-  TileIndex tile_index = origin_tile;
   static const u8 kAllowedDirections[16] = {CONN_NONE, CONN_SOUTH, CONN_EAST,
       CONN_NORTH, CONN_WEST, CONN_SE, CONN_NE, CONN_NW,
       CONN_WS};
   if ((city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) &&
       HasTileWater(&city->tile[origin_tile])) {
-    static const i8 kDirectionPreference[4] = {0, 2, 1, -1};
     for (int candidate = 0; candidate < (choose_direction ? 4 : 1); ++candidate) {
-      int axis = choose_direction ? (city->geography.rotation + kDirectionPreference[candidate]) & 3 : direction;
+      int axis = choose_direction ? (city->geography.rotation + kSpanDirectionPreference[candidate]) & 3 : direction;
       span = FindNativeWaterSpan(city, origin_tile, axis);
       if (span.end != INVALID_TILE) return span;
     }
     return span;
   }
-  int terrain = ReadLegacyTerrainCode(city, tile_index);
+  int terrain = ReadLegacyTerrainCode(city, origin_tile);
   if (terrain < CITY_TERRAIN_BANK_32 || terrain >= CITY_TERRAIN_BANK_END)
     return span;
   int directions = kAllowedDirections[terrain & CITY_TERRAIN_SHAPE_MASK];
   if (directions == 0)
     return span;
   if (choose_direction) {
-    static const i8 kDirectionPreference[4] = {0, 2, 1, -1};
     for (int candidate = 0; candidate < 4; ++candidate) {
-      direction = (city->geography.rotation + kDirectionPreference[candidate]) & 3;
+      direction = (city->geography.rotation + kSpanDirectionPreference[candidate]) & 3;
       if (directions & (1 << direction))
         break;
       if (candidate == 3)
         return span;
     }
   }
+  CityPoint origin_point = MapTilePt(city, origin_tile);
   int end_y = origin_point.y;
   int end_x = origin_point.x;
-  TileIndex end_index = tile_index;
+  TileIndex end_index = origin_tile;
   int distance = 0;
   for (;;) {
-    if (distance != 0 && ReadTile(city, end_index) != TK_CLEAR && !IsTileKindExposedWater(ReadTile(city, end_index))) {
+    int kind = city->tile[end_index].kind;
+    if (distance != 0 && kind != TK_CLEAR && !IsTileKindExposedWater(kind)) {
       span.error = CITY_NOTICE_CROSSING_BLOCKED;
       return span;
     }
@@ -230,14 +227,14 @@ i64 PlaceInfrastructureSpan(City *city, TileIndex origin_tile, int styles, int c
   InvalidateCityInformation(city->game, CITY_UPDATE_STATUS);
   if (dry_banks) InvalidateTile(city, tile_index);
   if (!dry_banks && ReadLegacyTerrainCode(city, tile_index) < CITY_TERRAIN_BANK_48) {
-    int altitude = ReadAltitudeWord(city, tile_index);
-    WriteAltitudeWord(city, tile_index, ((altitude & CITY_ALTITUDE_LAND_MASK) + 1) | (altitude &
-        CITY_ALTITUDE_CLEAR_LAND));
+    int altitude = city->tile[tile_index].altitude;
+    city->tile[tile_index].altitude = ((altitude & CITY_ALTITUDE_LAND_MASK) + 1) | (altitude &
+        CITY_ALTITUDE_CLEAR_LAND);
   }
   if (!ground_approaches) WriteLegacyCityTerrainCode(city, tile_index, dry_banks &&
       ReadCityLandHeight(&city->tile[tile_index]) > ReadCityWaterHeight(&city->tile[origin_tile]) ?
       CITY_TERRAIN_FLAT : ((direction + 1) & 3) + 1);
-  if (IsTileKindExposedWater(ReadTile(city, tile_index)))
+  if (IsTileKindExposedWater(city->tile[tile_index].kind))
     ReplaceCityTileAndStatistics(city, tile_index, TK_CLEAR);
   if (choice == CITY_SPAN_POWER)
     PlaceCityPowerLineCell(city, tile_index);
@@ -260,14 +257,14 @@ i64 PlaceInfrastructureSpan(City *city, TileIndex origin_tile, int styles, int c
   TileIndex end_index = tile_index + stride;
   if (dry_banks) InvalidateTile(city, end_index);
   if (!dry_banks && ReadLegacyTerrainCode(city, end_index) < CITY_TERRAIN_BANK_48) {
-    int altitude = ReadAltitudeWord(city, end_index);
-    WriteAltitudeWord(city, end_index, ((altitude & CITY_ALTITUDE_LAND_MASK) + 1) | (altitude &
-        CITY_ALTITUDE_CLEAR_LAND));
+    int altitude = city->tile[end_index].altitude;
+    city->tile[end_index].altitude = ((altitude & CITY_ALTITUDE_LAND_MASK) + 1) | (altitude &
+        CITY_ALTITUDE_CLEAR_LAND);
   }
   if (!ground_approaches) WriteLegacyCityTerrainCode(city, end_index, dry_banks &&
       ReadCityLandHeight(&city->tile[end_index]) > ReadCityWaterHeight(&city->tile[origin_tile]) ?
       CITY_TERRAIN_FLAT : ((direction - 1) & 3) + 1);
-  if (IsTileKindExposedWater(ReadTile(city, end_index)))
+  if (IsTileKindExposedWater(city->tile[end_index].kind))
     ReplaceCityTileAndStatistics(city, end_index, TK_CLEAR);
   if (choice == CITY_SPAN_POWER)
     PlaceCityPowerLineCell(city, end_index);

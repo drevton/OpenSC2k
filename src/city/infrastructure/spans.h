@@ -5,13 +5,18 @@
 
 // Span prices are shared by construction quotes, execution and the UI selector.
 extern const u16 kSpanCostPerCell[CITY_SPAN_STYLE_COUNT];
-extern const char *const kCitySpanNames[CITY_SPAN_STYLE_COUNT];
 
+// Read-only crossing eligibility at a valid tile; respects the native-landscape rule without reserving a route.
 bool IsCityInfrastructureSpanWater(const City *city, TileIndex tile);
+// Read-only shoreline search. A supplied direction uses CityInfrastructureDirection; choose_direction instead tries
+// the map's default, opposite, next and previous directions. Invalid/unsupported origins return end == INVALID_TILE,
+// with an optional notice code in error. Native spans include dry banks; legacy spans end at the last water code.
 CityInfrastructureSpan FindCityInfrastructureSpan(const City *city, TileIndex origin,
     int direction, bool choose_direction);
 
+// Use an explicit style mask when present, otherwise the legacy length-based choices. No style is selected here.
 int CityInfrastructureSpanStyles(CityInfrastructureSpan span);
+// Cheapest matching style charge, or -1 for an invalid end/no matching style. Does not check affordability or pay.
 i64 CityInfrastructureSpanCost(CityInfrastructureSpan span, int styles);
 i64 PlaceInfrastructureSpan(City *city, TileIndex origin_tile, int styles, int choose_direction);
 

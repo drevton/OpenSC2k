@@ -12,7 +12,8 @@ extern const u8 kTileScanMaskTable[4];
 // Zoning
 
 // Visit one interleaved quarter of the map for zoning growth, infrastructure maintenance and facility activity.
-// Offsets are 0..3. Batches preserve row/section/RNG order; first/count are multiples of 32 quarter-grid positions.
+// Requires complete native tiles. Offsets are 0..3; first/count are multiples of 32 quarter-grid positions.
+// Batches preserve row/section/RNG order.
 void ScanCityTileBatch(City *city, int quarter_x, int quarter_y,
     int first, int count, bool large_city_effect);
 void ScanQuarterCityTiles(City *city, int quarter_x, int quarter_y);

@@ -1,8 +1,6 @@
 #define WIN32_LEAN_AND_MEAN
-#define MulDiv WindowsMulDiv
 #include <windows.h>
 #include <mmsystem.h>
-#undef MulDiv
 #include <SDL.h>
 #include <limits.h>
 #include <stdio.h>

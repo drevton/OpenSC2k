@@ -1,7 +1,6 @@
 #include "drawing/maps/map_depth.h"
 
 #include "assets/state.h"
-#include "city/engine/random.h"
 #include "city/state.h"
 #include "drawing/maps/map_render.h"
 #include "drawing/maps/road_cars.h"
@@ -68,7 +67,7 @@ static void SortPreparedSpriteRange(MapSpriteWork *work, int first, int end, int
   }
 }
 
-static void PaintGroundAndCollectDepthObjects(City *city, const CityMapViewConfig *view, int zoom) {
+static void PaintGroundAndCollectDepthObjects(const City *city, const CityMapViewConfig *view, int zoom) {
   Drawing *drawing = city->drawing;
   DrawingMapDepth *paint = &drawing->map_depth;
   paint->phase = MAP_DEPTH_COLLECT;
@@ -81,9 +80,10 @@ static void PaintGroundAndCollectDepthObjects(City *city, const CityMapViewConfi
   paint->preparing = false;
 }
 
-static void PaintDepthArea(City *city, const CityMapViewConfig *view, int zoom, CityRect area, CityRect clip);
+static void PaintDepthArea(const City *city, const CityMapViewConfig *view, int zoom, CityRect area, CityRect clip);
 
-static bool SubdivideDepthArea(City *city, const CityMapViewConfig *view, int zoom, CityRect area, CityRect clip) {
+static bool SubdivideDepthArea(const City *city, const CityMapViewConfig *view, int zoom,
+    CityRect area, CityRect clip) {
   Drawing *drawing = city->drawing;
   int width = area.right - area.left, height = area.bottom - area.top;
   bool horizontal = width >= height;
@@ -111,7 +111,7 @@ static bool SubdivideDepthArea(City *city, const CityMapViewConfig *view, int zo
   return false;
 }
 
-static void PaintDepthArea(City *city, const CityMapViewConfig *view, int zoom, CityRect area, CityRect clip) {
+static void PaintDepthArea(const City *city, const CityMapViewConfig *view, int zoom, CityRect area, CityRect clip) {
   if (clip.left >= clip.right || clip.top >= clip.bottom) return;
   Drawing *drawing = city->drawing;
   DrawingMapDepth *paint = &drawing->map_depth;
@@ -123,10 +123,10 @@ static void PaintDepthArea(City *city, const CityMapViewConfig *view, int zoom, 
       SubdivideDepthArea(city, view, zoom, area, clip)) return;
   drawing->map_state.paint_rect = area;
   drawing->map_target.canvas.clip = clip;
-  SimulationRandomState random = city->random;
+  SimulationRandomState random = drawing->animation.random;
   PaintGroundAndCollectDepthObjects(city, view, zoom);
   if (paint->overflow) {
-    city->random = random;
+    drawing->animation.random = random;
     if (!SubdivideDepthArea(city, view, zoom, area, clip)) {
       SetGameError(city->game, SC2K_ERROR_MAP_SPRITE_CAPACITY);
       city->game->execution_failed = true;
@@ -139,7 +139,7 @@ static void PaintDepthArea(City *city, const CityMapViewConfig *view, int zoom, 
   DrawPreparedCityMapSprites(drawing);
 }
 
-void DrawDepthSortedCityMap(City *city, const CityMapViewConfig *view, int zoom) {
+void DrawDepthSortedCityMap(const City *city, const CityMapViewConfig *view, int zoom) {
   Drawing *drawing = city->drawing;
   DrawingMapDepth previous = drawing->map_depth;
   CityRect area = drawing->map_state.paint_rect;

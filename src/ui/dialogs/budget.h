@@ -101,12 +101,14 @@ int CityBondVisibleRows(const Window *window);
 int CityBondContentRows(int count);
 
 // Window lifetime and local controls. Rate and policy choices execute through City commands.
-// Returned budget state is borrowed; refresh it after callbacks that may close the window.
 // Finish the detached manual caller before city replacement or host teardown.
 void CloseCityManualBudget(City *city);
 void OpenCityBudget(City *city);
-const CityBudgetState *FindCityBudgetWindowState(const City *city, int id);
-void AdvanceCityBudgetHelper(City *city, int window);
+// Match an unsigned window ID to the budget's positive signed identity. Zero and IDs above INT32_MAX do not match.
+// The returned view borrows native UI state or the retained City interaction; reacquire it after callbacks.
+const CityBudgetState *FindCityBudgetWindowState(const City *city, u32 window_id);
+// Native UI advances its local helper. Observed callers deliver the same ID bits to the retained City timer boundary.
+void AdvanceCityBudgetHelper(City *city, u32 window_id);
 // Returns a desktop array index, or -1 on allocation failure; does not begin the retained budget caller.
 int OpenCityBudgetWindow(City *city);
 void ApplicationBudgetBegin(City *city, u32 window, bool manual);

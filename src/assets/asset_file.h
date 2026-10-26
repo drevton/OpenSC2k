@@ -4,7 +4,12 @@
 #include <stdio.h>
 #include "city/types.h"
 
-// Startup file decoder, or a bounded cursor over an already decoded asset.
+typedef enum AssetFileKind {
+  ASSET_FILE_RAW, ASSET_FILE_MEMORY, ASSET_FILE_ZSTD, ASSET_FILE_SECTION
+} AssetFileKind;
+
+// Startup cursor. Opening fixes its source kind until close: raw files and borrowed memory support seeking;
+// compressed files and bounded archive sections decode forward only. Decoder fields retain owned scratch.
 typedef struct AssetFile {
   FILE *file;
   const u8 *memory;
@@ -12,9 +17,11 @@ typedef struct AssetFile {
   u8 *input, *output;
   size_t input_size, input_offset, output_size, output_offset;
   bool failed, finished;
-  u64 length, position;
-  bool bounded_stream;
-  u64 compressed_remaining, decoded_total;
+  // RAW/MEMORY byte length, ZSTD encoded file size, or SECTION expected decoded size.
+  u64 length;
+  u64 position; // Consumed decoded bytes; buffered decoder output can be ahead of this cursor.
+  AssetFileKind kind;
+  u64 compressed_remaining, decoded_total; // Bounded input remaining and total decoder output, before buffering.
 } AssetFile;
 
 // Missing optional data permits a caller's fallback; unreadable/invalid data must remain an error.
@@ -29,11 +36,17 @@ AssetOpenResult OpenAssetFile(AssetFile *asset, const char *path);
 AssetOpenResult OpenAssetSpan(AssetFile *asset, ByteSpan span);
 // A null root borrows retained Assets bytes. An explicit root selects a loose startup/diagnostic source;
 // absence and invalid input keep their distinct results, without selecting another source here.
-AssetOpenResult OpenAssetSource(AssetFile *file, CityAssets *assets, u32 id, const char *root);
+AssetOpenResult OpenAssetSource(AssetFile *file, const CityAssets *assets, u32 id, const char *root);
+// Raw disk files and decoded spans support seeking; compressed input is forward-only.
 bool SeekAssetFile(AssetFile *asset, u64 position);
 size_t ReadAssetFile(AssetFile *asset, void *destination, size_t size);
 int ReadAssetByte(AssetFile *asset);
-// Also reports truncation, checksum errors, trailing data and close errors.
+// Borrow and consume the next size bytes from an open memory span, without copying or allocating.
+// Other source kinds, a failed cursor or insufficient bytes return an empty span without changing the cursor.
+// Successful zero-length reads retain a nonnull data pointer. Bytes keep the original span's lifetime.
+ByteSpan ReadAssetSpan(AssetFile *asset, size_t size);
+// Does not drain compressed input: its decoder must have reached the frame end for closing to succeed.
+// Also reports truncation, checksum errors, trailing data and close errors, then clears the cursor.
 bool CloseAssetFile(AssetFile *asset);
 
 // Read the remaining decoded bytes, at most limit. Known-length sources allocate once; compressed input grows

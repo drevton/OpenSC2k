@@ -1,5 +1,7 @@
 #include "ui/windows/window_internal.h"
 
+#include <stdlib.h>
+
 #include "assets/state.h"
 #include "audio/backend.h"
 #include "base/time.h"
@@ -11,6 +13,57 @@
 #include "ui/menus/menu.h"
 #include "ui/sdl.h"
 #include "ui/state.h"
+
+// Window callbacks are owned records; only event delivery knows their queue links and allocation layout.
+struct CityWindowCompletion {
+  CityWindowCompletion *next;
+  CityWindowCallback *callback;
+  void *context;
+};
+
+bool AttachCityWindowCallback(Window *window, CityWindowCallback *callback, void *context) {
+  if (!callback) return false;
+  CityWindowCompletion *completion = malloc(sizeof(*completion));
+  if (!completion) return false;
+  *completion = (CityWindowCompletion){window->completion, callback, context};
+  window->completion = completion;
+  return true;
+}
+
+// The window is already detached. Queue its callbacks without invoking them or releasing its owned content.
+void DeferCityWindowCallbacks(CityCanvasDesktop *desktop, Window *window) {
+  while (window->completion) {
+    CityWindowCompletion *completion = window->completion;
+    window->completion = completion->next;
+    completion->next = desktop->interface->closed_windows;
+    desktop->interface->closed_windows = completion;
+  }
+}
+
+void CompleteCityWindowCallbacks(Game *game) {
+  if (game->command_depth) return;
+  City *city = game->city;
+  CityInterfaceState *ui = game->ui;
+  while (ui->closed_windows) {
+    CityWindowCompletion *closed = ui->closed_windows, *pending = NULL;
+    ui->closed_windows = NULL;
+    // Resume in dismissal order, including windows closed together by replacement.
+    while (closed) {
+      CityWindowCompletion *next = closed->next;
+      closed->next = pending;
+      pending = closed;
+      closed = next;
+    }
+    while (pending) {
+      CityWindowCompletion *next = pending->next;
+      CityWindowCallback *callback = pending->callback;
+      void *context = pending->context;
+      free(pending);
+      callback(city, context);
+      pending = next;
+    }
+  }
+}
 
 // Button feedback and repeat timing belong to host input, independently of City ticks.
 static const double kButtonRepeatDelay = 0.4, kButtonRepeatInterval = 0.075;
@@ -82,11 +135,10 @@ static void HandleCityButtonRepeatInput(Game *game, const CanvasSDLEvent *input)
   CityCanvasDesktop *desktop = &game->ui->desktop;
   bool inside = false;
   if (input->kind == CANVAS_SDL_POINTER_MOVE) {
-    int px, py;
-    CityInterfacePixels(game, input, &px, &py);
-    Window *window = FindCityWindowAtPixels(desktop, px, py);
+    CityPoint pixels = CityInterfacePointerPixels(game, input);
+    Window *window = FindCityWindowAtPixels(desktop, pixels.x, pixels.y);
     if (window && window->window_id == press->window_id) {
-      CityPoint point = CityWindowPointFromPixels(desktop, press->window_id, px, py);
+      CityPoint point = CityWindowPointFromPixels(desktop, press->window_id, pixels.x, pixels.y);
       inside = CanvasPointInRect(press->bounds, point.x - window->bounds.left, point.y - window->bounds.top);
     }
   }
@@ -195,14 +247,14 @@ bool DispatchCityWindowInput(Game *game, const CanvasSDLEvent *input) {
       input->kind == CANVAS_SDL_POINTER_MOVE;
   u32 id = 0;
   if (pointer || input->kind == CANVAS_SDL_SCROLL) {
-    int x, y;
-    if (pointer) CityInterfacePixels(game, input, &x, &y);
+    CityPoint pixels;
+    if (pointer) pixels = CityInterfacePointerPixels(game, input);
     else {
-      x = desktop->tooltip.pointer_x; y = desktop->tooltip.pointer_y;
-      if (game->ui->display) Sc2kSDLFramebufferPointer(game->ui->display, &x, &y);
+      pixels = (CityPoint){desktop->tooltip.pointer_x, desktop->tooltip.pointer_y};
+      if (game->ui->display) Sc2kSDLFramebufferPointer(game->ui->display, &pixels.x, &pixels.y);
     }
     if (pointer && desktop->dragging != CITY_CANVAS_DRAG_NONE && input->kind != CANVAS_SDL_POINTER_DOWN) {
-      if (!Sc2kCanvasDesktopMovePixelDrag(desktop, x, y)) {
+      if (!Sc2kCanvasDesktopMovePixelDrag(desktop, pixels.x, pixels.y)) {
         CanvasSDLEvent point = TransformCityInterfaceEvent(game, input);
         Sc2kCanvasDesktopPointerMove(desktop, point.x, point.y);
       }
@@ -216,7 +268,7 @@ bool DispatchCityWindowInput(Game *game, const CanvasSDLEvent *input) {
         input->button != desktop->input_capture_button) return true;
     if (pointer) id = desktop->input_capture_window;
     if (!FindCityCanvasWindow(desktop, id)) {
-      Window *hit = FindCityWindowAtPixels(desktop, x, y);
+      Window *hit = FindCityWindowAtPixels(desktop, pixels.x, pixels.y);
       id = hit ? hit->window_id : 0;
     }
     if (input->kind == CANVAS_SDL_POINTER_MOVE && desktop->hover_window != id) {
@@ -233,11 +285,11 @@ bool DispatchCityWindowInput(Game *game, const CanvasSDLEvent *input) {
       desktop->input_capture_window = id;
       desktop->input_capture_button = input->button;
     }
-    CityPoint point = CityWindowPointFromPixels(desktop, id, x, y);
+    CityPoint point = CityWindowPointFromPixels(desktop, id, pixels.x, pixels.y);
     event.x = point.x; event.y = point.y;
     Window *window = FindCityCanvasWindow(desktop, id);
     SendWindowEvent(game, window, &event);
-    if (input->kind == CANVAS_SDL_POINTER_DOWN) Sc2kCanvasDesktopBeginPixelDrag(desktop, x, y);
+    if (input->kind == CANVAS_SDL_POINTER_DOWN) Sc2kCanvasDesktopBeginPixelDrag(desktop, pixels.x, pixels.y);
     if (input->kind == CANVAS_SDL_POINTER_UP && input->button == desktop->input_capture_button) {
       desktop->input_capture_window = 0;
       Sc2kCanvasDesktopPointerUp(desktop);

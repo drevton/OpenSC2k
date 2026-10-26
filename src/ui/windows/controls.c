@@ -1,6 +1,5 @@
 #include "ui/windows/controls.h"
 
-#include <math.h>
 #include <string.h>
 
 #include "drawing/fonts/fonts.h"
@@ -28,81 +27,82 @@ int CityScrollbarPosition(const CityScrollbar *scrollbar, int pointer, int grab,
 
 // Nested logical layouts inspired by OpenTTD's NWidget containers. No global
 // scale enters measurement: the compositor and input transform share it.
-CityWidgetSize Sc2kCanvasWidgetMinimum(const CityWidget *w) {
-  CityWidgetSize size = {w->min_width, w->min_height};
-  if (w->text && !w->count) {
+CityWidgetSize Sc2kCanvasWidgetMinimum(const CityWidget *widget) {
+  CityWidgetSize size = {widget->min_width, widget->min_height};
+  if (widget->text && !widget->count) {
     if (!size.width) {
       size.width = CanvasFontTextWidth(
-          w->text, w->kind == CITY_WIDGET_BUTTON ? kCanvasHeadingFont : kCanvasFont);
-      if (w->kind == CITY_WIDGET_BUTTON)
+          widget->text, widget->kind == CITY_WIDGET_BUTTON ? kCanvasHeadingFont : kCanvasFont);
+      if (widget->kind == CITY_WIDGET_BUTTON)
         size.width += 8;
-      if (w->kind == CITY_WIDGET_TOGGLE)
+      if (widget->kind == CITY_WIDGET_TOGGLE)
         size.width += 26;
     }
     if (!size.height)
-      size.height = w->kind == CITY_WIDGET_BUTTON ? 16 : 10;
+      size.height = widget->kind == CITY_WIDGET_BUTTON ? 16 : 10;
   }
-  i32 across = 0, along = 0;
-  for (i32 i = 0; i < w->count; ++i) {
-    CityWidgetSize child = Sc2kCanvasWidgetMinimum(&w->children[i]);
-    i32 a = w->kind == CITY_WIDGET_ROW ? child.width : child.height;
-    i32 c = w->kind == CITY_WIDGET_ROW ? child.height : child.width;
-    along += a;
-    across = IntMax(across, c);
+  int across = 0, along = 0;
+  bool row = widget->kind == CITY_WIDGET_ROW;
+  for (int i = 0; i < widget->count; ++i) {
+    CityWidgetSize child = Sc2kCanvasWidgetMinimum(&widget->children[i]);
+    int length = row ? child.width : child.height;
+    int breadth = row ? child.height : child.width;
+    along += length;
+    across = IntMax(across, breadth);
   }
-  if (w->count) {
-    along += (w->count - 1) * w->gap;
-    i32 width = (w->kind == CITY_WIDGET_ROW ? along : across) + w->padding * 2;
-    i32 height = (w->kind == CITY_WIDGET_ROW ? across : along) + w->padding * 2;
+  if (widget->count) {
+    along += (widget->count - 1) * widget->gap;
+    int width = (row ? along : across) + widget->padding * 2;
+    int height = (row ? across : along) + widget->padding * 2;
     size.width = IntMax(size.width, width);
     size.height = IntMax(size.height, height);
   }
   return size;
 }
 
-static bool CanvasWidgetAssign(const CityWidget *w, CityRect b, CityWidgetLayout *out,
-                                i32 capacity, i32 *count) {
+static bool CanvasWidgetAssign(const CityWidget *widget, CityRect bounds, CityWidgetLayout *layout,
+    int capacity, int *count) {
   if (*count >= capacity)
     return false;
-  out[(*count)++] = (CityWidgetLayout){w, b};
-  CityRect inner = {b.left + w->padding, b.top + w->padding, b.right - w->padding,
-                    b.bottom - w->padding};
-  i32 row = w->kind == CITY_WIDGET_ROW;
-  i32 available = (row ? inner.right - inner.left : inner.bottom - inner.top);
-  i32 total = w->count > 0 ? (w->count - 1) * w->gap : 0, weight = 0;
-  for (i32 i = 0; i < w->count; ++i) {
-    CityWidgetSize size = Sc2kCanvasWidgetMinimum(&w->children[i]);
+  layout[(*count)++] = (CityWidgetLayout){widget, bounds};
+  CityRect inner = {bounds.left + widget->padding, bounds.top + widget->padding,
+      bounds.right - widget->padding, bounds.bottom - widget->padding};
+  bool row = widget->kind == CITY_WIDGET_ROW;
+  int available = row ? inner.right - inner.left : inner.bottom - inner.top;
+  int total = widget->count > 0 ? (widget->count - 1) * widget->gap : 0, total_weight = 0;
+  for (int i = 0; i < widget->count; ++i) {
+    CityWidgetSize size = Sc2kCanvasWidgetMinimum(&widget->children[i]);
     total += row ? size.width : size.height;
-    weight += w->children[i].fill;
+    total_weight += widget->children[i].fill;
   }
-  i32 extra = available > total ? available - total : 0;
-  i32 position = row ? inner.left : inner.top, consumed = 0, distributed = 0;
-  for (i32 i = 0; i < w->count; ++i) {
-    const CityWidget *child = &w->children[i];
+  int extra = available > total ? available - total : 0;
+  int position = row ? inner.left : inner.top, used_weight = 0, used_extra = 0;
+  for (int i = 0; i < widget->count; ++i) {
+    const CityWidget *child = &widget->children[i];
     CityWidgetSize size = Sc2kCanvasWidgetMinimum(child);
-    i32 length = row ? size.width : size.height;
-    consumed += child->fill;
-    i32 share = weight ? (i32)((i64)extra * consumed / weight) : 0;
-    length += share - distributed;
-    distributed = share;
-    CityRect bounds = row ? (CityRect){position, inner.top, position + length, inner.bottom}
-                          : (CityRect){inner.left, position, inner.right, position + length};
-    if (!CanvasWidgetAssign(child, bounds, out, capacity, count))
+    int length = row ? size.width : size.height;
+    used_weight += child->fill;
+    int cumulative_extra = total_weight ? (int)((i64)extra * used_weight / total_weight) : 0;
+    length += cumulative_extra - used_extra;
+    used_extra = cumulative_extra;
+    CityRect child_bounds = row ? (CityRect){position, inner.top, position + length, inner.bottom} :
+        (CityRect){inner.left, position, inner.right, position + length};
+    if (!CanvasWidgetAssign(child, child_bounds, layout, capacity, count))
       return false;
-    position += length + w->gap;
+    position += length + widget->gap;
   }
   return true;
 }
 
-i32 Sc2kCanvasWidgetLayout(const CityWidget *w, CityRect b, CityWidgetLayout *out,
-                              i32 capacity) {
-  if (!w || !out || capacity <= 0)
+i32 Sc2kCanvasWidgetLayout(const CityWidget *widget, CityRect bounds, CityWidgetLayout *layout,
+    i32 capacity) {
+  if (!widget || !layout || capacity <= 0)
     return -1;
-  CityWidgetSize minimum = Sc2kCanvasWidgetMinimum(w);
-  if (b.right - b.left < minimum.width || b.bottom - b.top < minimum.height)
+  CityWidgetSize minimum = Sc2kCanvasWidgetMinimum(widget);
+  if (bounds.right - bounds.left < minimum.width || bounds.bottom - bounds.top < minimum.height)
     return -1;
-  i32 count = 0;
-  return CanvasWidgetAssign(w, b, out, capacity, &count) ? count : -1;
+  int count = 0;
+  return CanvasWidgetAssign(widget, bounds, layout, capacity, &count) ? count : -1;
 }
 
 const char *CityWidgetTooltipAt(const CityWidgetLayout *layout, int count, int x, int y) {
@@ -117,13 +117,13 @@ const char *CityWidgetTooltipAt(const CityWidgetLayout *layout, int count, int x
 }
 
 i32 Sc2kCanvasWidgetHit(const CityWidgetLayout *layout, i32 count, i32 x, i32 y) {
-  for (i32 i = count - 1; i >= 0; --i) {
-    const CityWidget *w = layout[i].widget;
-    if (w->id > 0 &&
-        (w->kind == CITY_WIDGET_BUTTON || w->kind == CITY_WIDGET_SLIDER ||
-         w->kind == CITY_WIDGET_TOGGLE) &&
+  for (int i = count - 1; i >= 0; --i) {
+    const CityWidget *widget = layout[i].widget;
+    if (widget->id > 0 &&
+        (widget->kind == CITY_WIDGET_BUTTON || widget->kind == CITY_WIDGET_SLIDER ||
+         widget->kind == CITY_WIDGET_TOGGLE) &&
         CanvasPointInRect(layout[i].bounds, x, y))
-      return w->id;
+      return widget->id;
   }
   return 0;
 }
@@ -300,35 +300,6 @@ static bool CityDropdownItemEnabled(const CityDropdown *dropdown, int item) {
       !(item < 32 && (dropdown->disabled & (1u << item)));
 }
 
-static void DrawCityDropdownMarker(Canvas *canvas, const CityDropdownColors *colors, CityRect row,
-    bool circle, bool highlighted) {
-  CanvasRaster raster = CanvasRasterView(canvas);
-  float scale = (float)raster.numerator / raster.denominator;
-  float center_x = (row.left + 5.5f + raster.origin_x) * scale + raster.offset_x;
-  float center_y = ((row.top + row.bottom) * 0.5f + raster.origin_y) * scale + raster.offset_y;
-  float radius = 3.75f * scale, inner_radius = 3 * scale;
-  CityRect clip = CanvasRasterRect(canvas, (CityRect){row.left + 1, row.top, row.left + 10, row.bottom});
-  u32 fill = highlighted ? colors->light : 0xFF000000;
-  u32 rim = highlighted ? 0xFF000000 : colors->light;
-  // Rasterize at final display resolution. Only the edge pixels blend, so
-  // circles stay round at fractional and high UI scales without a bitmap.
-  for (int y = clip.top; y < clip.bottom; ++y) for (int x = clip.left; x < clip.right; ++x) {
-    float dx = fabsf(x + 0.5f - center_x), dy = fabsf(y + 0.5f - center_y);
-    float distance = circle ? sqrtf(dx * dx + dy * dy) : fmaxf(dx, dy);
-    int outer = IntMax(0, IntMin(255, (int)((radius + 0.5f - distance) * 255)));
-    if (!outer) continue;
-    int inner = IntMax(0, IntMin(255, (int)((inner_radius + 0.5f - distance) * 255)));
-    size_t index = (size_t)y * canvas->stride + x;
-    u32 background = canvas->pixels[index], color = 0xFF000000;
-    for (int shift = 0; shift <= 16; shift += 8)
-      color |= (((fill >> shift & 255) * inner + (rim >> shift & 255) * (outer - inner) +
-          (background >> shift & 255) * (255 - outer) + 127) / 255) << shift;
-    canvas->pixels[index] = color;
-    if (canvas->palette_indices && (!canvas->palette_rows || canvas->palette_rows[y]))
-      canvas->palette_indices[(size_t)y * canvas->index_stride + x] = 0;
-  }
-}
-
 void DrawCityDropdown(const CityCanvasDesktop *desktop, Canvas *canvas) {
   const Window *owner = DropdownOwner(desktop);
   const CityDropdown *d = &desktop->dropdown;
@@ -364,7 +335,8 @@ void DrawCityDropdown(const CityCanvasDesktop *desktop, Canvas *canvas) {
     if (selected) CanvasFill(&local, row.left, row.top, row.right, row.bottom, colors->selected_face);
     if ((d->items[i].kind == CITY_DROPDOWN_RADIO || d->items[i].kind == CITY_DROPDOWN_CHECKBOX) &&
         (d->checked & (1u << i)))
-      DrawCityDropdownMarker(&local, colors, row, d->items[i].kind == CITY_DROPDOWN_RADIO, selected);
+      DrawCanvasChoiceMarker(&local, row, d->items[i].kind == CITY_DROPDOWN_RADIO,
+          selected ? colors->light : 0xFF000000, selected ? 0xFF000000 : colors->light);
     CityRect text_bounds = row;
     text_bounds.left += d->summary ? 13 : 1;
     DrawCityInterfaceTextInRow(local.interface_font, &local, text_bounds,

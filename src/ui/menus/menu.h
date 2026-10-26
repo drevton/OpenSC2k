@@ -175,6 +175,8 @@ void CityConstructionTooltipAt(const Game *game, const Window *window, int x, in
     char *text, size_t capacity);
 
 bool HandleCityMainMenuPointer(Game *game, const CanvasSDLEvent *event);
+// Execute a resolved menu choice synchronously. Local actions call their domain operations; shared City edits
+// use RunCityCommand. A null item does nothing. The item must remain valid through nested UI work and is not retained.
 void ExecuteCityMenuItem(Game *game, const CityMenuItem *item);
 
 #endif

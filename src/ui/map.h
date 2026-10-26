@@ -7,45 +7,11 @@
 typedef struct Drawing Drawing;
 typedef struct CityMapViewConfig CityMapViewConfig;
 
-// Map Cursor
-
 typedef struct City City;
 typedef struct Game Game;
-typedef struct CityInterfaceState CityInterfaceState;
 
 // Change a local display layer. Disabling vehicles clears their visualization; a change refreshes every map view.
 void ToggleCityMapLayer(Game *game, CityMapLayer layer);
-
-// Cursor read/results observed by optional diagnostics; no native pointer identities.
-typedef enum CityCursorInputKind {
-  CITY_CURSOR_INPUT_WINDOW_RECT = 1,
-  CITY_CURSOR_INPUT_POSITION,
-  CITY_CURSOR_INPUT_LOAD_WAIT,
-  CITY_CURSOR_INPUT_INSTALL,
-  CITY_CURSOR_INPUT_SHOW,
-  CITY_CURSOR_INPUT_CAPTURE,
-  CITY_CURSOR_INPUT_RELEASE,
-} CityCursorInputKind;
-
-typedef struct CityCursorInputRecord {
-  u32 kind;
-  u32 handle;
-  i32 value[4];
-} CityCursorInputRecord;
-
-enum { CITY_SYSTEM_CURSOR_WAIT = 0x7F02 };
-
-void ReadCityMapCursorRect(Game *game, CityRect *rect);
-void ReadCityMapCursorPosition(Game *game, int *x, int *y);
-u32 LoadCityWaitCursor(Game *game);
-u32 InstallCityMapCursor(Game *game, u32 handle);
-bool ShowCityMapCursor(Game *game);
-void Sc2kRefreshCityStatusPanel(City *city);
-void RefreshCityCursorStatus(City *city, i32 mode);
-void InvalidateCityMapSelection(City *city, const CityRect *rect);
-
-// Native presentation input, in the map's canvas coordinates.
-void SetCityMapCursorPosition(CityInterfaceState *ui, int x, int y);
 
 // Map Navigation
 
@@ -82,13 +48,5 @@ void MaskCityMapOriginForZoom(Drawing *drawing, CityMapViewConfig *view);
 // An unknown/zero viewport ID falls back to the main camera. Shaded viewports retain their rotation.
 void RotateCityMapViewport(City *city, u32 window_id, bool clockwise);
 void RotateFocusedCityMapView(City *city, bool clockwise);
-
-// Presentation
-
-// Retained command drag between valid tile endpoints: prepare its drawing clip, delegate counts/damage to City,
-// then reset the clip. Admission and City updates keep their original order; this does not place any infrastructure.
-void UpdateInfrastructureLinePlacementPreview(City *city, CityMapViewConfig *view, TileIndex start, TileIndex end);
-
-void ShowCityConstructionCost(City *city, TileIndex tile, i64 cost);
 
 #endif

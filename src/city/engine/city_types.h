@@ -5,6 +5,8 @@
 
 #include "city/types.h"
 
+// Engine vocabulary and retained records. Clock, random and weather operations have separate interfaces.
+
 // Persistent difficulty is one-based; the setup radio selection is zero-based.
 typedef enum CityDifficulty {
   CITY_DIFFICULTY_EASY = 1, CITY_DIFFICULTY_MEDIUM = 2, CITY_DIFFICULTY_HARD = 3,
@@ -82,7 +84,7 @@ typedef struct {
   char text[CITY_NAME_CAPACITY];
   int length;
   char *overflow;
-  int overflow_capacity; // Allocation metadata, excluded from simulation comparison.
+  int overflow_capacity;
 } CityName;
 
 static inline const char *CityNameText(const CityName *name) {
@@ -115,6 +117,43 @@ typedef struct {
   u16 year;
   u16 quarter;
 } SimulationClock;
+
+// City owns cadence counters independently of host clock reads or presentation frames.
+typedef struct {
+  u32 counter;
+  u16 parity;
+  u32 tick_due;
+} TimerCadenceCounter;
+
+// Random streams
+
+// The three original simulation streams remain independent. Native landscape evolution keeps its own City seed.
+typedef struct SimulationRandomState {
+  u32 map;
+  u32 event;
+  u32 crt;
+} SimulationRandomState;
+_Static_assert(sizeof(SimulationRandomState) == 12, "simulation RNG state stores three 32-bit streams");
+
+// Weather
+
+// Deterministic weather states; presentation chooses their labels.
+typedef enum CityWeather {
+  CITY_WEATHER_COLD = 0, CITY_WEATHER_CLEAR = 1, CITY_WEATHER_HOT = 2,
+  CITY_WEATHER_FOGGY = 3, CITY_WEATHER_CHILLY = 4, CITY_WEATHER_OVERCAST = 5,
+  CITY_WEATHER_SNOW = 6, CITY_WEATHER_RAIN = 7, CITY_WEATHER_WINDY = 8,
+  CITY_WEATHER_BLIZZARD = 9, CITY_WEATHER_HURRICANE = 10, CITY_WEATHER_TORNADO = 11,
+  CITY_WEATHER_COUNT = 12
+} CityWeather;
+
+typedef struct CityWeatherState {
+  u8 state;
+  u8 temperature;
+  u8 wind;
+  u8 rainfall;
+} CityWeatherState;
+
+_Static_assert(sizeof(CityWeatherState) == 4, "weather state stores four independent bytes");
 
 // Settings
 

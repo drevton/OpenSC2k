@@ -22,17 +22,15 @@ void SetSimulationFrameTime(City *city, u32 milliseconds);
 
 // Cadence
 
-// City owns cadence counters independently of host clock reads or presentation frames.
-typedef struct {
-  u32 counter;
-  u16 parity;
-  u32 tick_due;
-} TimerCadenceCounter;
-
 // Advance one cadence callback, update presentation and mark simulation work due for the agreed speed.
 // Returns the retained tick/parity projection. Requires attached Game/Drawing/Audio owners; no host time is sampled
 // and no simulation phase is executed.
 i16 UpdateCityCadence(City *city);
+
+// Store a valid agreed speed and refresh its presentation. Does not advance simulation or save a local preference.
+void SelectCitySimulationSpeed(City *city, int speed);
+// Validate speed and zero reserved fields. TEST has no effects; the command's map location is ignored.
+i64 CmdSetSimulationSpeed(City *city, u32 flags, int speed, int reserved1, int reserved2);
 
 // Calendar
 

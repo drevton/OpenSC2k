@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "city/engine/commands.h"
 #include "city/engine/simulation.h"
 #include "city/state.h"
 #include "game/errors.h"
@@ -14,7 +15,7 @@
 #include "ui/dialogs/information.h"
 #include "ui/dialogs/messages.h"
 #include "ui/dialogs/name_editor.h"
-#include "ui/map.h"
+#include "ui/tools/cost_labels.h"
 #include "ui/signs.h"
 #include "ui/state.h"
 

@@ -50,14 +50,30 @@ budget/advisor windows keep their session state in UI; opening them does not cha
 Manual newspaper reading uses a snapshot. Naming windows collect text locally and submit the committed
 shared edit. Explicit simulation decisions, such as a military offer, remain City commands.
 
-Optional stock adapters translate original caller IDs and stock coordinate records at the comparison
-boundary. Legacy numeric local inputs and their decoder exist only in `src/city/comparison/local_commands.*`;
-the normal game does not compile or reference them. The observer's command hook keeps diagnostic replay
-outside the player-command API. Compilation alone does not establish replay coverage.
+## Command record fields
 
-The existing optional `check_command_domains` source uses direct UI/file functions and shared City
-commands. It retains focused state-isolation, construction, callback and save/load checks. Task validation
-follows AGENTS.md; compiling this refactor does not claim those checks have been run.
+`EncodeCityCommand` and `DecodeCityCommand` share one private classification of
+the three payload words. The classification derives from the command ID; it adds
+no packet field, dispatch registry or retained state.
+
+| Encoding | Payload words |
+| --- | --- |
+| Scalars | argument 1, argument 2, argument 3 |
+| Tile | tile index, argument 1, argument 2 |
+| Coordinates | x, y, argument 1 |
+| Service coordinates | service, x, y |
+| Zone rectangle | zone, start tile, end tile |
+| Event stage | x minus 4, y minus 4, zero |
+
+The existing packet size, IDs and conversion expressions are unchanged. Unknown
+IDs retain scalar fields for later admission. Coordinate conversion preserves its
+invalid-tile representation and event offset checks. This describes record fields;
+domain handlers still receive resolved `TileIndex` arguments and actual options.
+
+`DoCityCommand` constructs an execution record only after flags and the TEST path
+are handled. It captures the record before handlers, work completion or notices can
+change City or pump nested commands. TEST returns its original quote without
+constructing an unused record or entering the execution/observation scopes.
 
 ## Retained question identities
 
@@ -116,7 +132,7 @@ as admitting Stretch Terrain only in edit mode, stay with the operation.
 
 The original drag adapters share live `City.construction` state with placement and retained
 questions. City owns their traversal, eligible-cell counts and terrain surcharge counts:
-`UpdateCityZoneRectanglePreview` belongs to zoning, `PrepareCityZonePreview` to infrastructure
+`UpdateCityZoneRectanglePreview` belongs to zoning, `UpdateCityLinePreview` to infrastructure
 lines, and `UpdateCityHighwayPreview` to highways. They publish tile damage immediately without
 placing tiles, charging money or consuming RNG. Endpoints use `TileIndex`.
 
@@ -151,16 +167,10 @@ the frame renderer publishes those changes to all map windows. Overlay changes i
 the transient-disaster scan invalidate their locations rather than relying on its
 former immediate map paint.
 
-Optional map-update observations preserve the stock replay checkpoints, including
-its suppressed-paint counters. Only the comparison adapter translates those events
-into the original redraw/present calls. With no comparison observer installed, those
-observations do no drawing or presentation and do not consume pending invalidations.
-
 Native gameplay never waits for animation or pumps cadence inside a command.
 Demolition effects and earthquake screen shake advance from the main loop using
 Drawing state. City mutations complete before returning; presentation timing does
-not expose partially completed operations to another frame. The original timer
-pumps and earthquake wait loop remain only in the optional stock comparison path.
+not expose partially completed operations to another frame.
 
 Native timing uses three distinct sources. Deterministic City work keeps its
 existing simulation ticks and cadence counters; host presentation clocks never

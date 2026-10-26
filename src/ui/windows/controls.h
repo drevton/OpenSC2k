@@ -47,7 +47,10 @@ typedef struct {
   const CityWidget *widget;
   CityRect bounds;
 } CityWidgetLayout;
+// Read a finite widget tree in logical units without changing it or allocating layout state.
 CityWidgetSize Sc2kCanvasWidgetMinimum(const CityWidget *widget);
+// Emit parents before children in source order, including containers and spacers. Capacity counts every entry.
+// Output borrows widget pointers; the tree and its text must outlive all use of the returned entries.
 // Returns the entry count, or -1 for insufficient space/capacity; discard any partial output on failure.
 i32 Sc2kCanvasWidgetLayout(const CityWidget *widget, CityRect bounds, CityWidgetLayout *layout,
     i32 capacity);

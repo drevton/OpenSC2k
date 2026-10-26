@@ -2,9 +2,11 @@
 #include "ui/map_visibility.h"
 
 #include "city/events/events.h"
-#include "city/maps/layers.h"
+#include "city/maps/terrain.h"
 #include "city/state.h"
 #include "drawing/maps/map_events.h"
+#include "drawing/maps/map_camera.h"
+#include "drawing/maps/road_cars.h"
 #include "drawing/maps/map_view.h"
 #include "drawing/raster/canvas_primitives.h"
 #include "drawing/state.h"
@@ -17,7 +19,7 @@
 #include "ui/windows/windows.h"
 
 // Input admission includes dialogs; sound and vehicle queries only require visible map pixels.
-bool IsCityMainMapInteractiveAt(City *city, int x, int y) {
+bool IsCityMainMapInteractiveAt(const City *city, int x, int y) {
   if (!city->game->city_active) return false;
   CityInterfaceState *ui = city->game->ui;
   Drawing *drawing = city->drawing;
@@ -186,7 +188,7 @@ CityRect ClipCityMapViewportPixels(CityRect rect, const CityMapPaint *paint) {
 }
 
 CityRect CityMapScreenRect(CityRect rect, const CityMapPaint *paint) {
-  City *city = paint->city;
+  const City *city = paint->city;
   Drawing *drawing = city->drawing;
   CityInterfaceState *ui = city->game->ui;
   CityExtraMapView *view = paint->view;

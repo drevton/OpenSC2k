@@ -3,7 +3,6 @@
 
 #include "ui/startup/startup.h"
 
-// Window-owned choices; retained comparison callers borrow the same lifecycle.
 typedef struct CityStartupMenuState {
   struct CityStartupMenuState *parent;
   CityStartupWindow *dialog;

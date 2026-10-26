@@ -1,7 +1,9 @@
+#include "game/city_lifecycle.h"
+
 #include "city/saveload/state.h"
+#include "city/terrain/terrain.h"
 #include "base/text.h"
 #include "city/engine/city_name.h"
-#include "game/city_lifecycle.h"
 #include "ui/dialogs/file_dialog.h"
 
 #include <stddef.h>
@@ -22,6 +24,7 @@
 #include "city/engine/simulation.h"
 #include "city/events/events.h"
 #include "city/events/news.h"
+#include "city/maps/map.h"
 #include "city/maps/map_types.h"
 #include "city/maps/tile_storage.h"
 #include "city/military.h"
@@ -37,7 +40,6 @@
 #include "drawing/maps/map_render.h"
 #include "drawing/maps/map_view.h"
 #include "drawing/state.h"
-#include "game/application.h"
 #include "game/errors.h"
 #include "game/observation.h"
 #include "game/settings.h"
@@ -54,6 +56,15 @@
 // City setup and loading
 
 static bool OpenCityPath(City *city, const char *path);
+
+void FinishCityMissionOutcome(City *city, int outcome) {
+  city->mission.active = 0;
+  if (outcome != CITY_OUTCOME_MISSION_WON) {
+    city->game->city_active = false;
+    city->game->idle_state = CITY_IDLE_STARTUP_MENU;
+    city->game->idle_entry = 1;
+  }
+}
 
 bool ApplyCityTerrainMap(City *city, const CityTerrainMap *map, const CityTerrainSettings *settings) {
   if (!InstallCityTerrainMap(city, map, settings)) return false;
@@ -264,7 +275,7 @@ static bool OpenCityPath(City *city, const char *path) {
     city->game->city_active = true;
     ChangeCityLoadDirectory(city->game->file, directory);
   } else {
-    game->path_open_flag = 0;
+    game->path_open_flag = CITY_PATH_OPEN_NONE;
     FinishCityFileOpen(city, false, error_serial);
   }
   return opened;
@@ -355,7 +366,7 @@ void ResetCitySimulationState(City *city) {
 // Scenario loading
 
 void CloseCityScenarioInput(CityScenarioInput *input) {
-  void *stream = input->stream;
+  CityLoadStream *stream = input->stream;
   input->stream = NULL; // Close consumes the wrapper even if it throws.
   if (stream) CityFileCloseStream(stream);
 }
@@ -377,7 +388,7 @@ bool PrepareCityScenarioLoad(City *city, const CityScenarioInput *input) {
       // The codec may already have presented a more specific load failure.
       if (ui->command_error_serial == error_serial)
         ShowCityLoadCommandResource(city, CITY_NOTICE_LOAD_CITY_FAILED);
-      game->path_open_flag = 0;
+      game->path_open_flag = CITY_PATH_OPEN_NONE;
     }
     if (!ui->restore_frame_tools) {
       game->idle_state = CITY_IDLE_STARTUP_MENU;
@@ -399,13 +410,13 @@ bool LoadCityScenarioInstructions(City *city, CityScenarioInput *input,
   input->stream = CityFileOpenStream(game->file, input->path);
   if (!input->stream) {
     ReportCityFileError(game->file, CITY_NOTICE_ERROR_OPENING_FILE, CITY_FILE_ERROR_RESOURCE_ONLY);
-    if (input->from_path) game->path_open_flag = 0;
+    if (input->from_path) game->path_open_flag = CITY_PATH_OPEN_NONE;
     return false;
   }
   if (!CityFileReadTaggedStream(input->stream, "TEXT", CITY_SCENARIO_INSTRUCTIONS_VERSION,
       (u8 *)text, CITY_SCENARIO_INSTRUCTION_BYTES + 1)) {
     ReportCityFileError(game->file, CITY_NOTICE_ERROR_EXTRACTING_SCENARIO_RESOURCE, CITY_FILE_ERROR_RESOURCE_ONLY);
-    if (input->from_path) game->path_open_flag = 0;
+    if (input->from_path) game->path_open_flag = CITY_PATH_OPEN_NONE;
     if (!game->ui->restore_frame_tools) {
       game->idle_state = CITY_IDLE_STARTUP_MENU;
       game->idle_entry = 1;
@@ -429,7 +440,7 @@ void CompleteCityScenarioLoad(City *city, bool from_path) {
 
 static void ClosePendingScenarioInput(void *context) {
   CityFileRuntime *file = context;
-  void *stream = file->scenario_input;
+  CityLoadStream *stream = file->scenario_input;
   file->scenario_input = NULL; // Close consumes the wrapper even if it throws.
   if (stream) CityFileCloseStream(stream);
 }

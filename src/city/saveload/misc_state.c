@@ -1,5 +1,4 @@
 #include "city/saveload/state.h"
-#include "city/economy/history.h"
 #include "city/engine/city_name.h"
 #include "city/saveload/map_format.h"
 #include "city/saveload/types.h"
@@ -7,10 +6,10 @@
 #include "city/maps/tile_storage.h"
 #include "city/tools/types.h"
 #include "game/audio.h"
-#include "audio/state.h"
 #include "game/state.h"
 #include "city/presentation.h"
 #include "city/state.h"
+#include "city/terrain/climate.h"
 #include "city/saveload/city_file_internal.h"
 #include "city/saveload/sc2k.h"
 #include "assets/catalog.h"
@@ -18,14 +17,15 @@
 #include <string.h>
 
 // MISC stores three current totals followed by alternating monthly amount/rate.
-static void *CityFileEconomyField(EconomySector *sector, int field) {
+// Field is in [0, CITY_MISC_ECONOMY_WORDS_PER_SECTOR); the offset selects one four-byte native member.
+static size_t CityFileEconomyFieldOffset(int field) {
   switch (field) {
-  case 0: return &sector->current_amount;
-  case 1: return &sector->current_rate;
-  case 2: return &sector->accumulated;
+  case 0: return offsetof(EconomySector, current_amount);
+  case 1: return offsetof(EconomySector, current_rate);
+  case 2: return offsetof(EconomySector, accumulated);
   default:
-    if (field & 1) return &sector->monthly_amount[(field - 3) / 2];
-    return &sector->monthly_rate[(field - 3) / 2];
+    if (field & 1) return offsetof(EconomySector, monthly_amount) + (field - 3) / 2 * sizeof(i32);
+    return offsetof(EconomySector, monthly_rate) + (field - 3) / 2 * sizeof(u32);
   }
 }
 
@@ -156,13 +156,13 @@ static void ResetCitySaveExtensionState(City *city) {
 // Project live City and presentation fields into an initialized stock-version MISC staging record. Buffer must hold
 // the complete record with its version set; returns false for unsupported version and does not change native storage
 // encoding.
-static bool EncodeCityMiscFields(City *city, u8 *misc) {
+bool EncodeCityMiscRecord(const City *city, u8 *misc) {
   if (ReadBE32(misc) != CITY_MISC_VERSION)
     return false;
   WriteBE32(misc + 4 * CITY_MISC_WORD_CASH, (u32)LegacyCityCash(city->indicators.cash));
   for (size_t index = 0; index < kCityMiscScalarCount; ++index) {
     const CityMiscScalar *field = &kCityMiscScalars[index];
-    u8 *field_bytes = (u8 *)city + field->native_offset;
+    const u8 *field_bytes = (const u8 *)city + field->native_offset;
     u32 value = 0;
     if (field->file_index == CITY_MISC_WORD_ASSET_VALUE)
       value = city->indicators.asset_value > UINT32_MAX ? UINT32_MAX : city->indicators.asset_value;
@@ -171,23 +171,15 @@ static bool EncodeCityMiscFields(City *city, u8 *misc) {
       value = (u32)(int)(i16)value;
     WriteBE32(misc + 4u * field->file_index, value);
   }
-  CityAudioState *audio = city->game->audio;
-  for (size_t index = 0; index < sizeof(kCityMiscAudioScalars) / sizeof(kCityMiscAudioScalars[0]);
-      ++index) {
-    const CityMiscAudioScalar *field = &kCityMiscAudioScalars[index];
-    u8 *field_bytes = (u8 *)audio + field->member_offset;
-    u32 value = 0;
-    memcpy(&value, field_bytes, field->width);
-    if (field->signed_value && field->width == 2)
-      value = (u32)(int)(i16)value;
-    WriteBE32(misc + 4u * field->file_index, value);
-  }
+  CitySavedAudioFields audio = ReadCitySavedAudio(city->game);
+  WriteBE32(misc + 4 * CITY_MISC_WORD_SOUND_ENABLED, audio.sound_enabled);
+  WriteBE32(misc + 4 * CITY_MISC_WORD_MUSIC_ENABLED, audio.music_enabled);
   CitySavedViewFields view = ReadCitySavedView(city);
   WriteBE32(misc + 4u * CITY_MISC_WORD_SAVED_VIEW_POSITION, (u32)(int)view.position);
   WriteBE32(misc + 4u * CITY_MISC_WORD_SAVED_VIEW_MODE, (u32)(int)view.mode);
   if (city->history == NULL)
     return false;
-  u32 value = ReadHistorySample(city, CITY_HISTORY_RESIDENTS, 1);
+  u32 value = city->history[CITY_HISTORY_RESIDENTS].sample[1];
   WriteBE32(misc + 4u * CITY_MISC_WORD_FIELD_29, value);
   u32 tile_counts[TK_COUNT];
   ReadCityLegacyTileCounts(city, tile_counts);
@@ -195,9 +187,9 @@ static bool EncodeCityMiscFields(City *city, u8 *misc) {
     const CityMiscArray *array = &kCityMiscArrays[group];
     u32 native_width = array->native_width ? array->native_width : array->width;
     u32 stride = array->record_stride ? array->record_stride : native_width;
-    u8 *records = (u8 *)city + array->native_offset;
+    const u8 *records = (const u8 *)city + array->native_offset;
     for (u32 index = 0; index < array->count; ++index) {
-      u8 *item = records + index * stride + array->record_offset;
+      const u8 *item = records + index * stride + array->record_offset;
       u8 *file_item = misc + 4 * (array->file_index + index * array->file_stride);
       u32 value = 0;
       memcpy(&value, item, native_width);
@@ -211,7 +203,8 @@ static bool EncodeCityMiscFields(City *city, u8 *misc) {
     int file_base = CITY_MISC_WORD_ECONOMY_FIRST + CITY_MISC_ECONOMY_WORDS_PER_SECTOR * sector;
     for (int field = 0; field < CITY_MISC_ECONOMY_WORDS_PER_SECTOR; ++field) {
       u32 value;
-      memcpy(&value, CityFileEconomyField(&city->economy.sector[sector], field), sizeof(value));
+      const u8 *source = (const u8 *)&city->economy.sector[sector] + CityFileEconomyFieldOffset(field);
+      memcpy(&value, source, sizeof(value));
       WriteBE32(misc + 4 * (file_base + field), value);
     }
   }
@@ -224,7 +217,6 @@ static bool EncodeCityMiscFields(City *city, u8 *misc) {
 // order and does not restore an earlier City snapshot.
 static void ApplyCityMiscWord(City *city, u32 index, u32 value) {
   Game *game = city->game;
-  CityAudioState *audio = game->audio;
   if (index == CITY_MISC_WORD_CASH) {
     city->indicators.cash = (i32)value;
   } else if (index == CITY_MISC_WORD_ASSET_VALUE) {
@@ -241,6 +233,10 @@ static void ApplyCityMiscWord(City *city, u32 index, u32 value) {
     ApplyCitySavedViewPosition(city, (i16)value);
   } else if (index == CITY_MISC_WORD_SAVED_VIEW_MODE) {
     ApplyCitySavedViewMode(city, value);
+  } else if (index == CITY_MISC_WORD_SOUND_ENABLED) {
+    ApplyCitySavedSoundPreference(game, value);
+  } else if (index == CITY_MISC_WORD_MUSIC_ENABLED) {
+    ApplyCitySavedMusicPreference(game, value);
   } else {
     for (size_t field_index = 0; field_index < kCityMiscScalarCount;
         ++field_index) {
@@ -249,12 +245,6 @@ static void ApplyCityMiscWord(City *city, u32 index, u32 value) {
         u8 *destination = (u8 *)city + field->native_offset;
         memcpy(destination, &value, field->native_width ? field->native_width : field->width);
       }
-    }
-    for (size_t field_index = 0; field_index < sizeof(kCityMiscAudioScalars) / sizeof(kCityMiscAudioScalars[0]);
-        ++field_index) {
-      const CityMiscAudioScalar *field = &kCityMiscAudioScalars[field_index];
-      if (field->file_index == index)
-        memcpy((u8 *)audio + field->member_offset, &value, field->width);
     }
     for (size_t group = 0; group < sizeof(kCityMiscArrays) / sizeof(kCityMiscArrays[0]); ++group) {
       const CityMiscArray *array = &kCityMiscArrays[group];
@@ -272,22 +262,19 @@ static void ApplyCityMiscWord(City *city, u32 index, u32 value) {
     if (index >= CITY_MISC_WORD_ECONOMY_FIRST && index < CITY_MISC_WORD_ECONOMY_END) {
       u32 sector = (index - CITY_MISC_WORD_ECONOMY_FIRST) / CITY_MISC_ECONOMY_WORDS_PER_SECTOR;
       u32 field = (index - CITY_MISC_WORD_ECONOMY_FIRST) % CITY_MISC_ECONOMY_WORDS_PER_SECTOR;
-      memcpy(CityFileEconomyField(&city->economy.sector[sector], field), &value, sizeof(value));
+      u8 *destination = (u8 *)&city->economy.sector[sector] + CityFileEconomyFieldOffset(field);
+      memcpy(destination, &value, sizeof(value));
     }
   }
   if (index == CITY_MISC_WORD_NEWSPAPER_EDITION) {
     city->settings.loaded_speed = city->settings.speed;
-    RefreshCityLoadedMusicPreference(audio);
-    if (audio->music_enabled == 0) {
-      StopCityMusicSequence(game);
-    }
+    RestoreCityLoadedMusicPreference(game);
   }
 }
 
-// Encode or apply a complete stock MISC record in the selected direction. Requires initialized City/file owners and
-// full record bytes; load effects follow original word order and are not transactionally rolled back.
-bool CityFileMiscFields(City *city, u8 *misc, CityFileDirection direction) {
-  if (direction == CITY_FILE_EXPORT) return EncodeCityMiscFields(city, misc);
+// Apply a complete big-endian stock MISC record without changing its bytes. Requires initialized City/file owners;
+// load effects follow original word order and are not transactionally rolled back.
+bool ApplyCityMiscRecord(City *city, const u8 *misc) {
   if (ReadBE32(misc) != CITY_MISC_VERSION) return false;
   ResetCitySaveExtensionState(city);
   for (u32 index = 1; index <= CITY_MISC_WORD_LAST_SAVED; ++index)
@@ -315,11 +302,11 @@ bool ApplyLoadedCityMisc(City *city) {
 bool SaveCityMiscToBuffer(City *city) {
   CityFileRuntime *file = city->game->file;
   if (!file->misc_active) return false;
-  CityMiscBuffer *buffer = (file->misc_active ? file->misc : NULL);
+  CityMiscBuffer *buffer = file->misc;
   if (buffer == NULL) return false;
   u8 serialized[sizeof(CityMiscBuffer)] = {0};
   WriteBE32(serialized, CITY_MISC_VERSION);
-  if (!EncodeCityMiscFields(city, serialized)) return false;
+  if (!EncodeCityMiscRecord(city, serialized)) return false;
   for (u32 index = 0; index < CITY_MISC_WORD_COUNT; ++index)
     buffer->words[index] = ReadBE32(serialized + 4 * index);
   return true;

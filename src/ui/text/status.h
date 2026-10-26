@@ -2,7 +2,7 @@
 #define SC2K_UI_TEXT_STATUS_H
 
 #include "city/disasters/types.h"
-#include "city/engine/weather.h"
+#include "city/engine/city_types.h"
 #include "city/types.h"
 
 typedef struct Game Game;
@@ -56,11 +56,22 @@ bool InvalidateCityStatus(CityStatusState *status);
 void PublishCityTitle(City *city, const char *title);
 bool IsCityTitleMinimized(const City *city);
 
+// Refresh current status through the cursor presentation boundary without forcing a minimized status panel.
+void Sc2kRefreshCityStatusPanel(City *city);
+
 // Publish the current city title and status through native UI.
 void UpdateCityStatus(City *city);
 
 // Store a bounded legend string/color; a change damages the status area. An unchanged value reports availability.
+// Invalid columns or text at least CITY_STATUS_TEXT_CAPACITY bytes long report an error without changing the legend.
+// Text must be terminated and may overlap the destination.
 bool SetCityMapLegendColumn(Game *game, CityStatusState *status, int column, const char *text, u32 color);
+
+// Format the selected tool's UI label/cost or terrain help into the caller's bounded buffer.
+void FormatCityToolStatusText(char *text, u32 capacity, int tool);
+
+// Refresh retained tool-help text from the current desktop selection; does not invalidate or change City.
+void UpdateCityToolStatus(City *city);
 
 // Reads the selected UI tool and City weather/problem state; force bypasses minimized-status suppression.
 void RefreshCityStatusPanel(City *city, CityStatusState *status, int speed, int force);

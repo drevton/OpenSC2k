@@ -80,10 +80,6 @@ i32 GetCitySaveAttemptError(const CityFileRuntime *file, const NativeCitySaveAtt
 // even when its saved I/O errno is nonzero.
 i32 EndCitySaveAttempt(CityFileRuntime *file, NativeCitySaveAttempt *attempt);
 
-// Save to an accepted host destination inside a private I/O attempt. The caller retains an active file operation
-// and a mutable CityPath; serialization may normalize that path. The attempt copies destination before writing.
-// The caller owns the chooser, name changes and final path commit. False includes serialization or close failure.
-bool SaveCityToDestination(City *city, CityPath *path, const char *destination);
 // Zero after successful platform operations, otherwise the first errno from
 // active attempt, or the last ended attempt if none is active. Close/remove
 // errors are visible here even when the original

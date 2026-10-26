@@ -28,44 +28,57 @@
 #include "city/maps/module.h"
 #include "city/maps/ground.h"
 #include "city/maps/water.h"
+#include "city/maps/map.h"
 #include "city/presentation.h"
 #include "city/state.h"
 #include "drawing/maps/map_terrain.h"
 #include "drawing/maps/map_camera.h"
 #include "drawing/maps/map_view.h"
 #include "drawing/maps/tables.h"
-#include "drawing/sprites/sprites.h"
 #include "game/state.h"
 
-// Find a valid tile's adjacent aligned rail incline and return its transition direction. Returns the routine's
-// no-transition value when none matches; neighbors outside the map are skipped.
+// Preserve the reconnectors' north, south, west, east scan order.
+static const struct {
+  i8 x, y;
+  u8 connection, slope, direction;
+} kSurfaceLineNeighbors[4] = {
+    {0, -1, CONN_NORTH, CITY_TERRAIN_SHAPE_1, CITY_LINE_NORTH},
+    {0, 1, CONN_SOUTH, CITY_TERRAIN_SHAPE_3, CITY_LINE_SOUTH},
+    {-1, 0, CONN_WEST, CITY_TERRAIN_SHAPE_2, CITY_LINE_WEST},
+    {1, 0, CONN_EAST, CITY_TERRAIN_SHAPE_4, CITY_LINE_EAST},
+};
+
+// For a valid tile, return the first aligned rail incline's side: 0 north, 1 south, 2 west, 3 east.
+// Ignore neighbors outside the map and return -1 when none matches.
 int FindCityRailTransition(const City *city, TileIndex tile) {
-  static const i8 kX[] = {0, 0, -1, 1}, kY[] = {-1, 1, 0, 0};
-  static const u8 kSlopes[] = {1, 3, 2, 4};
+  CityPoint point = MapTilePt(city, tile);
   for (int side = 0; side < 4; ++side) {
-    TileIndex neighbor = GetRelativeTileOrInvalid(city, tile, kX[side], kY[side]);
-    if (neighbor != INVALID_TILE && ReadTile(city, neighbor) == TK_RAIL &&
-        ReadTerrainCode(&city->tile[neighbor]) == kSlopes[side]) return side;
+    TileIndex neighbor = MapTileXYOrInvalid(city, point.x + kSurfaceLineNeighbors[side].x,
+        point.y + kSurfaceLineNeighbors[side].y);
+    if (neighbor == INVALID_TILE) continue;
+    const TileInfo *tp = &city->tile[neighbor];
+    if (tp->kind == TK_RAIL && ReadTerrainCode(tp) == kSurfaceLineNeighbors[side].slope) return side;
   }
   return -1;
 }
 
-// Read the axis of the requested straight infrastructure family on a valid tile. Returns -1 when the family or stored
-// shape cannot represent a straight segment; does not infer a new connection.
-int ReadCityStraightLineAxis(const City *city, TileIndex tile, int family) {
-  int kind = ReadTile(city, tile);
-  if (family && (family == TK_POWER_LINE ? !IsTileKindPlainPowerLine(kind) : kind != family)) return -1;
-  if (kind == TK_HIGHWAY) return ReadCityHighwayAxis(&city->tile[tile]);
-  if (!IsTileKindPlainPowerLine(kind) && !IsTileKindPlainTransport(kind)) return -1;
-  int shape = ReadTerrainCode(&city->tile[tile]);
-  if (IsTileKindPlainPowerLine(kind)) {
+// Read a valid tile's stored ordinary-line or plain-highway axis. Caller admission selects the allowed kinds;
+// rail transitions inspect adjacent inclines, and unsupported kinds/shapes return -1.
+int ReadCityStraightLineAxis(const City *city, TileIndex tile) {
+  const TileInfo *tp = &city->tile[tile];
+  int kind = tp->kind;
+  if (kind == TK_HIGHWAY) return ReadCityHighwayAxis(tp);
+  bool power_line = IsTileKindPlainPowerLine(kind);
+  if (!power_line && !IsTileKindPlainTransport(kind)) return -1;
+  int shape = ReadTerrainCode(tp);
+  if (power_line) {
     if (shape >= CITY_TERRAIN_SHAPE_1 && shape <= CITY_TERRAIN_SHAPE_4) return -1;
     if (shape >= CITY_TERRAIN_SHAPE_9 && shape <= CITY_TERRAIN_SHAPE_12) return 1;
   } else {
     if (kLineTerrainOverrideBySlope[shape]) return -1;
     if (kind == TK_RAIL && FindCityRailTransition(city, tile) >= 0) return -1;
   }
-  int mask = ReadTransportConnections(&city->tile[tile]);
+  int mask = ReadTransportConnections(tp);
   if (!(mask & CONN_NS)) return 0;
   if (!(mask & CONN_EW)) return 1;
   return -1;
@@ -74,11 +87,12 @@ int ReadCityStraightLineAxis(const City *city, TileIndex tile, int family) {
 // Determine whether a valid plain transport tile is a bend or junction rather than a straight or sloped piece. Reads
 // stored connections and rail transitions without changing topology.
 bool IsCityLineBendOrJunction(const City *city, TileIndex tile) {
-  int kind = ReadTile(city, tile);
+  const TileInfo *tp = &city->tile[tile];
+  int kind = tp->kind;
   if (!IsTileKindPlainTransport(kind) ||
-      kLineTerrainOverrideBySlope[ReadTerrainCode(&city->tile[tile])]) return false;
+      kLineTerrainOverrideBySlope[ReadTerrainCode(tp)]) return false;
   if (kind == TK_RAIL && FindCityRailTransition(city, tile) >= 0) return false;
-  int mask = ReadTransportConnections(&city->tile[tile]);
+  int mask = ReadTransportConnections(tp);
   return (mask & CONN_EW) && (mask & CONN_NS);
 }
 
@@ -88,17 +102,6 @@ void TickCitySurfaceLineGround(City *city, TileIndex tile) {
 }
 
 const TileModule kCitySurfaceLineModule = {.tick = TickCitySurfaceLineGround};
-
-// Preserve the reconnectors' north, south, west, east scan order.
-static const struct {
-  i8 x, y;
-  u8 connection, slope, direction;
-} kSurfaceLineNeighbors[4] = {
-    {0, -1, CONN_NORTH, 1, CITY_LINE_NORTH},
-    {0, 1, CONN_SOUTH, 3, CITY_LINE_SOUTH},
-    {-1, 0, CONN_WEST, 2, CITY_LINE_WEST},
-    {1, 0, CONN_EAST, 4, CITY_LINE_EAST},
-};
 
 typedef struct CitySubwayRailConnection {
   TileIndex neighbor;
@@ -111,8 +114,9 @@ static CitySubwayRailConnection FindCitySubwayRailConnection(const City *city, T
   static const i8 kNeighborX[4] = {0, 1, 0, -1};
   static const i8 kNeighborY[4] = {1, 0, -1, 0};
   TileIndex neighbors[4];
+  CityPoint point = MapTilePt(city, tile);
   for (int direction = 0; direction < 4; ++direction) {
-    TileIndex neighbor = GetRelativeTileOrInvalid(city, tile, kNeighborX[direction], kNeighborY[direction]);
+    TileIndex neighbor = MapTileXYOrInvalid(city, point.x + kNeighborX[direction], point.y + kNeighborY[direction]);
     neighbors[direction] = neighbor;
     if (neighbor == INVALID_TILE) continue;
     int kind = city->tile[neighbor].kind;
@@ -122,7 +126,7 @@ static CitySubwayRailConnection FindCitySubwayRailConnection(const City *city, T
   }
   for (int direction = 0; direction < 4; ++direction) {
     TileIndex neighbor = neighbors[direction];
-    if (neighbor != INVALID_TILE && IsSubwayTile(city->tile[neighbor].underground))
+    if (neighbor != INVALID_TILE && IsUndergroundKindSubway(city->tile[neighbor].underground))
       return (CitySubwayRailConnection){neighbor, (direction + 2) & 3};
   }
   return (CitySubwayRailConnection){.neighbor = INVALID_TILE};
@@ -138,8 +142,7 @@ bool CanPlaceCitySubwayRailConnection(const City *city, TileIndex tile) {
 i64 PlaceCitySubwayRailConnection(City *city, TileIndex tile) {
   assert(IsMapTileValid(city, tile));
   const TileInfo *tp = &city->tile[tile];
-  if (!IsTileKindUnbuilt(tp->kind) || tp->kind == TK_RADIOACTIVE_WASTE ||
-      ReadLegacyTerrainCode(city, tile) != CITY_TERRAIN_FLAT)
+  if (!IsFlatDryUnbuiltTile(tp) || tp->kind == TK_RADIOACTIVE_WASTE)
     return CITY_COMMAND_COST_BLOCKED;
   CitySubwayRailConnection connection = FindCitySubwayRailConnection(city, tile);
   if (connection.neighbor == INVALID_TILE) return CITY_COMMAND_COST_BLOCKED;
@@ -171,9 +174,10 @@ static int FindCitySurfaceConnections(const City *city, TileIndex tile_index, bo
   int mask = CONN_NONE;
   int surface_height = -1;
   int route_class = rail ? TCLASS_RAIL : TCLASS_ROAD;
+  CityPoint point = MapTilePt(city, tile_index);
   for (int direction = 0; direction < 4; ++direction) {
-    TileIndex neighbor_index = GetRelativeTileOrInvalid(city, tile_index,
-        kSurfaceLineNeighbors[direction].x, kSurfaceLineNeighbors[direction].y);
+    TileIndex neighbor_index = MapTileXYOrInvalid(city, point.x + kSurfaceLineNeighbors[direction].x,
+        point.y + kSurfaceLineNeighbors[direction].y);
     if (neighbor_index == INVALID_TILE) continue;
     const TileInfo *tp = &city->tile[neighbor_index];
     int neighbor = tp->kind;
@@ -207,15 +211,13 @@ static int FindCitySurfaceConnections(const City *city, TileIndex tile_index, bo
       mask |= kSurfaceLineNeighbors[direction].connection;
   }
   if (ReadOverlay(city, tile_index) == CITY_OVERLAY_BORDER_CONNECTION) {
-    CityPoint position = MapTilePt(city, tile_index);
-    int x = position.x, y = position.y;
-    if (y == 0)
+    if (point.y == 0)
       mask |= CONN_NORTH;
-    if (y == city->map_height - 1)
+    if (point.y == city->map_height - 1)
       mask |= CONN_SOUTH;
-    if (x == 0)
+    if (point.x == 0)
       mask |= CONN_WEST;
-    if (x == city->map_width - 1)
+    if (point.x == city->map_width - 1)
       mask |= CONN_EAST;
   }
   return mask;
@@ -231,22 +233,22 @@ int CityRoadConnectionMask(const City *city, TileIndex tile) {
 // Select a surface road tile from terrain and adjacent connections.
 void UpdateRoadConnections(City *city, TileIndex tile_index) {
   assert(IsMapTileValid(city, tile_index));
-  int tile = ReadTile(city, tile_index);
-  if (tile != TK_ROAD)
+  TileInfo *tp = &city->tile[tile_index];
+  if (tp->kind != TK_ROAD)
     return;
   int mask = FindCitySurfaceConnections(city, tile_index, false);
-  int shape = ReadTerrainCode(&city->tile[tile_index]);
+  int shape = ReadTerrainCode(tp);
   if (shape >= CITY_TERRAIN_SHAPE_1 && shape <= CITY_TERRAIN_SHAPE_4)
     mask &= shape & 1 ? CONN_NS : CONN_EW;
   ReplaceCityTileAndStatistics(city, tile_index, TK_ROAD);
-  WriteTransportConnections(&city->tile[tile_index], mask);
+  WriteTransportConnections(tp, mask);
   InvalidateTile(city, tile_index);
   // Prepared diagonal ends depend on adjoining road connections, even when
   // reconnecting a straight approach leaves its stored tile ID unchanged.
   TileNeighbors neighbors = GetTileNeighbors(city, tile_index);
   for (int index = 0; index < neighbors.count; ++index) {
     TileIndex neighbor = neighbors.tiles[index];
-    int road = ReadTile(city, neighbor);
+    int road = city->tile[neighbor].kind;
     if (road == TK_ROAD) InvalidateTile(city, neighbor);
   }
 }
@@ -263,28 +265,34 @@ static void PlaceCitySurfaceLineCell(City *city, TileIndex tile, bool rail) {
   }
   if (ReadCityTileClasses(kind) & (rail ? TCLASS_RAIL : TCLASS_ROAD)) return;
   int other = rail ? TK_ROAD : TK_RAIL;
-  int axis = ReadCityStraightLineAxis(city, tile, 0);
   int replacement, crossing_axis = -1;
   if (IsTileKindLandscape(kind)) replacement = line_kind;
-  else if (IsTileKindPlainPowerLine(kind) && axis >= 0) {
-    replacement = rail ? TK_RAIL_POWER_CROSSING : TK_ROAD_POWER_CROSSING;
-    crossing_axis = 1 - axis;
-  } else if (kind == other && axis >= 0) {
-    replacement = TK_ROAD_RAIL_CROSSING;
-    crossing_axis = rail ? axis : 1 - axis;
-  } else if (kind == TK_HIGHWAY) replacement = rail ? TK_HIGHWAY_RAIL : TK_HIGHWAY_ROAD;
-  else return;
+  else if (kind == TK_HIGHWAY) replacement = rail ? TK_HIGHWAY_RAIL : TK_HIGHWAY_ROAD;
+  else {
+    bool power_line = IsTileKindPlainPowerLine(kind);
+    if (!power_line && kind != other) return;
+    int axis = ReadCityStraightLineAxis(city, tile);
+    if (axis < 0) return;
+    if (power_line) {
+      replacement = rail ? TK_RAIL_POWER_CROSSING : TK_ROAD_POWER_CROSSING;
+      crossing_axis = 1 - axis;
+    } else {
+      replacement = TK_ROAD_RAIL_CROSSING;
+      crossing_axis = rail ? axis : 1 - axis;
+    }
+  }
   replacement = CityTileKindForWater(replacement, HasTileWater(tp));
   ReplaceCityTileAndStatistics(city, tile, replacement);
   if (crossing_axis >= 0) WriteCityCrossingAxis(tp, crossing_axis);
   if (rail || ReadCityZoneKind(tp) != ZONE_MILITARY)
-    WriteTileZoneByte(tp, ReadTileZoneByte(tp) & CITY_ZONE_METADATA_MASK);
+    WriteCityZoneKind(tp, ZONE_NONE);
   // Reconnect the edited cell first, then north, south, west and east. Rail's first matching incline fixes its axis.
   if (rail) UpdateRailConnections(city, tile);
   else UpdateRoadConnections(city, tile);
+  CityPoint point = MapTilePt(city, tile);
   for (int direction = 0; direction < 4; ++direction) {
-    TileIndex neighbor = GetRelativeTileOrInvalid(city, tile,
-        kSurfaceLineNeighbors[direction].x, kSurfaceLineNeighbors[direction].y);
+    TileIndex neighbor = MapTileXYOrInvalid(city, point.x + kSurfaceLineNeighbors[direction].x,
+        point.y + kSurfaceLineNeighbors[direction].y);
     if (neighbor == INVALID_TILE) continue;
     if (rail) UpdateRailConnections(city, neighbor);
     else UpdateRoadConnections(city, neighbor);
@@ -292,8 +300,7 @@ static void PlaceCitySurfaceLineCell(City *city, TileIndex tile, bool rail) {
   RefreshCityPowerConnections(city, tile);
 }
 
-// Add a surface road cell and reconnect its four neighbors. Delegates to PlaceCitySurfaceLineCell; arguments must
-// satisfy that function's contract.
+// Add a surface road cell through the shared surface placement path.
 void PlaceCityRoadCell(City *city, TileIndex origin_tile) {
   PlaceCitySurfaceLineCell(city, origin_tile, false);
 }
@@ -301,15 +308,15 @@ void PlaceCityRoadCell(City *city, TileIndex origin_tile) {
 // Select a surface rail tile from terrain and adjacent connections.
 void UpdateRailConnections(City *city, TileIndex tile_index) {
   assert(IsMapTileValid(city, tile_index));
-  int tile = ReadTile(city, tile_index);
-  if (tile != TK_RAIL)
+  TileInfo *tp = &city->tile[tile_index];
+  if (tp->kind != TK_RAIL)
     return;
   // A curve and its straight approach borrow a shared prepared path. Updating
   // either connection changes the neighbour's artwork even if its ID stays.
   TileNeighbors neighbors = GetTileNeighbors(city, tile_index);
   for (int index = 0; index < neighbors.count; ++index) {
     TileIndex neighbor = neighbors.tiles[index];
-    int rail = ReadTile(city, neighbor);
+    int rail = city->tile[neighbor].kind;
     if (rail == TK_RAIL) InvalidateTile(city, neighbor);
   }
   int terrain_code = ReadLegacyTerrainCode(city, tile_index);
@@ -324,12 +331,11 @@ void UpdateRailConnections(City *city, TileIndex tile_index) {
     mask = FindCitySurfaceConnections(city, tile_index, true);
   }
   ReplaceCityTileAndStatistics(city, tile_index, TK_RAIL);
-  WriteTransportConnections(&city->tile[tile_index], mask);
+  WriteTransportConnections(tp, mask);
   InvalidateTile(city, tile_index);
 }
 
-// Add a surface rail cell and reconnect its four neighbors. Delegates to PlaceCitySurfaceLineCell; arguments must
-// satisfy that function's contract.
+// Add a surface rail cell through the shared surface placement path.
 void PlaceCityRailCell(City *city, TileIndex origin_tile) {
   PlaceCitySurfaceLineCell(city, origin_tile, true);
 }
@@ -393,7 +399,7 @@ static TileIndex DiagonalSurfaceLineApproach(const City *city, TileIndex cell, i
 }
 
 int CitySurfaceLineSprite(const City *city, TileIndex tile, int layout, int zoom, int rotation) {
-  int original = layout + CITY_MAP_SPRITES_PER_ZOOM * zoom;
+  int original = MapSpriteZoomIndex(layout, zoom);
   bool rail = layout >= CITY_MAP_TILE_SPRITE_RAIL_FIRST;
   int base = rail ? CITY_MAP_TILE_SPRITE_RAIL_FIRST : CITY_MAP_TILE_SPRITE_ROAD_FIRST;
   if (layout < base || layout > base + 9 ||
@@ -444,7 +450,7 @@ int CitySurfaceLineSprite(const City *city, TileIndex tile, int layout, int zoom
 
 CitySurfaceLinePath ResolveCitySurfaceLinePath(const City *city, TileIndex tile, int entry, int exit, bool rail) {
   // Both vehicle families cache this descriptor on tile entry.
-  int sprite = ReadTile(city, tile) == (rail ? TK_RAIL : TK_ROAD)
+  int sprite = city->tile[tile].kind == (rail ? TK_RAIL : TK_ROAD)
       ? CitySurfaceLineSprite(
             city, tile, ResolveCitySurfaceLineGround(city, tile).layout, CITY_MAP_ZOOM_LARGE, 0)
       : 0;
@@ -500,7 +506,7 @@ CityMapSurface ResolveCitySurfaceLineGround(const City *city, TileIndex tile) {
       TileIndex cell = GetRelativeTileOrInvalid(city, tile,
           kNeighborOffsets[direction][0], kNeighborOffsets[direction][1]);
       if (cell == INVALID_TILE) continue;
-      if (ReadTile(city, cell) == TK_HIGHWAY_ENTRANCE) {
+      if (city->tile[cell].kind == TK_HIGHWAY_ENTRANCE) {
         layout = CITY_MAP_TILE_SPRITE_ROAD_FIRST + kLineTileOffsetByConnectionMask[CityRoadConnectionMask(city, tile)];
         surface.layout = layout;
         break;
@@ -517,7 +523,7 @@ CityMapSurface ResolveCitySurfaceLineGround(const City *city, TileIndex tile) {
     for (int direction = 0; direction < 4; ++direction) {
       TileIndex deck = GetRelativeTileOrInvalid(city, tile, kLineXStep[direction], kLineYStep[direction]);
       if (deck == INVALID_TILE) continue;
-      int bridge = ReadTile(city, deck);
+      int bridge = city->tile[deck].kind;
       const TileInfo *neighbor = &city->tile[deck];
       if (!HasTileWater(neighbor) ||
           (direction & 1) != ReadCityBridgeAxis(neighbor) ||
@@ -680,7 +686,7 @@ bool DrawCitySurfaceLineSprite(Drawing *drawing, int id, int x, int baseline, in
 }
 
 // Return the object baseline; sprite preparation never happens in this path.
-int DrawCityMapInfrastructureGround(City *city, TileIndex tile, int zoom, int screen_x, int ground_y,
+int DrawCityMapInfrastructureGround(const City *city, TileIndex tile, int zoom, int screen_x, int ground_y,
     CityMapSurface surface,
     const CityTileGeometry *tile_geometry) {
   Drawing *drawing = city->drawing;
@@ -709,7 +715,7 @@ int DrawCityMapInfrastructureGround(City *city, TileIndex tile, int zoom, int sc
   return ground_y - (surface.shape == CITY_TERRAIN_SHAPE_13 ? CityMapHeightStep(zoom) : 0);
 }
 
-void DrawCityMapTransportArtwork(City *city, TileIndex tile, int layout, int zoom, int x, int baseline,
+void DrawCityMapTransportArtwork(const City *city, TileIndex tile, int layout, int zoom, int x, int baseline,
     const CityTileGeometry *tile_geometry) {
   if (IsCityMapHighwayLayout(layout)) {
     DrawCityHighwayTransportArtwork(city, tile, layout, zoom, x, baseline, tile_geometry);
@@ -721,7 +727,7 @@ void DrawCityMapTransportArtwork(City *city, TileIndex tile, int layout, int zoo
     return;
   }
   Drawing *drawing = city->drawing;
-  int sprite = layout + CITY_MAP_SPRITES_PER_ZOOM * zoom;
+  int sprite = MapSpriteZoomIndex(layout, zoom);
   if (!IsCityMapGroundPass(drawing)) {
     bool surface = IsCityMapSurfaceLayout(layout) ||
         (layout >= CITY_MAP_TILE_SPRITE_ROAD_RAIL_CROSSING_FIRST &&
@@ -737,14 +743,14 @@ void DrawCityMapTransportArtwork(City *city, TileIndex tile, int layout, int zoo
 
 // Shared transport fallback after a family's native draw callback declines the tile. The renderer has already
 // applied visibility, detail and clip checks. Preserve ground, selection, object and power-warning order.
-void DrawCityTransportTileFallback(City *city, TileIndex tile, int layout, int zoom, int screen_x, int ground_y,
+void DrawCityTransportTileFallback(const City *city, TileIndex tile, int layout, int zoom, int screen_x, int ground_y,
     const CityTileGeometry *tile_geometry) {
   Drawing *drawing = city->drawing;
   const TileInfo *tp = &city->tile[tile];
   CityTileGeometry geometry = *tile_geometry;
   bool native = city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE);
   int kind = tp->kind, terrain_code = CityMapDryGroundShape(city, tile, tile_geometry);
-  int sprite_base = CITY_MAP_SPRITES_PER_ZOOM * zoom, half_width = 4 << zoom;
+  int sprite_base = MapSpriteZoomIndex(0, zoom), half_width = 4 << zoom;
   int tile_sprite = MapSpriteZoomIndex(layout, zoom), terrain_sprite = -1;
   if (IsTileKindTunnel(kind)) {
     DrawCityRoadTunnelEntrance(city, tile, tile_sprite, zoom, screen_x, ground_y, &geometry);

@@ -1,6 +1,6 @@
 #include "city/economy/history.h"
 
-#include <limits.h>
+#include "base/integer.h"
 #include <string.h>
 
 #include "city/economy/tables.h"
@@ -10,38 +10,6 @@
 
 // Chart Data
 // Calculation blocks in the original chart painters, without window-system drawing.
-
-// Fill caller-owned plot coordinates and scale from a selected history series and period. Rejects invalid dimensions,
-// series, periods and NULL output; a successful plot borrows no City storage.
-bool BuildCityHistoryPlot(const City *city, int series, int period, int width, int height, CityHistoryPlot *plot) {
-  if (plot == NULL || series < 0 || series >= CITY_HISTORY_SERIES_COUNT || period < 0 ||
-      period > CITY_HISTORY_PERIOD_LAST || width < 4 || height < 4 || width > 32767 || height > 32767)
-    return false;
-  int maximum = (int)city->history_maxima.value[series];
-  if (maximum == 0)
-    return false;
-  const CityHistoryRow *row = &city->history[series];
-  // Plot each band from its oldest sample to its newest.
-  int last = period == CITY_HISTORY_PERIOD_YEAR ? CITY_HISTORY_MONTHLY_FIRST + CITY_HISTORY_MONTHLY_COUNT - 1 :
-      period == CITY_HISTORY_PERIOD_TEN_YEARS ? CITY_HISTORY_HALF_YEAR_FIRST + CITY_HISTORY_HALF_YEAR_COUNT - 1 :
-      CITY_HISTORY_FIVE_YEAR_FIRST + CITY_HISTORY_FIVE_YEAR_COUNT - 1;
-  plot->count = period == CITY_HISTORY_PERIOD_YEAR ? CITY_HISTORY_MONTHLY_COUNT :
-      period == CITY_HISTORY_PERIOD_TEN_YEARS ? CITY_HISTORY_HALF_YEAR_COUNT : CITY_HISTORY_FIVE_YEAR_COUNT;
-  // The final point uses five sixths of the available width.
-  int x_divisor = period == CITY_HISTORY_PERIOD_YEAR ? 6 * (CITY_HISTORY_MONTHLY_COUNT - 1) :
-      period == CITY_HISTORY_PERIOD_TEN_YEARS ? 6 * (CITY_HISTORY_HALF_YEAR_COUNT - 1) :
-      6 * (CITY_HISTORY_FIVE_YEAR_COUNT - 1);
-  for (int index = 0; index < plot->count; ++index) {
-    u32 sample = row->sample[last - index];
-    int product = (int)((u32)(height - 3) * sample);
-    if (product == INT_MIN && maximum == -1)
-      return false; // Reject division overflow in a malformed graph scale.
-    int offset = product / maximum;
-    plot->point[index] = (CityChartPoint){(width - 1) * 5 * index / x_divisor, height - 2 - offset};
-  }
-  plot->latest = row->sample[last - plot->count + 1];
-  return true;
-}
 
 // Calculate population, health or education values for each age group. NULL outputs and unsupported modes return
 // false; success fills caller-owned values without changing simulation metrics.
@@ -79,9 +47,14 @@ bool ReadCityDemographicValues(const City *city, int mode, CityDemographicValues
 // Read industry balances, tax rates or demand and determine the chart scale. NULL outputs and unsupported modes return
 // false; success fills caller-owned balances/scale without applying a tax or demand edit.
 bool ReadCityIndustryValues(const City *city, int mode, CityIndustryValues *values) {
+  static const u8 kGraphMinimum[CITY_INDUSTRY_MODE_COUNT] = {
+    [CITY_INDUSTRY_ACCOUNTS] = 70,
+    [CITY_INDUSTRY_TAX] = 30,
+    [CITY_INDUSTRY_DEMAND] = 100,
+  };
   if (values == NULL || mode < 0 || mode > CITY_INDUSTRY_MODE_LAST)
     return false;
-  values->maximum = kIndustryGraphMinimum[mode];
+  values->maximum = kGraphMinimum[mode];
   for (int index = 0; index < CITY_INDUSTRY_COUNT; ++index) {
     int value = mode == CITY_INDUSTRY_ACCOUNTS ? (int)city->industry_accounts.value[index]
         : mode == CITY_INDUSTRY_TAX            ? city->industry_baseline.value[index]
@@ -92,28 +65,10 @@ bool ReadCityIndustryValues(const City *city, int mode, CityIndustryValues *valu
   return true;
 }
 
-// Neighbor painter uses this rotation order for its four surrounding icons. Neighbor must be 0 through 3 for a nonzero
-// result and rotation supported; does not change saved neighbor values.
-u32 ReadCityNeighborPopulation(const City *city, int neighbor, int rotation) {
-  static const i8 direction[4] = {2, -1, 0, 1};
-  if (neighbor < 0 || neighbor > 3)
-    return 0;
-  int index = ((u32)rotation + (u32)direction[neighbor]) & 3;
-  return city->primary_accounts.value[index];
-}
-
-// Exact population thresholds and empty neighboring-city row. Returns a stage index only; the neighboring flag
-// controls the special empty-city row without changing population.
-int CityNeighborPopulationIconRow(u32 population, int neighboring) {
-  if (population == 0 && neighboring != 0)
-    return 0;
-  if (population < 2000)
-    return 1;
-  if (population < 10000)
-    return 2;
-  if (population < 50000)
-    return 3;
-  return population < 100000 ? 4 : 5;
+// Read a saved neighbor side without applying any camera or window ordering. Invalid sides return zero.
+u32 ReadCityNeighborPopulation(const City *city, int side) {
+  if (side < 0 || side > 3) return 0;
+  return city->primary_accounts.value[side];
 }
 
 // Compute the local-city population used by the neighbor display, including special-building contributions. Requires
@@ -182,7 +137,7 @@ void RecordCityMonthlyHistory(City *city) {
   CityHistoryMaxima *maxima = &city->history_maxima;
 
   for (int series = 0; series < CITY_HISTORY_SERIES_COUNT; ++series) {
-    CityHistoryRow *row = GetCityHistoryRow(city, series);
+    CityHistoryRow *row = &city->history[series];
     memmove(row->sample + 1, row->sample, (CITY_HISTORY_MONTHLY_COUNT - 1) * sizeof(row->sample[0]));
   }
 
@@ -201,51 +156,51 @@ void RecordCityMonthlyHistory(City *city) {
   int residential_sample = common / 2 + 10 * (int)sectors->value[0];
   int commercial_sample = common / 4 + 10 * (int)sectors->value[1];
   int industrial_sample = common / 4 + 10 * (int)sectors->value[2];
-  WriteHistorySample(city, CITY_HISTORY_CITY_SIZE, 0, (u32)population_sample);
-  WriteHistorySample(city, CITY_HISTORY_RESIDENTS, 0, (u32)residential_sample);
-  WriteHistorySample(city, CITY_HISTORY_COMMERCE, 0, (u32)commercial_sample);
-  WriteHistorySample(city, CITY_HISTORY_INDUSTRY, 0, (u32)industrial_sample);
+  city->history[CITY_HISTORY_CITY_SIZE].sample[0] = (u32)population_sample;
+  city->history[CITY_HISTORY_RESIDENTS].sample[0] = (u32)residential_sample;
+  city->history[CITY_HISTORY_COMMERCE].sample[0] = (u32)commercial_sample;
+  city->history[CITY_HISTORY_INDUSTRY].sample[0] = (u32)industrial_sample;
 
   int largest = (int)maxima->value[CITY_HISTORY_CITY_SIZE];
-  int sample = (int)(ReadHistorySample(city, CITY_HISTORY_CITY_SIZE, 0));
+  int sample = (int)(city->history[CITY_HISTORY_CITY_SIZE].sample[0]);
   largest = IntMax(largest, sample);
   for (int series = CITY_HISTORY_CITY_SIZE; series <= CITY_HISTORY_INDUSTRY; ++series)
     maxima->value[series] = (u32)largest;
 
   u32 denominator = economy->sector[CITY_ECONOMY_ROADS].current_amount +
       economy->sector[CITY_ECONOMY_HIGHWAYS].current_amount + economy->sector[CITY_ECONOMY_BRIDGES].current_amount + 1;
-  WriteHistorySample(city, CITY_HISTORY_TRAFFIC, 0, UintDiv(city->indicators.city_traffic, denominator));
+  city->history[CITY_HISTORY_TRAFFIC].sample[0] = UintDiv(city->indicators.city_traffic, denominator);
 
   u32 zone_count = (i16)city->indicators.zone_count / 4 + 1;
-  WriteHistorySample(city, CITY_HISTORY_POLLUTION, 0, UintDiv(city->indicators.city_pollution, zone_count));
-  WriteHistorySample(city, CITY_HISTORY_LAND_VALUE, 0, UintDiv(city->indicators.city_land_value, zone_count));
-  WriteHistorySample(city, CITY_HISTORY_CRIME, 0, UintDiv(city->indicators.city_crime, zone_count));
+  city->history[CITY_HISTORY_POLLUTION].sample[0] = UintDiv(city->indicators.city_pollution, zone_count);
+  city->history[CITY_HISTORY_LAND_VALUE].sample[0] = UintDiv(city->indicators.city_land_value, zone_count);
+  city->history[CITY_HISTORY_CRIME].sample[0] = UintDiv(city->indicators.city_crime, zone_count);
   largest = 0;
   for (int series = CITY_HISTORY_TRAFFIC; series <= CITY_HISTORY_CRIME; ++series) {
     int prior = (int)maxima->value[series];
-    int current = (int)(ReadHistorySample(city, series, 0));
+    int current = (int)(city->history[series].sample[0]);
     largest = IntMax(largest, prior);
     largest = IntMax(largest, current);
   }
   for (int series = CITY_HISTORY_TRAFFIC; series <= CITY_HISTORY_CRIME; ++series)
     maxima->value[series] = (u32)largest;
 
-  WriteHistorySample(city, CITY_HISTORY_POWER_PERCENT, 0, 100 - city->infrastructure.power_percent);
-  WriteHistorySample(city, CITY_HISTORY_WATER_PERCENT, 0, 100 - city->infrastructure.water_percent);
-  WriteHistorySample(city, CITY_HISTORY_EDUCATION, 0, city->indicators.workforce_education);
-  WriteHistorySample(city, CITY_HISTORY_HEALTH, 0, city->indicators.workforce_life_expectancy);
+  city->history[CITY_HISTORY_POWER_PERCENT].sample[0] = 100 - city->infrastructure.power_percent;
+  city->history[CITY_HISTORY_WATER_PERCENT].sample[0] = 100 - city->infrastructure.water_percent;
+  city->history[CITY_HISTORY_EDUCATION].sample[0] = city->indicators.workforce_education;
+  city->history[CITY_HISTORY_HEALTH].sample[0] = city->indicators.workforce_life_expectancy;
   u32 active_population = population->value[CITY_POPULATION_TOTAL];
   u32 abandoned_population = population->value[CITY_POPULATION_ABANDONED];
   denominator = abandoned_population + active_population + 1;
   u32 proportion = UintDiv(100 * abandoned_population, denominator);
   city->indicators.unemployment = proportion;
-  WriteHistorySample(city, CITY_HISTORY_UNEMPLOYMENT, 0, proportion);
-  WriteHistorySample(city, CITY_HISTORY_GNP, 0, city->indicators.national_value);
-  WriteHistorySample(city, CITY_HISTORY_NATIONAL_POPULATION, 0, city->indicators.national_population);
-  WriteHistorySample(city, CITY_HISTORY_FEDERAL_RATE, 0, city->indicators.federal_interest_rate);
+  city->history[CITY_HISTORY_UNEMPLOYMENT].sample[0] = proportion;
+  city->history[CITY_HISTORY_GNP].sample[0] = city->indicators.national_value;
+  city->history[CITY_HISTORY_NATIONAL_POPULATION].sample[0] = city->indicators.national_population;
+  city->history[CITY_HISTORY_FEDERAL_RATE].sample[0] = city->indicators.federal_interest_rate;
   for (int series = CITY_HISTORY_POWER_PERCENT; series < CITY_HISTORY_SERIES_COUNT; ++series) {
     int prior = (int)maxima->value[series];
-    int current = (int)(ReadHistorySample(city, series, 0));
+    int current = (int)(city->history[series].sample[0]);
     if (prior < current)
       maxima->value[series] = (u32)current;
   }
@@ -255,7 +210,7 @@ void RecordCityMonthlyHistory(City *city) {
   int month = city->clock.month;
   if (month == CITY_MONTH_JANUARY || month == CITY_MONTH_JULY) {
     for (int series = 0; series < CITY_HISTORY_SERIES_COUNT; ++series) {
-      CityHistoryRow *row = GetCityHistoryRow(city, series);
+      CityHistoryRow *row = &city->history[series];
       memmove(row->sample + CITY_HISTORY_HALF_YEAR_FIRST + 1, row->sample + CITY_HISTORY_HALF_YEAR_FIRST,
           (CITY_HISTORY_HALF_YEAR_COUNT - 1) * sizeof(row->sample[0]));
       row->sample[CITY_HISTORY_HALF_YEAR_FIRST] = row->sample[CITY_HISTORY_MONTHLY_FIRST];
@@ -263,7 +218,7 @@ void RecordCityMonthlyHistory(City *city) {
   }
   if (month == CITY_MONTH_JANUARY && (i16)city->clock.year % 5 == 0) {
     for (int series = 0; series < CITY_HISTORY_SERIES_COUNT; ++series) {
-      CityHistoryRow *row = GetCityHistoryRow(city, series);
+      CityHistoryRow *row = &city->history[series];
       memmove(row->sample + CITY_HISTORY_FIVE_YEAR_FIRST + 1, row->sample + CITY_HISTORY_FIVE_YEAR_FIRST,
           (CITY_HISTORY_FIVE_YEAR_COUNT - 1) * sizeof(row->sample[0]));
       row->sample[CITY_HISTORY_FIVE_YEAR_FIRST] = row->sample[CITY_HISTORY_MONTHLY_FIRST];

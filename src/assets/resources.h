@@ -16,7 +16,7 @@ extern const char *const kCityTeamNames[5];
 
 // Borrowed static text; unknown categories and indices return an empty string.
 const char *ReadCityNameResource(int category, int index);
-bool InitializeCityResourceNames(CityAssets *resources);
+bool InitializeCityCalendarNames(CityAssets *resources);
 
 // Newspaper
 

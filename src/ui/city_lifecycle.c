@@ -19,7 +19,6 @@
 #include "city/terrain/terrain.h"
 #include "drawing/maps/map_view.h"
 #include "drawing/state.h"
-#include "game/application.h"
 #include "game/city_lifecycle.h"
 #include "game/commands.h"
 #include "game/errors.h"
@@ -54,8 +53,7 @@ void ResetCityConstructionToolOptions(Game *game) {
   for (int group = 0; group < CITY_TOOL_GROUP_BUILD_COUNT; ++group) {
     int variant = group >= CITY_TOOL_GROUP_RESIDENTIAL && group <= CITY_TOOL_GROUP_INDUSTRIAL
         ? CITY_ZONE_DENSE : CITY_TOOL_VARIANT_DEFAULT;
-    memcpy(ui->tool_labels[group], game->resources->tool_names.name[group][variant],
-        sizeof(ui->tool_labels[group]));
+    CopyText(ui->tool_labels[group], sizeof(ui->tool_labels[group]), CityToolName(group, variant));
     ui->tool_indices[group] = variant;
   }
 }
@@ -97,7 +95,7 @@ static void ConfigureCityFromSetupValues(City *city, CityNewCitySetupDialog *dia
 void RunCityConfigurationSetup(City *city) {
   ResetCitySimulationState(city);
   CityNewCitySetupDialog dialog;
-  ConstructNewCitySetupDialog(city, &dialog);
+  ConstructNewCitySetupDialog(&dialog);
   if (RunPausedCityAction(city, ChooseNewCitySetupAction, &dialog) == CITY_DIALOG_UNANSWERED) {
     DestroyNewCitySetupDialog(&dialog);
     return;
@@ -112,7 +110,7 @@ void RunCityCreationSetup(City *city) {
   CityNewCitySetupDialog setup;
   bool generated_setup = ui->terrain_setup_enabled;
   if (generated_setup) {
-    ConstructNewCitySetupDialog(city, &setup);
+    ConstructNewCitySetupDialog(&setup);
     CopyText(setup.city_name, sizeof(setup.city_name), "New City");
     ui->terrain_setup_active = true;
     int answer = RunPausedCityAction(city, ChooseNewCitySetupAction, &setup);
@@ -209,24 +207,17 @@ void OpenCityFromFileDialog(City *city) {
   FreeCityPathStorage(&directory);
 }
 
-typedef struct {
-  CityScenarioSelectionDialog *dialog;
-  CityScenarioInput input;
-} CityScenarioLifetime;
-
-static void DestroyScenarioLifetime(void *context) {
-  CityScenarioLifetime *lifetime = context;
-  CloseCityScenarioInput(&lifetime->input);
-  DestroyCityScenarioSelectionDialog(lifetime->dialog);
+static void CloseScenarioInput(void *context) {
+  CloseCityScenarioInput(context);
 }
 
 // Retained picker, load, instructions and cleanup.
 void OpenCityScenarioFromFileDialog(City *city) {
   Game *game = city->game;
-  CityScenarioSelectionDialog dialog;
-  ConstructCityScenarioSelectionDialog(&dialog, 0);
-  CityScenarioLifetime lifetime = {.dialog = &dialog};
-  CityFileCleanup cleanup = {DestroyScenarioLifetime, &lifetime, NULL};
+  CityScenarioSelectionDialog dialog = {.base.resource_id = CITY_SCENARIO_SELECTION_RESOURCE,
+      .selected_index = CITY_SCENARIO_NO_SELECTION};
+  CityScenarioInput input = {0};
+  CityFileCleanup cleanup = {CloseScenarioInput, &input, NULL};
   PushCityFileCleanup(game->file, &cleanup);
   game->ui->save_prompt_active = false;
   game->drawing->palette.direct_animation = 1;
@@ -238,33 +229,30 @@ void OpenCityScenarioFromFileDialog(City *city) {
       game->idle_entry = 1;
     }
   } else {
-    lifetime.input.path = dialog.selected_path;
+    input.path = dialog.selected_path;
     char text[CITY_SCENARIO_INSTRUCTION_BYTES + 1];
-    if (PrepareCityScenarioLoad(city, &lifetime.input) && LoadCityScenarioInstructions(city, &lifetime.input, text)) {
-      ShowCityTextMessageDialog(city, text, 0, 0);
+    if (PrepareCityScenarioLoad(city, &input) && LoadCityScenarioInstructions(city, &input, text)) {
+      ShowCityScenarioTextDialog(city, text);
       CompleteCityScenarioLoad(city, false);
     }
   }
   PopCityFileCleanup(game->file, &cleanup);
-  DestroyScenarioLifetime(&lifetime);
+  CloseCityScenarioInput(&input);
 }
 
 // Retained direct path and its distinct failure/encoding behavior.
 void OpenCityScenarioFromPath(City *city, const char *path) {
-  CityScenarioSelectionDialog dialog;
-  ConstructCityScenarioSelectionDialog(&dialog, 0);
-  CityScenarioLifetime lifetime = {.dialog = &dialog,
-      .input = {.path = path, .from_path = true}};
-  CityFileCleanup cleanup = {DestroyScenarioLifetime, &lifetime, NULL};
+  CityScenarioInput input = {.path = path, .from_path = true};
+  CityFileCleanup cleanup = {CloseScenarioInput, &input, NULL};
   PushCityFileCleanup(city->game->file, &cleanup);
   city->game->ui->save_prompt_active = false;
   char text[CITY_SCENARIO_INSTRUCTION_BYTES + 1];
-  if (PrepareCityScenarioLoad(city, &lifetime.input) && LoadCityScenarioInstructions(city, &lifetime.input, text)) {
-    ShowCityTextMessageDialog(city, text, 0, 0);
+  if (PrepareCityScenarioLoad(city, &input) && LoadCityScenarioInstructions(city, &input, text)) {
+    ShowCityScenarioTextDialog(city, text);
     CompleteCityScenarioLoad(city, true);
   }
   PopCityFileCleanup(city->game->file, &cleanup);
-  DestroyScenarioLifetime(&lifetime);
+  CloseCityScenarioInput(&input);
 }
 
 typedef struct {
@@ -348,8 +336,8 @@ void RequestCityFileOpen(Game *game) {
   game->ui->save_prompt_active = false;
   CityPath directory = {0};
   bool directory_ready = GetCitySaveDirectory(game, &directory);
-  CityFilePickerOptions options = {"*.sc2", CityPathText(&directory), "Open City",
-      true, OpenCityFileChoice, request};
+  CityFilePickerOptions options = {.name = "*.sc2", .directory = CityPathText(&directory), .title = "Open City",
+      .open = true, .callback = OpenCityFileChoice, .context = request};
   bool opened = directory_ready && OpenCityFileDialog(game->city, &options);
   FreeCityPathStorage(&directory);
   if (!opened) {
@@ -444,7 +432,7 @@ static void FinishCityReplacementRequest(City *city, CityReplacementRequest *req
       ui->replacement_prompt_suppressed = false;
       ShowCityMapToolWindows(city);
       if (!request->options.edit_terrain && !game->ranked_events_suppressed &&
-          !game->resources->news_resources_unavailable) ScheduleCityStartupNewspaper(city);
+          AreCityNewsResourcesAvailable(game->city)) ScheduleCityStartupNewspaper(city);
     } else if (request->startup) {
       game->idle_state = CITY_IDLE_STARTUP_MENU;
       game->idle_entry = 1;
@@ -462,7 +450,7 @@ void CompleteCityTerrainEditing(Game *game) {
     game->ui->desktop.selected_tool = CITY_CANVAS_TOOL_NONE;
   }
   ResetCityReplacementPresentation(game->city);
-  if (!game->ranked_events_suppressed && !game->resources->news_resources_unavailable)
+  if (!game->ranked_events_suppressed && AreCityNewsResourcesAvailable(game->city))
     ScheduleCityStartupNewspaper(game->city);
 }
 
@@ -524,7 +512,7 @@ static void AcceptCityConfiguration(City *city, const CityCreationOptions *optio
   }
   ResetCityReplacementPresentation(city);
   if (!options->edit_terrain && !city->game->ranked_events_suppressed &&
-      !city->game->resources->news_resources_unavailable) ScheduleCityStartupNewspaper(city);
+      AreCityNewsResourcesAvailable(city)) ScheduleCityStartupNewspaper(city);
 }
 
 bool RequestCityConfiguration(Game *game) {
@@ -584,6 +572,15 @@ void InvalidateLoadedCityCanvas(City *city) {
       (CityRect){0, 0, kDefaultCityCanvasWidth, kDefaultCityCanvasHeight});
 }
 
+// Keep ordinary input and host polling on the same completion order. Each step retains its own admission rules.
+void CompleteCityPendingWindows(Game *game) {
+  City *city = game->city;
+  CompleteCityWindowCallbacks(game);
+  CompleteCityScenarioSelection(city);
+  CompleteCityCreationWindow(city);
+  CompleteCityFileDialogs(city);
+}
+
 void BeginCityInterfaceShutdown(Game *game) {
   City *city = game->city;
   CityInterfaceState *ui = game->ui;
@@ -602,7 +599,7 @@ void CompleteCityInterfaceCallers(Game *game) {
   CityInterfaceState *ui = game->ui;
   ui->command_display = NULL;
   ClearCityScenarioSelection(city);
-  CompleteCityWindowCallbacks(city);
+  CompleteCityWindowCallbacks(game);
   ReleaseCityBudgetPresentation(ui);
 }
 
@@ -616,6 +613,6 @@ void ReleaseCityInterfacePresentation(Game *game) {
   ShutdownCityFileDialogPresentation(city);
   UnbindCityChartPanels(city);
   SetCityStatusPresentation(&ui->status, NULL, 0);
-  SetCityMapDataPresentation(city, NULL);
+  SetCityMapDataPresentation(ui, NULL);
   SetCityMapNavigationPresentation(game, false, false);
 }

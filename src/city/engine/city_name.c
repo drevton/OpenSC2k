@@ -25,7 +25,7 @@ void EmptyCityName(City *city) {
 // explicitly so the result is independent of host byte order. Slot must be 0 through 3; writes a terminated fixed
 // label without advancing City's simulation RNG streams.
 void GenerateCityNeighborName(City *city, int slot) {
-  char *name = (char *)city->geography.neighbor_names.name[slot];
+  char *name = city->geography.neighbor_names.name[slot];
   size_t capacity = sizeof(city->geography.neighbor_names.name[slot]);
   int index = city->account_names.value[slot];
   if (!index) {
@@ -43,7 +43,7 @@ void GenerateCityNeighborName(City *city, int slot) {
     if (!GenerateCityName(&seed, "", name, capacity)) continue;
     bool duplicate = false;
     for (int previous = 0; previous < slot; ++previous)
-      if (!strcmp(name, (const char *)city->geography.neighbor_names.name[previous])) duplicate = true;
+      if (!strcmp(name, city->geography.neighbor_names.name[previous])) duplicate = true;
     if (!duplicate) return;
   }
   snprintf(name, capacity, "Neighbor %d", index);

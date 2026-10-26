@@ -16,14 +16,17 @@ typedef struct {
 } CitySoundReplayThresholds;
 
 enum { CITY_EFFECT_VOICES = 8 };
+// Assets validates nonempty recordings. A playing voice has position < frames; a finished voice may equal frames.
+// During playback, cursor/repetition edits use SDL's device lock; callbacks already hold it.
 typedef struct {
   const u8 *samples; // Borrows the immutable Assets-owned mono recording.
   u32 frames, position;
   i32 repetitions; // Zero is finished; -1 repeats until stopped.
   i16 sound_id;
-  bool looping;
-  u8 pan; // 0 left, 128 both speakers, 255 right. Fits the existing voice padding.
+  u8 looping; // Retain the request's loop intent even on its last finite repetition.
+  u8 pan; // 0 left, 128 both speakers, 255 right.
 } CityEffectVoice;
+_Static_assert(sizeof(CityEffectVoice) == sizeof(void *) + 16, "effect voice has no per-record padding");
 
 // Audio remains outside saved City state. Music activity gates economy RNG;
 // sound state controls tool requests, replay and interruption. Both have
@@ -45,7 +48,7 @@ typedef struct CityAudioState {
   i32 transient_sound_id;
   u32 music_active;
   u16 music_device;
-  const char *music_filename; // Borrows a catalog name or comparison-owned transport text.
+  const char *music_filename;
   CityMusicDirectory music_directory;
   CitySoundTimingTable timing;
   CitySoundReplayThresholds replay_thresholds;
@@ -83,9 +86,5 @@ void InitializeCityAudioState(CityAudioState *audio);
 // Copy nonnull preference text without applying or validating it against a device. Does not change custom_soundfont.
 // The source may alias the current path. Allocation failure preserves the old path; Audio owns the successful copy.
 bool SetCitySoundFontPath(CityAudioState *audio, const char *path);
-
-// Preserve the live jukebox's playing choice after loading the saved music flag. Closed backends keep that flag;
-// no playback starts or stops here, so the codec retains its original word-by-word effect ordering.
-void RefreshCityLoadedMusicPreference(CityAudioState *audio);
 
 #endif

@@ -6,7 +6,7 @@
 
 typedef struct Game Game;
 typedef struct Canvas Canvas;
-typedef struct CanvasSDL CanvasSDL;
+typedef struct CityInterfaceState CityInterfaceState;
 typedef struct Window Window;
 typedef struct CityCanvasDesktop CityCanvasDesktop;
 typedef struct CityTerrainMap CityTerrainMap;
@@ -100,7 +100,9 @@ enum {
   NATIVE_STARTUP_CHECKPOINT_ENTER = 13, NATIVE_STARTUP_CHECKPOINT_LEAVE = 14,
   NATIVE_STARTUP_DIALOG_RESOURCE_TYPE = 5,
 };
-bool SetCityStartupMenuPresentation(City *city, CityCanvasDesktop *desktop);
+// Bind a non-NULL borrowed desktop only while startup/setup state is detached. Rejection leaves UI unchanged;
+// success clears the inline startup registry without opening windows or changing City.
+bool SetCityStartupMenuPresentation(CityInterfaceState *ui, CityCanvasDesktop *desktop);
 void ClearCityStartupMenuPresentation(City *city);
 struct CityCreationOptions;
 typedef struct { const char *path; bool current; } CityCreationTerrain;
@@ -140,22 +142,10 @@ int ShowCityStartupMenu(City *city);
 bool InitializeCityStartupMenuDialog(City *city, CityStartupMenuDialog *dialog);
 bool CenterCityStartupWindow(City *city, u32 window_id);
 
-typedef enum CityIntroStage {
-  CITY_INTRO_LOADING_CITY, CITY_INTRO_LOADING_GRAPHICS, CITY_INTRO_PREPARING_GRAPHICS,
-  CITY_INTRO_PREPARING_SPRITES, CITY_INTRO_STAGE_COUNT
-} CityIntroStage;
-
-// The startup backdrop streams into the caller's canvas; loading also prepares and presents the shared framebuffer.
-void DrawCityStartupBackdrop(Game *game, Canvas *canvas, CityRect area);
-bool DrawCityLoadingScreen(Game *game, CanvasSDL *display, CityIntroStage stage,
-    int completed, int total, bool initial);
-
-// Reserve the baked identity area when positioning startup content.
-int CityStartupContentTop(int width, int height);
-
 // Setup Dialog
 
-CityNewCitySetupDialog *ConstructNewCitySetupDialog(City *city, CityNewCitySetupDialog *dialog);
+// Initialize a fresh, unregistered dialog value. No City data is read or changed.
+CityNewCitySetupDialog *ConstructNewCitySetupDialog(CityNewCitySetupDialog *dialog);
 void DestroyNewCitySetupDialog(CityNewCitySetupDialog *dialog);
 int ChooseNewCitySetupDialog(City *city, CityNewCitySetupDialog *dialog);
 
@@ -175,7 +165,7 @@ enum {
   CITY_SETUP_COAST = 272, CITY_SETUP_RIVER, CITY_SETUP_LANDFORM, CITY_SETUP_VARIETY,
   CITY_SETUP_NAME_LIMIT = 32, CITY_SETUP_CHECKPOINT_ENTER = 17, CITY_SETUP_CHECKPOINT_LEAVE = 18,
 };
-void InitializeCitySetupName(City *city, CityNewCitySetupDialog *dialog);
+void InitializeCitySetupName(CityNewCitySetupDialog *dialog);
 void CaptureCitySetupName(City *city, CityNewCitySetupDialog *dialog);
 void ReleaseCitySetupName(CityNewCitySetupDialog *dialog);
 
@@ -189,6 +179,8 @@ bool AnswerCitySetupDialog(City *city, i32 token, i32 answer);
 
 bool CityStartupMenuServiceAvailable(City *city);
 i32 ChooseCityStartupMenuDialog(City *city, CityStartupWindow *dialog);
+// Accept only the five menu choices for the current unanswered token. Completion records the choice and closes
+// its canvas window; loading, generation and shutdown belong to the caller after this interaction completes.
 bool AnswerCityStartupMenuDialog(City *city, i32 token, i32 choice);
 bool EndCityStartupDialog(City *city, u32 window, i32 result);
 

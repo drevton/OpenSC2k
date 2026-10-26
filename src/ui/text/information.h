@@ -20,7 +20,7 @@ typedef struct CityInformationText {
 } CityInformationText;
 
 // Draw an explicit byte span, including embedded NULs, and advance the borrowed cursor.
-bool DrawCityTextBytes(CityInformationText *text, const char *value, int length);
+void DrawCityTextBytes(CityInformationText *text, const char *value, int length);
 // Expand one localized line using live facility data and borrowed Assets strings.
 // Missing lines draw nothing; invalid facility/template substitutions set the Game error.
 void DrawCityFacilityInformationTemplate(CityInformationText *text, int facility, int line);

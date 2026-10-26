@@ -1,25 +1,7 @@
 #ifndef SC2K_GAME_APPLICATION_H
 #define SC2K_GAME_APPLICATION_H
 
-#include "city/types.h"
-
-// Native startup choices and simulation dispatch states.
-typedef enum CityApplicationIdleState {
-  CITY_IDLE_PLAY = -1,
-  CITY_IDLE_TOOL_PREVIEW = 0,
-  CITY_IDLE_STARTUP_MENU = 7,
-  CITY_IDLE_LOAD_CITY = 10,
-  CITY_IDLE_NEW_CITY = 11,
-  CITY_IDLE_TERRAIN = 12,
-  CITY_IDLE_LOAD_SCENARIO = 13,
-  CITY_IDLE_STARTUP_CHOICE = 14,
-  CITY_IDLE_COMMAND_LINE_FILE = 15,
-} CityApplicationIdleState;
-
-// Application command-line dispatch selects either a city or scenario path.
-typedef enum CityPathOpenMode {
-  CITY_PATH_OPEN_NONE = 0, CITY_PATH_OPEN_CITY = 1, CITY_PATH_OPEN_SCENARIO = 2
-} CityPathOpenMode;
+#include "game/types.h"
 
 typedef struct Game Game;
 

@@ -70,7 +70,9 @@ bool Sc2kCanvasChartActionAt(const Window *window, i32 x, i32 y,
 // Refresh the cached values needed by a visible chart before painting it. Returns whether the requested panel was
 // handled; calculation may update the UI chart cache but does not advance simulation.
 bool PrepareCityChartPaintState(City *city, int code);
-bool BindCityChartPanels(City *city, CityCanvasDesktop *desktop);
+// Prepare UI chart resources and borrow the desktop; Game supplies UI and immutable neighbor artwork.
+// Rebinding a ready set succeeds only for the same desktop. Failed preparation retains its partial UI writes.
+bool BindCityChartPanels(Game *game, CityCanvasDesktop *desktop);
 void UnbindCityChartPanels(City *city);
 void RefreshCityChartPanels(City *city);
 

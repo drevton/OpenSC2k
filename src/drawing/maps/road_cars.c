@@ -1,4 +1,5 @@
 #include "drawing/maps/map_sprites.h"
+#include "drawing/maps/sprite_cache.h"
 #include "drawing/maps/road_cars.h"
 
 #include <limits.h>
@@ -13,6 +14,7 @@
 #include "city/maps/tables.h"
 #include "city/infrastructure/types.h"
 #include "city/maps/layers.h"
+#include "city/maps/terrain.h"
 #include "city/infrastructure/highways.h"
 #include "city/maps/tile_storage.h"
 #include "city/presentation.h"
@@ -25,8 +27,6 @@
 #include "drawing/state.h"
 #include "game/state.h"
 #include "road-car-paths.inc"
-#include "ui/map_visibility.h"
-#include "ui/map_views.h"
 
 _Static_assert(CITY_ROAD_VEHICLE_PALETTES <= 32 && CITY_ROAD_VEHICLE_TYPES <= 8, "Car appearances fit packed fields");
 
@@ -116,7 +116,7 @@ static bool RoadCarWatched(const City *city, const RoadCar *car) {
 
 static int RoadCarBucket(TileIndex tile) { return (tile ^ (tile >> 10)) & (CITY_ROAD_CAR_BUCKETS - 1); }
 
-static TileIndex SampleRoadCarTile(City *city, CityMapCamera view) {
+static TileIndex SampleRoadCarTile(const City *city, CityMapCamera view) {
   DrawingRoadTraffic *traffic = &city->drawing->road_traffic;
   int scale = 1 << view.zoom, margin = 64 * scale;
   int px = (int)(RoadTrafficRandom(traffic) % (view.width + margin * 2)) - margin - view.origin_x;
@@ -383,7 +383,7 @@ static void PrepareRoadCar(const City *city, RoadCar *car, int entry, int exit) 
 
 // Road edits refresh the entry cache, including while paused. Ordinary car
 // movement never resolves its current tile's connections or surface again.
-void RefreshCityRoadTrafficPoses(City *city) {
+void RefreshCityRoadTrafficPoses(const City *city) {
   Drawing *drawing = city->drawing;
   DrawingRoadTraffic *traffic = &drawing->road_traffic;
   for (int slot = 0; slot < CITY_ROAD_CAR_COUNT; ++slot) {
@@ -528,7 +528,7 @@ static bool RoadCarStraightRoute(const City *city, TileIndex tile, int entry) {
   if (tile == INVALID_TILE) return false;
   int axis = entry & 1 ? CONN_NS : CONN_EW;
   if (RoadCarRouteExits(city, tile, entry) != axis) return false;
-  if (ReadTile(city, tile) != TK_ROAD) return true;
+  if (city->tile[tile].kind != TK_ROAD) return true;
   int artwork = ResolveCitySurfaceLineGround(city, tile).layout;
   // A straight connection tile can contain half of a prepared diagonal bend.
   return CitySurfaceLineSprite(city, tile, artwork, CITY_MAP_ZOOM_LARGE, 0) < MAP_LANDSCAPE_SPRITE_FIRST;
@@ -570,7 +570,7 @@ static int RoadCarSpeed(const City *city, const RoadCar *car) {
   return (speed * (256 + boost) + 128) >> 8;
 }
 
-static void AdvanceRoadCar(City *city, DrawingRoadTraffic *traffic, RoadCar *car, u32 step) {
+static void AdvanceRoadCar(const City *city, DrawingRoadTraffic *traffic, RoadCar *car, u32 step) {
   int progress = car->progress, length = kRoadCarPathLengths[car->path - 1];
   // Q8 time times Q7 speed, scaled to the eleven-bit path cursor.
   u32 distance = step * RoadCarSpeed(city, car) * 16;
@@ -617,7 +617,7 @@ static void AdvanceRoadCar(City *city, DrawingRoadTraffic *traffic, RoadCar *car
   if (!RoadCarBlocked(city, traffic, car, &candidate)) *car = candidate;
 }
 
-static bool SpawnRoadCar(City *city, TileIndex tile, int entry, int phase) {
+static bool SpawnRoadCar(const City *city, TileIndex tile, int entry, int phase) {
   if (IsCityDrawbridgeOpen(city, tile)) return false;
   Drawing *drawing = city->drawing;
   DrawingRoadTraffic *traffic = &drawing->road_traffic;
@@ -696,10 +696,10 @@ static bool RoadCarVisibleCurrent(const City *city, const RoadCar *car) {
   return false;
 }
 
-static void SeedRoadCarRect(City *city, CityMapCamera view, int index, CityRect rect) {
+static void SeedRoadCarRect(const City *city, CityMapCamera view, int index, CityRect rect) {
   if (rect.left >= rect.right || rect.top >= rect.bottom) return;
   DrawingRoadTraffic *traffic = &city->drawing->road_traffic;
-  CityRect bounds = VisibleCityMapTileBounds(city, view.origin_x, view.origin_y, view.zoom, view.rotation, rect);
+  CityRect bounds = VisibleCityMapTileBounds(city, view, rect);
   int scale = 1 << view.zoom;
   for (int y = bounds.top; y < bounds.bottom; ++y)
     for (int x = bounds.left; x < bounds.right; ++x) {
@@ -723,7 +723,7 @@ static void SeedRoadCarRect(City *city, CityMapCamera view, int index, CityRect 
 
 // Camera history already belongs to the map snapshot. Seed only the newly
 // exposed strips and the viewing margin; no visited-map mask or camera copy is needed.
-void PopulateCityRoadTrafficView(City *city, int index, CityMapCamera previous, CityMapCamera view) {
+void PopulateCityRoadTrafficView(const City *city, int index, CityMapCamera previous, CityMapCamera view) {
   Drawing *drawing = city->drawing;
   if (!(city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) || !drawing->map_state.tile_details_enabled ||
       !drawing->map_state.vehicles_enabled || drawing->map_state.events_suppressed ||
@@ -760,7 +760,7 @@ void PopulateCityRoadTrafficView(City *city, int index, CityMapCamera previous, 
   SeedRoadCarRect(city, view, index, (CityRect){overlap.right, overlap.top, area.right, overlap.bottom});
 }
 
-bool UpdateCityRoadTraffic(City *city, u32 now) {
+bool UpdateCityRoadTraffic(const City *city, u32 now) {
   Drawing *drawing = city->drawing;
   if (!drawing->map_state.vehicles_enabled) return false;
   DrawingRoadTraffic *traffic = &drawing->road_traffic;
@@ -885,7 +885,7 @@ CityRect CityRoadCarPixelBounds(const City *city, const RoadCar *car, CityMapCam
   return (CityRect){x, y, x + sprite->width, y + sprite->height};
 }
 
-void DrawCityRoadCar(City *city, int slot, int zoom) {
+void DrawCityRoadCar(const City *city, int slot, int zoom) {
   const RoadCar *car = &city->drawing->road_traffic.cars[slot];
   // A car already on the leaf when a ship approaches evacuates through its cached path without painting on air.
   if (IsCityDrawbridgeOpen(city, car->tile)) return;
@@ -927,7 +927,7 @@ void DrawCityRoadCar(City *city, int slot, int zoom) {
   drawing->sprite_offset = saved;
 }
 
-void CollectCityRoadTraffic(City *city, int zoom) {
+void CollectCityRoadTraffic(const City *city, int zoom) {
   Drawing *drawing = city->drawing;
   if (zoom < CITY_MAP_ZOOM_LARGE || !drawing->map_state.tile_details_enabled || !drawing->map_state.vehicles_enabled ||
       drawing->map_state.events_suppressed || !(city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)))

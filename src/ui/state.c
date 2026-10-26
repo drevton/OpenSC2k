@@ -1,13 +1,11 @@
-#include "city/presentation.h"
 #include "ui/state.h"
-#include "ui/text/status.h"
 
 #include <stdlib.h>
 #include <string.h>
 
-#include "game/state.h"
+#include "city/presentation.h"
 #include "city/state.h"
-#include "drawing/state.h"
+#include "game/state.h"
 #include "ui/console.h"
 
 void InitializeCityInteractionState(CityInterfaceState *ui) {
@@ -52,19 +50,8 @@ void EnableCityDeveloperTools(City *city) {
   if (city->game->ui) city->game->ui->developer_enabled = true;
 }
 
-void SetCityProblemNotice(City *city, const char *text) {
-  if (city->game->ui) SetCityProblemDescription(&city->game->ui->status, text);
-}
-
 bool IsCityOutcomeNoticeActive(const City *city) {
   return city->game->ui && city->game->ui->outcome_dialog_active;
-}
-
-bool SetCityDemolitionSuppressed(City *city, bool suppressed) {
-  Drawing *drawing = city->drawing;
-  bool previous = drawing && drawing->demolition_suppressed;
-  if (drawing) drawing->demolition_suppressed = suppressed;
-  return previous;
 }
 
 bool IsCityPresentationMinimized(const City *city) {

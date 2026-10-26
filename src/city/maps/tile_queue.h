@@ -13,12 +13,6 @@ static inline int CityTileQueueCapacity(int width, int height) {
   return CITY_TILE_QUEUE_BASE_CAPACITY * IntMax(width, height) / CITY_MAP_MIN_SIZE;
 }
 
-typedef struct CityTileQueueCursor {
-  u16 read, write, mask;
-} CityTileQueueCursor;
-_Static_assert(sizeof(CityTileQueueCursor) == 6 && offsetof(CityTileQueueCursor, mask) == 4,
-    "tile queue cursor layout");
-
 // The queue is exclusive workspace shared by utility scans, terrain edits and commuter routes.
 // Flood insertion/removal maintains duplicate marks when the fix is enabled and route_queued is non-NULL.
 // Without marker backing, every operation skips duplicate bookkeeping. Commuter append bypasses those marks because

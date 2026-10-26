@@ -11,7 +11,6 @@
 #include "city/infrastructure/lines.h"
 #include "city/infrastructure/networks.h"
 #include "city/infrastructure/transport.h"
-#include "city/saveload/map_format.h"
 #include "city/engine/random.h"
 #include "city/growth/growth.h"
 
@@ -29,8 +28,9 @@
 
 #include "city/state.h"
 #include "city/maps/layers.h"
+#include "city/maps/terrain.h"
+#include "city/maps/water.h"
 #include "city/maps/map.h"
-#include "city/tools/tools.h"
 #include "city/maps/map_types.h"
 
 static void GrowCityZonedTile(City *city, TileIndex tile, bool large_city_effect_enabled);
@@ -96,9 +96,9 @@ static void ScanCityTileSectionRow(City *city, int first_x, int y,
     if (zone) {
       if (zone >= ZONE_RESERVED_FIRST) {
         if (NextCityMapRandomModulo(city, 128) == 0) {
-          int underground = ReadUnderground(city, cell_index);
-          if (IsSubwayTile(underground)) {
-            int maintenance = ReadCityMaintenancePercent(city, CITY_ECONOMY_SUBWAY);
+          int underground = ReadTileUndergroundKind(tp);
+          if (IsUndergroundKindSubway(underground)) {
+            u32 maintenance = ReadCityMaintenancePercent(city, CITY_ECONOMY_SUBWAY);
             if (maintenance != 100 && Sc2kCrtRandRange(city, 100) >= maintenance) {
               if (underground == TUK_SUBWAY_ACCESS) {
                 BulldozeCityTile(city, cell_index, false);
@@ -111,38 +111,38 @@ static void ScanCityTileSectionRow(City *city, int first_x, int y,
         continue;
       }
       GrowCityZonedTile(city, cell_index, large_city_effect_enabled);
-    } else if (CityTileStatisticAt(city, cell_index) >= TKL_ROAD_EAST_WEST) {
-      // Water pylons also take a maintenance draw, despite sharing land-line kinds.
+    } else if (IsTileKindTransportOrBuilding(tp->kind) || IsTileKindWaterPowerLine(tp->kind)) {
+      // Water pylons also take a maintenance draw; dry power lines and landscape tiles do not.
       u32 seed = city->random.map;
       int next = AdvanceCityMapSeed(seed);
       city->random.map = next;
-      int tile = tp->kind;
+      int kind = tp->kind;
       int decay_sector = -1;
-      if (IsTileKindRoadRoute(tile))
+      if (IsTileKindRoadRoute(kind))
         decay_sector = CITY_ECONOMY_ROADS;
-      else if (IsTileKindRailRoute(tile))
+      else if (IsTileKindRailRoute(kind))
         decay_sector = CITY_ECONOMY_RAIL;
-      if (!IsTileKindBuilding(tile) && (next & 0x7F) == 0 &&
-          (IsTileKindBridge(tile) ||
-              IsCityWaterPowerLine(tp))) {
-        int maintenance = ReadCityMaintenancePercent(city, CITY_ECONOMY_BRIDGES);
+      if (!IsTileKindBuilding(kind) && (next & 0x7F) == 0 &&
+          (IsTileKindBridge(kind) ||
+              IsTileKindWaterPowerLine(tp->kind))) {
+        u32 maintenance = ReadCityMaintenancePercent(city, CITY_ECONOMY_BRIDGES);
         if (maintenance != 100 && (u32)city->weather.wind + Sc2kCrtRandRange(city, 50) >= maintenance) {
           CenterCityMapOnEvent(city, x, y);
           BulldozeCityTile(city, cell_index, true);
           InsertRankedCityEvent(city, CITY_NEWS_BRIDGE_COLLAPSE, 0);
         }
-      } else if (!IsTileKindBuilding(tile) && (next & 0x7F) == 0 && decay_sector != -1) {
-        int percentage = ReadCityMaintenancePercent(city, decay_sector);
+      } else if (!IsTileKindBuilding(kind) && (next & 0x7F) == 0 && decay_sector != -1) {
+        u32 percentage = ReadCityMaintenancePercent(city, decay_sector);
         if (percentage == 100 || Sc2kCrtRandRange(city, 100) < percentage)
           continue;
         ReplaceCityTileVariant(city, cell_index, TK_RUBBLE, Sc2kCrtRand(city) & 3);
         tp->flags &= ~TF_POWERABLE;
         RefreshCityPowerConnections(city, cell_index);
-      } else if (!IsTileKindBuilding(tile) && (next & 0x7F) == 0 &&
-          (tile == TK_HIGHWAY || tile == TK_HIGHWAY_POWER ||
-              IsTileKindMultiHighway(tile)) &&
+      } else if (!IsTileKindBuilding(kind) && (next & 0x7F) == 0 &&
+          (kind == TK_HIGHWAY || kind == TK_HIGHWAY_POWER ||
+              IsTileKindMultiHighway(kind)) &&
           !(y & 1) && !(x & 1)) {
-        int percentage = ReadCityMaintenancePercent(city, CITY_ECONOMY_HIGHWAYS);
+        u32 percentage = ReadCityMaintenancePercent(city, CITY_ECONOMY_HIGHWAYS);
         if (percentage == 100 || Sc2kCrtRandRange(city, 100) < percentage)
           continue;
         static const u8 cell_y_offsets[4] = {0, 1, 0, 1};
@@ -151,24 +151,26 @@ static void ScanCityTileSectionRow(City *city, int first_x, int y,
           int cell_x = x + cell_x_offsets[cell];
           int cell_y = y + cell_y_offsets[cell];
           TileIndex cell_tile = cell_y * width + cell_x;
-          if (HasTileWater(&city->tile[cell_tile]))
-            ReplaceCityTileAndStatistics(city, cell_tile, ReadCityWaterGroundKind(&city->tile[cell_tile]));
+          const TileInfo *tp = &city->tile[cell_tile];
+          if (HasTileWater(tp))
+            ReplaceCityTileAndStatistics(city, cell_tile, ReadCityWaterGroundKind(tp));
           else ReplaceCityTileVariant(city, cell_tile, TK_RUBBLE, Sc2kCrtRand(city) & 3);
           RefreshCityPowerConnections(city, cell_tile);
         }
       }
-      if ((tile == TK_RAIL_STATION || tile == TK_MARINA) &&
+      if ((kind == TK_RAIL_STATION || kind == TK_MARINA) &&
           (tp->flags & TF_POWERED)) {
+        // Actor limits compare at the unsigned tile counters' width.
         if (NextCityMapRandomModulo(city, 4) == 0 &&
-            city->statistics.count[tile] / (tile == TK_RAIL_STATION ? 4 : 9) >
-                (tile == TK_RAIL_STATION ? city->disasters.tile237_count : city->disasters.tile248_count)) {
-          if (tile == TK_RAIL_STATION)
+            city->statistics.count[kind] / (kind == TK_RAIL_STATION ? 4 : 9) >
+                (u32)(kind == TK_RAIL_STATION ? city->disasters.train_count : city->disasters.sailboat_count)) {
+          if (kind == TK_RAIL_STATION)
             TrySpawnCityStationTrains(city, cell_index);
           else
             TrySpawnCityMarinaSailboats(city, cell_index);
         }
-      } else if (IsTileKindArcology(tile) && tile != TK_BRAUN_LLAMA_DOME &&
-          ReadFootprintCorners(city, cell_index) == CITY_ZONE_CORNER_3) {
+      } else if (IsTileKindArcology(kind) && kind != TK_BRAUN_LLAMA_DOME &&
+          ReadFootprintCorners(city, cell_index) == CITY_FOOTPRINT_CORNER_NE) {
         int overlay = ReadCityFacilityOverlay(city, cell_index);
         if (IsCityFacilityOverlay(overlay)) {
           CityAnnualFacilityRecord *facility = CityFacilityRecordAt(city, CityFacilityOverlaySlot(overlay));
@@ -221,26 +223,8 @@ void ScanQuarterCityTiles(City *city, int quarter_x, int quarter_y) {
 
 // Zoning
 
-// Read-only admission queries for a valid tile; preserve the transport probe order and power edge rules.
-// Neither changes tiles, consumes RNG nor calls presentation.
-// 24-neighbor road, rail and highway access probe.
-static bool TileHasTransportAccess(const City *city, TileIndex tile_index) {
-  assert(IsMapTileValid(city, tile_index));
-  CityPoint point = MapTilePt(city, tile_index);
-  for (int i = 0; i < 24; ++i) {
-    int nx = point.x + kTransportNeighborOffsets.offset[i].x;
-    int ny = point.y + kTransportNeighborOffsets.offset[i].y;
-    if (!IsMapCoordinateValid(city, nx, ny)) continue;
-    TileIndex neighbor = MapTileXY(city, nx, ny);
-    int kind = ReadTile(city, neighbor);
-    if (IsTileKindRoadRoute(kind) ||
-        kind == TK_BUS_STATION || kind == TK_RAIL_STATION || kind == TK_SUBWAY_STATION)
-      return true;
-  }
-  return false;
-}
-
-// A powered cell at the given position or immediately beside it.
+// Read-only power admission for a valid tile, including the existing strict north/west edge rules.
+// A powered cell at the given position or immediately beside it; no RNG or presentation effects.
 static bool TileHasNearbyPower(const City *city, TileIndex tile_index) {
   assert(IsMapTileValid(city, tile_index));
   CityPoint point = MapTilePt(city, tile_index);
@@ -253,9 +237,10 @@ static bool TileHasNearbyPower(const City *city, TileIndex tile_index) {
       (point.x < width - 1 && (tp[1].flags & TF_POWERED) != 0);
 }
 
-// Select a seaport kind from current counts without mutation or RNG. The growth caller places its footprint.
+// Port ratios use unsigned tile counters, preserving their 32-bit sums/products before division or comparison.
+// Select a seaport kind without mutation or RNG. The growth caller places its footprint.
 static int SelectCitySeaportGrowthKind(const CityTileCounts *counts) {
-  int existing = counts->count[TK_CRANE];
+  u32 existing = counts->count[TK_CRANE];
   if (counts->count[TK_CARGO_YARD] / 4 >= existing)
     return TK_CRANE;
   if (counts->count[TK_LOADING_BAY] / 4 < existing)
@@ -265,7 +250,7 @@ static int SelectCitySeaportGrowthKind(const CityTileCounts *counts) {
 
 // Select an airport kind, including runway tiles, from current counts. Placement stays with the growth caller.
 static int SelectCityAirportGrowthKind(const CityTileCounts *counts) {
-  int target = (counts->count[TK_RUNWAY_FIRST] + counts->count[TK_RUNWAY_LAST]) / 5;
+  u32 target = (counts->count[TK_RUNWAY_FIRST] + counts->count[TK_RUNWAY_LAST]) / 5;
   if (counts->count[TK_PARKING_LOT_2X2_1] / 4 >= target)
     return TK_RUNWAY_FIRST;
   if (2 * counts->count[TK_CONTROL_TOWER_1X1_1] < target)
@@ -317,7 +302,7 @@ static void GrowCityZonedTile(City *city, TileIndex tile, bool large_city_effect
       if (event_draw < 4) {
         TrySpawnCityHelicopter(city, tile);
       } else {
-        int axis = 2 * (ReadBuildingOrientation(city, tile) & 1);
+        int axis = 2 * (DecodeBuildingOrientation(tp->terrain) & 1);
         TrySpawnCityAirplane(city, tile, axis);
       }
     }
@@ -338,7 +323,7 @@ static void GrowCityZonedTile(City *city, TileIndex tile, bool large_city_effect
         (x < width - 1 && (tp[1].flags & TF_POWERED));
     // The route search itself returns without consuming RNG when no access exists.
     if (powered)
-      has_route = FindTransportRouteAndApplyTraffic(city, x, y, zone, size, 100);
+      has_route = FindTransportRouteAndApplyTraffic(city, tile, zone, size, 100);
     int category = kTileZoneCategory[building ? kind - TK_RESIDENTIAL_FIRST : 0];
     if (category == CITY_BUILDING_DEVELOPED && ReadCityBuildingConstructionStage(tp))
       category = CITY_BUILDING_CONSTRUCTION;
@@ -401,9 +386,10 @@ static void GrowCityZonedTile(City *city, TileIndex tile, bool large_city_effect
 static void PlaceGrowthTiles(City *city, TileIndex tile_index, int size, int growth_type) {
   assert(IsMapTileValid(city, tile_index));
   CityPoint point = MapTilePt(city, tile_index);
-  int zone = ReadCityZoneKind(&city->tile[tile_index]);
+  TileInfo *tp = &city->tile[tile_index];
+  int zone = ReadCityZoneKind(tp);
   bool construction = growth_type == 3 && zone >= ZONE_RESIDENTIAL_LOW && zone <= ZONE_INDUSTRIAL_HIGH &&
-      !HasTileWater(&city->tile[tile_index]) &&
+      !HasTileWater(tp) &&
       (city->fixes & (1ull << CITY_FIX_BUILDING_CONSTRUCTION));
   if (construction) growth_type = (zone - 1) / 2;
   int new_tile;
@@ -422,7 +408,7 @@ static void PlaceGrowthTiles(City *city, TileIndex tile_index, int size, int gro
     int facing = ReadBuildingOrientation(city, tile_index);
     ReplaceCityTileAndStatistics(city, tile_index, new_tile);
     InitializeCityBuildingFootprint(city, tile_index, 1, 1, facing);
-    city->tile[tile_index].flags |= TF_UTILITY_CAPABILITY;
+    tp->flags |= TF_UTILITY_CAPABILITY;
     RefreshCityPowerConnections(city, tile_index);
     if (construction) SetCityBuildingFootprintStage(city, tile_index, CITY_BUILDING_CONSTRUCTION_STAGE_MAX);
     return;
@@ -529,8 +515,8 @@ static SC2K_NOINLINE SC2K_PRESERVE_MOST bool DeclineNeighborSuitable(
 // category/statistics before its replacement is installed.
 static void ClearDecliningZone(City *city, TileIndex tile) {
   int corners = ReadFootprintCorners(city, tile);
-  if (corners != CITY_ZONE_CORNER_0 && corners != CITY_ZONE_CORNER_1 &&
-      corners != CITY_ZONE_CORNER_2 && corners != CITY_ZONE_CORNER_3) return;
+  if (corners != CITY_FOOTPRINT_CORNER_NW && corners != CITY_FOOTPRINT_CORNER_SW &&
+      corners != CITY_FOOTPRINT_CORNER_SE && corners != CITY_FOOTPRINT_CORNER_NE) return;
   TileIndex anchor = GetBuildingStartTile(city, tile);
   if (anchor == INVALID_TILE) return;
   // Keep the original clockwise order: top right, bottom right, bottom left, top left.
@@ -625,7 +611,7 @@ void GrowZoneFromTraffic(City *city, TileIndex tile_index, int size, u8 zone) {
       continue;
     for (int i = 0; i < 8; ++i) {
       TileIndex cell = origin + perimeter_y[i] * width + perimeter_x[i];
-      if (ReadTile(city, cell) >= TK_CHEAP_APARTMENTS) ClearDecliningZone(city, cell);
+      if (city->tile[cell].kind >= TK_CHEAP_APARTMENTS) ClearDecliningZone(city, cell);
     }
     PlaceGrowthTiles(city, origin, 4, 3);
     return;
@@ -635,7 +621,7 @@ void GrowZoneFromTraffic(City *city, TileIndex tile_index, int size, u8 zone) {
 // Remove an existing special-zone tile or footprint. Requires valid footprint geometry; clears its statistics,
 // power and zone metadata in row order before the caller installs the replacement.
 static void ClearSpecialZoneFootprint(City *city, TileIndex tile) {
-  int kind = ReadTile(city, tile);
+  int kind = city->tile[tile].kind;
   if (!IsTileKindFacility(kind)) return;
   int size = kind >= TK_STATUE && kind <= TK_RADAR ? 1 : 2;
   if (size == 2) {
@@ -644,8 +630,9 @@ static void ClearSpecialZoneFootprint(City *city, TileIndex tile) {
   }
   for (int row = 0; row < size; ++row)
     for (TileIndex cell = tile + row * city->map_width, end = cell + size; cell < end; ++cell) {
-      ReplaceCityTileAndStatistics(city, cell, ReadCityWaterGroundKind(&city->tile[cell]));
-      city->tile[cell].flags &= ~(TF_POWERED | TF_POWERABLE);
+      TileInfo *tp = &city->tile[cell];
+      ReplaceCityTileAndStatistics(city, cell, ReadCityWaterGroundKind(tp));
+      tp->flags &= ~(TF_POWERED | TF_POWERABLE);
       RefreshCityPowerConnections(city, cell);
       WriteZoneByte(city, cell, ReadZoneByte(city, cell) & CITY_ZONE_KIND_MASK);
     }
@@ -673,7 +660,7 @@ static bool GrowSpecialZoneRunway(City *city, TileIndex origin, int zone_kind) {
     int kind = tp->kind;
     if (zone_kind == ZONE_MILITARY && (city->fixes & (1ull << CITY_FIX_MILITARY_GROWTH)) &&
         (kind == TK_ROAD || IsTileKindBridge(kind) || kind == TK_CRANE || kind == TK_MISSILE_SILO ||
-            ReadTerrainCode(tp) || ReadUnderground(city, probe) || HasTileWater(tp)))
+            ReadTerrainCode(tp) || ReadTileUndergroundKind(tp) || HasTileWater(tp)))
       return false;
     if (kind == TK_RUNWAY_FIRST || kind == TK_RUNWAY_LAST) continue;
     if (++new_cells == 5) break;
@@ -682,13 +669,14 @@ static bool GrowSpecialZoneRunway(City *city, TileIndex origin, int zone_kind) {
   int facing = (step_y != (city->geography.rotation & 1)) + city->geography.rotation;
   TileIndex tile = origin;
   for (int placed = 0; placed < 5; tile += stride) {
-    int kind = ReadTile(city, tile);
+    TileInfo *tp = &city->tile[tile];
+    int kind = tp->kind;
     bool crossing = kind == TK_RUNWAY_FIRST;
-    if (kind == TK_RUNWAY_LAST || (crossing && (ReadBuildingOrientation(city, tile) & 1) == step_y)) continue;
+    if (kind == TK_RUNWAY_LAST || (crossing && (DecodeBuildingOrientation(tp->terrain) & 1) == step_y)) continue;
     if (!crossing && !IsTileKindUnbuilt(kind)) ClearSpecialZoneFootprint(city, tile);
     ReplaceCityTileAndStatistics(city, tile, crossing ? TK_RUNWAY_LAST : TK_RUNWAY_FIRST);
     if (zone_kind != ZONE_MILITARY) {
-      city->tile[tile].flags |= TF_POWER_SERVICE;
+      tp->flags |= TF_POWER_SERVICE;
       RefreshCityPowerConnections(city, tile);
     }
     InitializeCityBuildingFootprint(city, tile, 1, 1, crossing ? city->geography.rotation : facing);
@@ -728,7 +716,7 @@ static bool GrowSpecialZonePier(City *city, TileIndex tile_index, int zone_kind)
   const TileInfo *end = &city->tile[end_tile];
   if (ReadCityWaterHeight(end) < ReadCityLandHeight(end) + 2)
     return false;
-  if (!IsTileKindUnbuilt(ReadTile(city, tile_index)))
+  if (!IsTileKindUnbuilt(city->tile[tile_index].kind))
     ClearSpecialZoneFootprint(city, tile_index);
   if (PlaceSpecialZoneFootprint(city, tile_index, TK_CRANE, 1) < 0 &&
       (city->fixes & (1ull << CITY_FIX_MILITARY_GROWTH)))
@@ -772,24 +760,24 @@ bool ReplaceSpecialZoneTile(City *city, TileIndex tile, int replacement, int zon
   }
 
   if (size == 1) {
-    if (!IsTileKindUnbuilt(ReadTile(city, tile))) return true;
+    if (!IsTileKindUnbuilt(city->tile[tile].kind)) return true;
   } else {
     CityPoint point = MapTilePt(city, tile);
     tile -= (point.y & 1) * city->map_width + (point.x & 1);
-    if (ReadTile(city, tile) >= TK_WATER_TOWER) return false;
+    if (city->tile[tile].kind >= TK_WATER_TOWER) return false;
     for (int row = 0; row < 2; ++row)
       for (TileIndex cell = tile + row * city->map_width, end = cell + 2; cell < end; ++cell) {
         const TileInfo *tp = &city->tile[cell];
         int kind = tp->kind;
         if (zone_kind == ZONE_MILITARY && (city->fixes & (1ull << CITY_FIX_MILITARY_GROWTH)) &&
-            (kind == TK_ROAD || IsTileKindBridge(kind) || kind == TK_MISSILE_SILO || ReadUnderground(city, cell)))
+            (kind == TK_ROAD || IsTileKindBridge(kind) || kind == TK_MISSILE_SILO || ReadTileUndergroundKind(tp)))
           return false;
         if (kind == TK_RUNWAY_FIRST || kind == TK_RUNWAY_LAST || kind == TK_CRANE || ReadCityZoneKind(tp) != zone_kind)
           return false;
       }
     for (int row = 0; row < 2; ++row)
       for (TileIndex cell = tile + row * city->map_width, end = cell + 2; cell < end; ++cell)
-        if (!IsTileKindUnbuilt(ReadTile(city, cell))) ClearSpecialZoneFootprint(city, cell);
+        if (!IsTileKindUnbuilt(city->tile[cell].kind)) ClearSpecialZoneFootprint(city, cell);
   }
 
   // Single-cell military growth restores the pre-placement flags; larger footprints keep each cell's live flags.

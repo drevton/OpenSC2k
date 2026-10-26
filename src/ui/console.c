@@ -8,6 +8,7 @@
 #include "audio/backend.h"
 #include "base/text.h"
 #include "city/engine/cheats.h"
+#include "city/engine/commands.h"
 #include "drawing/fonts/fonts.h"
 #include "drawing/raster/canvas_primitives.h"
 #include "drawing/raster/canvas_raster_internal.h"

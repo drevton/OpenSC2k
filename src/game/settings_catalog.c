@@ -21,7 +21,7 @@ static const CityDropdownItem kScrollwheelChoices[] = {
 // One schema supplies labels, tooltips, defaults, storage, City commands and config keys.
 const CitySetting kCitySettings[] = {
   {"Individual facility records", "Give every facility its own microsim record, name and chronological age. "
-      "Off restores stock shared records and the 150-record limit for comparisons.",
+      "Off restores shared facility records and the 150-record limit.",
       .group = CITY_SETTINGS_SIMCITY_FIXES, .action = GAME_OPTIONS_INDIVIDUAL_FACILITIES,
       .default_value = true, .key = "game.individual_facilities", .owner = SETTING_CITY, .type = SETTING_BOOL,
       .offset = offsetof(City, individual_facilities), .maximum = 1,
@@ -238,7 +238,7 @@ const CitySetting kCitySettings[] = {
       .command = CITY_COMMAND_SET_FIX, .parameter = CITY_FIX_GRASS_CLEARING_COST,
   },
   {"Restored cheat codes", "Enable cheats from the DOS, Mac and demo releases. Enter codes with cheat CODE in the "
-      "developer console. Cheated cities are excluded from pristine executable comparison.",
+      "developer console.",
       .group = CITY_SETTINGS_SIMCITY_FIXES, .action = GAME_OPTIONS_FIX + CITY_FIX_RESTORED_CHEATS,
       .default_value = true,
       .key = "fixes.restored_cheats", .owner = SETTING_CITY, .type = SETTING_MASK64,
@@ -408,7 +408,7 @@ const CitySetting kCitySettings[] = {
       .command = CITY_COMMAND_SET_FIX, .parameter = CITY_FIX_LANDSCAPE_DETAILS,
   },
   {"Deterministic transport root cost", "Initialize the route's starting cost instead of using an unwritten stock "
-      "stack byte. Off permits captured stock values in comparison tools; normal gameplay still uses zero.",
+      "stack byte. Normal gameplay always starts the route at zero.",
       .group = CITY_SETTINGS_SIMCITY_FIXES, .action = GAME_OPTIONS_FIX + CITY_FIX_ROUTE_ROOT_COST,
       .default_value = true,
       .key = "fixes.route_root_cost", .owner = SETTING_CITY, .type = SETTING_MASK64,

@@ -7,6 +7,9 @@
 typedef struct CityTileGeometry CityTileGeometry;
 typedef struct CityConstructionState CityConstructionState;
 
+// Native highway mesh heights in terrain elevation units. A bridge approach rises once above its bank.
+enum { CITY_HIGHWAY_DECK_RISE = 3, CITY_HIGHWAY_BRIDGE_GRADE = 1 };
+
 // Local payload and placement-selector conversions use only the supplied values or tile record.
 // Orientation writes do not select a kind or complete a footprint; callers own admission and old/new damage.
 static SC2K_FORCE_INLINE bool ReadCityHighwayRampMirror(const TileInfo *tp) {
@@ -62,11 +65,18 @@ typedef struct {
 
 // Highway links identify the anchor of a rectangular footprint.
 TileIndex CityHighwayAnchor(const City *city, TileIndex tile);
+// Read-only commuter edge check for adjacent valid tiles and their cardinal direction. Only two straight-axis
+// highway cells are restricted here: within one footprint they can change lanes; separate footprints must align
+// end to end. Other kinds pass this check and still need the caller's route-state admission.
+bool CityHighwaysCanJoin(const City *city, TileIndex from, TileIndex to, int direction);
 // Compact placement uses the picked tile; existing footprints supply their own anchor.
 TileIndex CityHighwayPlacementAnchor(const City *city, TileIndex tile);
-// Bounded neighbour reads also work on the dense zone plane during import.
-CityRect CityHighwayFootprintBounds(const City *city, TileIndex tile, const u8 *zones, int stride);
-SC2K_PRESERVE_MOST int CityHighwayCornerMask(const City *city, int zone);
+// Valid native highway tile; derives bounds from City's own continuation links and neighbouring kinds.
+CityRect CityHighwayFootprintBounds(const City *city, TileIndex tile);
+// Valid native highway footprint or highway bridge; corner is a physical CITY_BUILDING_CORNER_ index.
+bool IsCityHighwayFootprintCorner(const City *city, TileIndex tile, int corner);
+// Same tile contract; returns rotation-relative CityFootprintCornerMask bits in the low nibble.
+SC2K_PRESERVE_MOST int CityHighwayCornerMask(const City *city, TileIndex tile);
 void InitializeCityHighwayFootprint(City *city, TileIndex top_left);
 void UpdateCityHighwayTile(City *city, TileIndex tile_index, int shape);
 // Land/curve/junction selectors 0..12; bridges are built as complete native spans.
@@ -86,12 +96,15 @@ bool AdvanceCityHighwayLine(const City *city, CityConstructionState *state, int 
 void PrepareCityHighwayLine(const City *city, CityConstructionState *state, int x, int y, int end_x, int end_y);
 bool CityHighwayCellAlreadyBuilt(const City *city, TileIndex tile);
 CityInfrastructureSpan FindCityHighwaySpan(const City *city, TileIndex origin, int direction, bool choose_direction);
-i64 PlaceCityBridgeOrTunnel(City *city, TileIndex origin_tile, int ui_mode);
+// Place a two-lane highway span from a valid footprint. True lets the span query choose a direction;
+// false uses City.construction.direction. Checks affordability without debiting the span charge;
+// approach/deck writes and partial effects retain their original order. Returns success or a negative error.
+i64 PlaceCityHighwaySpan(City *city, TileIndex origin_tile, bool choose_direction);
 i64 PlaceCityLegacyTransportLine(City *city, TileIndex origin_tile);
 i64 PlaceCityTransportLine(City *city, TileIndex origin_tile);
 // Span queries take tile indexes; optional queries accept INVALID_TILE.
 // Compatibility and height use the northwest tile; height requires a valid 2x2 footprint.
-int ClassifyTransportSpanTile(const City *city, TileIndex tile);
+CityTransportFootprint ClassifyTransportSpanTile(const City *city, TileIndex tile);
 int GetMaximumTerrainHeightIn2x2(const City *city, TileIndex tile);
 int GetTransportSpanCompatibilityMask(const City *city, TileIndex tile);
 int ResolveTransportSpanDirection(const City *city, TileIndex tile);
@@ -115,14 +128,14 @@ int CityHighwayDrawHeight(const City *city, TileIndex tile, const CityTileGeomet
 // Highway artwork only: compact carriageways, entrances, shared shapes and highway bridges.
 int CityHighwaySpriteFlip(const City *city, TileIndex tile, int layout);
 // Compact highway artwork keeps the perpendicular surface in the ground pass and the deck in the object pass.
-void DrawCityHighwayTransportArtwork(City *city, TileIndex tile, int layout, int zoom, int screen_x, int baseline,
+void DrawCityHighwayTransportArtwork(const City *city, TileIndex tile, int layout, int zoom, int screen_x, int baseline,
     const CityTileGeometry *geometry);
 // Shared catalog footprints paint their four ground tiles and native road/rail underpasses in the ground pass,
 // then submit the shared deck. Underpasses never come from the terrain service.
-void DrawCityHighwaySharedFootprint(City *city, TileIndex tile, int layout, int zoom, int screen_x, int ground_y,
+void DrawCityHighwaySharedFootprint(const City *city, TileIndex tile, int layout, int zoom, int screen_x, int ground_y,
     const CityTileGeometry *geometry);
 // Paint the road/rail underneath an unmodified native crossing during depth-ground collection.
-void DrawCityHighwayCrossingGround(City *city, int layout, int zoom, int screen_x, int ground_y);
+void DrawCityHighwayCrossingGround(const City *city, int layout, int zoom, int screen_x, int ground_y);
 
 // Shared command admission is read-only in TEST mode; execution retains the family placement/payment order.
 i64 CmdPlaceTransportLine(City *city, u32 flags, TileIndex start,

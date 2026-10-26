@@ -7,7 +7,7 @@
 #include "city/engine/city_types.h"
 #include "city/engine/random.h"
 #include "city/events/events.h"
-#include "city/maps/layers.h"
+#include "city/maps/terrain.h"
 #include "city/maps/tile_storage.h"
 #include "city/state.h"
 #include "drawing/maps/map_depth.h"
@@ -87,9 +87,7 @@ static bool PrepareEventFootprints(MapSpriteFootprints *sprites, int capacity) {
   return true;
 }
 
-bool PrepareCityEventDrawingStorage(const City *city) {
-  Drawing *drawing = city->drawing;
-  int capacity = city->events.capacity;
+bool PrepareDrawingEventStorage(Drawing *drawing, int capacity) {
   if (drawing->vehicles.capacity < capacity) {
     VehicleMotion *slots = calloc(capacity, sizeof(*slots));
     if (!slots) return false;
@@ -110,7 +108,7 @@ bool PrepareCityEventDrawingStorage(const City *city) {
   return true;
 }
 
-void ReleaseCityEventDrawingStorage(Drawing *drawing) {
+void ReleaseDrawingEventStorage(Drawing *drawing) {
   free(drawing->vehicles.slots);
   drawing->vehicles = (DrawingVehicles){0};
   free(drawing->tile_traversal.event_cells);
@@ -124,9 +122,10 @@ void ReleaseCityEventDrawingStorage(Drawing *drawing) {
   }
 }
 
-void PublishCityMapEventDamage(City *city, MapSpriteFootprints *sprites, CityCanvasVisiblePaint mark, void *context) {
+void PublishCityMapEventDamage(const City *city, MapSpriteFootprints *sprites,
+    CityCanvasVisiblePaint mark, void *context) {
   Drawing *drawing = city->drawing;
-  if (!PrepareCityEventDrawingStorage(city)) return;
+  if (!PrepareDrawingEventStorage(drawing, city->events.capacity)) return;
   int phase = city->event_runtime.animation_phase;
   int dx = drawing->map_state.origin_x - sprites->origin_x;
   int dy = drawing->map_state.origin_y - sprites->origin_y;
@@ -139,7 +138,7 @@ void PublishCityMapEventDamage(City *city, MapSpriteFootprints *sprites, CityCan
     bool random = event->type == CITY_MAP_EVENT_EXPLOSION || event->type == CITY_MAP_EVENT_MONSTER ||
         event->type == CITY_MAP_EVENT_TORNADO;
     bool rotor_changed = sprites->helicopter_frame != drawing->vehicles.helicopter_frame &&
-        ((event->type == CITY_MAP_EVENT_HELICOPTER && event->next_slot != CITY_HELICOPTER_ON_GROUND) ||
+        ((event->type == CITY_MAP_EVENT_HELICOPTER && event->state != CITY_HELICOPTER_ON_GROUND) ||
             event->type == CITY_MAP_EVENT_MAXIS_MAN);
     if (!random && event->type != CITY_MAP_EVENT_UNUSED && IsMapTileValid(city, event->tile))
       bounds = CityMapEventSpriteBounds(city, event->tile, drawing->default_map_view->zoom, slot);
@@ -181,7 +180,7 @@ static void DrawVehicleSprite(Drawing *drawing, int sprite, int x, int y, int fl
 }
 
 // Animated map overlays 251 through 255.
-void DrawCityMapAnimatedOverlay(City *city, TileIndex tile, int zoom, int overlay) {
+void DrawCityMapAnimatedOverlay(const City *city, TileIndex tile, int zoom, int overlay) {
   Drawing *drawing = city->drawing;
   CityPoint camera = CityMapViewTilePoint(city, tile);
   const MapSpriteMetrics *catalog = drawing->map_state.sprite_metrics;
@@ -197,10 +196,12 @@ void DrawCityMapAnimatedOverlay(City *city, TileIndex tile, int zoom, int overla
     case CITY_OVERLAY_FLOOD: sprite_id = (CITY_MAP_SPRITES_PER_ZOOM * zoom + CITY_SPRITE_CATALOG_FLOOD); break;
     case CITY_OVERLAY_RIOTS_SOUTH_EAST:
     case CITY_OVERLAY_RIOTS_NORTH_WEST:
-      sprite_id = (CITY_MAP_SPRITES_PER_ZOOM * zoom + CITY_SPRITE_CATALOG_RIOTS_FIRST + (Sc2kCrtRand(city) & 1));
+      sprite_id = CITY_MAP_SPRITES_PER_ZOOM * zoom + CITY_SPRITE_CATALOG_RIOTS_FIRST +
+          (NextCrtRandom(&drawing->animation.random.crt) & 1);
       break;
     case CITY_OVERLAY_FIRE:
-      sprite_id = (CITY_MAP_SPRITES_PER_ZOOM * zoom + CITY_SPRITE_CATALOG_FIRE_FIRST + (Sc2kCrtRand(city) & 3));
+      sprite_id = CITY_MAP_SPRITES_PER_ZOOM * zoom + CITY_SPRITE_CATALOG_FIRE_FIRST +
+          (NextCrtRandom(&drawing->animation.random.crt) & 3);
       break;
     default: return;
   }
@@ -208,11 +209,11 @@ void DrawCityMapAnimatedOverlay(City *city, TileIndex tile, int zoom, int overla
   int sprite_y = drawing->map_state.origin_y + row_step * (camera.y + camera.x) -
       elevation_step * elevation - sprite->baseline;
   int sprite_x = drawing->map_state.origin_x + half_width * (camera.y - camera.x + 1) - (sprite->width >> 1);
-  DrawCityMapSprite(drawing, sprite_id, sprite_x, sprite_y, (Sc2kCrtRand(city) & 1));
+  DrawCityMapSprite(drawing, sprite_id, sprite_x, sprite_y, (NextCrtRandom(&drawing->animation.random.crt) & 1));
 }
 
 // Unanimated map-event sprite for event types 7, 8, and 14.
-static void DrawCityMapEventStaticSprite(City *city, TileIndex tile, int zoom, int slot) {
+static void DrawCityMapEventStaticSprite(const City *city, TileIndex tile, int zoom, int slot) {
   Drawing *drawing = city->drawing;
   CityPoint camera = CityMapViewTilePoint(city, tile);
   const MapSpriteMetrics *catalog = drawing->map_state.sprite_metrics;
@@ -222,7 +223,7 @@ static void DrawCityMapEventStaticSprite(City *city, TileIndex tile, int zoom, i
     [CITY_CANVAS_MAP_ZOOM_LARGE] = CITY_SPRITE_CATALOG_LARGE_BASE,
     [CITY_CANVAS_MAP_ZOOM_MAGNIFIED] = CITY_SPRITE_CATALOG_LARGE_BASE,
   };
-  CityMapEvent *event = &city->events.event[slot];
+  const CityMapEvent *event = &city->events.event[slot];
   int sprite_id = kZoomSpriteBase[zoom] + kCityMapEventBaseSprite[event->type];
   const MapSpriteMetrics *sprite = &catalog[sprite_id];
   int zoom_scale = 1 << zoom;
@@ -233,31 +234,31 @@ static void DrawCityMapEventStaticSprite(City *city, TileIndex tile, int zoom, i
 }
 
 // Randomized sprite for map-event type 15.
-static void DrawCityMapEventRandomSprite(City *city, TileIndex tile, int zoom) {
+static void DrawCityMapEventRandomSprite(const City *city, TileIndex tile, int zoom) {
   Drawing *drawing = city->drawing;
   CityPoint camera = CityMapViewTilePoint(city, tile);
   const MapSpriteMetrics *catalog = drawing->map_state.sprite_metrics;
   if (drawing->map_state.events_suppressed != 0)
     return;
   int sprite_id = CITY_MAP_SPRITES_PER_ZOOM * zoom + kCityMapEventBaseSprite[CITY_MAP_EVENT_TORNADO] +
-      Sc2kCrtRandRange(city, 3);
+      NextCrtRandom(&drawing->animation.random.crt) % 3;
   int elevation = ReadCitySurfaceHeight(&city->tile[tile]);
   const MapSpriteMetrics *sprite = &catalog[sprite_id];
   int sprite_y = drawing->map_state.origin_y + (2 << zoom) * (camera.y + camera.x) -
       sprite->baseline - (CityMapHeightStep(zoom)) * elevation;
   int sprite_x = drawing->map_state.origin_x + (4 << zoom) * (camera.y - camera.x + 1) - sprite->width;
-  DrawCityMapSprite(drawing, sprite_id, sprite_x, sprite_y, (Sc2kCrtRand(city) & 1));
+  DrawCityMapSprite(drawing, sprite_id, sprite_x, sprite_y, (NextCrtRandom(&drawing->animation.random.crt) & 1));
 }
 
 // Draw the authored type-5 crawler as one registered sprite.
-static void DrawCityMapEventStructure(City *city, TileIndex tile, int zoom, int slot) {
+static void DrawCityMapEventStructure(const City *city, TileIndex tile, int zoom, int slot) {
   Drawing *drawing = city->drawing;
   if (drawing->map_state.events_suppressed) return;
-  CityMapEvent *event = &city->events.event[slot];
+  const CityMapEvent *event = &city->events.event[slot];
   CityPoint camera = CityMapViewTilePoint(city, tile);
   int direction = (event->direction + 6 * CityMapCameraRotation(drawing)) & 7;
   int pose = (direction >> 1) & 1;
-  if (event->monster.lower_pose & 128) pose = Sc2kCrtRand(city) & 1;
+  if (event->monster.lower_pose & 128) pose = NextCrtRandom(&drawing->animation.random.crt) & 1;
   int sprite_id = CITY_MAP_SPRITES_PER_ZOOM * zoom + CITY_SPRITE_CATALOG_CRAWLER_FIRST + pose;
   const MapSpriteMetrics *sprite = &drawing->map_state.sprite_metrics[sprite_id];
   int elevation = ReadCitySurfaceHeight(&city->tile[tile]);
@@ -268,11 +269,11 @@ static void DrawCityMapEventStructure(City *city, TileIndex tile, int zoom, int 
 }
 
 // Dispatch the event slot stored in overlay IDs 201 through 240.
-void DrawCityMapEventOverlay(City *city, TileIndex tile, int zoom, int slot) {
+void DrawCityMapEventOverlay(const City *city, TileIndex tile, int zoom, int slot) {
   Drawing *drawing = city->drawing;
   CityPoint camera = CityMapViewTilePoint(city, tile);
   const MapSpriteMetrics *catalog = drawing->map_state.sprite_metrics;
-  CityMapEvent *event = &city->events.event[slot];
+  const CityMapEvent *event = &city->events.event[slot];
   if (!drawing->map_state.vehicles_enabled && IsCityMapVehicle(event->type)) return;
   if (kCityMapEventMinZoom[event->type] > zoom)
     return;
@@ -303,7 +304,7 @@ void DrawCityMapEventOverlay(City *city, TileIndex tile, int zoom, int slot) {
       } else if (event->type >= CITY_MAP_EVENT_AIRPLANE && event->type <= CITY_MAP_EVENT_SHIP) {
         sprite_base += kCityMapEventHeadingSprite[direction];
         if (event->type == CITY_MAP_EVENT_HELICOPTER) {
-          int frame = event->next_slot == CITY_HELICOPTER_ON_GROUND ? 0 : drawing->vehicles.helicopter_frame;
+          int frame = event->state == CITY_HELICOPTER_ON_GROUND ? 0 : drawing->vehicles.helicopter_frame;
           sprite_base = CITY_SPRITE_CATALOG_HELICOPTER_ANIMATION_FIRST +
               kCityMapEventHeadingSprite[direction] * CITY_HELICOPTER_ROTOR_FRAMES + frame;
         }
@@ -311,8 +312,9 @@ void DrawCityMapEventOverlay(City *city, TileIndex tile, int zoom, int slot) {
       } else if (event->type == CITY_MAP_EVENT_EXPLOSION) {
         // Explosion direction is an animation stage, independent of camera rotation.
         sprite_base += event->direction;
-        flip = NextCityMapRandomModulo(city, 2);
-      } else if (event->type == CITY_MAP_EVENT_SAILBOAT && event->next_slot != 0) {
+        drawing->animation.random.map = AdvanceCityMapSeed(drawing->animation.random.map);
+        flip = drawing->animation.random.map & 1;
+      } else if (event->type == CITY_MAP_EVENT_SAILBOAT && event->state != CITY_SAILBOAT_SAILING) {
         sprite_base = 379;
         flip = city->event_runtime.animation_phase & 1;
       } else {
@@ -386,7 +388,7 @@ CityRect CityAirplaneBounds(const City *city, int slot, CityMapCamera camera) {
 }
 
 // Collect the current deterministic sprite footprint through the same prepared drawing path.
-CityRect CityMapEventSpriteBounds(City *city, TileIndex tile, int zoom, int slot) {
+CityRect CityMapEventSpriteBounds(const City *city, TileIndex tile, int zoom, int slot) {
   Drawing *drawing = city->drawing;
   CityRect bounds = {0};
   CityRect *previous = drawing->sprite_damage_bounds;

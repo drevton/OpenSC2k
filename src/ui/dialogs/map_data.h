@@ -5,6 +5,7 @@
 
 typedef struct Canvas Canvas;
 typedef struct Drawing Drawing;
+typedef struct CityInterfaceState CityInterfaceState;
 typedef struct Window Window;
 typedef struct CityCanvasDesktop CityCanvasDesktop;
 typedef union CityStatistics CityStatistics;
@@ -24,7 +25,9 @@ typedef struct CityMapDataState {
 enum { CITY_MAP_DATA_MIN_WIDTH = 250, CITY_MAP_DATA_MIN_HEIGHT = 160,
     CITY_MAP_DATA_DEFAULT_WIDTH = 356, CITY_MAP_DATA_DEFAULT_HEIGHT = 270 };
 
-void SetCityMapDataPresentation(City *city, CityCanvasDesktop *desktop);
+// Borrow the desktop (or detach with NULL) and select isometric projection. Caller finishes window lifetimes before
+// detaching; this binding does not close windows, release Drawing caches or change City.
+void SetCityMapDataPresentation(CityInterfaceState *ui, CityCanvasDesktop *desktop);
 // Combined group/option index; reading the selection does not refresh its preview.
 int ReadCityMapDataSelection(const CityMapDataState *state);
 void HideCityMapDataDialog(City *city);

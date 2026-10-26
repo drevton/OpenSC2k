@@ -85,6 +85,16 @@ u32 OpenCityNewspaperPage(City *city, CityNewspaperDialog *paint, int edition, d
   return id;
 }
 
+// Ranking and edition selection have already run in City. Retained presenters consume the event identity;
+// the native page uses the captured edition and keeps the same paused caller through dismissal.
+void PresentRankedCityEvent(City *city, u32 event_code, u32 event_data) {
+  (void)event_code;
+  (void)event_data;
+  CityNewspaperDialog dialog = {0};
+  dialog.edition_index = city->newspaper.edition_index;
+  RunPausedCityNewspaperDialog(city, &dialog);
+}
+
 void PresentCityNewspaperEdition(City *city, i32 edition) {
   if (city->game->debug_city) return;
   CityInterfaceState *ui = city->game->ui;
@@ -214,6 +224,17 @@ bool PollCityStartupNewspaper(City *city, double now) {
   return false;
 }
 
+void UpdateCityPeriodicNewspaper(Game *game) {
+  City *city = game->city;
+  CityInterfaceState *ui = game->ui;
+  if (ui->newspaper_month != city->clock.month) {
+    ui->newspaper_month = city->clock.month;
+    if (!city->newspaper.enabled && !ui->newspaper_delivery_disabled &&
+        (ui->newspaper_month == CITY_MONTH_APRIL || ui->newspaper_month == CITY_MONTH_AUGUST))
+      OpenCityManualNewspaper(city, city->newspaper.edition_index);
+  }
+}
+
 void OpenCityManualNewspaper(City *city, int edition) {
   city->game->ui->startup_newspaper_open_at = 0;
   const GameObservation *observer = city->game->observation;
@@ -229,7 +250,7 @@ void ApplyCityNewspaperPageEffects(City *city, int edition) {
   CityNewspaperDialog paint = {.edition_index = edition};
   if (BeginCityNewspaperDialog(city, &paint) != CITY_NEWSPAPER_INITIALIZATION_SKIPPED)
     FinishCityNewspaperInitialization(city, edition);
-  if (!city->game->resources->news_resources_unavailable) {
+  if (AreCityNewsResourcesAvailable(city)) {
     NativeNewspaperDialog *page = calloc(1, sizeof(*page));
     if (page) {
       NativeCaptureNewspaper(city, &paint, page);
@@ -240,8 +261,6 @@ void ApplyCityNewspaperPageEffects(City *city, int edition) {
   DestroyCityNewspaperWindow(city, &paint);
 }
 
-// Retain the original newspaper caller for comparison. Returns the retained dispatch result; pending effects must
-// continue through their existing work rather than being restarted after presentation.
 i64 ProcessPendingCityDisaster(City *city, bool terrain_water_allowed) {
   i64 result = AdvanceCityDisasterEffects(city, terrain_water_allowed);
   if (result == CITY_OPERATION_PENDING) return result;

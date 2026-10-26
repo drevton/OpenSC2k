@@ -27,9 +27,6 @@ i64 CmdAllInventions(City *city, u32 flags, int reserved1, int reserved2, int re
 i64 CmdAddCityCashBonus(City *city, u32 flags, int reserved1, int reserved2, int reserved3);
 i64 CmdGrantSpecialFacilitiesAndCash(City *city, u32 flags, int reserved1, int reserved2, int reserved3);
 
-// Unconditional reward/cash effect used by the cheat command and the original comparison menu adapter.
-// The caller owns admission and command completion. Unlock/status/sound feedback precedes cash;
-// the final toolbar refresh follows it.
 void GrantAllSpecialFacilitiesAndCash(City *city);
 
 #endif

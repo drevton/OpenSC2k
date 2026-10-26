@@ -13,7 +13,7 @@ typedef struct CityInterfaceState CityInterfaceState;
 typedef struct CanvasSDLEvent CanvasSDLEvent;
 
 typedef enum WindowEventKind {
-  WINDOW_PAINT, WINDOW_INPUT, WINDOW_DROPDOWN, WINDOW_ZOOM, WINDOW_DESTROY
+  WINDOW_PAINT, WINDOW_INPUT, WINDOW_DROPDOWN, WINDOW_ZOOM, WINDOW_DESTROY, WINDOW_TIMER
 } WindowEventKind;
 
 // Paint borrows a window-local canvas for this call only. Input keeps the host
@@ -21,6 +21,8 @@ typedef enum WindowEventKind {
 // Procedures may open/close windows: retain IDs, not Window pointers, across callbacks.
 // WINDOW_DESTROY borrows a detached record whose ID is already absent from the stack.
 // Its owned data stays alive until the procedure returns.
+// TIMER delivers host real-time seconds, including while dialogs pause City. Return true only for a presentation
+// change; timers mark their own damage and may dismiss their window. No common timer behavior follows.
 typedef struct WindowEvent {
   WindowEventKind kind;
   int x, y; // Logical desktop position for input/zoom; paint uses window-local coordinates.
@@ -28,6 +30,7 @@ typedef struct WindowEvent {
     Canvas *canvas;
     const CanvasSDLEvent *input;
     int zoom_steps;
+    double now; // WINDOW_TIMER host time; never a simulation advance.
     const CityDropdownSelection *selection;
   };
 } WindowEvent;
@@ -106,10 +109,11 @@ bool Sc2kCanvasDesktopDismissWindow(CityCanvasDesktop *desktop, u32 window_id);
 // Attach before any call that can reconcile pauses or run nested UI work. Failure leaves the window unchanged;
 // success retains callback delivery and borrows its context until completion. This API never frees the context.
 bool AttachCityWindowCallback(Window *window, CityWindowCallback *callback, void *context);
+// Game supplies the UI queue and command depth; continuations receive its captured City.
 // Drain detached completion batches only outside commands. Window-owned data is already released.
 // Windows resume in dismissal order; callbacks attached to one window resume newest first.
 // Each record is freed before its callback runs; callbacks may open, close or reorder windows.
-void CompleteCityWindowCallbacks(City *city);
+void CompleteCityWindowCallbacks(Game *game);
 
 // IDs in back-to-front order for one pass. Newly opened windows wait for the next pass.
 // Reacquire each ID before use because callbacks may close or reorder windows.

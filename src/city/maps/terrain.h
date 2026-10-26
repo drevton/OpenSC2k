@@ -2,8 +2,7 @@
 #define SC2K_CITY_MAPS_TERRAIN_H
 
 #include "city/types.h"
-
-typedef struct TileInfo TileInfo;
+#include "city/maps/kinds.h"
 
 // Land shape comes from zone's slope encoding, including submerged beds. Kind determines water presence;
 // flags retain salinity. Wet occupants retain their underlying water kind in terrain's low nibble.
@@ -25,6 +24,46 @@ typedef enum CityWaterSurface {
   CITY_WATER_SURFACE_UNSUPPORTED
 } CityWaterSurface;
 
+// Record queries read only the supplied tile and immutable kind classes; they do not require City state.
+// Permanent water is a property of the stored kind, including occupied water.
+static SC2K_FORCE_INLINE bool HasTileWater(const TileInfo *tp) {
+  return (ReadCityTileClasses(tp->kind) & TCLASS_WATER) != 0;
+}
+
+static SC2K_FORCE_INLINE CityWaterKind ReadTileWaterKind(const TileInfo *tp) {
+  return !HasTileWater(tp) ? CITY_WATER_NONE : tp->flags & TF_SALTWATER ? CITY_WATER_SALT : CITY_WATER_FRESH;
+}
+
+// Land shape is independent of the occupant; water presence comes from its kind.
+static SC2K_FORCE_INLINE bool IsFlatDryTile(const TileInfo *tp) {
+  return ReadTerrainCode(tp) == CITY_TERRAIN_FLAT && !HasTileWater(tp);
+}
+
+// Unbuilt includes rubble, radioactive waste and trees. Callers add any
+// tool-specific restrictions on those kinds, zoning or underground contents.
+static SC2K_FORCE_INLINE bool IsFlatDryUnbuiltTile(const TileInfo *tp) {
+  return IsTileKindUnbuilt(tp->kind) && IsFlatDryTile(tp);
+}
+
+// Read the bed's minimum height, excluding water level and construction progress.
+static SC2K_FORCE_INLINE int ReadCityLandHeight(const TileInfo *tp) {
+  return tp->altitude & CITY_ALTITUDE_LAND_MASK;
+}
+
+// Use this for elevation calculations unless the caller already knows that the
+// tile contains real water. A construction stage must never become a height.
+static SC2K_FORCE_INLINE int ReadCityWaterHeight(const TileInfo *tp) {
+  int altitude = tp->altitude;
+  return IsTileKindDryBuilding(tp->kind) || IsTileKindBridgeHead(tp->kind) ? altitude & CITY_ALTITUDE_LAND_MASK :
+      (altitude & CITY_ALTITUDE_WATER_MASK) >> CITY_ALTITUDE_WATER_SHIFT;
+}
+
+// Read the water plane on wet tiles and the land height on dry tiles.
+// Building stages and stale water bits never contribute to the surface height.
+static SC2K_FORCE_INLINE int ReadCitySurfaceHeight(const TileInfo *tp) {
+  return HasTileWater(tp) ? ReadCityWaterHeight(tp) : ReadCityLandHeight(tp);
+}
+
 // Decoded world geometry. Rendering rotates its shapes into the camera before invoking family draw callbacks.
 typedef struct CityTileGeometry {
   int land_height, land_shape;
@@ -34,7 +73,7 @@ typedef struct CityTileGeometry {
   CityWaterSurface water_surface;
 } CityTileGeometry;
 
-// Resolve surface shapes and water classification. For individual stored fields, use the layer accessors;
+// Resolve surface shapes and water classification. For individual stored fields, use the record queries above;
 // ReadCitySurfaceHeight reads just the surface elevation without decoding shoreline geometry.
 CityTileGeometry ReadCityTileGeometry(const City *city, TileIndex tile);
 int CityTerrainSlopeAt(const City *city, TileIndex tile);
@@ -43,13 +82,6 @@ int CityTerrainSlopeAt(const City *city, TileIndex tile);
 int ReadCityTerrainVertexHeight(const City *city, int x, int y);
 // Lowest height shared by the two adjacent records along a north/east/south/west edge.
 int CityTerrainEdgeHeight(const TileInfo *tp, const TileInfo *neighbor, int direction);
-// Native terrain edits preserve the supplied water level and existing salinity.
-// Dry land newly covered by water borrows salinity from neighboring water.
-// keep_rapids preserves existing sloped river water; landscaping passes false
-// so a raised river bed at the water plane becomes dry instead.
-// Updates clear/water/river/bank kinds while retaining river behavior independently of salinity.
-// Their statistics counter is shared; the caller owns old/new invalidation.
-void SetCityTerrainWater(City *city, TileIndex tile, int water_height, int land_shape, bool keep_rapids);
 
 // Recalculate after removing/editing an occupant. Removes incompatible construction while preserving native
 // point-edit slopes and existing water levels; it does not charge or apply the terrain editor's sea-level policy.

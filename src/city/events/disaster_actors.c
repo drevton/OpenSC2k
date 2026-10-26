@@ -7,16 +7,71 @@
 #include <assert.h>
 #include <string.h>
 
-#include "game/audio.h"
+#include "audio/types.h"
 #include "city/disasters/disasters.h"
 #include "city/disasters/types.h"
 #include "city/engine/random.h"
 #include "city/maps/buildings.h"
 #include "city/maps/layers.h"
+#include "city/maps/terrain.h"
 #include "city/maps/water.h"
 #include "city/presentation.h"
 #include "city/state.h"
-#include "city/tools/tools.h"
+
+// Create the monster or tornado event if that disaster's active-count gate permits it. Returns false when already
+// active or no event can be created; successful creation updates deterministic event/disaster state.
+bool ApplyCityMobileDisaster(City *city, bool monster) {
+  if ((monster ? city->disasters.monster_count : city->disasters.tornado_count) >= 1)
+    return false;
+  int slot = FindFreeCityEventSlot(city);
+  if (slot == 0)
+    return false;
+
+  int y = city->disasters.location.y;
+  int x = city->disasters.location.x;
+  y = IntClamp(y, 0, city->map_height - 1);
+  x = IntClamp(x, 0, city->map_width - 1);
+
+  TileIndex tile_index = MapTileXY(city, x, y);
+  int overlay = ReadOverlay(city, tile_index);
+  if (IsCityEventOverlay(overlay))
+    ClearCityMapEventSlot(city, CityEventOverlaySlot(overlay));
+
+  CityMapEvent *event = &city->events.event[slot];
+  memset(event, 0, sizeof(*event));
+  event->type = monster ? CITY_MAP_EVENT_MONSTER : CITY_MAP_EVENT_TORNADO;
+  event->direction = monster ? CITY_HEADING_SOUTH : Sc2kCrtRand(city) & 7;
+  event->tile = tile_index;
+  if (monster) event->height = 15;
+  SetCityMapEventTarget(city, event, 128, 128);
+  int upper = Sc2kCrtRand(city) & 0x7F;
+  int lower = Sc2kCrtRand(city) & 0x7F;
+  if (monster) {
+    event->monster.upper_pose = upper;
+    event->monster.lower_pose = lower;
+  } else {
+    // Stock retains these randomized words even though tornadoes do not use them.
+    event->raw.destination_y = upper;
+    event->raw.destination_x = lower;
+  }
+  if (!monster) event->height = ReadCityLandHeight(&city->tile[tile_index]);
+  event->previous_overlay = ReadCityEventUnderlay(city, tile_index);
+  if (monster) {
+    if (city->mission.active != 0 || (Sc2kCrtRand(city) & 1) != 0)
+      event->monster.action = 0;
+    else
+      event->monster.action = Sc2kCrtRandRange(city, 3) + 1;
+  }
+  event->state = 0;
+  if (monster) ++city->disasters.monster_count;
+  else ++city->disasters.tornado_count;
+  LinkCityMapEvent(city, slot);
+  city->disasters.last_event_slot = slot;
+  InvalidateCityMapEvent(city, slot);
+  if (city->settings.auto_goto != 0)
+    CenterCityMapOnEvent(city, monster ? IntMax(x - 8, 0) : x, monster ? IntMax(y - 8, 0) : y);
+  return true;
+}
 
 // Animate an explosion, then apply its nearby disaster effects. Slot must identify a live explosion; animation
 // completion may damage tiles and queue subsequent disaster work.
@@ -64,7 +119,7 @@ static bool IsCityMaxisManTargetSlot(const City *city, int slot) {
 // Dispatch Maxis Man near the latest disaster. Event targets must still identify the corresponding live disaster;
 // marker targets use the disaster location. Searches and event creation may consume RNG and update active counters.
 void CreateCityMapMaxisMan(City *city, int disaster_type) {
-  if (city->disasters.type16_count >= 1)
+  if (city->disasters.maxis_man_count >= 1)
     return;
   if (disaster_type == CITY_DISASTER_TORNADO || disaster_type == CITY_DISASTER_MONSTER) {
     int target = city->disasters.last_event_slot;
@@ -102,10 +157,10 @@ void CreateCityMapMaxisMan(City *city, int disaster_type) {
   memset(event, 0, sizeof(*event));
   event->type = CITY_MAP_EVENT_MAXIS_MAN;
   event->direction = CityEventHeadingTowardPoint(x, y, city->disasters.location.x, city->disasters.location.y);
-  event->next_slot = 0;
+  event->state = 0;
   event->tile = tile_index;
   event->height = (u8)(ReadCityLandHeight(&city->tile[tile_index]) + 2);
-  SetCityMapEventTarget(city, event, 128, 128);
+  event->maxis_man.motion = (CityMapEventMotion){.offset_x = 128, .offset_y = 128};
   event->maxis_man.destination_y = city->disasters.location.y;
   event->maxis_man.destination_x = city->disasters.location.x;
   event->previous_overlay = ReadCityEventUnderlay(city, tile_index);
@@ -139,7 +194,7 @@ void CreateCityMapMaxisMan(City *city, int disaster_type) {
 
   CenterCityMapViewAndResetOverlays(city, x, y, 2);
   PlayCitySound(city, tile_index, CITY_SOUND_CIVIC_PLACEMENT);
-  ++city->disasters.type16_count;
+  ++city->disasters.maxis_man_count;
   LinkCityMapEvent(city, slot);
 }
 
@@ -155,10 +210,10 @@ int CreateCityMapEffectEvent(City *city, TileIndex tile_index, int variant, int 
   memset(event, 0, sizeof(*event));
   event->type = CITY_MAP_EVENT_EXPLOSION;
   event->direction = CITY_EXPLOSION_START;
-  event->next_slot = state;
+  event->state = state;
   event->tile = tile_index;
   event->height = (u8)variant;
-  SetCityMapEventTarget(city, event, 128, 128);
+  event->explosion.motion = (CityMapEventMotion){.offset_x = 128, .offset_y = 128};
   event->previous_overlay = ReadCityEventUnderlay(city, tile_index);
   event->explosion.trigger_disaster = linked;
   LinkCityMapEvent(city, slot);
@@ -179,9 +234,9 @@ void UpdateCityMapMaxisMan(City *city, int slot) {
       ClearCityMapEventSlot(city, slot);
       return;
     }
-    if (!IsCityMaxisManTargetSlot(city, target_slot)) event->next_slot = CITY_MAXIS_MAN_DEPART;
+    if (!IsCityMaxisManTargetSlot(city, target_slot)) event->state = CITY_MAXIS_MAN_DEPART;
   }
-  ++city->disasters.type16_count;
+  ++city->disasters.maxis_man_count;
   // Stock probes can leave the map and dereference unmapped guest rows. End invalid events safely.
   if (position.y >= city->map_height || position.x >= city->map_width) {
     ClearCityMapEventSlot(city, slot);
@@ -190,8 +245,8 @@ void UpdateCityMapMaxisMan(City *city, int slot) {
 
   int target_y;
   int target_x;
-  if (event->next_slot != CITY_MAXIS_MAN_TRACK_TARGET) {
-    if (event->next_slot == CITY_MAXIS_MAN_RANDOM_STEP) {
+  if (event->state != CITY_MAXIS_MAN_TRACK_TARGET) {
+    if (event->state == CITY_MAXIS_MAN_RANDOM_STEP) {
       if ((Sc2kCrtRand(city) & 3) != 0) {
         int direction = Sc2kCrtRand(city) & 7;
         target_y = position.y + kCityMapEventSubtileYStep[direction];
@@ -205,9 +260,9 @@ void UpdateCityMapMaxisMan(City *city, int slot) {
           event->direction = (u8)direction;
         }
       } else {
-        event->next_slot = CITY_MAXIS_MAN_TRACK_TARGET;
+        event->state = CITY_MAXIS_MAN_TRACK_TARGET;
       }
-    } else if (event->next_slot == CITY_MAXIS_MAN_DEPART) {
+    } else if (event->state == CITY_MAXIS_MAN_DEPART) {
       AdvanceCityMapEventPosition(city, CITY_MAP_EVENT_MAXIS_MAN, slot, event->direction);
       if (event->type == CITY_MAP_EVENT_UNUSED) return;
       position = ReadCityMapEventPosition(city, event);
@@ -221,20 +276,20 @@ void UpdateCityMapMaxisMan(City *city, int slot) {
       target_x = event->maxis_man.destination_x;
       TileIndex target = MapTileXYOrInvalid(city, target_x, target_y);
       if (target == INVALID_TILE || !IsCityMarkerOverlay(ReadOverlay(city, target))) {
-        event->next_slot = CITY_MAXIS_MAN_DEPART;
+        event->state = CITY_MAXIS_MAN_DEPART;
         target_y = position.y - 32;
-        for (; target_y <= position.y + 32 && event->next_slot == CITY_MAXIS_MAN_DEPART; ++target_y) {
-          for (target_x = position.x - 32; target_x <= position.x + 32 && event->next_slot == CITY_MAXIS_MAN_DEPART;
+        for (; target_y <= position.y + 32 && event->state == CITY_MAXIS_MAN_DEPART; ++target_y) {
+          for (target_x = position.x - 32; target_x <= position.x + 32 && event->state == CITY_MAXIS_MAN_DEPART;
               ++target_x) {
             target = MapTileXYOrInvalid(city, target_x, target_y);
             if (target != INVALID_TILE && IsCityMarkerOverlay(ReadOverlay(city, target))) {
               event->maxis_man.destination_y = target_y;
               event->maxis_man.destination_x = target_x;
-              event->next_slot = CITY_MAXIS_MAN_TRACK_TARGET;
+              event->state = CITY_MAXIS_MAN_TRACK_TARGET;
             }
           }
         }
-        if (event->next_slot == CITY_MAXIS_MAN_DEPART)
+        if (event->state == CITY_MAXIS_MAN_DEPART)
           goto update_height;
       }
     } else {
@@ -266,12 +321,12 @@ void UpdateCityMapMaxisMan(City *city, int slot) {
           position = ReadCityMapEventPosition(city, event);
         }
       } else if (event->maxis_man.goal != overlay || (Sc2kCrtRand(city) & 3) != 0) {
-        event->next_slot = CITY_MAXIS_MAN_RANDOM_STEP;
+        event->state = CITY_MAXIS_MAN_RANDOM_STEP;
       } else {
         PlayCityAmbientSound(city, event->tile, CITY_SOUND_EXPLOSION);
         ClearCityMapEventSlot(city, target_slot);
         CreateCityMapEffectEvent(city, next, event->height, 0, 1);
-        event->next_slot = CITY_MAXIS_MAN_DEPART;
+        event->state = CITY_MAXIS_MAN_DEPART;
       }
     } else if ((Sc2kCrtRand(city) & 1) != 0) {
       WriteOverlay(city, next, CITY_OVERLAY_NONE);
@@ -290,11 +345,11 @@ update_height:
       return;
     }
     TileIndex tile_index = MapTileXY(city, x, y);
-    int power = ReadAltitudeWord(city, tile_index);
+    int altitude = city->tile[tile_index].altitude;
     if (HasTileWater(&city->tile[tile_index]))
-      event->height = (u8)(event->next_slot + ((power >> CITY_ALTITUDE_WATER_SHIFT) & CITY_ALTITUDE_LAND_MASK));
+      event->height = (u8)(event->state + ((altitude >> CITY_ALTITUDE_WATER_SHIFT) & CITY_ALTITUDE_LAND_MASK));
     else
-      event->height = (u8)(event->next_slot + (power & CITY_ALTITUDE_LAND_MASK));
+      event->height = (u8)(event->state + (altitude & CITY_ALTITUDE_LAND_MASK));
   } else if (IsCityMaxisManTargetSlot(city, target_slot)) {
     event->height = city->events.event[target_slot].height;
   }
@@ -306,7 +361,7 @@ void UpdateCityMapTornado(City *city, int slot) {
   CityMapEvent *event = &city->events.event[slot];
   ++city->disasters.tornado_count;
 
-  int tile = ReadTile(city, event->tile);
+  int tile = city->tile[event->tile].kind;
   bool survives_bulldoze = false;
   if (!IsTileKindBareGround(tile)) {
     BulldozeCityTile(city, event->tile, true);
@@ -345,14 +400,14 @@ void UpdateCityMapMonster(City *city, int slot) {
   int direction = event->direction;
   ++city->disasters.monster_count;
 
-  if (city->disasters.type1_count != 0) {
+  if (city->disasters.airplane_count != 0) {
     for (int aircraft_slot = CITY_EVENT_SLOT_FIRST; aircraft_slot < city->events.capacity; ++aircraft_slot) {
       CityMapEvent *aircraft = &city->events.event[aircraft_slot];
       if (aircraft->type == CITY_MAP_EVENT_AIRPLANE)
         aircraft->state = CITY_AIRPLANE_CRASH;
     }
   }
-  if (city->disasters.type2_count != 0) {
+  if (city->disasters.helicopter_count != 0) {
     for (int aircraft_slot = CITY_EVENT_SLOT_FIRST; aircraft_slot < city->events.capacity; ++aircraft_slot) {
       CityMapEvent *aircraft = &city->events.event[aircraft_slot];
       if (aircraft->type == CITY_MAP_EVENT_HELICOPTER)
@@ -380,7 +435,7 @@ void UpdateCityMapMonster(City *city, int slot) {
       int target_y = y + 1;
       int target_x = x + 1;
       TileIndex target = MapTileXY(city, target_x, target_y);
-      int target_kind = ReadTile(city, target);
+      int target_kind = city->tile[target].kind;
       if (event->monster.action != CITY_MONSTER_DESTROY_TILE) {
         if ((!IsMapTileValid(city, target) ||
                 !HasTileWater(&city->tile[target])) &&

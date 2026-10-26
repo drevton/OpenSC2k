@@ -10,28 +10,37 @@
 // flags[0] selects salt versus fresh water.
 // Banks use zone[5..7] for their modulo-eight ground recovery counter. Other shared fields follow tile_storage.h.
 
+#include "city/maps/water.h"
+
 #include "drawing/maps/map_sprites.h"
 #include "city/infrastructure/lines.h"
 #include "city/saveload/map_format.h"
 #include "city/engine/random.h"
 #include "city/infrastructure/power_lines.h"
-#include "city/maps/water.h"
 #include "city/maps/terrain.h"
+#include "city/maps/tables.h"
 #include "city/maps/ground.h"
 
 #include <assert.h>
 
-#include "game/audio.h"
+#include "audio/types.h"
 #include "city/engine/commands.h"
 #include "city/events/events.h"
 #include "city/maps/layers.h"
+#include "city/maps/tile_storage.h"
 #include "city/maps/module.h"
+#include "city/maps/map.h"
 #include "city/presentation.h"
 #include "city/state.h"
 #include "city/tools/tools.h"
 #include "drawing/maps/map_terrain.h"
 #include "drawing/maps/map_camera.h"
 #include "game/errors.h"
+
+// Flooding and channel grading share the north/east/south/west edge order.
+static const i8 kTerrainChannelNeighborY[4] = {-1, 0, 1, 0};
+
+static const i8 kTerrainChannelNeighborX[4] = {0, 1, 0, -1};
 
 // Dry/wet forms share their occupant metadata. Unsupported submerged occupants become exposed water.
 int CityTileKindForWater(int kind, bool water) {
@@ -51,9 +60,109 @@ int CityTileKindForWater(int kind, bool water) {
   }
 }
 
-// Drain one admitted exposed water tile to bare ground without changing its bed or slope.
-// Neighboring open water can flood it again.
-void ClearCityExposedWater(City *city, TileIndex tile_index) {
+// Test whether a valid tile belongs to saltwater coastline or touches one. Reads only the bounded neighborhood and
+// does not change water flags or elevation.
+static bool UsesRaisedCoast(const City *city, TileIndex tile) {
+  if (ReadTileWaterKind(&city->tile[tile]) == CITY_WATER_SALT) return true;
+  for (int direction = 0; direction < 8; ++direction) {
+    TileIndex neighbor = GetRelativeTileOrInvalid(city, tile,
+        kTerrainNeighborXOffsets[direction], kTerrainNeighborYOffsets[direction]);
+    if (neighbor != INVALID_TILE && ReadTileWaterKind(&city->tile[neighbor]) == CITY_WATER_SALT)
+      return true;
+  }
+  return false;
+}
+
+// Update water level and bed shape, preserving river behavior independently of salinity.
+// A raised river bed becomes dry unless keep_rapids retains an existing sloped river surface.
+// The caller invalidates old/new extents; kind changes also update tile statistics.
+void SetCityTerrainWater(City *city, TileIndex tile, int water_height, int land_shape, bool keep_rapids) {
+  assert(IsMapTileValid(city, tile));
+  TileInfo *tp = &city->tile[tile];
+  int altitude = tp->altitude, land = ReadCityLandHeight(tp);
+  if (land_shape == CITY_TERRAIN_RAISE_LEVEL) land_shape = CITY_TERRAIN_FLAT;
+  CityWaterKind water = ReadTileWaterKind(tp);
+  int ground = ReadCityWaterGroundKind(tp);
+  bool river = ground == TK_RIVER;
+  bool coast = water != CITY_WATER_NONE ? water == CITY_WATER_SALT : UsesRaisedCoast(city, tile);
+  bool was_wet = water != CITY_WATER_NONE;
+  int bank_ground = IsTileKindShoreBank(tp->kind) ? ReadGroundKind(tp) : CITY_GROUND_GRASS;
+  bool changed_bank = tp->kind != TK_WATER_BANK || ReadTerrainCode(tp) != land_shape ||
+      ReadCityWaterHeight(tp) != water_height;
+  bool was_rapids = keep_rapids && river && ReadTerrainCode(tp) && land == ReadCityWaterHeight(tp);
+  bool wet = land < water_height || (land == water_height && (!land_shape || !river || was_rapids));
+  if (!wet) {
+    tp->flags &= ~TF_SALTWATER;
+    WriteTerrainCode(tp, land_shape);
+    ground = TK_CLEAR;
+  } else {
+    ground = river ? TK_RIVER : land == water_height && land_shape ? TK_WATER_BANK : TK_WATER;
+    tp->flags = (tp->flags & ~TF_SALTWATER) | (coast ? TF_SALTWATER : 0);
+  }
+  int kind = CityTileKindForWater(tp->kind, wet);
+  if (IsTileKindShoreTree(kind) && ground != TK_WATER_BANK) kind = ground;
+  if (IsTileKindExposedWater(kind)) kind = ground;
+  if (kind != tp->kind) ReplaceCityTileAndStatistics(city, tile, kind);
+  if (wet) {
+    // Replacing a dry building clears its old construction-stage bits, which
+    // share this field. Install the water plane after that category change.
+    tp->altitude = (altitude & CITY_ALTITUDE_CLEAR_WATER) | water_height << CITY_ALTITUDE_WATER_SHIFT;
+    WriteTerrainCode(tp, land_shape);
+    tp->terrain = (tp->terrain & 240) | (IsTileKindShoreBank(kind) ? bank_ground :
+        IsTileKindExposedWater(kind) ? 0 : ground - TK_WATER);
+    if (kind == TK_WATER_BANK && changed_bank) BeginCityBareGroundRecovery(city, tp);
+  } else if (was_wet && (kind == TK_CLEAR || IsTileKindTree(kind))) {
+    tp->altitude &= CITY_ALTITUDE_CLEAR_WATER;
+    if (kind == TK_CLEAR) BeginCityBareGroundRecovery(city, tp);
+  }
+}
+
+// A shoreline's low edge or corner becomes ordinary slope when newly created
+// dry land meets it at water level. Its raised, landward edge remains a coast.
+void ReclaimCityShorelineBanks(City *city, TileIndex land) {
+  const TileInfo *ground = &city->tile[land];
+  if (HasTileWater(ground)) return;
+  CityTileGeometry geometry = ReadCityTileGeometry(city, land);
+  int raised = kTerrainRaisedCorners[geometry.land_shape];
+  bool changed = false;
+  for (int direction = 0; direction < 8; ++direction) {
+    int dx = kTerrainNeighborXOffsets[direction], dy = kTerrainNeighborYOffsets[direction];
+    TileIndex neighbor = GetRelativeTileOrInvalid(city, land, dx, dy);
+    if (neighbor == INVALID_TILE || !IsTileKindShoreBank(city->tile[neighbor].kind)) continue;
+    CityTileGeometry bank = ReadCityTileGeometry(city, neighbor);
+    if (bank.land_height != bank.water_height || !bank.land_shape) continue;
+    int bank_raised = kTerrainRaisedCorners[bank.land_shape];
+    bool touches = false;
+    for (int corner = 0; corner < 4; ++corner) {
+      if (geometry.land_height + ((raised >> corner) & 1) > bank.water_height) continue;
+      for (int other = 0; other < 4; ++other)
+        if (kTerrainCornerX[corner] == dx + kTerrainCornerX[other] &&
+            kTerrainCornerY[corner] == dy + kTerrainCornerY[other] &&
+            !(bank_raised & (1 << other))) touches = true;
+    }
+    if (!touches) continue;
+    InvalidateTile(city, neighbor);
+    int kind = city->tile[neighbor].kind;
+    ReplaceCityTileAndStatistics(city, neighbor,
+        IsTileKindShoreTree(kind) ? CityTreeTile(CityTreeCount(kind)) : TK_CLEAR);
+    TileInfo *tp = &city->tile[neighbor];
+    tp->altitude &= CITY_ALTITUDE_CLEAR_WATER;
+    tp->flags &= ~TF_SALTWATER;
+    RefreshCityTileClimates(city, neighbor);
+    BeginCityBareGroundRecovery(city, tp);
+    changed = true;
+  }
+  if (changed) {
+    CityPoint point = MapTilePt(city, land);
+    int left = IntMax(0, point.x - 2), top = IntMax(0, point.y - 2);
+    InvalidateTileRange(city, MapTileXY(city, left, top),
+        IntMin(city->map_width, point.x + 3) - left, IntMin(city->map_height, point.y + 3) - top);
+  }
+}
+
+// Drain an admitted exposed water tile after the caller pays and invalidates its old extents. Preserve bed/slope;
+// update kind, counters, salinity, climate and damage. Neighboring open water can flood it again.
+static void ClearCityExposedWater(City *city, TileIndex tile_index) {
   ReplaceCityTileAndStatistics(city, tile_index, TK_CLEAR);
   TileInfo *tp = &city->tile[tile_index];
   tp->flags &= ~TF_SALTWATER;
@@ -91,13 +200,14 @@ void CreateCityRiverTile(City *city, TileIndex tile) {
 // This allocates nothing and consumes no RNG.
 bool FloodCityClearTile(City *city, TileIndex tile) {
   assert(IsMapTileValid(city, tile) && city->tile[tile].kind == TK_CLEAR);
-  static const i8 kNeighborX[4] = {0, 1, 0, -1}, kNeighborY[4] = {-1, 0, 1, 0};
   TileInfo *tp = &city->tile[tile];
   int shape = ReadTerrainCode(tp);
   if (!shape && !(city->fixes & (1ull << CITY_FIX_WATER_SPREADING))) return false;
   int land = ReadCityLandHeight(tp), water = -1, salt = 0;
+  CityPoint point = MapTilePt(city, tile);
   for (int direction = 0; direction < 4; ++direction) {
-    TileIndex next = GetRelativeTileOrInvalid(city, tile, kNeighborX[direction], kNeighborY[direction]);
+    TileIndex next = MapTileXYOrInvalid(city, point.x + kTerrainChannelNeighborX[direction],
+        point.y + kTerrainChannelNeighborY[direction]);
     if (next == INVALID_TILE) continue;
     const TileInfo *neighbor = &city->tile[next];
     int ground = ReadCityWaterGroundKind(neighbor);
@@ -112,15 +222,10 @@ bool FloodCityClearTile(City *city, TileIndex tile) {
   SetCityTerrainWater(city, tile, water, shape, false);
   tp->flags = (tp->flags & ~TF_SALTWATER) | salt;
   RefreshCityTileClimates(city, tile);
-  CityPoint point = MapTilePt(city, tile);
   int left = IntMax(0, point.x - 1), top = IntMax(0, point.y - 1);
   InvalidateTileRange(city, MapTileXY(city, left, top), point.x + 2 - left, point.y + 2 - top);
   return true;
 }
-
-static const i8 kTerrainChannelNeighborY[4] = {-1, 0, 1, 0};
-
-static const i8 kTerrainChannelNeighborX[4] = {0, 1, 0, -1};
 
 static const i8 kTerrainChannelTurns[4] = {0, 1, 3, 2};
 
@@ -128,49 +233,49 @@ static const i8 kTerrainChannelTurns[4] = {0, 1, 3, 2};
 // tiles. Requires bound layers and a supported height; this is a map-wide edit rather than a local placement.
 void ApplyTerrainWaterLevel(City *city, int height) {
   for (int y = 0; y < city->map_height; ++y) {
-    for (int x = 0; x < city->map_width; ++x) {
-      const TileIndex cell_index = MapTileXY(city, x, y);
-      TileInfo *tp = &city->tile[cell_index];
+    TileIndex tile = MapTileXY(city, 0, y);
+    for (int x = 0; x < city->map_width; ++x, ++tile) {
+      TileInfo *tp = &city->tile[tile];
       // Raising/lowering the open-water datum never changes a confined river.
       if (ReadCityWaterGroundKind(tp) == TK_RIVER) continue;
       int altitude = tp->altitude;
       int elevation = ReadCityLandHeight(tp);
       if (city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) {
-        SetCityTerrainWater(city, cell_index, height, ReadTerrainCode(tp), true);
+        SetCityTerrainWater(city, tile, height, ReadTerrainCode(tp), true);
         continue;
       }
       if (height <= elevation) {
         if (HasTileWater(tp)) {
-          int terrain_code = ReadLegacyTerrainCode(city, cell_index);
+          int terrain_code = ReadLegacyTerrainCode(city, tile);
           if (terrain_code < CITY_TERRAIN_BANK_48) {
             // A permanently submerged building lost its stage. Receding water
             // starts it at zero, rather than interpreting water height as stage.
             int water_height = IsTileKindBuilding(tp->kind) ? 0 : height;
             tp->altitude = (altitude & CITY_ALTITUDE_CLEAR_WATER) | (water_height *
                 CITY_ALTITUDE_WATER_STEP);
-            WriteLegacyCityTerrainCode(city, cell_index, (u8)(terrain_code & CITY_TERRAIN_SHAPE_MASK));
+            WriteLegacyCityTerrainCode(city, tile, (u8)(terrain_code & CITY_TERRAIN_SHAPE_MASK));
           } else {
-            WriteLegacyCityTerrainCode(city, cell_index, ReadTerrainCode(tp));
+            WriteLegacyCityTerrainCode(city, tile, ReadTerrainCode(tp));
           }
         }
         continue;
       }
 
-      int terrain_code = ReadLegacyTerrainCode(city, cell_index);
+      int terrain_code = ReadLegacyTerrainCode(city, tile);
       tp->altitude = (altitude & CITY_ALTITUDE_CLEAR_WATER) | (height *
           CITY_ALTITUDE_WATER_STEP);
-      int tile = tp->kind;
-      if (IsTileKindTreeOrPark(tile))
-        ReplaceCityTileAndStatistics(city, cell_index, TK_CLEAR);
+      int kind = tp->kind;
+      if (IsTileKindTreeOrPark(kind))
+        ReplaceCityTileAndStatistics(city, tile, TK_CLEAR);
       tp->kind = TK_WATER;
       if (terrain_code < CITY_TERRAIN_BANK_48) {
         int terrain = terrain_code & CITY_TERRAIN_SHAPE_MASK;
         int slope =
             elevation + 1 >= height && terrain_code != CITY_TERRAIN_FLAT ? CITY_TERRAIN_BANK_32 :
                 CITY_TERRAIN_WATER_FIRST;
-        WriteLegacyCityTerrainCode(city, cell_index, (u8)(terrain + slope));
+        WriteLegacyCityTerrainCode(city, tile, (u8)(terrain + slope));
       } else {
-        WriteLegacyCityTerrainCode(city, cell_index, CITY_TERRAIN_WATER_FIRST);
+        WriteLegacyCityTerrainCode(city, tile, CITY_TERRAIN_WATER_FIRST);
       }
     }
   }
@@ -184,12 +289,12 @@ void ApplyTerrainWaterLevel(City *city, int height) {
 // -1 or 1; an applied edit refreshes the map and restores the cursor, while a boundary attempt only sets busy.
 void AdjustCityTerrainWaterLevel(City *city, int direction) {
   assert(direction == -1 || direction == 1);
-  SetCityCursor(city, CITY_CURSOR_BUSY, 0);
+  SetCityCursor(city, CITY_CURSOR_BUSY, CITY_CURSOR_SELECT);
   if (direction > 0 ? city->geography.edit_height <= 30 : city->geography.edit_height >= 1) {
     city->geography.edit_height += direction;
     ApplyTerrainWaterLevel(city, city->geography.edit_height);
     RefreshCityMapTiles(city);
-    SetCityCursor(city, CITY_CURSOR_ARROW, 0);
+    SetCityCursor(city, CITY_CURSOR_ARROW, CITY_CURSOR_SELECT);
   }
 }
 
@@ -241,10 +346,9 @@ void CarveTerrainWaterChannel(City *city, TileIndex tile_index, int length) {
   }
 }
 
-static bool CanPlaceStreamCell(const City *city, TileIndex tile) {
-  const TileInfo *tp = &city->tile[tile];
+static bool CanPlaceStreamCell(const TileInfo *tp) {
   return IsTileKindUnbuilt(tp->kind) && tp->kind != TK_RADIOACTIVE_WASTE &&
-      ReadCityZoneKind(tp) == ZONE_NONE && ReadUnderground(city, tile) == TUK_CLEAR && !tp->overlay;
+      ReadCityZoneKind(tp) == ZONE_NONE && ReadTileUndergroundKind(tp) == TUK_CLEAR && !tp->overlay;
 }
 
 // Grow a freshwater channel downhill, favoring the current heading with occasional gentle turns. Admission only
@@ -252,7 +356,7 @@ static bool CanPlaceStreamCell(const City *city, TileIndex tile) {
 i64 CmdPlaceStream(City *city, u32 flags, TileIndex tile, int length) {
   if (!IsMapTileValid(city, tile) || length < 1 || length > 256) return CITY_COMMAND_COST_INVALID;
   if (city->settings.timer_mode != CITY_TIMER_STOPPED || HasTileWater(&city->tile[tile]) ||
-      !CanPlaceStreamCell(city, tile)) return CITY_COMMAND_COST_BLOCKED;
+      !CanPlaceStreamCell(&city->tile[tile])) return CITY_COMMAND_COST_BLOCKED;
   if (flags & CITY_COMMAND_TEST) return 0;
   int heading = Sc2kCrtRandRange(city, 4);
   int reach = length / 2 + Sc2kCrtRandRange(city, length - length / 2 + 1);
@@ -272,7 +376,7 @@ i64 CmdPlaceStream(City *city, u32 flags, TileIndex tile, int length) {
     for (int turn = 0; turn < 4; ++turn) {
       int direction = (heading + kTurns[turn]) & 3;
       TileIndex candidate = GetRelativeTileOrInvalid(city, tile, kLineXStep[direction], kLineYStep[direction]);
-      if (candidate == INVALID_TILE || candidate == previous || !CanPlaceStreamCell(city, candidate)) continue;
+      if (candidate == INVALID_TILE || candidate == previous || !CanPlaceStreamCell(&city->tile[candidate])) continue;
       CityTileGeometry geometry = ReadCityTileGeometry(city, candidate);
       int elevation = geometry.water != CITY_WATER_NONE ? geometry.surface_height : geometry.land_height;
       if (elevation >= lowest) continue;
@@ -307,21 +411,22 @@ static CityCommandCost GetCityCanalRectangleCost(const City *city, TileIndex sta
   CityCommandCost quote = {.error = CITY_COMMAND_COST_INVALID, .error_tile = INVALID_TILE};
   if (!IsMapTileValid(city, start) || !IsMapTileValid(city, end)) return quote;
   CityRect bounds = MapTileRectangle(city, start, end);
-  for (int y = bounds.top; y < bounds.bottom; ++y)
-    for (int x = bounds.left; x < bounds.right; ++x)
-      if (CanPlaceCityCanal(city, MapTileXY(city, x, y)))
-        quote.cost += CITY_CANAL_COST;
+  for (int y = bounds.top; y < bounds.bottom; ++y) {
+    TileIndex tile = MapTileXY(city, bounds.left, y);
+    for (int x = bounds.left; x < bounds.right; ++x, ++tile)
+      if (CanPlaceCityCanal(city, tile)) quote.cost += CITY_CANAL_COST;
+  }
   quote.error = !quote.cost ? CITY_COMMAND_COST_BLOCKED : CITY_COMMAND_COST_OK;
   return quote;
 }
 
-// Apply the same canal admission used by previews and rectangle commands. Regrading edits terrain/water/statistics;
-// this single-cell operation leaves pricing and payment to its caller.
+// Check canal admission once, then convert the tile and clear its zoning. Returns BLOCKED without effects or 1
+// after applying the edit. Pricing and payment belong to the caller; recorded Game errors remain separate.
 i64 ApplyWaterToolAtTile(City *city, TileIndex tile) {
   if (!CanPlaceCityCanal(city, tile)) return CITY_COMMAND_COST_BLOCKED;
   CreateCityRiverTile(city, tile);
-  WriteTileZoneByte(&city->tile[tile], ReadTileZoneByte(&city->tile[tile]) & CITY_ZONE_METADATA_MASK);
-  return true;
+  WriteCityZoneKind(&city->tile[tile], ZONE_NONE);
+  return 1;
 }
 
 // Convert eligible cells in the resolved inclusive rectangle to canals. Rejects reserved options and invalid
@@ -336,18 +441,14 @@ i64 CmdBuildCanalsRect(City *city, u32 flags, TileIndex location, TileIndex end,
   if (affordable < 0) return affordable;
   CityRect bounds = MapTileRectangle(city, location, end);
   ClearGameError(city->game);
-  i64 failure = 0;
-  for (int y = bounds.top; y < bounds.bottom; ++y)
-    for (int x = bounds.left; x < bounds.right; ++x) {
-      TileIndex tile = MapTileXY(city, x, y);
-      if (!CanPlaceCityCanal(city, tile)) continue;
-      i64 result = ApplyWaterToolAtTile(city, tile);
-      if (result < 0) failure = result;
-      else DebitCityCommandCost(city, CITY_CANAL_COST);
-    }
+  for (int y = bounds.top; y < bounds.bottom; ++y) {
+    TileIndex tile = MapTileXY(city, bounds.left, y);
+    for (int x = bounds.left; x < bounds.right; ++x, ++tile)
+      if (ApplyWaterToolAtTile(city, tile) >= 0) DebitCityCommandCost(city, CITY_CANAL_COST);
+  }
   PlayCitySound(city, location, CITY_SOUND_WATER);
   InvalidateCityInformation(city->game, CITY_UPDATE_STATUS);
-  return failure ? failure : GetGameError(city->game) ? CITY_COMMAND_COST_REJECTED : 1;
+  return GetGameError(city->game) ? CITY_COMMAND_COST_REJECTED : 1;
 }
 
 // Adjust the shared terrain editing height by the resolved direction. Only -1 and 1 are admitted; TEST validates
@@ -417,15 +518,15 @@ static int FlatWaterSprite(const City *city, TileIndex tile, int zoom) {
   // river layout by water kind rather than the editable terrain water datum.
   if (ReadTileWaterKind(&city->tile[tile]) == CITY_WATER_FRESH)
     return MAP_SLOPED_WATER_SPRITE_FIRST + zoom * MAP_SELECTION_SPRITE_SHAPES;
-  return CITY_SPRITE_CATALOG_FLAT_WATER + CITY_SPRITE_CATALOG_MEDIUM_BASE * zoom;
+  return MapSpriteZoomIndex(CITY_SPRITE_CATALOG_FLAT_WATER, zoom);
 }
 
 // Select the same camera-relative water and bank layers for map drawing and retained tile previews.
-CityRiverSprites ReadCityRiverSprites(const City *city, TileIndex tile, int zoom,
+MapRiverSprites ReadCityRiverSprites(const City *city, TileIndex tile, int zoom,
     const CityTileGeometry *geometry) {
-  CityRiverSprites sprites = {0};
+  MapRiverSprites sprites = {0};
   if (!(city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE))) return sprites;
-  int kind = ReadTile(city, tile);
+  int kind = city->tile[tile].kind;
   int first = MAP_LANDSCAPE_SPRITE_FIRST + zoom * MAP_LANDSCAPE_SPRITES_PER_ZOOM - CITY_LANDSCAPE_GROUND_FIRST;
   if (!geometry->surface_shape && geometry->water == CITY_WATER_FRESH) {
     static const i8 kNeighborX[] = {-1, 0, 1, 0, -1, 1, 1, -1};
@@ -470,20 +571,20 @@ CityRiverSprites ReadCityRiverSprites(const City *city, TileIndex tile, int zoom
 
 // Draw water and adjoining riverbanks, including slope edges beneath hydro plants.
 // The selected water surface stays intact; painting never changes the tile or water behavior.
-bool DrawCityWaterBank(City *city, TileIndex tile, int zoom, int screen_x, int ground_y,
+bool DrawCityWaterBank(const City *city, TileIndex tile, int zoom, int screen_x, int ground_y,
     const CityTileGeometry *geometry) {
-  CityRiverSprites sprites = ReadCityRiverSprites(city, tile, zoom, geometry);
+  MapRiverSprites sprites = ReadCityRiverSprites(city, tile, zoom, geometry);
   if (sprites.count <= 1) return false;
   for (int i = 0; i < sprites.count; ++i)
     DrawCityMapSpriteAtBaseline(city->drawing, sprites.sprite[i], screen_x, ground_y, 0);
   return true;
 }
 
-static bool DrawCityRiverTile(City *city, TileIndex tile, int zoom, int screen_x, int ground_y,
+static bool DrawCityRiverTile(const City *city, TileIndex tile, int zoom, int screen_x, int ground_y,
     const CityTileGeometry *tile_geometry) {
   Drawing *drawing = city->drawing;
   CityTileGeometry geometry = *tile_geometry;
-  if (!(city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) || !IsTileKindExposedWater(ReadTile(city, tile)) ||
+  if (!(city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) || !IsTileKindExposedWater(city->tile[tile].kind) ||
       geometry.water_surface != CITY_WATER_SURFACE_RAPIDS) return false;
   int shape = geometry.surface_shape;
   if (shape < 1 || shape > CITY_LANDSCAPE_RIVER_SLOPES) return false;
@@ -496,7 +597,7 @@ static bool DrawCityRiverTile(City *city, TileIndex tile, int zoom, int screen_x
       CITY_LANDSCAPE_TERRAIN_FACE_FIRST + shape;
   DrawCityMapTerrainFace(city, tile, zoom, face, screen_x, ground_y,
       CityMapSlopeFaceSides(city, tile, shape, geometry.land_height));
-  CityRiverSprites sprites = ReadCityRiverSprites(city, tile, zoom, &geometry);
+  MapRiverSprites sprites = ReadCityRiverSprites(city, tile, zoom, &geometry);
   for (int i = 0; i < sprites.count; ++i)
     DrawCityMapSpriteAtBaseline(drawing, sprites.sprite[i], screen_x, ground_y, 0);
   DrawCityMapPlacementTile(city, tile);
@@ -505,7 +606,7 @@ static bool DrawCityRiverTile(City *city, TileIndex tile, int zoom, int screen_x
 
 // Select the wet surface from camera geometry, including retained water below infrastructure and hydro spillways.
 int CityWaterSprite(const City *city, TileIndex tile, int zoom, const CityTileGeometry *geometry) {
-  if (ReadTile(city, tile) == TK_HYDRO_POWER &&
+  if (city->tile[tile].kind == TK_HYDRO_POWER &&
       geometry->land_shape >= CITY_TERRAIN_SHAPE_1 && geometry->land_shape <= CITY_TERRAIN_SHAPE_4)
     return MAP_LANDSCAPE_SPRITE_FIRST + zoom * MAP_LANDSCAPE_SPRITES_PER_ZOOM - CITY_LANDSCAPE_GROUND_FIRST +
         CITY_LANDSCAPE_HYDRO_WATER_FIRST + geometry->land_shape - 1;
@@ -531,4 +632,15 @@ static void TickCityWaterTile(City *city, TileIndex tile) {
   if (city->tile[tile].kind == TK_WATER_BANK) AdvanceCityGroundRecovery(city, tile);
 }
 
-const TileModule kCityWaterModule = {.tick = TickCityWaterTile, .draw = DrawCityRiverTile};
+static i64 ClearWaterTile(City *city, u32 flags, TileIndex tile) {
+  if (flags & CITY_COMMAND_TEST) {
+    const TileInfo *tp = &city->tile[tile];
+    return ReadCityWaterHeight(tp) > ReadCityLandHeight(tp) ? CITY_COMMAND_COST_CLEAR_DEEP_WATER : CITY_COMMAND_COST_OK;
+  }
+  ClearCityExposedWater(city, tile);
+  return 1;
+}
+
+const TileModule kCityWaterModule = {
+  .clear = ClearWaterTile, .tick = TickCityWaterTile, .draw = DrawCityRiverTile,
+};

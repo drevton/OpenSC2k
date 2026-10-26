@@ -22,10 +22,10 @@ typedef struct CityFileExceptionFrame {
   struct CityFileExceptionFrame *previous;
 } CityFileExceptionFrame;
 
-typedef struct {
+struct CityLoadStream {
   FILE *stream;
   CityFileRuntime *owner;
-} CityLoadStream;
+};
 
 // Unwind registered file cleanups to the active command frame and transfer control to its handler. Never returns; an
 // unhandled exception or an exception during cleanup aborts instead of masquerading as EOF.
@@ -85,7 +85,7 @@ static bool ResolveLoadPath(const CityFileRuntime *owner, const char *path, char
 
 // Resolve and open a path within the file operation's directory context. Returns an owned stream wrapper or NULL with
 // the recorded open error; close it through CloseCityLoadStream before ending the operation.
-void *OpenCityLoadStream(CityFileRuntime *owner, const char *path) {
+CityLoadStream *OpenCityLoadStream(CityFileRuntime *owner, const char *path) {
   char *native = NULL;
   errno = 0;
   FILE *file = ResolveLoadPath(owner, path, &native) ? fopen(native, "rb") : NULL;
@@ -120,8 +120,7 @@ void FillCityLoadOpenError(const CityFileRuntime *owner, CityFileExceptionState 
 // Read up to size bytes into caller storage and record the actual I/O outcome. Requires an open load stream and enough
 // destination space; short EOF returns a count, while filesystem errors unwind through the active file exception
 // frame.
-u32 ReadCityLoadStream(void *stream, void *destination, u32 size) {
-  CityLoadStream *input = stream;
+u32 ReadCityLoadStream(CityLoadStream *input, void *destination, u32 size) {
   FILE *file = input->stream;
   errno = 0;
   u32 copied = (u32)fread(destination, 1, size, file);
@@ -134,9 +133,8 @@ u32 ReadCityLoadStream(void *stream, void *destination, u32 size) {
 
 // Seek an open load stream and return its representable 32-bit position. OS errors and the UINT32_MAX sentinel throw
 // through the active file frame; callers must not turn those into ordinary EOF.
-u32 SeekCityLoadStream(void *stream, int offset, int origin) {
+u32 SeekCityLoadStream(CityLoadStream *file, int offset, int origin) {
   errno = 0;
-  CityLoadStream *file = stream;
   int seek = fseek(file->stream, offset, origin);
   long position = seek == 0 ? ftell(file->stream) : -1;
   int error = position < 0 ? errno != 0 ? errno : EIO : (u64)position > 0xFFFFFFFFu ? EOVERFLOW : 0;
@@ -152,23 +150,22 @@ u32 SeekCityLoadStream(void *stream, int offset, int origin) {
 
 // Seek a preview using the throwing load-stream path and discard its position result. Requires an open load stream;
 // zero is returned only after a successful seek, and failures unwind rather than returning an error status.
-int SeekCityPreviewStream(void *stream, int offset, int origin) {
+int SeekCityPreviewStream(CityLoadStream *stream, int offset, int origin) {
   SeekCityLoadStream(stream, offset, origin);
   return 0; // The CFile position result is discarded by the preview reader.
 }
 // Query the current load-stream position through the same observed seek path. Requires an open stream; seek failures
 // throw and the returned bits retain the original signed projection.
-int GetCityPreviewStreamPosition(void *stream) {
+int GetCityPreviewStreamPosition(CityLoadStream *stream) {
   return (int)(SeekCityLoadStream(stream, 0, SEEK_CUR));
 }
 
 // Close and release an owned load-stream wrapper, decrementing the operation's open-stream count. The wrapper is
 // invalid after this call even if close fails and throws through the command frame.
-void CloseCityLoadStream(void *stream) {
-  CityLoadStream *input = stream;
+void CloseCityLoadStream(CityLoadStream *input) {
   CityFileRuntime *owner = input->owner;
   errno = 0;
-  int result = fclose(input->stream) == 0;
+  bool result = fclose(input->stream) == 0;
   int error = result ? 0 : errno != 0 ? errno : EIO;
   --owner->load_io.load_stream_count;
   ObserveCityFileIO(owner, NATIVE_LOAD_CLOSE, 0, (u32)result, error, NULL, 0);
@@ -182,7 +179,7 @@ int ChangeCityLoadDirectory(CityFileRuntime *owner, const char *path) {
   char *native = NULL;
   HostFileInfo info;
   errno = 0;
-  int success = ResolveLoadPath(owner, path, &native) && ReadHostFileInfo(native, &info) && info.directory;
+  bool success = ResolveLoadPath(owner, path, &native) && ReadHostFileInfo(native, &info) && info.directory;
   int error = success ? 0 : errno != 0 ? errno : EINVAL;
   if (success) SetCityFileDirectory(owner, native);
   free(native);

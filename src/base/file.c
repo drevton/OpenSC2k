@@ -9,10 +9,7 @@
 #ifdef _WIN32
 #include <direct.h>
 #include <io.h>
-// Keep the Win32 32-bit declaration separate from our 64-bit arithmetic helper.
-#define MulDiv WindowsMulDiv
 #include <windows.h>
-#undef MulDiv
 #else
 #include <dirent.h>
 #include <sys/statvfs.h>
@@ -189,7 +186,8 @@ bool VisitDirectory(const char *path,
     HostFileInfo info;
     if (ReadHostFileInfo(filename, &info)) ok = visit(entry.cFileName, &info, context);
   } while (ok && FindNextFileA(directory, &entry));
-  FindClose(directory);
+  if (ok && GetLastError() != ERROR_NO_MORE_FILES) ok = false;
+  if (!FindClose(directory)) ok = false;
 #else
   DIR *directory = opendir(path);
   if (!directory) return false;
@@ -340,21 +338,30 @@ bool WriteFileAtomically(const char *path, bool (*write_contents)(FILE *file, vo
     free(temporary);
     return false;
   }
-  FILE *file = fopen(temporary, "wx");
+  int descriptor = _open(temporary, _O_WRONLY | _O_CREAT | _O_EXCL | _O_BINARY, _S_IREAD | _S_IWRITE);
+  FILE *file = descriptor >= 0 ? _fdopen(descriptor, "wb") : NULL;
 #else
   int descriptor = mkstemp(temporary);
   FILE *file = descriptor >= 0 ? fdopen(descriptor, "wb") : NULL;
-  if (!file && descriptor >= 0) close(descriptor);
 #endif
-  bool ok = file && write_contents(file, context);
-  if (file && ok && fflush(file)) ok = false;
+  bool created = descriptor >= 0;
+  int error = file ? 0 : errno;
+  if (!file && created) {
+    // fdopen failed after exclusive creation. Retain its error while closing our unclaimed descriptor.
+    close(descriptor);
+  }
+  bool ok = file && write_contents(file, context) && !ferror(file);
+  if (ok && fflush(file)) ok = false;
 #ifdef _WIN32
-  if (file && ok && _commit(_fileno(file))) ok = false;
+  if (ok && _commit(_fileno(file))) ok = false;
 #else
-  if (file && ok && fsync(fileno(file))) ok = false;
+  if (ok && fsync(fileno(file))) ok = false;
 #endif
-  if (file && fclose(file)) ok = false;
-  int error = errno;
+  if (!ok && !error) error = errno;
+  if (file && fclose(file)) {
+    ok = false;
+    if (!error) error = errno;
+  }
 #ifdef _WIN32
   if (ok && !MoveFileExA(temporary, path, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) ok = false;
 #else
@@ -363,7 +370,7 @@ bool WriteFileAtomically(const char *path, bool (*write_contents)(FILE *file, vo
     error = errno;
   }
 #endif
-  if (!ok) remove(temporary);
+  if (!ok && created) remove(temporary);
   free(temporary);
   errno = ok ? 0 : error ? error : EIO;
   return ok;
@@ -376,8 +383,10 @@ static bool CopyAndCloseFileSource(FILE *output, void *context) {
   u8 buffer[65536];
   size_t count;
   bool ok = true;
-  while (ok && (count = fread(buffer, 1, sizeof(buffer), source)) != 0)
+  while (ok && (count = fread(buffer, 1, sizeof(buffer), source)) != 0) {
     ok = fwrite(buffer, 1, count, output) == count;
+    if (feof(source) || ferror(source)) break;
+  }
   if (ferror(source)) ok = false;
   if (fclose(source)) ok = false;
   *stream = NULL;

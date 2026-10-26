@@ -1,6 +1,7 @@
 #include "drawing/sprites/sources.h"
 
 #include "assets/state.h"
+#include "base/byte_order.h"
 
 // Immutable interface variants and map catalog bindings. Source lookup does not touch Drawing state.
 
@@ -9,13 +10,13 @@ int InterfaceSpriteLevel(int scale) {
 }
 
 InterfaceSpriteSource GetInterfaceSprite(const CityInterfaceIcons *icons, int sprite, int level) {
-  u16 reference = ResolveSpriteVariant(icons->variants, sprite, level, icons->lookup[sprite]);
+  u16 reference = ResolveSpriteVariant(icons->variants, sprite, level, ReadLE16(icons->lookup + (size_t)sprite * 2));
   return (InterfaceSpriteSource){.image = icons->images[(reference & CITY_SPRITE_HEADER_MASK) - 1],
       .flipped = (reference & CITY_SPRITE_HEADER_FLIPPED) != 0};
 }
 
 int TileSpriteResourceIndex(const CityResourceState *assets, int sprite, int direction) {
-  int index = assets->map_sprite_sources[sprite];
+  int index = ReadLE16(assets->map_sprite_sources + (size_t)sprite * 2);
   return (index & ~3) | ((index + direction) & 3);
 }
 
@@ -41,6 +42,16 @@ int LandscapeSpriteResourceIndex(const CityResourceState *assets, int source) {
 // Map code passes an opaque resource index. Header aliases and artwork flips are
 // interpreted only here and by the sprite-pack loader, never by tile selection.
 const CityLandscapeSprite *GetResourceSprite(const CityResourceState *assets, int index) {
-  int header = assets->sprite_index_lookup[index] & CITY_SPRITE_HEADER_MASK;
+  int header = ReadLE16(assets->sprite_index_lookup + (size_t)index * 2) & CITY_SPRITE_HEADER_MASK;
   return header ? &assets->landscape[header - 1] : NULL;
+}
+
+LandscapeSpriteSource GetResourceSpriteVariant(const CityResourceState *assets, int index, int level,
+    bool base_fallback) {
+  u16 fallback = base_fallback ? ReadLE16(assets->sprite_index_lookup + (size_t)index * 2) : 0;
+  u16 reference = ResolveSpriteVariant(assets->sprite_variants, index, level, fallback);
+  if (!reference) return (LandscapeSpriteSource){0};
+  int header = (reference & CITY_SPRITE_HEADER_MASK) - 1;
+  return (LandscapeSpriteSource){.artwork = &assets->landscape[header],
+      .flipped = ((reference ^ ReadLE16(assets->sprite_index_lookup + (size_t)header * 2)) & CITY_SPRITE_HEADER_FLIPPED) != 0};
 }

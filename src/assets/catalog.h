@@ -15,8 +15,9 @@ RunSprite *ReadAssetRunSprite(AssetFile *file, int width, int height, u32 size);
 
 // Graphics Assets
 
-// Picture IDs select illustrations, advisors or neighbors. Validated images replace their slots one at a time;
-// failure preserves earlier replacements and leaves later slots unchanged. Unknown IDs fail before opening input.
+// Load CITY_ASSET_ILLUSTRATIONS, CITY_ASSET_ADVISORS or CITY_ASSET_NEIGHBORS into its matching Assets slots.
+// Validated images replace slots one at a time; failure preserves earlier replacements and leaves later slots
+// unchanged. Unknown asset IDs fail before opening input.
 // Assets owns the decoded sprite references; a failure after the final image can still leave every slot replaced.
 bool LoadCityPictureAssets(CityAssets *assets, u32 asset_id);
 typedef struct CityInterfaceIcons CityInterfaceIcons;
@@ -39,7 +40,8 @@ typedef struct CityResourceState CityResourceState;
 // Decode failure leaves prior images unchanged; pack preload can retain successfully loaded bytes.
 bool LoadApplicationIntroAssets(CityResourceState *assets);
 
-// Borrowed native image with its own palette; valid until its slot is replaced or Assets releases it.
+// Advisor and notice/newspaper resource IDs select installed pictures; unknown IDs return NULL.
+// The image and its palette are borrowed until the slot is replaced or Assets releases it.
 const RunSprite *ReadCityPicture(const CityAssets *assets, int id);
 
 #endif

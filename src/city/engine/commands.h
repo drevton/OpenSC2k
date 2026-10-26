@@ -4,8 +4,18 @@
 #include "city/types.h"
 #include "city/engine/command_types.h"
 
+typedef struct CityNameCommandInput CityNameCommandInput;
+
+// Copy the active command's resolved name reply into caller-owned outputs. False leaves both outputs unchanged;
+// cancellation writes only the answer. The caller retains the enclosing command's staged input.
+bool ReadCityNameCommandAnswer(const City *city, CityNameCommandInput *state, int *answer);
+
 bool IsCityCommandId(u32 id);
 
+// Convert fields only: neither function admits or executes the action, changes City or consumes RNG.
+// Index-valued locations pass through unchecked. Coordinate forms map out-of-bounds locations to INVALID_TILE
+// when decoding, or (-1, -1) plus any record offset when encoding. Unknown IDs retain their scalar fields,
+// with no decoded location.
 CityCommandArguments DecodeCityCommand(const City *city, CityCommand command);
 CityCommand EncodeCityCommand(const City *city, CityCommandId id, TileIndex tile, int parameter1, int parameter2,
     int parameter3);
@@ -36,19 +46,22 @@ enum { CITY_COMMAND_NEEDS_CONFIRMATION = INT32_MIN };
 // the live state again. Execution returns a negative gameplay error on failure and
 // a nonnegative value on success. Free settings/actions query as zero; a question's
 // eventual outcome still depends on its reply and live state when executed.
-// GetCityConstructionCost retains the price when it reports insufficient funds. Before
-// a bridge style is chosen it quotes the cheapest compatible style.
+// Priced quotes retain the work price when reporting insufficient funds. Before
+// a bridge style is chosen, its domain quote uses the cheapest compatible style.
 enum { CITY_TERRAIN_POINT_EDIT = 1, CITY_TERRAIN_NO_SEAWATER = 2, CITY_TERRAIN_OPTIONS_MASK = 3 };
 // Domain quote functions below return raw work prices and gameplay admission errors.
 // DoCityCommand(TEST) and preview pricing apply the shared monetary policy.
 i64 DoCityCommand(City *city, CityCommandId id, u32 flags, TileIndex tile, int parameter1, int parameter2,
     int parameter3);
-// EDIT_MAP_LABEL: tile is the location; parameter1 is dialog result 1/2 (accept/cancel).
-// Text is immutable command payload, at most 23 Windows-1252 bytes; empty acceptance clears the label.
-// EDIT_FACILITY_LABEL: same parameters and payload; facility text is limited to 24 bytes plus NUL.
-// ASSIGN_STADIUM_TEAM: tile is the location; parameter1 is team 0..4 or -1 for no selection.
-// Immutable Windows-1252 team name is limited to 24 bytes; no selection preserves game state.
-// Execution stages the text on City for this call and restores the enclosing command's input afterward.
+// Supported text actions borrow at most CITY_OVERLAY_NAME_MAX_LENGTH bytes, excluding the terminator. Empty text
+// may use NULL; embedded NUL bytes are rejected. Native editors supply UTF-8; this entry does not transcode it or
+// validate its encoding. Stock text conversion belongs at import/export boundaries.
+// RENAME_SIGN: tile is the location, parameter1 is the existing sign overlay or zero; parameter2/3 are zero.
+// EDIT_MAP_LABEL/EDIT_FACILITY_LABEL: tile is the location, parameter1 is OK/Cancel; parameter2/3 are zero.
+// ASSIGN_STADIUM_TEAM: tile is the location, parameter1 is team 0..4 or -1 for no selection; parameter2/3 are zero.
+// REPLY_TO_QUESTION: parameter1 is the question ID, parameter2 its answer and parameter3 the selected option.
+// TEST checks admission without staging text. Label/team execution installs a terminated copy on City for the call
+// and restores the enclosing command's text, answer and active state after nested execution returns.
 i64 DoCityCommandWithText(City *city, CityCommandId id, u32 flags, TileIndex tile, int parameter1, int parameter2,
     int parameter3, const u8 *text, u32 length);
 

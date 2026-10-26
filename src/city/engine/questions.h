@@ -1,61 +1,7 @@
 #ifndef SC2K_CITY_QUESTIONS_H
 #define SC2K_CITY_QUESTIONS_H
 
-#include "city/economy/types.h"
-#include "city/maps/labels.h"
-#include "city/types.h"
-
-// Native nonmodal questions retain the original caller's pending game context.
-// The UI reads these records and sends immutable answer commands; it does not own
-// the context or register a continuation callback. This is not a guest ABI type.
-typedef enum CityQuestionKind {
-  CITY_QUESTION_FACILITY_NAME = 1,
-  CITY_QUESTION_STADIUM_TEAM = 2,
-  CITY_QUESTION_BUDGET_ADVISOR = 3,
-  // Not replyable: reserves the ID/slot before rankings, captures the name afterward.
-  CITY_QUESTION_FACILITY_OPENING = 4,
-} CityQuestionKind;
-
-typedef struct {
-  int slot;
-  CityOverlayName original_name;
-} CityFacilityNameQuestion;
-
-typedef struct {
-  TileIndex tile;
-  int slot;
-  int available_teams;
-} CityStadiumTeamQuestion;
-
-typedef struct {
-  i32 budget_session;
-  CityBudgetCategory category;
-  i32 portrait_resource;
-  CityBudgetAdvice advice;
-  i32 parent_question;
-  bool helper_enabled;
-} CityBudgetAdvisorQuestion;
-
-typedef struct {
-  int id;
-  CityQuestionKind kind;
-  union {
-    CityFacilityNameQuestion facility_name;
-    CityStadiumTeamQuestion stadium_team;
-    CityBudgetAdvisorQuestion budget_advisor;
-  } context;
-} CityQuestion;
-
-// Reply text is borrowed for synchronous validation/application; length excludes a terminator.
-// Embedded zero bytes are rejected, and no input text pointer is retained by City.
-typedef struct {
-  int answer;
-  const u8 *text;
-  int length;
-  int selection;
-} CityQuestionReply;
-
-enum { CITY_PENDING_QUESTION_CAPACITY = 16 };
+#include "city/engine/input.h"
 
 // Count includes reserved opening slots, which are not yet replyable.
 int CityQuestionCount(const City *city);
@@ -79,8 +25,15 @@ bool QueueCityBudgetAdvisorQuestion(City *city, int id, i32 budget_session,
 // invalid, duplicate or stale replies leave both game state and the queue intact.
 // A stadium OK with no selection reports a warning and keeps the question open.
 i64 ReplyToCityQuestion(City *city, int id, CityQuestionReply reply);
-bool ReplyToQuestion(City *city, int id, CityQuestionReply reply);
-bool CanReplyToCityQuestion(City *city, int id, CityQuestionReply reply);
+// Read-only TEST admission; leaves question order, helper state, RNG and presentation unchanged.
+bool CanReplyToCityQuestion(const City *city, int id, CityQuestionReply reply);
+
+// Validate and apply a reply with a nonnull stadium action for this call only; no action pointer is retained.
+// An accepted team action must preserve the pending question array until this call consumes its question.
+// Selection -1 may run nested commands in the action; this call returns without reading or consuming the question
+// again. Other admitted replies resume and consume their actual context. Invalid replies return false without effects.
+bool ApplyCityQuestionReply(City *city, int id, CityQuestionReply reply,
+    void (*assign_team)(City *, TileIndex, int, const char *));
 
 // Resolved scalar reply command. TEST validates only; execution preserves the retained caller's result.
 i64 CmdReplyToQuestion(City *city, u32 flags, int id, int answer, int selection);

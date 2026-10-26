@@ -47,7 +47,8 @@ u16 ReadCityEventUnderlay(const City *city, TileIndex tile);
 
 // Slot allocation and release.
 
-int FindFreeCityEventSlot(City *city);
+// Read-only search; zero means no free slot. Returning a slot does not reserve or initialize its record.
+int FindFreeCityEventSlot(const City *city);
 void ClearCityMapEventSlot(City *city, int slot);
 
 // Tables
@@ -59,10 +60,6 @@ extern const i8 kCityMapEventSubtileXStep[8];
 // Shared movement maintains tile/hash membership and byte fractions. Slots must contain live records.
 // speed_type selects the event-kind speed; direction is an explicit eight-way heading.
 void AdvanceCityMapEventPosition(City *city, int speed_type, int slot, int direction);
-// Ship boundary failure unlinks but retains its event; the caller decides its subsequent state/removal.
-bool AdvanceCityShipPosition(City *city, int slot);
-// Sailboat boundary failure releases its event; the final map row/column are excluded.
-bool AdvanceCitySailboatPosition(City *city, int slot);
 // Always return an adjacent heading, even when already aligned. SteerCityEventTowardPoint preserves alignment.
 int TurnCityEventHeadingToward(int direction, int target);
 // World coordinates, including off-map waypoints. Half-axis thresholds select headings; coincident points select SE.
@@ -70,19 +67,21 @@ int CityEventHeadingTowardPoint(int x, int y, int target_x, int target_y);
 int SteerCityEventTowardPoint(int direction, int x, int y, int target_x, int target_y);
 int RandomlyPerturbCityEventHeading(City *city, int direction, int chance);
 
-void CreateCityMapEventAtTile(City *city, TileIndex tile, int type, int direction);
 void UpdateCityMapEvents(City *city);
 void UpdateCityMapEventTimer(City *city);
 
 // Aircraft (aircraft.c). Spawning and updates own City state/RNG; waypoint decoding is read-only for file codecs.
-// During approach the destination is the runway reference point; derive its rotated offset only when needed.
-void ReadCityAirplaneApproachOffset(const CityMapEvent *event, int *x, int *y);
+// During approach the destination is the runway reference point. Return signed map-tile offsets for its stored heading.
+CityPoint ReadCityAirplaneApproachOffset(const CityMapEvent *event);
 // Target effects use native tile indices; invalid/non-helicopter targets leave City unchanged.
 void CrashCityHelicopterAtTile(City *city, TileIndex tile);
 // Free shared action: TEST is read-only and execution acknowledges no-op targets as before.
 i64 CmdCrashCityHelicopterAtTile(City *city, u32 flags, TileIndex tile);
 void TrySpawnCityHelicopter(City *city, TileIndex tile);
 void TrySpawnCityAirplane(City *city, TileIndex tile, int axis);
+// Create a crashing airplane in the central map region; search consumes RNG even if no slot is available.
+// Returns false when the search or pool admission fails.
+bool ApplyCityAirCrashDisaster(City *city);
 void UpdateCityMapAirplane(City *city, int slot);
 void UpdateCityMapHelicopter(City *city, int slot);
 
@@ -98,6 +97,9 @@ void TrySpawnCityStationTrains(City *city, TileIndex tile);
 void UpdateCityMapTrain(City *city, int slot);
 
 // Disaster actors (disaster_actors.c). Creation/update applies City effects and delivers presentation requests.
+// Create a monster/tornado at the queued disaster location. An existing actor of that kind or full pool returns false.
+// Creation owns its payload, counters, RNG and presentation; the disaster dispatcher selects when to request it.
+bool ApplyCityMobileDisaster(City *city, bool monster);
 void CreateCityMapMaxisMan(City *city, int disaster_type);
 int CreateCityMapEffectEvent(City *city, TileIndex tile, int variant, int state, int linked);
 void UpdateCityMapExplosion(City *city, int slot);

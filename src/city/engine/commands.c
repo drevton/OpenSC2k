@@ -3,9 +3,9 @@
 #include "city/engine/commands.h"
 #include "city/engine/input.h"
 
+#include "base/integer.h"
 #include <string.h>
 
-#include "game/audio.h"
 #include "audio/types.h"
 #include "city/disasters/disasters.h"
 #include "city/economy/budget.h"
@@ -14,6 +14,7 @@
 #include "city/engine/initialization.h"
 #include "city/engine/questions.h"
 #include "city/engine/simulation.h"
+#include "city/engine/clock.h"
 #include "city/events/emergency.h"
 #include "city/events/events.h"
 #include "city/infrastructure/bridges.h"
@@ -35,15 +36,15 @@
 #include "game/state.h"
 #include "game/update.h"
 
-// Translate between serialized command fields and native tile arguments in either direction. Encode reads args and
-// replaces command; decode reads command and replaces args, using City only for coordinate conversion.
-static void TranslateCityCommandArguments(const City *city, CityCommand *command, CityCommandArguments *args,
-    bool encode) {
-  CityPoint point = {-1, -1};
-  if (encode && IsMapTileValid(city, args->tile)) {
-    point = MapTilePt(city, args->tile);
-  }
-  switch (command->id) {
+// The three payload words have one field encoding per command ID. Sharing this classification keeps packing and
+// unpacking symmetric; it does not validate commands, inspect City or select command handlers.
+typedef enum CityCommandEncoding {
+  CITY_COMMAND_ENCODING_SCALARS, CITY_COMMAND_ENCODING_TILE, CITY_COMMAND_ENCODING_XY,
+  CITY_COMMAND_ENCODING_SERVICE_XY, CITY_COMMAND_ENCODING_ZONE_TILE, CITY_COMMAND_ENCODING_EVENT_XY
+} CityCommandEncoding;
+
+static SC2K_FORCE_INLINE CityCommandEncoding ReadCityCommandEncoding(u32 id) {
+  switch (id) {
   case CITY_COMMAND_LEVEL_TERRAIN_TILE:
   case CITY_COMMAND_STRETCH_TERRAIN_TILE:
   case CITY_COMMAND_PLACE_STREAM:
@@ -63,12 +64,7 @@ static void TranslateCityCommandArguments(const City *city, CityCommand *command
   case CITY_COMMAND_LOWER_TERRAIN_TILE:
   case CITY_COMMAND_RAISE_TERRAIN_TILE:
   case CITY_COMMAND_STEP_TERRAIN_HEIGHT:
-    if (encode) {
-      *command = (CityCommand){command->id, (int)args->tile, args->parameter1, args->parameter2};
-    } else {
-      *args = (CityCommandArguments){(TileIndex)command->parameter1, command->parameter2, command->parameter3, 0};
-    }
-    break;
+    return CITY_COMMAND_ENCODING_TILE;
   case CITY_COMMAND_PLACE_HIGHWAY_ONRAMP:
   case CITY_COMMAND_PLACE_SUBWAY_RAIL_CONNECTION:
   case CITY_COMMAND_BULLDOZE:
@@ -79,64 +75,64 @@ static void TranslateCityCommandArguments(const City *city, CityCommand *command
   case CITY_COMMAND_ASSIGN_STADIUM_TEAM:
   case CITY_COMMAND_CARVE_WATER_CHANNEL:
   case CITY_COMMAND_APPLY_WATER_TILE:
-    if (encode) {
-      *command = (CityCommand){command->id, point.x, point.y, args->parameter1};
-    } else {
-      *args = (CityCommandArguments){MapTileXYOrInvalid(city, command->parameter1, command->parameter2),
-          command->parameter3, 0, 0};
-    }
-    break;
-  case CITY_COMMAND_DISPATCH_CITY_SERVICE:
-    if (encode) {
-      *command = (CityCommand){command->id, args->parameter1, point.x, point.y};
-    } else {
-      *args = (CityCommandArguments){MapTileXYOrInvalid(city, command->parameter2, command->parameter3),
-          command->parameter1, 0, 0};
-    }
-    break;
-  case CITY_COMMAND_PLACE_ZONE_RECT:
-    if (encode) {
-      *command = (CityCommand){command->id, args->parameter1, (int)args->tile, args->parameter2};
-    } else {
-      *args = (CityCommandArguments){(TileIndex)command->parameter2, command->parameter1, command->parameter3, 0};
-    }
-    break;
-  case CITY_COMMAND_SET_EVENT_STAGE_AT_TILE:
-    if (encode) {
-      *command = (CityCommand){command->id, point.x - 4, point.y - 4, 0};
-    } else {
-      *args = (CityCommandArguments){INVALID_TILE, 0, 0, 0};
-      if (command->parameter1 >= -4 && command->parameter1 < city->map_width - 4 &&
-          command->parameter2 >= -4 && command->parameter2 < city->map_height - 4)
-        args->tile = MapTileXY(city, command->parameter1 + 4, command->parameter2 + 4);
-    }
-    break;
-  default:
-    break;
+    return CITY_COMMAND_ENCODING_XY;
+  case CITY_COMMAND_DISPATCH_CITY_SERVICE: return CITY_COMMAND_ENCODING_SERVICE_XY;
+  case CITY_COMMAND_PLACE_ZONE_RECT: return CITY_COMMAND_ENCODING_ZONE_TILE;
+  case CITY_COMMAND_SET_EVENT_STAGE_AT_TILE: return CITY_COMMAND_ENCODING_EVENT_XY;
+  default: return CITY_COMMAND_ENCODING_SCALARS;
   }
 }
 
-// Decode the current command record; old command streams are not supported. Returns decoded values only; it does not
-// validate admission, execute an action or support retired command encodings.
+// Decode the current command record into native tile arguments. Field conversion does not validate admission or
+// execute an action; scalar and unknown IDs retain their three fields for the command dispatcher to inspect.
 CityCommandArguments DecodeCityCommand(const City *city, CityCommand command) {
-  CityCommandArguments args = {INVALID_TILE, command.parameter1, command.parameter2, command.parameter3};
-  TranslateCityCommandArguments(city, &command, &args, false);
-  return args;
+  switch (ReadCityCommandEncoding(command.id)) {
+  case CITY_COMMAND_ENCODING_TILE:
+    return (CityCommandArguments){(TileIndex)command.parameter1, command.parameter2, command.parameter3, 0};
+  case CITY_COMMAND_ENCODING_XY:
+    return (CityCommandArguments){MapTileXYOrInvalid(city, command.parameter1, command.parameter2),
+        command.parameter3, 0, 0};
+  case CITY_COMMAND_ENCODING_SERVICE_XY:
+    return (CityCommandArguments){MapTileXYOrInvalid(city, command.parameter2, command.parameter3),
+        command.parameter1, 0, 0};
+  case CITY_COMMAND_ENCODING_ZONE_TILE:
+    return (CityCommandArguments){(TileIndex)command.parameter2, command.parameter1, command.parameter3, 0};
+  case CITY_COMMAND_ENCODING_EVENT_XY:
+    // Event-stage records offset both coordinates by four tiles.
+    if (command.parameter1 >= -4 && command.parameter1 < city->map_width - 4 &&
+        command.parameter2 >= -4 && command.parameter2 < city->map_height - 4)
+      return (CityCommandArguments){MapTileXY(city, command.parameter1 + 4, command.parameter2 + 4), 0, 0, 0};
+    return (CityCommandArguments){INVALID_TILE, 0, 0, 0};
+  default:
+    return (CityCommandArguments){INVALID_TILE, command.parameter1, command.parameter2, command.parameter3};
+  }
 }
 
-// Pack a resolved action and its native tile arguments into the current command record. Parameters must follow that
-// command's schema; admission and execution happen later, and invalid tiles remain representable.
+// Pack a resolved action into its current record schema. Admission and execution happen later; a coordinate-based
+// command represents an invalid tile as (-1, -1), before any command-specific coordinate offset.
 CityCommand EncodeCityCommand(const City *city, CityCommandId id, TileIndex tile, int parameter1, int parameter2,
     int parameter3) {
-  CityCommand command = {id, parameter1, parameter2, parameter3};
-  CityCommandArguments args = {tile, parameter1, parameter2, parameter3};
-  TranslateCityCommandArguments(city, &command, &args, true);
-  return command;
+  CityPoint point = {-1, -1};
+  if (IsMapTileValid(city, tile)) point = MapTilePt(city, tile);
+  switch (ReadCityCommandEncoding(id)) {
+  case CITY_COMMAND_ENCODING_TILE:
+    return (CityCommand){id, (int)tile, parameter1, parameter2};
+  case CITY_COMMAND_ENCODING_XY:
+    return (CityCommand){id, point.x, point.y, parameter1};
+  case CITY_COMMAND_ENCODING_SERVICE_XY:
+    return (CityCommand){id, parameter1, point.x, point.y};
+  case CITY_COMMAND_ENCODING_ZONE_TILE:
+    return (CityCommand){id, parameter1, (int)tile, parameter2};
+  case CITY_COMMAND_ENCODING_EVENT_XY:
+    return (CityCommand){id, point.x - 4, point.y - 4, 0};
+  default:
+    return (CityCommand){id, parameter1, parameter2, parameter3};
+  }
 }
 
 // Read the active command's staged text reply into caller-owned state and answer outputs. Returns false when no text
 // reply is active; cancellation writes the answer but leaves the text output untouched.
-bool ReadCityNameCommandAnswer(City *city, CityNameCommandInput *state, int *answer) {
+bool ReadCityNameCommandAnswer(const City *city, CityNameCommandInput *state, int *answer) {
   if (!city->command_name_active)
     return false;
   if (city->command_name_answer != CITY_DIALOG_CANCEL)
@@ -299,13 +295,13 @@ static bool CityCommandHasSinglePayment(const City *city, CityCommandId id, Tile
 i64 DoCityCommand(City *city, CityCommandId id, u32 flags, TileIndex tile, int parameter1, int parameter2,
     int parameter3) {
   if (!IsCityCommandId(id)) return CITY_COMMAND_COST_INVALID;
-  CityCommand command = EncodeCityCommand(city, id, tile, parameter1, parameter2, parameter3);
   if (flags & ~CITY_COMMAND_TEST) return CITY_COMMAND_COST_INVALID;
   if (flags & CITY_COMMAND_TEST) {
     i64 price = ExecuteCityCommand(city, id, flags, tile, parameter1, parameter2, parameter3);
     // Bond repayment retains its financial eligibility/confirmation contract, including in the editor.
     return price < 0 || id == CITY_COMMAND_REDEEM_BOND ? price : AffordableCityCommandCost(city, price);
   }
+  CityCommand command = EncodeCityCommand(city, id, tile, parameter1, parameter2, parameter3);
   Game *game = city->game;
   CityFileRuntime file;
   bool owns_file = game->file == NULL;
@@ -353,17 +349,22 @@ i64 DoCityCommand(City *city, CityCommandId id, u32 flags, TileIndex tile, int p
   return result;
 }
 
-// Stage a bounded text payload for a supported shared action, execute it, then release the temporary binding. Text is
-// borrowed for the call; invalid IDs, flags, lengths and nested text bindings return a negative error.
+// Admit the text-bearing actions before inspecting their payload. Label/team execution temporarily stages a
+// terminated copy on City and restores the enclosing binding afterward; TEST never installs that binding.
 i64 DoCityCommandWithText(City *city, CityCommandId id, u32 flags, TileIndex tile,
     int parameter1, int parameter2, int parameter3, const u8 *text, u32 length) {
-  if (!IsCityCommandId(id)) return CITY_COMMAND_COST_INVALID;
-  if (flags & ~CITY_COMMAND_TEST) return CITY_COMMAND_COST_INVALID;
-  int limit = CITY_OVERLAY_NAME_MAX_LENGTH;
-  if ((id != CITY_COMMAND_RENAME_SIGN && id != CITY_COMMAND_EDIT_MAP_LABEL &&
-      id != CITY_COMMAND_EDIT_FACILITY_LABEL && id != CITY_COMMAND_ASSIGN_STADIUM_TEAM &&
-      id != CITY_COMMAND_REPLY_TO_QUESTION) || length > limit || (length && !text) ||
-      (length && memchr(text, 0, length))) return CITY_COMMAND_COST_INVALID;
+  switch (id) {
+  case CITY_COMMAND_RENAME_SIGN:
+  case CITY_COMMAND_EDIT_MAP_LABEL:
+  case CITY_COMMAND_EDIT_FACILITY_LABEL:
+  case CITY_COMMAND_ASSIGN_STADIUM_TEAM:
+  case CITY_COMMAND_REPLY_TO_QUESTION:
+    break;
+  default:
+    return CITY_COMMAND_COST_INVALID;
+  }
+  if ((flags & ~CITY_COMMAND_TEST) || length > CITY_OVERLAY_NAME_MAX_LENGTH ||
+      (length && (!text || memchr(text, 0, length)))) return CITY_COMMAND_COST_INVALID;
   if (id == CITY_COMMAND_RENAME_SIGN) {
     if (parameter2 || parameter3) return CITY_COMMAND_COST_INVALID;
     i64 result = CmdRenameCitySign(city, flags, tile, parameter1, text, length);

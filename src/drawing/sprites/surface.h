@@ -18,8 +18,6 @@ typedef struct SpriteSurface {
   bool image_palette; // Static image colours must not retain global palette/selection identity.
 } SpriteSurface;
 
-// A null palette uses the image palette for normal copies, otherwise the surface palette.
-void DrawRunSprite(SpriteSurface *surface, const RunSprite *sprite, int x, int y, u32 flags, const u32 *palette);
 void FillSpriteSurface(SpriteSurface *surface, CityRect rect, u8 index);
 bool AnimateSpriteSurface(SpriteSurface *surface, int first, int count);
 bool AnimateSpriteSurfaceChanges(SpriteSurface *surface, u32 changed_buckets);

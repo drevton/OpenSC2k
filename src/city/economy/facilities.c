@@ -1,8 +1,11 @@
 #include "city/economy/facilities.h"
 
+#include <assert.h>
 #include <string.h>
 
 #include "assets/resources.h"
+#include "audio/types.h"
+#include "base/integer.h"
 #include "base/text.h"
 #include "city/economy/types.h"
 #include "city/engine/commands.h"
@@ -11,14 +14,17 @@
 #include "city/events/news.h"
 #include "city/maps/buildings.h"
 #include "city/maps/labels.h"
+#include "city/maps/kinds.h"
 #include "city/maps/layers.h"
+#include "city/maps/map_types.h"
 #include "city/maps/tile_storage.h"
+#include "city/maps/map.h"
 #include "city/military.h"
 #include "city/presentation.h"
-#include "city/saveload/map_format.h"
 #include "city/state.h"
-#include "city/tools/tools.h"
 #include "city/tools/types.h"
+#include "game/observation.h"
+#include "game/state.h"
 
 // Unlisted kinds have no specialized facility information template.
 const u8 kFacilityClassByTile[TK_COUNT] = {
@@ -87,6 +93,80 @@ void ResetCityFacilityState(City *city) {
   city->infrastructure.counter_a = 0;
   city->infrastructure.counter_b = 0;
   city->infrastructure.counter_c = 0;
+}
+
+// Apply a captured facility-name answer to the tile's live facility record. Requires a valid facility overlay and
+// bounded text state; ranking callbacks may run before the live record is read again.
+static void ApplyCityFacilityLabelChoice(City *city, TileIndex tile, const CityNameCommandInput *state, int answer) {
+  InvalidateTile(city, tile);
+  int slot = ReadCityFacilityOverlay(city, tile);
+  if (!city->individual_facilities && slot == CITY_OVERLAY_NEWSPAPER_RANKING_FACILITY)
+    UpdateCityNewspaperRanksAndF3Records(city);
+  if (CityFacilityRecordAt(city, CityFacilityOverlaySlot(slot))->type == TK_CLEAR)
+    ReportCityTileInspection(city, tile);
+  else if (answer == CITY_DIALOG_OK)
+    memcpy(CityOverlayNameAt(city, slot)->character, state->name.character, state->length + 1);
+}
+
+// Commit a staged text answer for the selected facility's label. Requires the active bounded name payload and
+// supported answer; TEST checks admission and execution reads the live facility state after callbacks.
+i64 CmdEditFacilityLabel(City *city, u32 flags, TileIndex tile, int answer) {
+  int invalid = CITY_COMMAND_COST_INVALID;
+  if (!city->command_name_active || !IsMapTileValid(city, tile) ||
+      (answer != CITY_DIALOG_OK && answer != CITY_DIALOG_CANCEL))
+    return invalid;
+  int slot = ReadCityFacilityOverlay(city, tile);
+  if (!IsCityFacilityOverlay(slot))
+    return invalid;
+  if (flags & CITY_COMMAND_TEST) return 0;
+  const GameObservation *observer = city->game->observation;
+  if (observer && observer->edit_facility_label) observer->edit_facility_label(city, tile);
+  else ApplyCityFacilityLabelChoice(city, tile, &city->command_name, answer);
+  RefreshCityMapViews(city->game);
+  return 1;
+}
+
+// Copy the selected team's name and update the stadium's live record. Tile must still have a facility overlay and team
+// must select the team-name table; the caller validates the captured choice before entry.
+void SetCityStadiumTeam(City *city, TileIndex tile, int team, const char *name) {
+  CityOverlayName *team_name = CityOverlayNameAt(city, CITY_TEAM_NAME_FIRST + team);
+  CopyText((char *)team_name->character, sizeof(team_name->character), name);
+  int slot = ReadCityFacilityOverlay(city, tile);
+  CityAnnualFacilityRecord *stadium = CityFacilityRecordAt(city, CityFacilityOverlaySlot(slot));
+  stadium->stadium_team = team;
+  stadium->stadium_team_name_slot = CITY_TEAM_NAME_FIRST + team;
+  city->infrastructure.stadium_team_mask |= 1u << team;
+}
+
+// Native commands report rejection; their UI caller presents it after command execution.
+void ApplyCityStadiumTeamChoice(City *city, TileIndex tile, int team, const char *name) {
+  assert(IsMapTileValid(city, tile));
+  const GameObservation *observer = city->game->observation;
+  if (observer && observer->accept_stadium_team) {
+    observer->accept_stadium_team(city, tile, team, name);
+    return;
+  }
+  if (team == -1) {
+    PlayCitySound(city, tile, CITY_SOUND_PLACEMENT_REJECTED);
+    return;
+  }
+  SetCityStadiumTeam(city, tile, team, name);
+  return;
+}
+
+// Assign the requested team index to the live stadium using the staged bounded name. TEST validates the tile,
+// stadium and index without effects; -1 preserves the rejection sound/error instead of assigning a team.
+i64 CmdAssignStadiumTeam(City *city, u32 flags, TileIndex tile, int team) {
+  int invalid = CITY_COMMAND_COST_INVALID;
+  if (!city->command_name_active || !IsMapTileValid(city, tile) || team < -1 || team >= CITY_TEAM_NAME_COUNT)
+    return invalid;
+  int slot = ReadCityFacilityOverlay(city, tile);
+  if (!IsCityFacilityOverlay(slot) ||
+      CityFacilityRecordAt(city, CityFacilityOverlaySlot(slot))->type != TK_STADIUM)
+    return invalid;
+  if (flags & CITY_COMMAND_TEST) return 0;
+  ApplyCityStadiumTeamChoice(city, tile, team, (const char *)city->command_name.name.character);
+  return team == -1 ? -CITY_NOTICE_SELECT_VALID_STADIUM_SPORT : 1;
 }
 
 // Bounds annual facility metrics by population, funding, and city statistics. Preserves stock signed-word inputs and
@@ -174,7 +254,7 @@ static void InitializeFacilityRecord(City *city, int slot, u8 kind) {
   case TK_FIRE_STATION:
     record->value_02 =
         ClampAnnualFacilityMetric(city, city->economy.sector[CITY_ECONOMY_FIRE].current_rate >> 1, 70);
-    record->value_04 = 4;
+    record->fire_engines = 4;
     break;
   case TK_MUSEUM:
     record->age = 100;
@@ -184,8 +264,8 @@ static void InitializeFacilityRecord(City *city, int slot, u8 kind) {
     break;
   case TK_MAYORS_HOUSE:
     record->value_02 = city->geography.start_year + city->clock.year;
-    record->value_04 = Sc2kCrtRandRange(city, 30) + 10;
-    record->value_06 = Sc2kCrtRandRange(city, 60);
+    record->mayors_house_approval = Sc2kCrtRandRange(city, 30) + 10;
+    record->mayors_house_staff = Sc2kCrtRandRange(city, 60);
     break;
   case TK_PLYMOUTH_ARCOLOGY:
   case TK_FOREST_ARCOLOGY:
@@ -303,9 +383,9 @@ bool SetCityIndividualFacilities(City *city, bool individual) {
     // Count and reserve before changing policy; a failed reservation leaves shared records active.
     int additional = 0;
     for (TileIndex tile = 0; tile < city->map_cell_count; ++tile) {
-      int kind = ReadTile(city, tile);
+      int kind = city->tile[tile].kind;
       if (!IsTileKindFacility(kind) || !kCityBuildings[kind].size ||
-          ResolveBulldozeFootprint(city, tile).start != tile) continue;
+          GetBuildingStartTile(city, tile) != tile) continue;
       int facility_class = kFacilityClassByTile[kind];
       if (facility_class >= CITY_FACILITY_INFO_SHARED_RECORD_FIRST || !ReadCityFacilityOverlay(city, tile))
         ++additional;
@@ -315,9 +395,9 @@ bool SetCityIndividualFacilities(City *city, bool individual) {
         city->map_cell_count + CITY_FACILITY_RECORD_RESERVED_COUNT))) return false;
     city->individual_facilities = true;
     for (TileIndex tile = 0; tile < city->map_cell_count; ++tile) {
-      int kind = ReadTile(city, tile);
+      int kind = city->tile[tile].kind;
       if (!IsTileKindFacility(kind) || !kCityBuildings[kind].size ||
-          ResolveBulldozeFootprint(city, tile).start != tile || ReadCityFacilityOverlay(city, tile)) continue;
+          GetBuildingStartTile(city, tile) != tile || ReadCityFacilityOverlay(city, tile)) continue;
       int facility_class = kFacilityClassByTile[kind];
       CityOverlayName shared_name = {0};
       if (facility_class >= CITY_FACILITY_INFO_SHARED_RECORD_FIRST) {
@@ -334,9 +414,9 @@ bool SetCityIndividualFacilities(City *city, bool individual) {
     for (int slot = 0; slot < CITY_FACILITY_RECORD_RESERVED_COUNT; ++slot)
       facilities->record[slot] = (CityAnnualFacilityRecord){.type = kReservedFacilityKinds[slot]};
     for (TileIndex tile = 0; tile < city->map_cell_count; ++tile) {
-      int kind = ReadTile(city, tile);
+      int kind = city->tile[tile].kind;
       if (!IsTileKindFacility(kind) || !kCityBuildings[kind].size ||
-          ResolveBulldozeFootprint(city, tile).start != tile) continue;
+          GetBuildingStartTile(city, tile) != tile) continue;
       int facility_class = kFacilityClassByTile[kind];
       int overlay = ReadCityFacilityOverlay(city, tile);
       if (facility_class != CITY_FACILITY_INFO_DEFAULT && facility_class < CITY_FACILITY_INFO_SHARED_RECORD_FIRST)
@@ -406,14 +486,13 @@ void AdvanceAnnualFacilityState(City *city) {
 // compatibility case.
 static void FinishAgingCityPowerPlant(City *city, int index) {
   CityAnnualFacilityRecord *facility = CityFacilityRecordAt(city, index);
-  if (facility->type < TK_GAS_POWER_PLANT || facility->type > TK_COAL_POWER_PLANT) return;
+  if (!IsTileKindAgingPowerPlant(facility->type)) return;
   TileIndex location = facility->age > 50 ? FindAnnualFacilityOverlayTile(city, index) : INVALID_TILE;
   // Stock's packed return used zero for both failure and tile (0, 0).
   if (location != INVALID_TILE &&
       (city->individual_facilities || location != 0 || city->map_cell_count != CITY_MAP_CELL_COUNT)) {
     if (city->indicators.event_flag != 0) {
-      int cost_index = kPowerPlantToolVariants[facility->type - TK_GAS_POWER_PLANT];
-      u32 cost = kCityToolCosts[CITY_TOOL_GROUP_POWER * CITY_TOOL_VARIANT_CAPACITY + cost_index];
+      u32 cost = kCityBuildings[facility->type].cost;
       if (city->indicators.cash >= cost) {
         city->indicators.cash = AddInt64Clamped(city->indicators.cash, -(i64)cost);
         facility->age = 0;
@@ -447,10 +526,10 @@ CityAnnualFacilityWork BeginCityAnnualFacilities(City *city) {
 // BeginCityAnnualFacilities and survive each notice; true means the scan reached its end, not that its final totals
 // were committed.
 bool AdvanceCityAnnualFacilities(City *city, CityAnnualFacilityWork *work) {
-  CityTileCounts *statistics = &city->statistics;
-  CityEconomyMonths *economy = &city->economy;
-  CityAgeCohorts *cohorts = &city->age_cohorts;
-  for (; work->index < CityFacilityRecordLimit(city); ++work->index) {
+  const CityTileCounts *statistics = &city->statistics;
+  const CityEconomyMonths *economy = &city->economy;
+  const CityAgeCohorts *cohorts = &city->age_cohorts;
+  for (; work->index < (u32)CityFacilityRecordLimit(city); ++work->index) {
     int index = work->index;
     CityAnnualFacilityRecord *facility = CityFacilityRecordAt(city, index);
     if (work->resume_power) {
@@ -467,7 +546,7 @@ bool AdvanceCityAnnualFacilities(City *city, CityAnnualFacilityWork *work) {
     } else if (facility->type == TK_WIND_POWER) {
       facility->value_02 = city->individual_facilities ? 1 : statistics->count[TK_WIND_POWER];
       facility->value_04 = 4 * facility->value_02;
-    } else if (facility->type >= TK_GAS_POWER_PLANT && facility->type <= TK_COAL_POWER_PLANT) {
+    } else if (IsTileKindAgingPowerPlant(facility->type)) {
       ++facility->age;
       facility->value_04 = city->infrastructure.power_percent + (Sc2kCrtRand(city) & 7);
       if (facility->age > 48 &&
@@ -497,22 +576,22 @@ bool AdvanceCityAnnualFacilities(City *city, CityAnnualFacilityWork *work) {
       facility->age = economy->sector[CITY_ECONOMY_POLICE].current_rate;
       facility->value_02 =
           ClampAnnualFacilityMetric(city, 2 * economy->sector[CITY_ECONOMY_POLICE].current_rate, 90);
-      int count = statistics->count[TK_POLICE_STATION];
-      count = IntMax(count, 1);
-      u32 value = city->indicators.city_crime / (u32)count;
-      facility->value_04 = value;
+      int stations = statistics->count[TK_POLICE_STATION];
+      stations = IntMax(stations, 1);
+      u32 offenses = city->indicators.city_crime / (u32)stations;
+      facility->police_offenses = offenses;
       int divisor = 5 - work->prior_ratio_flag;
       divisor = IntMax(divisor, 1);
-      int capacity = (int)value / divisor + (int)(Sc2kCrtRand(city) & 15);
-      facility->value_06 = capacity;
-      int total = capacity + work->value_sum;
+      int arrests = (int)offenses / divisor + (int)(Sc2kCrtRand(city) & 15);
+      facility->police_arrests = arrests;
+      int total = arrests + work->value_sum;
       // Stock stores the running sum as a word between facility records.
       work->value_sum = IntMin(total, 0xFFFF) & 0xFFFF;
     } else if (facility->type == TK_FIRE_STATION) {
       facility->age = economy->sector[CITY_ECONOMY_FIRE].current_rate;
       facility->value_02 = ClampAnnualFacilityMetric(city, economy->sector[CITY_ECONOMY_FIRE].current_rate >> 1, 70);
-      facility->value_04 = (facility->value_02 >> 4) + 1;
-      facility->value_06 = Sc2kCrtRandRange(city, 20) + 2;
+      facility->fire_engines = (facility->value_02 >> 4) + 1;
+      facility->fire_response_minutes = Sc2kCrtRandRange(city, 20) + 2;
     } else if (facility->type == TK_MUSEUM) {
       u32 rate = economy->sector[CITY_ECONOMY_COLLEGES].current_rate;
       u32 requested = 4 * rate * (city->individual_facilities ? 9 : statistics->count[TK_MUSEUM]);
@@ -529,7 +608,7 @@ bool AdvanceCityAnnualFacilities(City *city, CityAnnualFacilityWork *work) {
         value = population;
       facility->value_02 = value;
       facility->value_04 = city->individual_facilities ? 9 :
-          statistics->count[TK_LARGE_PARK] + statistics->count[TKL_PARK];
+          statistics->count[TK_LARGE_PARK] + statistics->count[TSTAT_PARK];
       facility->value_06 = ClampAnnualFacilityMetric(city, facility->value_04 / 9, 120);
     } else if (facility->type == TK_SCHOOL) {
       u32 rate = economy->sector[CITY_ECONOMY_SCHOOLS].current_rate;
@@ -613,9 +692,9 @@ bool AdvanceCityAnnualFacilities(City *city, CityAnnualFacilityWork *work) {
       facility->value_02 = (city->individual_facilities ? 4 : statistics->count[TK_RAIL_STATION]) / 4;
       facility->value_06 = city->infrastructure.counter_b;
     } else if (facility->type == TK_MAYORS_HOUSE) {
-      facility->value_04 = city->infrastructure.mayor_rating;
-      if (facility->value_06 != 0) {
-        --facility->value_06;
+      facility->mayors_house_approval = city->infrastructure.mayor_rating;
+      if (facility->mayors_house_staff != 0) {
+        --facility->mayors_house_staff;
         ++facility->age;
       }
     } else if (facility->type == TK_WATER_TREATMENT_PLANT || facility->type == TK_DESALINATION_PLANT) {
@@ -706,7 +785,7 @@ void CompleteCityArcologyExodus(City *city, int arcology_count) {
   for (int y = 0; y < city->map_height; ++y)
     for (int x = 0; x < city->map_width; ++x) {
       TileIndex tile = MapTileXY(city, x, y);
-      if (ReadTile(city, tile) == TK_LAUNCH_ARCOLOGY) BulldozeCityTile(city, tile, true);
+      if (city->tile[tile].kind == TK_LAUNCH_ARCOLOGY) BulldozeCityTile(city, tile, true);
     }
   city->indicators.cash = AddInt64Clamped(city->indicators.cash, 100000 * (i64)arcology_count);
 }

@@ -3,10 +3,7 @@
 
 #include <string.h>
 
-#include "city/maps/buildings.h"
-#include "city/state.h"
 #include "drawing/maps/map_sprites.h"
-#include "drawing/maps/tables.h"
 #include "drawing/sprites/preparation.h"
 #include "drawing/state.h"
 
@@ -85,23 +82,11 @@ static bool DecodeNativeMapIcon(const RunSprite *sprite, const u32 palette[256],
   return copied;
 }
 
-static bool DecodeCityMapIcon(const Drawing *drawing, int sprite_id, const u32 palette[256], u32 *icon, int size) {
-  if ((unsigned)sprite_id >= MAP_SPRITE_COUNT || size <= 4) return false;
-  return DecodeNativeMapIcon(drawing->sprite_cache.base[sprite_id], palette, drawing->animation_palette, icon, size);
-}
-
-bool DecodeCityBuildingCursorIcon(const City *city, TileKind kind, const u32 palette[256],
+bool DecodeCityMapCursorIcon(const Drawing *drawing, int sprite_id, const u32 palette[256],
     u32 icon[SC2K_CURSOR_ASSET_ICON_PIXELS]) {
-  int art = CityBuildingSprite(city, kind, 0);
-  int sprite = CITY_SPRITE_CATALOG_LARGE_BASE + kCityMapKindSprites[kind];
-  if (art >= 0) {
-    // Wind previews include the rotor, which is a separate animated layer on the map.
-    if (kind == TK_WIND_POWER)
-      art = CITY_LANDSCAPE_WIND_PREVIEW_FIRST +
-          (city->geography.start_year + city->clock.year >= CITY_WIND_MODERN_YEAR ? CITY_CIVIC_VIEWS : 0);
-    sprite = MAP_LANDSCAPE_SPRITE_FIRST + 2 * MAP_LANDSCAPE_SPRITES_PER_ZOOM + art - CITY_LANDSCAPE_GROUND_FIRST;
-  }
-  return DecodeCityMapIcon(city->drawing, sprite, palette, icon, 40);
+  if ((unsigned)sprite_id >= MAP_SPRITE_COUNT) return false;
+  return DecodeNativeMapIcon(drawing->sprite_cache.base[sprite_id], palette, drawing->animation_palette,
+      icon, SC2K_CURSOR_ASSET_ICON_SIZE);
 }
 
 bool DecodeCityInterfaceCursorIcon(InterfaceSpriteSource source, int height,

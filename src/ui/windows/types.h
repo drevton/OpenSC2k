@@ -50,6 +50,12 @@ typedef struct Window Window;
 typedef struct WindowEvent WindowEvent;
 typedef struct CityCanvasDesktop CityCanvasDesktop;
 typedef struct CityDirtyRegions CityDirtyRegions;
+typedef struct CityWindowCompletion CityWindowCompletion;
+typedef struct Game Game;
+
+// Return true to consume the event. Only unhandled input proceeds to common chrome handling;
+// the dispatcher reacquires the window by ID first, since the procedure may have closed it.
+typedef bool WindowProcedure(Game *game, const Window *window, const WindowEvent *event);
 
 // Completion runs after the window releases its owned state; context remains caller-owned.
 typedef void CityWindowCallback(City *city, void *context);

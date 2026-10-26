@@ -2,7 +2,9 @@
 #include <stdlib.h>
 
 #include "city/infrastructure/surface_lines.h"
+#include "city/infrastructure/highways.h"
 #include "city/infrastructure/types.h"
+#include "city/maps/buildings.h"
 #include "city/maps/layers.h"
 #include "city/maps/tables.h"
 #include "city/maps/tile_storage.h"
@@ -70,10 +72,25 @@ TileIndex CityMapViewNeighbor(const City *city, TileIndex tile, int dx, int dy) 
   return GetRelativeTileOrInvalid(city, tile, offset.x, offset.y);
 }
 
+// Camera projection retains legacy water/bank shape codes and underground kinds, including their padded tails.
+// These immutable mappings are private to Drawing; native tile kinds are not rotated through artwork IDs.
+static const u8 kCameraTerrainClockwise[] = {
+  0, 4, 1, 2, 3, 8, 5, 6, 7, 12, 9, 10, 11, 13, 0, 0,
+  16, 20, 17, 18, 19, 24, 21, 22, 23, 28, 25, 26, 27, 29, 0, 0,
+  32, 36, 33, 34, 35, 40, 37, 38, 39, 44, 41, 42, 43, 45, 46, 0,
+  48, 52, 49, 50, 51, 56, 53, 54, 55, 60, 57, 58, 59, 61, 62, 0,
+  65, 64, 69, 66, 67, 68, 0, 0
+};
+
+static const u8 kCameraUndergroundClockwise[] = {
+  0, 2, 1, 6, 3, 4, 5, 10, 7, 8, 9, 14, 11, 12, 13, 15,
+  17, 16, 21, 18, 19, 20, 25, 22, 23, 24, 29, 26, 27, 28, 30, 32,
+  31, 33, 34, 35, 0, 0, 0, 0
+};
+
 int CityMapCameraShape(int shape, int rotation) {
-  if (!rotation || (unsigned)shape >= CITY_TERRAIN_ROTATION_COUNT) return shape;
-  const CityMapRotationTables *tables = ReadCityMapRotationTables();
-  for (int turn = 0; turn < rotation; ++turn) shape = tables->terrain_clockwise[shape];
+  if (!rotation || (unsigned)shape >= sizeof(kCameraTerrainClockwise)) return shape;
+  for (int turn = 0; turn < rotation; ++turn) shape = kCameraTerrainClockwise[shape];
   return shape;
 }
 
@@ -112,19 +129,20 @@ int CityMapDryGroundShape(const City *city, TileIndex tile, const CityTileGeomet
 }
 
 int CityMapViewUnderground(const City *city, TileIndex tile) {
-  int kind = ReadUnderground(city, tile);
-  if (kind >= CITY_UNDERGROUND_ROTATION_COUNT) return kind;
-  const CityMapRotationTables *tables = ReadCityMapRotationTables();
-  for (int turn = 0; turn < CityMapCameraRotation(city->drawing); ++turn) kind = tables->underground_clockwise[kind];
+  int kind = ReadTileUndergroundKind(&city->tile[tile]);
+  if ((unsigned)kind >= sizeof(kCameraUndergroundClockwise)) return kind;
+  for (int turn = 0; turn < CityMapCameraRotation(city->drawing); ++turn) kind = kCameraUndergroundClockwise[kind];
   return kind;
 }
 
-int CityMapViewOrientation(const City *city, TileIndex tile) {
-  return (ReadBuildingOrientation(city, tile) + CityMapCameraRotation(city->drawing)) & 3;
-}
-
 bool IsCityMapViewFootprintAnchor(const City *city, TileIndex tile) {
-  return IsCityFootprintCorner(city, tile, (CITY_BUILDING_CORNER_TOP_RIGHT + CityMapCameraRotation(city->drawing)) & 3);
+  int corner = (CITY_BUILDING_CORNER_TOP_RIGHT + CityMapCameraRotation(city->drawing)) & 3;
+  int kind = city->tile[tile].kind;
+  if (IsTileKindBuilding(kind)) return IsCityBuildingCorner(city, tile, corner);
+  if (IsTileKindHighwayFootprint(kind) || IsTileKindHighwayBridge(kind))
+    return IsCityHighwayFootprintCorner(city, tile, corner);
+  int mask = CITY_FOOTPRINT_CORNER_NW << ((city->geography.rotation + corner) & 3);
+  return (ReadFootprintCorners(city, tile) & mask) != 0;
 }
 
 CityMapGround CityMapUnderworldGround(const City *city, TileIndex tile) {
@@ -197,6 +215,7 @@ static void CityMapCameraTileCorners(const City *city, TileIndex tile, CityMapCa
   CityPoint point = CityMapCameraPoint(city, camera.rotation, MapTileX(city, tile), MapTileY(city, tile));
   int zoom = camera.zoom;
   int x = point.x, y = point.y, scale = 1 << zoom;
+  int height_step = CityMapHeightStep(zoom);
   CityTileGeometry geometry = ReadCityMapCameraGeometry(city, tile, camera.rotation);
   bool water = !drawing->map_state.events_suppressed && geometry.water != CITY_WATER_NONE;
   int elevation = water ? geometry.surface_height : geometry.land_height;
@@ -207,29 +226,28 @@ static void CityMapCameraTileCorners(const City *city, TileIndex tile, CityMapCa
         (CityMapGround){geometry.land_shape, geometry.land_height});
     elevation = patch.elevation;
     int left = camera.origin_x + 4 * scale * (y - x);
-    int bottom = camera.origin_y + 2 * scale * (y + x) - CityMapHeightStep(zoom) * elevation;
+    int bottom = camera.origin_y + 2 * scale * (y + x) - height_step * elevation;
     const int u[] = {0, 0, 1, 1}, v[] = {0, 1, 1, 0};
     for (int corner = 0; corner < 4; ++corner) {
       points[2 * corner] = left + 4 * scale * (1 + v[corner] - u[corner]);
       points[2 * corner + 1] = bottom + 2 * scale * (u[corner] + v[corner] - 2) -
-          CityMapHeightStep(zoom) * CityMapUnderworldHeight(&patch, u[corner], v[corner]);
+          height_step * CityMapUnderworldHeight(&patch, u[corner], v[corner]);
     }
     return;
   }
-  if (!drawing->map_state.events_suppressed && !water &&
-      drawing->map_state.tile_details_enabled) {
+  if (!water && drawing->map_state.tile_details_enabled) {
     CityMapSurface surface = ResolveCitySurfaceLineViewGround(city, tile, camera.rotation);
     shape = surface.shape;
     elevation += surface.raised;
   }
   int raised = kTerrainRaisedCorners[shape];
   int left = camera.origin_x + 4 * scale * (y - x);
-  int bottom = camera.origin_y + 2 * scale * (y + x) - CityMapHeightStep(zoom) * elevation;
+  int bottom = camera.origin_y + 2 * scale * (y + x) - height_step * elevation;
   const int corners[8] = {left + 4 * scale, bottom - 4 * scale,
       left + 8 * scale, bottom - 2 * scale, left + 4 * scale, bottom, left, bottom - 2 * scale};
   for (int point = 0; point < 4; ++point) {
     points[2 * point] = corners[2 * point];
-    points[2 * point + 1] = corners[2 * point + 1] - ((raised >> point) & 1) * CityMapHeightStep(zoom);
+    points[2 * point + 1] = corners[2 * point + 1] - ((raised >> point) & 1) * height_step;
   }
 }
 
@@ -257,15 +275,18 @@ static TileIndex PickCityMapSurface(const City *city, CityMapCamera camera,
   // A ray can cross at most the supported elevation range. Test projected
   // surfaces in painter order, independent of total map dimensions.
   int unit = 1 << camera.zoom;
-  int px = scaled_x - camera.origin_x - 4 * unit;
+  int ray_x = (scaled_x - camera.origin_x - 4 * unit) / unit;
   int py = scaled_y - camera.origin_y + 4 * unit;
+  int height_step = CityMapHeightStep(camera.zoom);
+  // A raised corner can sit one level above the maximum stored land height.
+  int max_elevation = CITY_ALTITUDE_LAND_MASK + 1;
   int best_diagonal = -1, best_y = -1;
   i64 best_distance = 128 * unit * unit;
   TileIndex best = INVALID_TILE;
-  for (int elevation = 0; elevation <= CITY_ALTITUDE_LAND_MASK + 1; ++elevation) {
-    int sum = (py + CityMapHeightStep(camera.zoom) * elevation) / unit;
-    int center_x = (2 * sum - px / unit) / 8;
-    int center_y = (2 * sum + px / unit) / 8;
+  for (int elevation = 0; elevation <= max_elevation; ++elevation) {
+    int sum = (py + height_step * elevation) / unit;
+    int center_x = (2 * sum - ray_x) / 8;
+    int center_y = (2 * sum + ray_x) / 8;
     for (int ty = center_y - 1; ty <= center_y + 1; ++ty)
       for (int tx = center_x - 1; tx <= center_x + 1; ++tx) {
         TileIndex tile = CityMapCameraTile(city, camera.rotation, tx, ty);

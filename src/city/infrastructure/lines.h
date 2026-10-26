@@ -5,7 +5,8 @@
 #include "city/engine/input.h"
 #include "city/infrastructure/types.h"
 
-// Immutable simulation data, available without loading an executable image.
+// Shared immutable line geometry and connection data. Nonzero slope overrides select a slope-specific connection
+// or grading path; index by the decoded low four slope bits after excluding unsupported bank codes.
 extern const u8 kLineTerrainOverrideBySlope[16];
 extern const u8 kLineTileOffsetByConnectionMask[16];
 // Retained reconnectors index stock terrain codes; the data definition owns their supported range.
@@ -15,12 +16,7 @@ extern const u8 kLineVerticalConnectionAllowed[256];
 // Lines and spans use CityInfrastructureDirection; the same vectors apply to both.
 extern const i8 kLineYStep[CITY_LINE_DIRECTION_COUNT];
 extern const i8 kLineXStep[CITY_LINE_DIRECTION_COUNT];
-extern const u8 kLineTerrainElevationDelta[16];
-extern const u16 kInfrastructureTerrainByDirection[64];
-extern const u8 kLineTerrainDirectionAllowed[64];
 
-typedef struct { u8 stage, unit_cost; } CityInfrastructureDefinition;
-extern const CityInfrastructureDefinition kCityInfrastructure[CITY_INFRASTRUCTURE_COUNT];
 // Quote and execution setup share this pure option decoder. Kind must be a valid infrastructure family.
 CityConstructionChoices ReadCityLineCommandChoices(CityInfrastructureKind kind, TileIndex end, int options);
 // Requires admitted endpoints/options. Family placement owns payment; diagnostic observers alone may collect input.
@@ -36,13 +32,19 @@ int GetCityLineConnectionCost(const City *city, TileIndex start, TileIndex end, 
 // Quotes supply a separate state so they leave City working state unchanged. Neither path consumes RNG.
 int CityLineDirection(int x, int y, int end_x, int end_y);
 int CityLineTerrainDirection(int x, int y, int end_x, int end_y);
+// Valid native map coordinates and initialized stage; failure leaves state unchanged.
+// Success installs endpoints, direction and bounds in the supplied state.
 bool PrepareCityLine(const City *city, CityConstructionState *state, int x, int y, int end_x, int end_y);
+// Cursors advance only on success. A rejected candidate can retain its chosen direction in state.
 bool AdvanceCityLine(const City *city, CityConstructionState *state, int *x, int *y);
 
 bool CityLineCellAlreadyBuilt(const City *city, TileIndex tile, int stage);
+// Grade a valid cell using the live construction stage/direction before family placement. Reuse, bank codes and the
+// buried-terrain option can skip grading. No pricing/payment; the caller completes placement and its invalidation.
+void PrepareInfrastructureTerrainCell(City *city, TileIndex tile);
 // Retained command preview between valid endpoints. Prepare the live construction line, count new cells/surcharges
 // and invalidate visited tiles. On failure retain PrepareCityLine's writes and leave prior counts intact; no RNG.
-bool PrepareCityZonePreview(City *city, TileIndex start, TileIndex end);
+bool UpdateCityLinePreview(City *city, TileIndex start, TileIndex end);
 
 i64 CalculateCityLineCost(const City *city, TileIndex start, TileIndex end, CityConstructionState *state, int unit_cost,
     bool highway);

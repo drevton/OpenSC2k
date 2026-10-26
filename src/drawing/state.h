@@ -1,6 +1,7 @@
 #ifndef SC2K_DRAWING_STATE_H
 #define SC2K_DRAWING_STATE_H
 
+#include "city/maps/map_types.h"
 #include "city/maps/tile_storage.h"
 #include "city/engine/city_types.h"
 #include "drawing/fonts/fonts.h"
@@ -18,7 +19,7 @@
 #include "drawing/raster/screen_damage.h"
 #include "drawing/bitmaps.h"
 #include "drawing/cursors.h"
-#include "drawing/maps/map_sprites.h"
+#include "drawing/maps/sprite_cache.h"
 #include "drawing/options.h"
 #include "drawing/newspaper.h"
 
@@ -174,7 +175,7 @@ typedef struct Drawing {
   int benchmark_redraw, profile_redraw, disable_map_cache;
   u32 profiled_redraws;
   u64 repair_pixels;
-  double snapshot_seconds, map_seconds, canvas_seconds;
+  double prepare_seconds, map_seconds, canvas_seconds;
   bool show_redraw_rects, show_render_stats;
   bool disable_repaint_coalescing;
   DrawingFrameStats frame_stats;

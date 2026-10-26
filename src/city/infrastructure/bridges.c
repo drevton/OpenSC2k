@@ -11,32 +11,36 @@
 // altitude[0..4] remains land/bed height. zone[4] selects underlying slope versus zoning in zone[0..3]; zone[5..7]
 // has no bridge payload. Shared flags/overlay, tunnels and underground retain their tile_storage.h meanings.
 
+#include "city/infrastructure/bridges.h"
+
 #include "drawing/maps/map_sprites.h"
 #include "city/infrastructure/surface_lines.h"
+#include "city/infrastructure/highways.h"
 #include "city/infrastructure/networks.h"
 #include "city/infrastructure/spans.h"
-#include "city/saveload/map_format.h"
-#include "city/infrastructure/bridges.h"
 #include "city/maps/terrain.h"
+#include "city/maps/tables.h"
 
 #include <assert.h>
 #include <stdlib.h>
 
 #include "assets/state.h"
-#include "game/audio.h"
+#include "audio/types.h"
 #include "city/engine/commands.h"
 #include "city/events/events.h"
 #include "city/infrastructure/power_lines.h"
 #include "city/maps/ground.h"
 #include "city/maps/layers.h"
+#include "city/maps/map.h"
 #include "city/maps/module.h"
 #include "city/maps/water.h"
 #include "city/presentation.h"
 #include "city/state.h"
-#include "city/tools/tools.h"
 #include "drawing/maps/map_terrain.h"
 #include "drawing/maps/map_camera.h"
+#include "drawing/maps/map_depth.h"
 #include "drawing/maps/tables.h"
+#include "drawing/state.h"
 #include "game/state.h"
 
 // Shared bridge policy, indexed by the saved road/rail style. Length bounds count deck tiles, excluding heads.
@@ -175,33 +179,33 @@ CityInfrastructureSpan FindCityBridgeSpan(const City *city, TileIndex start, Til
   int base = ReadCityLandHeight(&city->tile[start]);
   if (base >= 31) { span.error_tile = start; return span; }
   int family = rail ? TK_RAIL : TK_ROAD;
+  int stride = axis ? city->map_width : 1;
+  int power_axis = axis ? CONN_EW : CONN_NS;
   for (int step = 0; step < span.length; ++step) {
-    TileIndex tile = start + step * (axis ? city->map_width : 1);
+    TileIndex tile = start + step * stride;
     span.error_tile = tile;
     const TileInfo *tp = &city->tile[tile];
     int height = ReadCityLandHeight(tp), shape = ReadTerrainCode(tp);
     bool water = HasTileWater(tp);
     bool head = step == 0 || step == span.length - 1;
     int surface = tp->kind;
-    int line_axis = ReadCityStraightLineAxis(city, tile, 0);
+    bool unbuilt = IsTileKindUnbuilt(surface);
+    int line_axis = IsTileKindPlainTransport(surface) ? ReadCityStraightLineAxis(city, tile) : -1;
     bool straight = surface == family && line_axis == axis;
     bool perpendicular = IsTileKindPlainTransport(surface) && line_axis == !axis;
-    int power_axis = axis ? CONN_EW : CONN_NS;
-    bool power = IsTileKindPlainPowerLine(tp->kind) && CityPowerConnectionMask(tp) == power_axis;
+    bool power = IsTileKindPlainPowerLine(surface) && CityPowerConnectionMask(tp) == power_axis;
     if (ReadCityZoneKind(tp) == ZONE_MILITARY || ReadOverlay(city, tile) ||
-        tp->kind == TK_RADIOACTIVE_WASTE ||
-        (!IsTileKindUnbuilt(tp->kind) && !straight && !perpendicular && !power)) return span;
+        surface == TK_RADIOACTIVE_WASTE || (!unbuilt && !straight && !perpendicular && !power)) return span;
     if (head) {
-      if (water || shape || height != base ||
-          (!IsTileKindUnbuilt(tp->kind) && !straight)) return span;
+      if (water || shape || height != base || (!unbuilt && !straight)) return span;
     } else {
       int maximum = height + (shape >= 16 ? 2 : shape != 0);
       if (maximum > base || (water && ReadCityWaterHeight(tp) > base)) return span;
-      if (!IsTileKindUnbuilt(tp->kind) && (water || shape || straight)) return span;
+      if (!unbuilt && (water || shape || straight)) return span;
     }
   }
   span.styles = CityNativeRoadBridgeStyles(span.length);
-  TileIndex center = span.start + (span.length - 1) / 2 * (axis ? city->map_width : 1);
+  TileIndex center = span.start + (span.length - 1) / 2 * stride;
   if (rail || !HasTileWater(&city->tile[center])) span.styles &= ~CITY_SPAN_STYLE_RAISING_BRIDGE_MASK;
   span.end = end;
   span.error = 0;
@@ -222,12 +226,12 @@ static TileIndex CityBridgeNeighbor(const City *city, TileIndex tile, int side) 
       CityBridgeHeadKind(other->kind) != CityBridgeHeadKind(tp->kind) ||
       ReadCityBridgeAxis(other) != axis ||
       (IsTileKindHighwayBridge(tp->kind) &&
-          ((ReadTileZoneByte(other) ^ ReadTileZoneByte(tp)) & CITY_BRIDGE_HIGHWAY_RIGHT)))
+          ((other->terrain ^ tp->terrain) & CITY_BRIDGE_HIGHWAY_RIGHT)))
     return INVALID_TILE;
   if (IsCityBridgeHead(tp) &&
-      ((ReadTileZoneByte(tp) & CITY_BRIDGE_HEAD_FACING_MASK) ? side > 0 : side < 0)) return INVALID_TILE;
+      ((tp->terrain & CITY_BRIDGE_HEAD_FACING_MASK) ? side > 0 : side < 0)) return INVALID_TILE;
   if (IsCityBridgeHead(other) &&
-      ((ReadTileZoneByte(other) & CITY_BRIDGE_HEAD_FACING_MASK) ? side < 0 : side > 0)) return INVALID_TILE;
+      ((other->terrain & CITY_BRIDGE_HEAD_FACING_MASK) ? side < 0 : side > 0)) return INVALID_TILE;
   return neighbor;
 }
 
@@ -235,7 +239,7 @@ static TileIndex CityBridgeNeighbor(const City *city, TileIndex tile, int side) 
 // no whole-span search or mutation occurs.
 static SC2K_PRESERVE_MOST int ReadCityBridgeHead(const TileInfo *tp) {
   if (!IsCityBridgeHead(tp)) return CITY_BRIDGE_HEAD_NONE;
-  return ReadTileZoneByte(tp) & CITY_BRIDGE_HEAD_FACING_MASK ?
+  return tp->terrain & CITY_BRIDGE_HEAD_FACING_MASK ?
       CITY_BRIDGE_HEAD_SOUTH : CITY_BRIDGE_HEAD_NORTH;
 }
 
@@ -267,7 +271,7 @@ bool ValidateCityBridgeSpan(const City *city, TileIndex tile) {
       ReadCityBridgeHead(last_tp) != CITY_BRIDGE_HEAD_SOUTH ||
       ReadTileBridgeStyle(first_tp) != ReadTileBridgeStyle(last_tp)) return false;
   if (highway) {
-    int lane = (ReadTileZoneByte(tp) & CITY_BRIDGE_HIGHWAY_RIGHT) != 0;
+    int lane = (tp->terrain & CITY_BRIDGE_HIGHWAY_RIGHT) != 0;
     if (length & 1) return false;
     TileIndex other = GetRelativeTileOrInvalid(city, tile,
         axis ? lane ? -1 : 1 : 0, axis ? 0 : lane ? -1 : 1);
@@ -275,7 +279,7 @@ bool ValidateCityBridgeSpan(const City *city, TileIndex tile) {
     const TileInfo *other_tp = &city->tile[other];
     if (CityBridgeHeadKind(other_tp->kind) != TK_HIGHWAY_BRIDGE_HEAD ||
         ReadCityBridgeAxis(other_tp) != axis ||
-        !((ReadTileZoneByte(other_tp) ^ ReadTileZoneByte(tp)) & CITY_BRIDGE_HIGHWAY_RIGHT) ||
+        !((other_tp->terrain ^ tp->terrain) & CITY_BRIDGE_HIGHWAY_RIGHT) ||
         ReadCityBridgeHead(other_tp) != ReadCityBridgeHead(tp) ||
         (IsTileKindBridgeHead(other_tp->kind) && ReadTileBridgeStyle(other_tp) != ReadTileBridgeStyle(tp)))
       return false;
@@ -304,7 +308,7 @@ void StoreCityBridgeSpan(City *city, TileIndex first, TileIndex last, int head_k
   for (TileIndex tile = first;; tile += stride) {
     TileInfo *tp = &city->tile[tile];
     int lane = head_kind == TK_HIGHWAY_BRIDGE_HEAD ?
-        ((ReadTileZoneByte(tp) & (axis ? CITY_BUILDING_CONTINUE_X : CITY_BUILDING_CONTINUE_Y)) != 0) : 0;
+        ((tp->terrain & (axis ? CITY_BUILDING_CONTINUE_X : CITY_BUILDING_CONTINUE_Y)) != 0) : 0;
     bool head = tile == first || tile == last;
     int under = ReadCityBridgeUnderpass(tp);
     ReplaceCityTileAndStatistics(city, tile, head ? head_kind :
@@ -329,7 +333,7 @@ int CityBridgeHighwayZone(const City *city, TileIndex tile) {
   TileIndex first = FindCityBridgeHead(city, tile, -1);
   int stride = axis ? city->map_width : 1;
   int distance = (tile - first) / stride;
-  int lane = (ReadTileZoneByte(tp) & CITY_BRIDGE_HIGHWAY_RIGHT) != 0;
+  int lane = (tp->terrain & CITY_BRIDGE_HIGHWAY_RIGHT) != 0;
   int along = distance & 1;
   return (axis << CITY_HIGHWAY_ORIENTATION_SHIFT) |
       ((axis ? lane : along) ? CITY_BUILDING_CONTINUE_X : 0) |
@@ -355,18 +359,25 @@ static int ReadCityBridgePiece(const City *city, TileIndex tile) {
   return CityRoadBridgePiece(north, south);
 }
 
+// A wet middle borrows its deck height from an already resolved negative-side span end. An incomplete span can end
+// without a proper head; retain its water-height fallback. Neither record is changed.
+static SC2K_FORCE_INLINE int BridgeDeckHeightFromHead(const TileInfo *tp, const TileInfo *head_tp) {
+  if (IsCityBridgeHead(head_tp)) return ReadCityLandHeight(head_tp) + 1;
+  return ReadCityWaterHeight(tp) + 1;
+}
+
 // Read a valid bridge's deck level, using its bank head when the dry-head payload is not stored. Requires consistent
 // span metadata; returns geometry without editing borrowed altitude fields.
 int ReadCityBridgeDeckHeight(const City *city, TileIndex tile) {
   const TileInfo *tp = &city->tile[tile];
   // Bridge heads sit on their bank. Water-built bridges need not initialize
   // a borrowed water-height payload on dry heads, including saved SC2 bridges.
-  if (IsCityBridgeHead(tp)) return ReadCityLandHeight(tp) + 1;
-  if (!HasTileWater(tp)) return ReadCityWaterHeight(tp) + 1;
+  int extra = IsTileKindHighwayBridge(tp->kind) ? CITY_HIGHWAY_DECK_RISE : 0;
+  if (IsCityBridgeHead(tp)) return ReadCityLandHeight(tp) + 1 + extra;
+  if (!HasTileWater(tp)) return ReadCityWaterHeight(tp) + 1 + extra;
   TileIndex head = FindCityBridgeHead(city, tile, -1);
   const TileInfo *head_tp = &city->tile[head];
-  if (IsCityBridgeHead(head_tp)) return ReadCityLandHeight(head_tp) + 1;
-  return ReadCityWaterHeight(tp) + 1;
+  return BridgeDeckHeightFromHead(tp, head_tp) + extra;
 }
 
 // Resolve the transport family available through a valid bridge tile in the supplied cardinal direction. Crossing the
@@ -442,7 +453,7 @@ i64 CmdBuildCityBridge(City *city, u32 flags, TileIndex start, TileIndex end, in
     if (!head && !HasTileWater(tp))
       tp->altitude = (tp->altitude & CITY_ALTITUDE_CLEAR_WATER) | base << CITY_ALTITUDE_WATER_SHIFT;
     int under_kind = ReadCityBridgeUnderpassKind(tp);
-    if (under_kind) ++city->statistics.count[CityTileStatisticsKind(city, under_kind)];
+    if (under_kind) ++city->statistics.count[CityTileStatisticsKey(city, under_kind)];
     InvalidateTile(city, tile);
   }
   for (int step = 0; step < span.length; ++step) {
@@ -455,11 +466,11 @@ i64 CmdBuildCityBridge(City *city, u32 flags, TileIndex start, TileIndex end, in
 
 // Clear an admitted bridge middle's underlying transport or ground cover. Preserve the bridge's family, lane, axis,
 // deck height and water; the caller owns admission/payment and reconnects adjacent networks after this edit.
-void ClearCityBridgeUnderpass(City *city, TileIndex tile_index) {
+static void ClearCityBridgeUnderpass(City *city, TileIndex tile_index) {
   TileInfo *tp = &city->tile[tile_index];
   int under = ReadCityBridgeUnderpass(tp);
   if (under) {
-    --city->statistics.count[CityTileStatisticsKind(city, ReadCityBridgeUnderpassKind(tp))];
+    --city->statistics.count[CityTileStatisticsKey(city, ReadCityBridgeUnderpassKind(tp))];
     // Keep the bridge family, axis, lane, deck height and ground intact.
     tp->kind -= under;
     if (under == CITY_BRIDGE_UNDERPASS_POWER) tp->flags &= ~(TF_POWERED | TF_POWERABLE);
@@ -477,11 +488,10 @@ void ClearCityBridgeUnderpass(City *city, TileIndex tile_index) {
 // Rebuild the bank terrain around a newly edited highway bridge shore. Requires a valid admitted shoreline location;
 // this is a post-placement geometry effect and not an admission query.
 static void RecalculateHighwayBridgeShore(City *city, TileIndex shore) {
-  static const i8 kCornerX[4] = {0, 0, 1, 1};
-  static const i8 kCornerY[4] = {0, 1, 1, 0};
   InvalidateTileRange(city, shore, 2, 2);
   for (int corner = 0; corner < 4; ++corner)
-    RecalculateTerrainCell(city, GetRelativeTileOrInvalid(city, shore, kCornerX[corner], kCornerY[corner]));
+    RecalculateTerrainCell(city,
+        GetRelativeTileOrInvalid(city, shore, kTerrainCornerX[corner], kTerrainCornerY[corner]));
   InvalidateTileRange(city, shore, 2, 2);
 }
 
@@ -489,11 +499,11 @@ static void RecalculateHighwayBridgeShore(City *city, TileIndex shore) {
 // preserves its underlying water/ground and explicitly reconnects and invalidates affected cells.
 bool RemoveCityNativeBridge(City *city, TileIndex origin, bool animate) {
   if (!IsTileKindBridge(city->tile[origin].kind)) return false;
-  bool highway = IsTileKindHighwayBridge(ReadTile(city, origin));
+  bool highway = IsTileKindHighwayBridge(city->tile[origin].kind);
   int axis = ReadCityBridgeAxis(&city->tile[origin]);
   int stride = axis ? city->map_width : 1;
   int across = axis ? 1 : city->map_width;
-  if (highway && (ReadTileZoneByte(&city->tile[origin]) & CITY_BRIDGE_HIGHWAY_RIGHT)) origin -= across;
+  if (highway && (city->tile[origin].terrain & CITY_BRIDGE_HIGHWAY_RIGHT)) origin -= across;
   TileIndex first[2], last[2];
   for (int lane = 0; lane < (highway ? 2 : 1); ++lane) {
     first[lane] = FindCityBridgeHead(city, origin + lane * across, -1);
@@ -556,7 +566,7 @@ void PlaceCityBridgeUnderpass(City *city, TileIndex tile, int kind) {
   tp->kind += kind == TK_ROAD ? CITY_BRIDGE_UNDERPASS_ROAD : CITY_BRIDGE_UNDERPASS_RAIL;
   if (ReadGroundKind(tp) >= CITY_GROUND_ROUGH) WriteGroundKind(tp,
       CITY_GROUND_GRASS);
-  ++city->statistics.count[CityTileStatisticsKind(city, ReadCityBridgeUnderpassKind(tp))];
+  ++city->statistics.count[CityTileStatisticsKey(city, ReadCityBridgeUnderpassKind(tp))];
   RefreshAdjacentSurfaceConnections(city, tile);
   InvalidateTile(city, tile);
 }
@@ -583,7 +593,7 @@ static int BridgeDeckSprite(const City *city, TileIndex tile, int zoom, BridgeSt
   if (piece >= CITY_LANDSCAPE_BRIDGE_PIECES) piece = 4;
   int axis = (CityBridgeViewZone(city, tile) & CITY_BRIDGE_AXIS_MASK) != 0;
   return MAP_LANDSCAPE_SPRITE_FIRST + zoom * MAP_LANDSCAPE_SPRITES_PER_ZOOM - CITY_LANDSCAPE_GROUND_FIRST +
-      (IsTileKindRailBridge(ReadTile(city, tile)) ? CITY_LANDSCAPE_RAIL_BRIDGE_FIRST :
+      (IsTileKindRailBridge(city->tile[tile].kind) ? CITY_LANDSCAPE_RAIL_BRIDGE_FIRST :
           CITY_LANDSCAPE_ROAD_BRIDGE_FIRST) +
       (kBridgeDefinitions[style].geometry * CITY_LANDSCAPE_BRIDGE_PIECES + piece) * 2 + axis;
 }
@@ -658,7 +668,30 @@ void InvalidateCityDrawbridgesForShip(City *city, int slot, TileIndex previous, 
   }
 }
 
-void DrawCityBridgeDeckArtwork(City *city, TileIndex tile, int layout, int zoom, int screen_x, int baseline,
+i32 CityMapBridgeArtworkDepth(const City *city, TileIndex tile, bool foreground) {
+  CityPoint point = CityMapViewTilePoint(city, tile);
+  // Both approach layers belong to the bank tile. Using the higher deck plane for
+  // its front layer moves it ahead of objects on the next ground tile.
+  int height = IsCityBridgeHead(&city->tile[tile]) ?
+      ReadCityLandHeight(&city->tile[tile]) : ReadCityBridgeDeckHeight(city, tile);
+  int edge = foreground ? 2048 : -2048;
+  return CityMapObjectDepth(point.x * 4096 + edge, point.y * 4096 + edge, height * 4096);
+}
+
+// Submit the near-side layer during depth collection, then restore the caller's depth.
+// palette_offset selects a bridge palette independently of the saved BridgeStyle value.
+static void DrawCityBridgeTrafficForeground(const City *city, TileIndex tile, int sprite, int x, int baseline,
+    int palette_offset) {
+  Drawing *drawing = city->drawing;
+  if (!drawing->map_depth.preparing) return;
+  i32 depth = drawing->map_depth.depth;
+  drawing->map_depth.depth = CityMapBridgeArtworkDepth(city, tile, true);
+  DrawCityMapPaletteSpriteAtBaseline(drawing, sprite, x, baseline, SPRITE_OPAQUE_PALETTE,
+      MAP_PALETTE_BRIDGE_FIRST + palette_offset);
+  drawing->map_depth.depth = depth;
+}
+
+void DrawCityBridgeDeckArtwork(const City *city, TileIndex tile, int layout, int zoom, int screen_x, int baseline,
     BridgeStyle style) {
   Drawing *drawing = city->drawing;
   if (style == BRIDGE_STYLE_DRAWBRIDGE && CityDrawbridgeCenter(city, tile) == tile) {
@@ -671,7 +704,7 @@ void DrawCityBridgeDeckArtwork(City *city, TileIndex tile, int layout, int zoom,
         (CityBridgeViewZone(city, tile) & CITY_BRIDGE_AXIS_MASK) != 0);
     return;
   }
-  int sprite = layout + 500 * zoom;
+  int sprite = MapSpriteZoomIndex(layout, zoom);
   if (city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) {
     sprite = BridgeDeckSprite(city, tile, zoom, style);
     int palette = kBridgeDefinitions[style].palette;
@@ -688,16 +721,17 @@ void DrawCityBridgeDeckArtwork(City *city, TileIndex tile, int layout, int zoom,
   }
 }
 
-void DrawCityBridgeUnderpass(City *city, TileIndex tile, int kind, int zoom, int screen_x, int ground_y) {
+void DrawCityBridgeUnderpass(const City *city, TileIndex tile, int kind, int zoom, int screen_x, int ground_y) {
   int axis = ReadCityBridgeAxis(&city->tile[tile]);
   int layout = kind == TK_POWER_LINE ? CityMapPowerLayout(axis ? CONN_EW : CONN_NS, CITY_TERRAIN_FLAT) :
       kCityMapKindSprites[kind] + !axis;
   Drawing *drawing = city->drawing;
-  int sprite = CityMapCameraSprite(city->game->resources, layout, CityMapCameraRotation(drawing)) + 500 * zoom;
+  int sprite = MapSpriteZoomIndex(
+      CityMapCameraSprite(city->game->resources, layout, CityMapCameraRotation(drawing)), zoom);
   DrawCityMapSpriteAtBaseline(drawing, sprite, screen_x, ground_y, 0);
 }
 
-bool DrawCityBridgeGround(City *city, TileIndex tile, int zoom, int screen_x, int ground_y,
+bool DrawCityBridgeGround(const City *city, TileIndex tile, int zoom, int screen_x, int ground_y,
     const CityTileGeometry *geometry) {
   DrawCityMapTerrainTile(city, tile, zoom, -1, screen_x, ground_y, geometry);
   int under = ReadCityBridgeUnderpassKind(&city->tile[tile]);
@@ -707,13 +741,17 @@ bool DrawCityBridgeGround(City *city, TileIndex tile, int zoom, int screen_x, in
 
 // Bridge ground and the elevated deck occupy separate planes. Prepared heads
 // include the approach structure; terrain and perpendicular underpasses stay below.
-static bool DrawBridgeTile(City *city, TileIndex tile, int zoom, int screen_x, int ground_y,
+static bool DrawBridgeTile(const City *city, TileIndex tile, int zoom, int screen_x, int ground_y,
     const CityTileGeometry *tile_geometry) {
   Drawing *drawing = city->drawing;
   const TileInfo *tp = &city->tile[tile];
   if (!(city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) || !IsTileKindBridge(tp->kind) ||
       IsTileKindHighwayBridge(tp->kind)) return false;
-  BridgeStyle style = ReadCityBridgeStyle(city, tile);
+  // This synchronous paint cannot replace map storage or edit bridge metadata. Reuse the style head for the deck
+  // height too, instead of walking the same wet span again after terrain/placement drawing.
+  TileIndex head_tile = IsCityBridgeHead(tp) ? tile : FindCityBridgeHead(city, tile, -1);
+  const TileInfo *head_tp = &city->tile[head_tile];
+  BridgeStyle style = ReadTileBridgeStyle(head_tp);
   CityTileGeometry geometry = *tile_geometry;
   int first = MAP_LANDSCAPE_SPRITE_FIRST + zoom * MAP_LANDSCAPE_SPRITES_PER_ZOOM - CITY_LANDSCAPE_GROUND_FIRST;
   if (geometry.water == CITY_WATER_NONE && IsCityMapGroundPass(drawing)) {
@@ -750,8 +788,8 @@ static bool DrawBridgeTile(City *city, TileIndex tile, int zoom, int screen_x, i
     if (under && (power || IsCityMapGroundPass(drawing)))
       DrawCityBridgeUnderpass(city, tile, under, zoom, screen_x, ground_y);
     DrawCityMapPlacementTile(city, tile);
-    int baseline = ground_y - (ReadCityBridgeDeckHeight(city, tile) - 1 - geometry.surface_height) *
-        CityMapHeightStep(zoom);
+    int deck_height = HasTileWater(tp) ? BridgeDeckHeightFromHead(tp, head_tp) : ReadCityWaterHeight(tp) + 1;
+    int baseline = ground_y - (deck_height - 1 - geometry.surface_height) * CityMapHeightStep(zoom);
     DrawCityBridgeDeckArtwork(city, tile, CityMapViewTileSpriteIndex(city, tile), zoom, screen_x, baseline, style);
   }
   return true;
@@ -763,6 +801,19 @@ void TickCityBridgeTile(City *city, TileIndex tile) {
   AdvanceCityGroundRecovery(city, tile);
 }
 
+i64 ClearCityBridgeTile(City *city, u32 flags, TileIndex tile) {
+  if (flags & CITY_COMMAND_TEST) {
+    const TileInfo *tp = &city->tile[tile];
+    if (!IsTileKindBridgeMiddle(tp->kind)) return CITY_COMMAND_COST_OK;
+    return ReadCityBridgeUnderpass(tp) != CITY_BRIDGE_UNDERPASS_NONE || CanClearCityGroundCover(tp) ?
+        CITY_COMMAND_COST_OK : CITY_COMMAND_COST_NOTHING_TO_REMOVE;
+  }
+  if (IsTileKindBridgeMiddle(city->tile[tile].kind)) ClearCityBridgeUnderpass(city, tile);
+  else BulldozeCityTile(city, tile, true);
+  return 1;
+}
+
 const TileModule kCityBridgeModule = {
+  .clear = ClearCityBridgeTile,
   .tick = TickCityBridgeTile, .draw = DrawBridgeTile, .draw_ground = DrawCityBridgeGround,
 };

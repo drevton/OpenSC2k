@@ -9,9 +9,10 @@
 #include "assets/state.h"
 #include "base/text.h"
 #include "city/economy/facilities.h"
+#include "city/engine/commands.h"
 #include "city/events/events.h"
 #include "city/maps/labels.h"
-#include "city/maps/layers.h"
+#include "city/maps/terrain.h"
 #include "city/maps/information.h"
 #include "city/state.h"
 #include "drawing/fonts/fonts.h"
@@ -48,7 +49,7 @@ void PresentCityTileInformationDialog(City *city, TileIndex tile) {
   CityInterfaceState *ui = city->game->ui;
   ApplicationUpdateDialogPause(city);
   if (CityTileHasFacilityLabel(city, tile) &&
-      kFacilityClassByTile[ReadTile(city, tile)] != CITY_FACILITY_INFO_DEFAULT &&
+      kFacilityClassByTile[city->tile[tile].kind] != CITY_FACILITY_INFO_DEFAULT &&
       !(ui->advanced_query && IsAltKeyPressed(ui))) {
     int opened = FocusCityCanvasWindowKind(&ui->desktop, CITY_CANVAS_FACILITY_INFORMATION);
     int facility = CityFacilityOverlaySlot(ReadCityFacilityOverlay(city, tile));
@@ -57,8 +58,8 @@ void PresentCityTileInformationDialog(City *city, TileIndex tile) {
     if (opened >= 0) {
       Window *window = &ui->desktop.windows[opened];
       window->data_map_selection = facility;
-      window->confirmed_command = (CityCommand){CITY_COMMAND_EDIT_FACILITY_LABEL,
-          MapTileX(city, tile), MapTileY(city, tile), 1};
+      window->confirmed_command = EncodeCityCommand(city, CITY_COMMAND_EDIT_FACILITY_LABEL,
+          tile, CITY_DIALOG_OK, 0, 0);
       Sc2kDirtyMarkRect(&ui->desktop.dirty, window->bounds);
     }
     return;
@@ -312,8 +313,7 @@ bool InformationWindowProcedure(Game *game, const Window *window, const WindowEv
       event->input->kind == CANVAS_SDL_POINTER_DOWN && event->input->button == CANVAS_SDL_BUTTON_LEFT) {
     CityRect b = window->bounds;
     if (CanvasPointInRect((CityRect){b.left + 10, b.bottom - 24, b.left + 72, b.bottom - 9}, event->x, event->y)) {
-      TileIndex tile = MapTileXYOrInvalid(game->city, window->confirmed_command.parameter1,
-          window->confirmed_command.parameter2);
+      TileIndex tile = DecodeCityCommand(game->city, window->confirmed_command).tile;
       if (tile != INVALID_TILE) PresentCityLabelEditor(game->city, tile, true);
       return true;
     }

@@ -3,6 +3,12 @@
 
 #include "ui/dialogs/scenario.h"
 
+// The retained presenter borrows this record until its instruction window closes.
+typedef struct CityTextMessageDialog {
+  City *city;
+  u32 window;
+} CityTextMessageDialog;
+
 // List entries and cached rows live only while the UI picker is open.
 typedef struct ScenarioListModel ScenarioListModel;
 struct ScenarioListModel {

@@ -96,25 +96,29 @@ void NativeAudioStop(CityAudioState *audio) {
   if (!StopWindowsMidi(audio->windows_midi)) audio->midi_available = 0;
 #endif
 }
-void NativeAudioVolume(CityAudioState *audio) {
-  const Jukebox *p = &audio->jukebox;
-  SetCityEffectMixerVolume(audio, p->effects_volume * audio->master_volume / 100);
-  audio->music_volume = p->volume * audio->master_volume / 100;
+
+// Apply only the music bus gain. Focus changes leave playback cursors and effect volume alone.
+static void ApplyCityMusicVolume(CityAudioState *audio) {
 #ifdef __APPLE__
   if (audio->music_mixer) AudioUnitSetParameter(audio->music_mixer, kMultiChannelMixerParam_Volume,
       kAudioUnitScope_Output, 0, audio->music_background || audio->music_focused ? audio->music_volume / 100.0f : 0, 0);
 #elif defined(_WIN32)
   SetWindowsMidiVolume(audio->windows_midi, audio->music_background || audio->music_focused ? audio->music_volume : 0);
+#else
+  (void)audio;
 #endif
 }
+
+void NativeAudioVolume(CityAudioState *audio) {
+  const Jukebox *p = &audio->jukebox;
+  SetCityEffectMixerVolume(audio, p->effects_volume * audio->master_volume / 100);
+  audio->music_volume = p->volume * audio->master_volume / 100;
+  ApplyCityMusicVolume(audio);
+}
+
 void SetCityAudioFocus(CityAudioState *audio, bool focused) {
   audio->music_focused = focused;
-#ifdef __APPLE__
-  if (audio->music_mixer) AudioUnitSetParameter(audio->music_mixer, kMultiChannelMixerParam_Volume,
-      kAudioUnitScope_Output, 0, audio->music_background || focused ? audio->music_volume / 100.0f : 0, 0);
-#elif defined(_WIN32)
-  SetWindowsMidiVolume(audio->windows_midi, audio->music_background || focused ? audio->music_volume : 0);
-#endif
+  ApplyCityMusicVolume(audio);
 }
 
 // Read the current track cursor in seconds. Returns false on a position-read error.
@@ -189,8 +193,9 @@ bool NativeAudioPlay(CityAudioState *audio) {
   Jukebox *p = &audio->jukebox;
   audio->interrupt_device = CITY_MUSIC_NO_TOKEN;
   audio->resume_music_track = p->interrupt_track = -1;
-  if (JukeboxCurrent(p) < 0) p->playing = 0;
-  bool played = NativeAudioPlayTrack(audio, JukeboxCurrent(p), 0);
+  int current = JukeboxCurrent(p);
+  if (current < 0) p->playing = 0;
+  bool played = NativeAudioPlayTrack(audio, current, 0);
   if (!played) p->playing = 0;
   audio->music_enabled = p->playing != 0;
   return played;
@@ -283,15 +288,16 @@ void NativeAudioClose(CityAudioState *audio) {
   audio->live_open = 0;
 }
 
-// Soundtrack and interruption completions share the same generation-token guard.
-CityMusicCompletion NativeAudioMusicNotification(CityAudioState *audio, u16 *device) {
-  if (!audio->music_active || !audio->music_notify || !device) return CITY_MUSIC_PENDING;
-  CityMusicCompletion notification = MusicCompletion(audio);
-  if (notification != CITY_MUSIC_PENDING) {
-    *device = audio->music_device;
+// Polling captures the token; the completion controller checks whether it still identifies live playback.
+CityMusicNotification NativeAudioMusicNotification(CityAudioState *audio) {
+  CityMusicNotification result = {CITY_MUSIC_PENDING, CITY_MUSIC_NO_TOKEN};
+  if (!audio->music_active || !audio->music_notify) return result;
+  result.completion = MusicCompletion(audio);
+  if (result.completion != CITY_MUSIC_PENDING) {
+    result.token = audio->music_device;
     audio->music_notify = 0;
   }
-  return notification;
+  return result;
 }
 
 // CoreAudio supplies native MIDI synthesis; its DLS instrument also accepts SF2 banks.
@@ -305,6 +311,7 @@ bool SetCitySoundFont(CityAudioState *audio, const char *path, bool enabled) {
   const char *selected = enabled ? path :
       "/System/Library/Components/CoreAudio.component/Contents/Resources/gs_instruments.dls";
   CFURLRef url = CFURLCreateFromFileSystemRepresentation(NULL, (const UInt8 *)selected, strlen(selected), false);
+  // DLSMusicDevice exposes its bank URL as read-only; bank selection still requires the FSRef setter.
   FSRef reference;
   bool loaded = url && audio->music_synth && CFURLGetFSRef(url, &reference) &&
       AudioUnitSetProperty(audio->music_synth, kMusicDeviceProperty_SoundBankFSRef,

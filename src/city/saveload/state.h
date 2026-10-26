@@ -35,7 +35,7 @@ typedef struct Game Game;
 typedef struct CityFileRuntime {
   Game *game;
   struct CityFileRuntime *previous;
-  void *scenario_input; // Retained until the instructions continuation finishes.
+  struct CityLoadStream *scenario_input; // Retained until the instructions continuation finishes.
   char scenario_instructions[CITY_SCENARIO_INSTRUCTION_BYTES + 1];
   CityMiscBuffer *misc; // Borrowed from the active operation, or owned fallback.
   bool misc_active, misc_owned;

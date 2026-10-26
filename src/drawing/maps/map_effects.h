@@ -49,7 +49,7 @@ bool UpdateCityCostTexts(Drawing *drawing, double now);
 // The matching map target and camera must already be bound. UI supplies the viewport in framebuffer pixels;
 // histories retain unclipped bounds so scrolling and moved/removed effects damage both old and new footprints.
 void PrepareCityMapEffectDamage(const CityMapPaint *paint, CityRect viewport);
-void DrawCityCostTexts(City *city);
-void DrawCityDemolitionEffects(City *city);
+void DrawCityCostTexts(const City *city);
+void DrawCityDemolitionEffects(const City *city);
 
 #endif

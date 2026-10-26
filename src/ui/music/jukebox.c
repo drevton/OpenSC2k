@@ -1,5 +1,5 @@
-#include "ui/windows/window_internal.h"
 #include "ui/music/jukebox.h"
+#include "ui/windows/window_internal.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -24,6 +24,11 @@
 // Music controls, title animation, window painting and input.
 
 enum { MUSIC_TITLE_WIDTH = 103 };
+
+// Match the selected interface font and the size rounding used for drawing.
+static int MusicTextWidth(const CityInterfaceFont *font, const char *text, int size) {
+  return (CityInterfaceTextWidth(font, text) * size + 9) / 10;
+}
 
 static void MusicTitleText(const Jukebox *player, char *text, size_t capacity) {
   int current = player->playing ?
@@ -53,12 +58,14 @@ bool UpdateCityJukeboxTitle(CityInterfaceState *ui, u32 milliseconds) {
     title->started_at = milliseconds;
     title->active = true;
   }
-  int width = (CityInterfaceTextWidth(ui->desktop.interface_font, text) * 8 + 9) / 10;
+  int width = MusicTextWidth(ui->desktop.interface_font, text, 8);
   int overflow = width - MUSIC_TITLE_WIDTH, offset = 0;
   if (overflow > 0) {
     enum { PAUSE_MS = 1000, PIXEL_MS = 50 };
     int travel = overflow * PIXEL_MS;
-    u32 phase = (milliseconds - title->started_at) % (2 * (PAUSE_MS + travel));
+    // Subtract wrapping host times before reducing to the bounded animation cycle.
+    u32 elapsed = milliseconds - title->started_at;
+    int phase = elapsed % (2 * (PAUSE_MS + travel));
     if (phase > PAUSE_MS && phase <= PAUSE_MS + travel) offset = (phase - PAUSE_MS) / PIXEL_MS;
     else if (phase > PAUSE_MS + travel && phase <= 2 * PAUSE_MS + travel) offset = overflow;
     else if (phase > 2 * PAUSE_MS + travel) offset = overflow - (phase - 2 * PAUSE_MS - travel) / PIXEL_MS;
@@ -128,72 +135,77 @@ static bool MusicHeld(const CityInterfaceState *ui, const Window *w,
 
 enum { MUSIC_TRACK_DISPLAY = 40, MUSIC_TITLE_DISPLAY };
 
-#define MW(k, ident, width, height)                                                                \
+#define MW(k, ident, width, height) \
   {.kind = k, .id = ident, .min_width = width, .min_height = height}
-#define MW_ROW(height, ...)                                                                        \
-  {.kind = CITY_WIDGET_ROW,                                                                        \
-   .min_height = height,                                                                           \
-   .children = (const CityWidget[]){__VA_ARGS__},                                                  \
-   .count = sizeof((const CityWidget[]){__VA_ARGS__}) / sizeof(CityWidget)}
-static const CityWidget music_player = {
-    .kind = CITY_WIDGET_COLUMN,
-    .min_width = JUKEBOX_PLAYER_WIDTH,
-    .children = (const CityWidget[]){MW_ROW(JUKEBOX_TITLE_HEIGHT,
-                                            MW(CITY_WIDGET_BUTTON, JUKEBOX_CLOSE, 11, JUKEBOX_TITLE_HEIGHT),
-                                            {.kind = CITY_WIDGET_SPACER, .fill = 1},
-                                            MW(CITY_WIDGET_BUTTON, JUKEBOX_COLLAPSE, 12, JUKEBOX_TITLE_HEIGHT),
-                                            MW(CITY_WIDGET_BUTTON, JUKEBOX_PIN, 12, JUKEBOX_TITLE_HEIGHT)),
-                                     MW(CITY_WIDGET_SPACER, 0, 0, 2),
-                                     MW_ROW(22, MW(CITY_WIDGET_BUTTON, JUKEBOX_PREVIOUS, 21, 22),
-                                            MW(CITY_WIDGET_BUTTON, JUKEBOX_NEXT, 21, 22),
-                                            MW(CITY_WIDGET_BUTTON, JUKEBOX_STOP, 21, 22),
-                                            MW(CITY_WIDGET_BUTTON, JUKEBOX_PLAY, 21, 22),
-                                            MW(CITY_WIDGET_SPACER, 0, 1, 22),
-                                            MW(CITY_WIDGET_SPACER, 0, 8, 22),
-                                            MW(CITY_WIDGET_SLIDER, JUKEBOX_MUSIC_VOLUME, 70, 22),
-                                            MW(CITY_WIDGET_SPACER, 0, 8, 22),
-                                            MW(CITY_WIDGET_SLIDER, JUKEBOX_EFFECTS_VOLUME, 70, 22),
-                                            MW(CITY_WIDGET_SPACER, 0, 8, 22)),
-                                     MW(CITY_WIDGET_SPACER, 0, 0, 3),
-                                     MW_ROW(19, MW(CITY_WIDGET_SPACER, 0, 4, 19),
-                                            MW(CITY_WIDGET_BUTTON, JUKEBOX_SHUFFLE, 50, 19),
-                                            MW(CITY_WIDGET_SPACER, 0, 6, 19),
-                                            MW(CITY_WIDGET_LABEL, MUSIC_TRACK_DISPLAY, 20, 19),
-                                            MW(CITY_WIDGET_LABEL, MUSIC_TITLE_DISPLAY, 107, 19),
-                                            MW(CITY_WIDGET_SPACER, 0, 6, 19),
-                                            MW(CITY_WIDGET_BUTTON, JUKEBOX_PROGRAMME, 50, 19),
-                                            MW(CITY_WIDGET_SPACER, 0, 7, 19)),
-                                     MW(CITY_WIDGET_SPACER, 0, 0, 2),
-                                     MW_ROW(10,
-                                            MW(CITY_WIDGET_BUTTON, JUKEBOX_SELECT + JUKEBOX_PROGRAMME_ALL, 38, 10),
-                                            MW(CITY_WIDGET_BUTTON, JUKEBOX_SELECT + JUKEBOX_PROGRAMME_OLD_STYLE,
-                                               41, 10),
-                                            MW(CITY_WIDGET_BUTTON, JUKEBOX_SELECT + JUKEBOX_PROGRAMME_NEW_STYLE,
-                                               41, 10),
-                                            MW(CITY_WIDGET_BUTTON, JUKEBOX_SELECT + JUKEBOX_PROGRAMME_EZY_STREET,
-                                               44, 10),
-                                            MW(CITY_WIDGET_BUTTON, JUKEBOX_SELECT + JUKEBOX_PROGRAMME_CUSTOM_1,
-                                               41, 10),
-                                            MW(CITY_WIDGET_BUTTON, JUKEBOX_SELECT + JUKEBOX_PROGRAMME_CUSTOM_2,
-                                               45, 10))},
-    .count = 7};
+#define MW_ROW(height, ...) \
+  {.kind = CITY_WIDGET_ROW, .min_height = height, \
+      .children = (const CityWidget[]){__VA_ARGS__}, \
+      .count = sizeof((const CityWidget[]){__VA_ARGS__}) / sizeof(CityWidget)}
+
+static const CityWidget kMusicPlayerRows[] = {
+  MW_ROW(JUKEBOX_TITLE_HEIGHT,
+      MW(CITY_WIDGET_BUTTON, JUKEBOX_CLOSE, 11, JUKEBOX_TITLE_HEIGHT),
+      {.kind = CITY_WIDGET_SPACER, .fill = 1},
+      MW(CITY_WIDGET_BUTTON, JUKEBOX_COLLAPSE, 12, JUKEBOX_TITLE_HEIGHT),
+      MW(CITY_WIDGET_BUTTON, JUKEBOX_PIN, 12, JUKEBOX_TITLE_HEIGHT)),
+  MW(CITY_WIDGET_SPACER, 0, 0, 2),
+  MW_ROW(22,
+      MW(CITY_WIDGET_BUTTON, JUKEBOX_PREVIOUS, 21, 22),
+      MW(CITY_WIDGET_BUTTON, JUKEBOX_NEXT, 21, 22),
+      MW(CITY_WIDGET_BUTTON, JUKEBOX_STOP, 21, 22),
+      MW(CITY_WIDGET_BUTTON, JUKEBOX_PLAY, 21, 22),
+      MW(CITY_WIDGET_SPACER, 0, 1, 22),
+      MW(CITY_WIDGET_SPACER, 0, 8, 22),
+      MW(CITY_WIDGET_SLIDER, JUKEBOX_MUSIC_VOLUME, 70, 22),
+      MW(CITY_WIDGET_SPACER, 0, 8, 22),
+      MW(CITY_WIDGET_SLIDER, JUKEBOX_EFFECTS_VOLUME, 70, 22),
+      MW(CITY_WIDGET_SPACER, 0, 8, 22)),
+  MW(CITY_WIDGET_SPACER, 0, 0, 3),
+  MW_ROW(19,
+      MW(CITY_WIDGET_SPACER, 0, 4, 19),
+      MW(CITY_WIDGET_BUTTON, JUKEBOX_SHUFFLE, 50, 19),
+      MW(CITY_WIDGET_SPACER, 0, 6, 19),
+      MW(CITY_WIDGET_LABEL, MUSIC_TRACK_DISPLAY, 20, 19),
+      MW(CITY_WIDGET_LABEL, MUSIC_TITLE_DISPLAY, 107, 19),
+      MW(CITY_WIDGET_SPACER, 0, 6, 19),
+      MW(CITY_WIDGET_BUTTON, JUKEBOX_PROGRAMME, 50, 19),
+      MW(CITY_WIDGET_SPACER, 0, 7, 19)),
+  MW(CITY_WIDGET_SPACER, 0, 0, 2),
+  MW_ROW(10,
+      MW(CITY_WIDGET_BUTTON, JUKEBOX_SELECT + JUKEBOX_PROGRAMME_ALL, 38, 10),
+      MW(CITY_WIDGET_BUTTON, JUKEBOX_SELECT + JUKEBOX_PROGRAMME_OLD_STYLE, 41, 10),
+      MW(CITY_WIDGET_BUTTON, JUKEBOX_SELECT + JUKEBOX_PROGRAMME_NEW_STYLE, 41, 10),
+      MW(CITY_WIDGET_BUTTON, JUKEBOX_SELECT + JUKEBOX_PROGRAMME_EZY_STREET, 44, 10),
+      MW(CITY_WIDGET_BUTTON, JUKEBOX_SELECT + JUKEBOX_PROGRAMME_CUSTOM_1, 41, 10),
+      MW(CITY_WIDGET_BUTTON, JUKEBOX_SELECT + JUKEBOX_PROGRAMME_CUSTOM_2, 45, 10))
+};
+
+static const CityWidget kMusicPlayer = {
+  .kind = CITY_WIDGET_COLUMN,
+  .min_width = JUKEBOX_PLAYER_WIDTH,
+  .children = kMusicPlayerRows,
+  .count = sizeof(kMusicPlayerRows) / sizeof(kMusicPlayerRows[0])
+};
 
 #undef MW
 #undef MW_ROW
-static i32 MusicPlayerLayout(const Window *w, CityWidgetLayout *out) {
-  CityRect b = w->bounds;
-  b.bottom = b.top + JUKEBOX_PLAYER_HEIGHT;
-  i32 count = Sc2kCanvasWidgetLayout(&music_player, b, out, 64);
+
+enum { kMusicPlayerLayoutCapacity = 64 };
+
+// Painting and hit testing share full-height player geometry, including the adjusted slider/button bounds.
+static int MusicPlayerLayout(CityRect bounds, CityWidgetLayout layout[kMusicPlayerLayoutCapacity]) {
+  bounds.bottom = bounds.top + JUKEBOX_PLAYER_HEIGHT;
+  int count = Sc2kCanvasWidgetLayout(&kMusicPlayer, bounds, layout, kMusicPlayerLayoutCapacity);
   if (count < 0)
     return 0;
-  for (i32 i = 0; i < count; ++i) {
-    i32 id = out[i].widget->id;
+  for (int i = 0; i < count; ++i) {
+    int id = layout[i].widget->id;
     if (id == JUKEBOX_SHUFFLE || id == JUKEBOX_PROGRAMME) {
-      out[i].bounds.top += 5;
-      out[i].bounds.bottom = out[i].bounds.top + 9;
+      layout[i].bounds.top += 5;
+      layout[i].bounds.bottom = layout[i].bounds.top + 9;
     } else if (id == JUKEBOX_MUSIC_VOLUME || id == JUKEBOX_EFFECTS_VOLUME) {
-      out[i].bounds.top += 9;
-      out[i].bounds.right += 1;
+      layout[i].bounds.top += 9;
+      layout[i].bounds.right += 1;
     }
   }
   return count;
@@ -206,42 +218,8 @@ static CityRect MusicWidgetBounds(const CityWidgetLayout *layout, i32 count, i32
   return (CityRect){0, 0, 0, 0};
 }
 
-static i32 MusicFontWidth(const char *text, i32 size) {
-  return (CanvasTextWidth(text) * size + 9) / 10;
-}
-
-static void MusicFontText(Canvas *c, i32 x, i32 y, const char *text, u32 color,
-    i32 size) {
-  if (c->interface_font && c->interface_font->ready) {
-    DrawCityInterfaceTextSized(c->interface_font, c, x, y, text, color, false, size);
-    return;
-  }
-  Canvas glyph_canvas = *c;
-  glyph_canvas.raster = CanvasRasterView(c);
-  glyph_canvas.raster.origin_x *= 10; glyph_canvas.raster.origin_y *= 10;
-  glyph_canvas.raster.denominator *= 10;
-  glyph_canvas.width *= 10; glyph_canvas.height *= 10;
-  glyph_canvas.clip = (CityRect){c->clip.left * 10, c->clip.top * 10,
-      c->clip.right * 10, c->clip.bottom * 10};
-  x *= 10; y *= 10;
-  while (*text) {
-    int character = ReadCityFontCharacter(&text);
-    const CityCanvasGlyph *glyph = &kCanvasFont[character];
-    for (i32 row = 0; row < glyph->height; ++row)
-      for (i32 bit = 0; bit < glyph->width; ++bit)
-        if (glyph->rows[row] & (1ull << bit))
-          CanvasFill(&glyph_canvas, x + (glyph->offset_x + bit) * size, y + (glyph->offset_y + row) * size,
-              x + (glyph->offset_x + bit + 1) * size, y + (glyph->offset_y + row + 1) * size, color);
-    x += glyph->advance * size;
-  }
-}
-
-static i32 MusicTextWidth(const char *text) {
-  return MusicFontWidth(text, 8);
-}
-
 static void MusicText(Canvas *c, i32 x, i32 y, const char *text, u32 color) {
-  MusicFontText(c, x, y, text, color, 8);
+  CanvasTextSized(c, x, y, text, color, 8);
 }
 
 static void MusicBox(Canvas *c, i32 x, i32 y, i32 w, i32 h, u32 fill, i32 raised) {
@@ -249,18 +227,18 @@ static void MusicBox(Canvas *c, i32 x, i32 y, i32 w, i32 h, u32 fill, i32 raised
 }
 
 static void MusicLabel(Canvas *c, i32 x, i32 y, i32 w, const char *text, u32 color) {
-  MusicText(c, x + (w - MusicTextWidth(text)) / 2, y, text, color);
+  MusicText(c, x + (w - MusicTextWidth(c->interface_font, text, 8)) / 2, y, text, color);
 }
 
 static void MusicButton(Canvas *c,
     i32 x, i32 y, i32 w, i32 h, const char *text, i32 pressed, i32 disabled) {
   if (!disabled) pressed |= RegisterCityCanvasButton(c, (CityRect){x, y, x + w, y + h});
   MusicBox(c, x, y, w, h, canvas_face, !pressed);
-  i32 text_width = MusicFontWidth(text, 7);
+  i32 text_width = MusicTextWidth(c->interface_font, text, 7);
   CityRect clip = c->clip;
   c->clip.left = IntMax(c->clip.left, x + 1);
   c->clip.right = IntMin(c->clip.right, x + w - 1);
-  MusicFontText(c, x + pressed + (w - text_width) / 2, y + pressed + (h - 7) / 2, text,
+  CanvasTextSized(c, x + pressed + (w - text_width) / 2, y + pressed + (h - 7) / 2, text,
                    disabled ? canvas_dark : 0xFF101010u, 7);
   c->clip = clip;
 }
@@ -303,8 +281,8 @@ static void CanvasDrawJukebox(Game *game, Canvas *c, const Window *w) {
         CITY_WINDOW_ICON_STICKY, ui->music_pinned || MusicHeld(ui, w, b.right - 12, y, 12, JUKEBOX_TITLE_HEIGHT));
     if (ui->music_collapsed)
       return;
-    CityWidgetLayout layout[64];
-    i32 count = MusicPlayerLayout(w, layout);
+    CityWidgetLayout layout[kMusicPlayerLayoutCapacity];
+    i32 count = MusicPlayerLayout(w->bounds, layout);
     for (i32 button = 0; button < CITY_MUSIC_SPRITE_COUNT; ++button) {
       CityRect control = MusicWidgetBounds(layout, count, JUKEBOX_PREVIOUS + button);
       MusicTransport(game, c, w, control.left, control.top, button,
@@ -338,7 +316,7 @@ static void CanvasDrawJukebox(Game *game, Canvas *c, const Window *w) {
     CityRect clip = c->clip;
     c->clip.left = IntMax(c->clip.left, x + 82);
     c->clip.right = IntMin(c->clip.right, x + 185);
-    int title_width = (CityInterfaceTextWidth(c->interface_font, title) * 8 + 9) / 10;
+    int title_width = MusicTextWidth(c->interface_font, title, 8);
     int offset = ui->music_title.active && !strcmp(ui->music_title.text, title) ? ui->music_title.offset : 0;
     int title_x = title_width <= MUSIC_TITLE_WIDTH ? (MUSIC_TITLE_WIDTH - title_width) / 2 : -offset;
     MusicText(c, x + 82 + title_x, y + 51, title, 0xFFB6CF7Fu);
@@ -398,8 +376,8 @@ i32 Sc2kCanvasJukeboxActionAt(const CityInterfaceState *ui, const Window *w, i32
       return JUKEBOX_COLLAPSE;
     if (ui->music_collapsed)
       return JUKEBOX_NONE;
-    CityWidgetLayout layout[64];
-    i32 count = MusicPlayerLayout(w, layout);
+    CityWidgetLayout layout[kMusicPlayerLayoutCapacity];
+    i32 count = MusicPlayerLayout(w->bounds, layout);
     i32 id = Sc2kCanvasWidgetHit(layout, count, px, py);
     if (id == JUKEBOX_MUSIC_VOLUME || id == JUKEBOX_EFFECTS_VOLUME) {
       CityRect control = MusicWidgetBounds(layout, count, id);

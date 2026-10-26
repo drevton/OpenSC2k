@@ -12,6 +12,7 @@
 #include "city/presentation.h"
 #include "drawing/bitmaps.h"
 #include "drawing/raster/screen_damage.h"
+#include "drawing/startup.h"
 #include "drawing/state.h"
 #include "game/commands.h"
 #include "game/state.h"

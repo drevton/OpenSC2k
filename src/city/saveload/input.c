@@ -10,9 +10,9 @@
 u32 CityFileInputRead(CityFileInput *input, void *destination, u32 size) {
   switch (input->kind) {
     case CITY_FILE_INPUT_PLATFORM:
-      return ReadCityLoadStream(input->stream, destination, size);
+      return ReadCityLoadStream(input->load_stream, destination, size);
     case CITY_FILE_INPUT_STDIO:
-      return (u32)fread(destination, 1, size, input->stream);
+      return (u32)fread(destination, 1, size, input->stdio_stream);
     case CITY_FILE_INPUT_MEMORY: {
       u32 available = input->size - input->position;
       u32 count = size < available ? size : available;
@@ -27,7 +27,7 @@ u32 CityFileInputRead(CityFileInput *input, void *destination, u32 size) {
 // Seek the selected stdio, memory or observed-load backend. Memory seeks reject positions outside its span; returns
 // the backend's zero-success convention and propagates throwing load-stream failures.
 int CityFileInputSeek(CityFileInput *input, int offset, int origin) {
-  if (input->kind == CITY_FILE_INPUT_STDIO) return fseek(input->stream, offset, origin);
+  if (input->kind == CITY_FILE_INPUT_STDIO) return fseek(input->stdio_stream, offset, origin);
   if (input->kind == CITY_FILE_INPUT_MEMORY) {
     i64 base = origin == SEEK_CUR ? input->position : origin == SEEK_END ? input->size : 0;
     i64 position = base + offset;
@@ -36,13 +36,13 @@ int CityFileInputSeek(CityFileInput *input, int offset, int origin) {
     input->position = (u32)position;
     return 0;
   }
-  return SeekCityPreviewStream(input->stream, offset, origin);
+  return SeekCityPreviewStream(input->load_stream, offset, origin);
 }
 
 // Query the current selected input position without consuming bytes. Input must be initialized; preserves stdio/load
 // position and error conventions rather than turning failures into EOF.
 int CityFileInputPosition(CityFileInput *input) {
-  if (input->kind == CITY_FILE_INPUT_STDIO) return (int)ftell(input->stream);
+  if (input->kind == CITY_FILE_INPUT_STDIO) return (int)ftell(input->stdio_stream);
   if (input->kind == CITY_FILE_INPUT_MEMORY) return (int)input->position;
-  return GetCityPreviewStreamPosition(input->stream);
+  return GetCityPreviewStreamPosition(input->load_stream);
 }

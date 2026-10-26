@@ -8,11 +8,12 @@
 #include <assert.h>
 #include <string.h>
 
-#include "game/audio.h"
+#include "audio/types.h"
 #include "city/disasters/types.h"
 #include "city/engine/random.h"
 #include "city/infrastructure/bridges.h"
-#include "city/maps/layers.h"
+#include "city/maps/water.h"
+#include "city/maps/map.h"
 #include "city/presentation.h"
 #include "city/state.h"
 
@@ -24,12 +25,20 @@ static const i8 kCityEventAdjacentXOffset[8] = {
   -1, 0, 1, 0, 0, 0, 0, 0
 };
 
-static const i8 kCityEventOverlayBlockYOffset[8] = {
+static const i8 kCityShipStepY[8] = {
   0, 3, 4, 3, 0, -3, -4, -3
 };
 
-static const i8 kCityEventOverlayBlockXOffset[8] = {
+static const i8 kCityShipStepX[8] = {
   -4, -3, 0, 3, 4, 3, 0, -3
+};
+
+static const i8 kCitySailboatStepY[8] = {
+  0, 16, 0, -16, -16, 0, 16, 0
+};
+
+static const i8 kCitySailboatStepX[8] = {
+  -16, 0, 16, 0, 0, 1, 0, -1
 };
 
 static const i8 kCityEventTurnClockwiseOrder[9] = {
@@ -48,8 +57,61 @@ static const i8 kBorderWaterTileXOffsets[4] = {
   0, 2, 0, -2
 };
 
-// Small boats need a level water surface, including beneath water infrastructure. Their pier/marina rules are
-// handled by the route caller. Stock comparison retains its broader water-presence check.
+// Move a live ship using its eight-way step table and CITY_EVENT_SHIP_FRACTION period. Route admission is separate.
+// At the map edge, return false with the event unlinked but retained for the ship handler to finish.
+static bool AdvanceCityShipPosition(City *city, int slot) {
+  CityMapEvent *event = &city->events.event[slot];
+  int direction = event->direction;
+  CityPoint position = ReadCityMapEventPosition(city, event);
+  CityPoint offset = ReadCityMapEventTarget(city, event);
+  int next_y = offset.y + CITY_EVENT_OFFSET_SCALE * kCityShipStepY[direction];
+  int next_x = offset.x + CITY_EVENT_OFFSET_SCALE * kCityShipStepX[direction];
+  int cell_y_step = 0, cell_x_step = 0;
+  if (next_y >= CITY_EVENT_SHIP_FRACTION) { next_y -= CITY_EVENT_SHIP_FRACTION; cell_y_step = 1; }
+  if (next_y < 0) { next_y += CITY_EVENT_SHIP_FRACTION; cell_y_step = -1; }
+  if (next_x >= CITY_EVENT_SHIP_FRACTION) { next_x -= CITY_EVENT_SHIP_FRACTION; cell_x_step = 1; }
+  if (next_x < 0) { next_x += CITY_EVENT_SHIP_FRACTION; cell_x_step = -1; }
+  SetCityMapEventTarget(city, event, next_x, next_y);
+  if (cell_y_step == 0 && cell_x_step == 0) return true;
+
+  int y = position.y + cell_y_step, x = position.x + cell_x_step;
+  UnlinkCityMapEvent(city, slot);
+  if (x < 0 || y < 0 || x >= city->map_width || y >= city->map_height) return false;
+  TileIndex tile = event->tile + cell_y_step * city->map_width + cell_x_step;
+  event->tile = tile;
+  event->previous_overlay = ReadCityEventUnderlay(city, tile);
+  LinkCityMapEvent(city, slot);
+  return true;
+}
+
+// Move a live sailboat using its cardinal step table and CITY_EVENT_TILE_FRACTION period. Route admission is separate.
+// Preserve its retained underlay; release the event if the step leaves the map excluding its last row/column.
+static bool AdvanceCitySailboatPosition(City *city, int slot) {
+  CityMapEvent *event = &city->events.event[slot];
+  int direction = event->direction;
+  CityPoint position = ReadCityMapEventPosition(city, event);
+  CityPoint offset = ReadCityMapEventTarget(city, event);
+  int next_y = offset.y + CITY_EVENT_OFFSET_SCALE * kCitySailboatStepY[direction];
+  int next_x = offset.x + CITY_EVENT_OFFSET_SCALE * kCitySailboatStepX[direction];
+  int cell_y_step = 0, cell_x_step = 0;
+  if (next_y >= CITY_EVENT_TILE_FRACTION) { next_y -= CITY_EVENT_TILE_FRACTION; cell_y_step = 1; }
+  if (next_y < 0) { next_y += CITY_EVENT_TILE_FRACTION; cell_y_step = -1; }
+  if (next_x >= CITY_EVENT_TILE_FRACTION) { next_x -= CITY_EVENT_TILE_FRACTION; cell_x_step = 1; }
+  if (next_x < 0) { next_x += CITY_EVENT_TILE_FRACTION; cell_x_step = -1; }
+  SetCityMapEventTarget(city, event, next_x, next_y);
+  if (cell_y_step == 0 && cell_x_step == 0) return true;
+
+  int y = position.y + cell_y_step, x = position.x + cell_x_step;
+  UnlinkCityMapEvent(city, slot);
+  if (x < 0 || y < 0 || x >= city->map_width - 1 || y >= city->map_height - 1) {
+    ClearCityMapEventSlot(city, slot);
+    return false;
+  }
+  event->tile += cell_y_step * city->map_width + cell_x_step;
+  LinkCityMapEvent(city, slot);
+  return true;
+}
+
 static bool IsCitySailboatWaterTile(const City *city, TileIndex tile) {
   if (city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE))
     return ReadCityTileGeometry(city, tile).water_surface == CITY_WATER_SURFACE_LEVEL;
@@ -66,7 +128,7 @@ static bool CheckCityEventAdjacentTile(City *city, int slot, int direction) {
   const TileIndex tile_index = MapTileXYOrInvalid(city, x, y);
   if (tile_index == INVALID_TILE) return true;
 
-  int tile = ReadTile(city, tile_index);
+  int tile = city->tile[tile_index].kind;
   if (tile == TK_MARINA) {
     ClearCityMapEventSlot(city, slot);
     return false;
@@ -80,8 +142,8 @@ static bool CheckCityEventAdjacentTile(City *city, int slot, int direction) {
 // and active counts or release its record.
 void UpdateCityMapSailboat(City *city, int slot) {
   CityMapEvent *event = &city->events.event[slot];
-  ++city->disasters.tile248_count;
-  if (!(city->fixes & (1ull << CITY_FIX_EXPANDED_EVENTS)) && city->disasters.tile248_count > 4) {
+  ++city->disasters.sailboat_count;
+  if (!(city->fixes & (1ull << CITY_FIX_EXPANDED_EVENTS)) && city->disasters.sailboat_count > 4) {
     ClearCityMapEventSlot(city, slot);
     return;
   }
@@ -135,8 +197,8 @@ static bool IsCityBoatPassageTile(const City *city, TileIndex tile) {
 static bool CanCityEventAdvanceInDirection(City *city, int slot, int direction) {
   CityMapEvent *event = &city->events.event[slot];
   CityPoint position = ReadCityMapEventPosition(city, event);
-  int y = position.y + kCityEventOverlayBlockYOffset[direction];
-  int x = position.x + kCityEventOverlayBlockXOffset[direction];
+  int y = position.y + kCityShipStepY[direction];
+  int x = position.x + kCityShipStepX[direction];
   const TileIndex tile_index = MapTileXYOrInvalid(city, x, y);
   if (tile_index == INVALID_TILE) return true;
   return IsCityBoatPassageTile(city, tile_index) && !IsCityEventOrMarkerOverlay(ReadOverlay(city, tile_index));
@@ -147,7 +209,7 @@ static bool CanCityEventAdvanceInDirection(City *city, int slot, int direction) 
 static void StepCityMapShip(City *city, int slot) {
   CityMapEvent *event = &city->events.event[slot];
   CityPoint position = ReadCityMapEventPosition(city, event);
-  ++city->disasters.border_water_count;
+  ++city->disasters.ship_count;
   if ((Sc2kCrtRand(city) & 0xFF) == 0)
     PlayCityAmbientSound(city, event->tile, CITY_SOUND_SHIP);
 
@@ -159,13 +221,13 @@ static void StepCityMapShip(City *city, int slot) {
     memset(event->object_data, 0, sizeof(event->object_data));
     event->type = CITY_MAP_EVENT_EXPLOSION;
     SetCityMapEventTarget(city, event, offset.x, offset.y);
-    event->next_slot = CITY_DISASTER_NONE;
+    event->state = CITY_DISASTER_NONE;
     event->explosion.trigger_disaster = 0;
     event->direction = CITY_EXPLOSION_START;
     return;
   }
 
-  switch (event->next_slot) {
+  switch (event->state) {
   case CITY_SHIP_TRAVEL:
     if (NextCityMapRandomModulo(city, 10) == 0) {
       int direction =
@@ -176,14 +238,14 @@ static void StepCityMapShip(City *city, int slot) {
     if (CanCityEventAdvanceInDirection(city, slot, event->direction))
       AdvanceCityShipPosition(city, slot);
     else
-      event->next_slot = CITY_SHIP_TURN_TO_TARGET;
+      event->state = CITY_SHIP_TURN_TO_TARGET;
 
     for (int index = 0; index < 4; ++index) {
       int target_y = y + kBorderWaterTileYOffsets[index];
       int target_x = x + kBorderWaterTileXOffsets[index];
       TileIndex target = MapTileXYOrInvalid(city, target_x, target_y);
-      if (target != INVALID_TILE && ReadTile(city, target) == TK_PIER)
-        event->next_slot = CITY_SHIP_AT_PIER;
+      if (target != INVALID_TILE && city->tile[target].kind == TK_PIER)
+        event->state = CITY_SHIP_AT_PIER;
     }
     break;
   case CITY_SHIP_TURN_TO_TARGET: {
@@ -191,9 +253,9 @@ static void StepCityMapShip(City *city, int slot) {
     event->direction = (u8)TurnCityEventHeadingToward(event->direction, target);
     if (event->direction == target) {
       if (!CanCityEventAdvanceInDirection(city, slot, target))
-        event->next_slot = CITY_SHIP_FIND_PASSAGE;
+        event->state = CITY_SHIP_FIND_PASSAGE;
       else
-        event->next_slot = CITY_SHIP_TRAVEL;
+        event->state = CITY_SHIP_TRAVEL;
     }
     break;
   }
@@ -214,12 +276,12 @@ static void StepCityMapShip(City *city, int slot) {
       return;
     }
     event->direction = (u8)candidate;
-    event->next_slot = CITY_SHIP_TRAVEL;
+    event->state = CITY_SHIP_TRAVEL;
     break;
   }
   case CITY_SHIP_AT_PIER:
     if (NextCityMapRandomModulo(city, 30) == 0) {
-      event->next_slot = CITY_SHIP_DEPART;
+      event->state = CITY_SHIP_DEPART;
       PlayCityAmbientSound(city, event->tile, CITY_SOUND_SHIP);
       TileIndex home = event->ship.home_tile != INVALID_TILE ? event->ship.home_tile : event->tile;
       CityPoint point = MapTilePt(city, home);
@@ -292,15 +354,16 @@ void SpawnBorderWaterEvent(City *city, TileIndex source) {
   CityPoint origin = MapTilePt(city, source);
   event->direction = CityEventHeadingTowardPoint(destination.x, destination.y, origin.x, origin.y);
   event->tile = tile_index;
-  SetCityMapEventTarget(city, event, 128, 128);
+  event->ship.offset_x = 128;
+  event->ship.offset_y = 128;
   event->ship.home_tile = tile_index;
   event->height = 1;
   event->previous_overlay = overlay;
-  event->next_slot = CITY_SHIP_TRAVEL;
+  event->state = CITY_SHIP_TRAVEL;
   city->disasters.border_water_y = destination.y;
   city->disasters.border_water_x = destination.x;
   PlayCityAmbientSound(city, source, CITY_SOUND_SHIP);
-  ++city->disasters.border_water_count;
+  ++city->disasters.ship_count;
   LinkCityMapEvent(city, slot);
   InvalidateCityDrawbridgesForShip(city, slot, INVALID_TILE, event->tile);
 }
@@ -311,7 +374,7 @@ static void TryCreateCitySailboat(City *city, TileIndex tile_index) {
   if ((city->fixes & (1ull << CITY_FIX_EXPANDED_EVENTS)) && !CanSpawnCityVehicle(city, CITY_MAP_EVENT_SAILBOAT))
     return;
   int slot = FindFreeCityEventSlot(city);
-  if (slot == CITY_OVERLAY_NONE || !IsTileKindExposedWater(ReadTile(city, tile_index)) ||
+  if (slot == CITY_OVERLAY_NONE || !IsTileKindExposedWater(city->tile[tile_index].kind) ||
       ReadOverlay(city, tile_index) != CITY_OVERLAY_NONE) return;
   if (!IsCitySailboatWaterTile(city, tile_index)) return;
 
@@ -320,13 +383,13 @@ static void TryCreateCitySailboat(City *city, TileIndex tile_index) {
   event->type = CITY_MAP_EVENT_SAILBOAT;
   event->direction = NextCityMapRandomModulo(city, 3);
   event->tile = tile_index;
-  SetCityMapEventTarget(city, event, 64, 64);
+  event->sailboat = (CityMapEventMotion){.offset_x = 64, .offset_y = 64};
   event->age = 0;
   event->previous_overlay = 0;
-  event->next_slot = CITY_SAILBOAT_SAILING;
+  event->state = CITY_SAILBOAT_SAILING;
   LinkCityMapEvent(city, slot);
   InvalidateTile(city, tile_index);
-  ++city->disasters.tile248_count;
+  ++city->disasters.sailboat_count;
 }
 
 // Try unoccupied neighboring water tiles around a marina; each spawn applies the same surface admission as movement.

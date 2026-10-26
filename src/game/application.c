@@ -1,7 +1,7 @@
 #include "drawing/maps/map_view.h"
 #include <string.h>
 #include "base/text.h"
-#include "drawing/maps/map_sprites.h"
+#include "drawing/maps/sprite_cache.h"
 #include "game/graphics.h"
 #include "ui/updates.h"
 #include "ui/cursor/cursor.h"
@@ -270,7 +270,7 @@ static bool RunHeadlessApplication(Game *game, const ApplicationOptions *options
     return false;
   if (drawing->benchmark_redraw) {
     // Exclude startup and the first draw, which warms resource and allocator caches.
-    drawing->snapshot_seconds = drawing->map_seconds = drawing->canvas_seconds = 0;
+    drawing->prepare_seconds = drawing->map_seconds = drawing->canvas_seconds = 0;
     double benchmark_started = MonotonicSeconds();
     for (i32 index = 0; index < drawing->benchmark_redraw; ++index) {
       drawing->main_cache.valid = 0;
@@ -279,11 +279,11 @@ static bool RunHeadlessApplication(Game *game, const ApplicationOptions *options
     }
     double milliseconds = 1000.0 / drawing->benchmark_redraw;
     double frame_cpu_ms = (MonotonicSeconds() - benchmark_started) * milliseconds;
-    fprintf(stderr, "redraw_samples=%d snapshot_ms=%.3f map_ms=%.3f canvas_ms=%.3f "
+    fprintf(stderr, "redraw_samples=%d prepare_ms=%.3f map_ms=%.3f canvas_ms=%.3f "
         "total_ms=%.3f frame_cpu_ms=%.3f\n",
-        drawing->benchmark_redraw, drawing->snapshot_seconds * milliseconds, drawing->map_seconds * milliseconds,
+        drawing->benchmark_redraw, drawing->prepare_seconds * milliseconds, drawing->map_seconds * milliseconds,
         drawing->canvas_seconds * milliseconds,
-        (drawing->snapshot_seconds + drawing->map_seconds + drawing->canvas_seconds) * milliseconds, frame_cpu_ms);
+        (drawing->prepare_seconds + drawing->map_seconds + drawing->canvas_seconds) * milliseconds, frame_cpu_ms);
   }
 
   return true;
@@ -428,7 +428,7 @@ static bool RunLiveApplication(Game *game, CanvasSDL *display, const Application
     if (drawing->cost_texts_active)
       wait_ms = IntMin(wait_ms,
           IntMax(0, (int)((drawing->cost_text_time + 1.0 / 60 - MonotonicSeconds()) * 1000)));
-    if (city->settings.speed == CITY_SPEED_PAUSED && game->idle_state == (u32)CITY_IDLE_PLAY &&
+    if (city->settings.speed == CITY_SPEED_PAUSED && game->idle_state == CITY_IDLE_PLAY &&
         !ui->music_press.active && !ui->viewport_pressed_window && !ui->signs.pressed_window &&
         !ui->desktop.menu.pressed && !ui->button_feedback.repeating &&
         !drawing->cost_texts_active &&
@@ -468,7 +468,7 @@ static bool RunLiveApplication(Game *game, CanvasSDL *display, const Application
           (event.kind != CANVAS_SDL_POINTER_MOVE || ui->desktop.dragging != CITY_CANVAS_DRAG_NONE ||
               ui->pointer_stroke_count || ui->jukebox_slider || ui->options_slider || ui->pan_button))
         dirty = 1;
-      DispatchCityCanvasEvent(city, &event);
+      DispatchCityCanvasEvent(game, &event);
       if (live_script_path != NULL && event.kind == CANVAS_SDL_FOCUS_GAINED) {
         if (!RunInputScript(game, live_script_path, city_path))
           return false;
@@ -480,10 +480,7 @@ static bool RunLiveApplication(Game *game, CanvasSDL *display, const Application
       break;
     if (!game->delay_blocked) {
       CompleteCityAbandon(game);
-      CompleteCityWindowCallbacks(city);
-      CompleteCityScenarioSelection(city);
-      CompleteCityCreationWindow(city);
-      CompleteCityFileDialogs(city);
+      CompleteCityPendingWindows(game);
     }
     if (!frame_started) frame_started = MonotonicSeconds();
     batch_frame = city->game->spread_simulation && city->map_cell_count > CITY_MAP_CELL_COUNT;
@@ -499,7 +496,7 @@ static bool RunLiveApplication(Game *game, CanvasSDL *display, const Application
       }
     }
     // Consume queued cadence work; the fastest speed retains tick_due for the next idle pass.
-    i32 idle_pending = game->idle_state != (u32)CITY_IDLE_PLAY ||
+    i32 idle_pending = game->idle_state != CITY_IDLE_PLAY ||
         drawing->palette.fast_due == 1 || drawing->palette.slow_due == 1 ||
         (city->settings.speed != CITY_SPEED_PAUSED && city->cadence_counter.tick_due != 0);
     bool run_idle = !game->delay_blocked && !ui->pointer_stroke_count &&
@@ -507,7 +504,7 @@ static bool RunLiveApplication(Game *game, CanvasSDL *display, const Application
     if (run_idle && !batch_frame) {
       RunGameIdle(game, (GameIdleInputs){true, true, true});
       // A paused cadence still delivers commands, but unchanged pixels stay retained.
-      dirty |= game->idle_state != (u32)CITY_IDLE_PLAY;
+      dirty |= game->idle_state != CITY_IDLE_PLAY;
     }
     if (Sc2kCanvasJukeboxTick(ui, (u32)(u64)(MonotonicSeconds() * 1000))) {
       DirtyCityMusicWindows(game);
@@ -608,7 +605,8 @@ int RunGameApplication(int argc, char **argv, const GameApplicationHooks *hooks,
   InitializeSimulation(city, maps);
   *game = (Game){.city = city, .drawing = &storage->drawing, .ui = &storage->ui,
       .audio = &storage->audio, .resources = &storage->assets, .idle_inputs = {true, true, false},
-      .default_city_fixes = CITY_FIX_DEFAULT_MASK, .repair_save_headers = true};
+      .default_city_fixes = CITY_FIX_DEFAULT_MASK, .repair_save_headers = true,
+      .pointer_command.release_flags = CITY_DRAG_INPUT_RELEASE};
   city->game = game;
   city->drawing = game->drawing;
   city->fixes = game->default_city_fixes;
@@ -700,13 +698,13 @@ int RunGameApplication(int argc, char **argv, const GameApplicationHooks *hooks,
   Sc2kCanvasSetJukeboxState(ui, &audio->jukebox);
   ui->desktop.canvas_width = kDefaultCityCanvasWidth;
   ui->desktop.canvas_height = kDefaultCityCanvasHeight;
-  if (!BindCityChartPanels(city, &ui->desktop))
+  if (!BindCityChartPanels(game, &ui->desktop))
     goto done;
-  if (!SetCityStartupMenuPresentation(city, &ui->desktop))
+  if (!SetCityStartupMenuPresentation(ui, &ui->desktop))
     goto done;
   SyncCityInterface(game, NULL, 1);
   SetCitySpanPresentation(ui, &ui->desktop);
-  if (!InitializeCityFileDialogPresentation(city, &ui->desktop, city_path))
+  if (!InitializeCityFileDialogPresentation(game, &ui->desktop, city_path))
     goto done;
   if (!headless) ShowCityLoadWarnings(city);
   if (city->settings.timer_mode == CITY_TIMER_STOPPED) {
@@ -723,7 +721,7 @@ int RunGameApplication(int argc, char **argv, const GameApplicationHooks *hooks,
   ui->newspaper_delivery_disabled = !city->newspaper.enabled;
   ui->extra_newspaper_disabled = !city->indicators.ranked_disaster_gate;
   ui->newspaper_month = city->clock.month;
-  SetCityMapDataPresentation(city, &ui->desktop);
+  SetCityMapDataPresentation(ui, &ui->desktop);
   RefreshCityStatusPanel(city, &ui->status, city->settings.speed, true);
   if (GetGameError(game)) goto done;
   ApplicationSyncDialogPause(city);
@@ -752,10 +750,10 @@ int RunGameApplication(int argc, char **argv, const GameApplicationHooks *hooks,
         ui->dialog_input_blocked, city->settings.speed);
   if (drawing->profile_redraw && drawing->profiled_redraws) {
     double milliseconds = 1000.0 / drawing->profiled_redraws;
-    fprintf(stderr, "redraw_samples=%u snapshot_ms=%.3f map_ms=%.3f canvas_ms=%.3f total_ms=%.3f\n",
-        drawing->profiled_redraws, drawing->snapshot_seconds * milliseconds, drawing->map_seconds * milliseconds,
+    fprintf(stderr, "redraw_samples=%u prepare_ms=%.3f map_ms=%.3f canvas_ms=%.3f total_ms=%.3f\n",
+        drawing->profiled_redraws, drawing->prepare_seconds * milliseconds, drawing->map_seconds * milliseconds,
         drawing->canvas_seconds * milliseconds,
-        (drawing->snapshot_seconds + drawing->map_seconds + drawing->canvas_seconds) * milliseconds);
+        (drawing->prepare_seconds + drawing->map_seconds + drawing->canvas_seconds) * milliseconds);
   }
   result = game->execution_failed ? 1 : 0;
 done:

@@ -2,9 +2,10 @@
 #define SC2K_DRAWING_CURSORS_H
 
 #include "assets/cursors.h"
-#include "city/maps/tile_storage.h"
 #include "drawing/canvas.h"
 #include "drawing/sprites/sources.h"
+
+typedef struct Drawing Drawing;
 
 // Bounded Drawing storage for composed tool cursors; UI verifies its slot mapping against this capacity.
 enum { CITY_CURSOR_TOOL_CAPACITY = 71 };
@@ -39,9 +40,10 @@ void ComposeCityCursorIcon(u32 pixels[SC2K_CURSOR_ASSET_SPRITE_PIXELS], const Ci
 // Compose the zone diamond in the supplied color, with stripes for dense zoning, using the same badge and arrow.
 void ComposeCityZoneCursorIcon(u32 pixels[SC2K_CURSOR_ASSET_SPRITE_PIXELS], const CityCursorAssets *artwork,
     u32 color, bool dense);
-// Fit a building's installed map artwork into a 40x40 cursor icon, including the wind rotor/year variant.
-// Missing artwork or preparation failure returns false; temporary sprites are released. City remains read-only.
-bool DecodeCityBuildingCursorIcon(const City *city, TileKind kind, const u32 palette[256],
+// Fit a valid map-cache slot into a cleared 40x40 cursor icon, using the supplied palette and Drawing animation colors.
+// Invalid slots and missing sources return false without writing pixels. Preparation failure leaves the cleared icon.
+// Temporary sprites are released; no cache or simulation state changes.
+bool DecodeCityMapCursorIcon(const Drawing *drawing, int sprite_id, const u32 palette[256],
     u32 icon[SC2K_CURSOR_ASSET_ICON_PIXELS]);
 // Decode a selected interface image into a cleared 40x40 icon, centered at width 40 and height in 1..40.
 // Source is borrowed. Failure releases temporary references and leaves the cleared icon; no cache is retained.

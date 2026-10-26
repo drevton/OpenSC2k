@@ -2,7 +2,6 @@
 #define SC2K_DOMAIN_SRC_CITY_TOOLS_TOOLS_H
 
 #include "city/engine/command_types.h"
-#include "city/infrastructure/types.h"
 #include "city/maps/tile_storage.h"
 #include "city/tools/types.h"
 #include "city/types.h"
@@ -10,41 +9,37 @@
 // Enable or disable terrain protection for structures. Validate Boolean/zero reserved values; TEST has no effects.
 i64 CmdSetTerrainProtection(City *city, u32 flags, int enabled, int reserved1, int reserved2);
 
-// Raw terrain quote: validates the tile/tool/options without changing map, treasury, RNG or presentation.
+// Raw terrain quote validates tile/tool. Native planning uses resolved terrain options; legacy pricing ignores them.
+// Does not change map, treasury, RNG or presentation.
 CityCommandCost GetCityTerrainCost(const City *city, TileIndex tile, bool raise, int tool, int options);
-TileIndex FindLowerTerrainNeighbor(const City *city, TileIndex tile);
 i64 EditCityTerrainCell(City *city, TileIndex tile, bool raise, int tool);
 i64 CmdLevelTerrainTile(City *city, u32 flags, TileIndex tile, int height, int options);
 i64 CmdStretchTerrainTile(City *city, u32 flags, TileIndex tile, int height, int options);
 
 // Demolition
 
-// The start is the northwest tile. Unresolved footprints have INVALID_TILE and zero dimensions.
-CityTileArea ResolveBulldozeFootprint(const City *city, TileIndex tile);
-// Mutate an admitted structure, including connected tunnels/bridges/runways/piers and footprint metadata.
-// Requires a valid tile; performs damage/sound/effects but no admission, pricing or payment.
-void BulldozeCityTile(City *city, TileIndex tile, bool animate);
-// Tool execution checks admission and pays once before applying demolition. Returns success or a negative error;
-// an error after payment retains the original partial effects (for example a tree-removal protest).
-i64 ApplyCityBulldozerAtTile(City *city, TileIndex tile, int options);
+// Retained tools select a cost-table entry explicitly. Check admission and pay once before applying demolition;
+// return success or a negative error. A late error retains payment and prior edits (for example a tree protest).
+i64 ApplyBulldozerTile(City *city, TileIndex tile, int options, int cost_index);
 // Read-only admission uses resolved layer/alt choices; invalid tiles are rejected as nothing to remove.
-bool CanBulldozeCityTile(const City *city, TileIndex tile, bool underground, bool alt);
-int GetCityBulldozeTileError(const City *city, TileIndex tile, bool underground, bool alt);
+// City is mutable only to dispatch the module callback with CITY_COMMAND_TEST; these queries have no effects.
+bool CanBulldozeCityTile(City *city, TileIndex tile, bool underground, bool alt);
+int GetCityBulldozeTileError(City *city, TileIndex tile, bool underground, bool alt);
 // Quote a valid tile without mutation, payment, RNG or invalidation. Admission is checked separately.
 i64 GetCityBulldozeTileCost(const City *city, TileIndex tile, bool underground);
 
-// Rectangle quoting inspects each current cell; execution checks and pays each edit against live state.
+// Structural removal command. Validate tile and animate (0/1); TEST returns zero without editing.
+// Execution removes the structure without tool admission or payment and reports completion through Game's error record.
+i64 CmdBulldoze(City *city, u32 flags, TileIndex tile, int animate);
+// Paid single-cell tool command with resolved layer/alt/effect options. TEST checks admission and quotes its price;
+// execution checks admission, charges once and restores the prior local effect suppression after the edit.
+// A late error retains payment and prior edits. TEST callbacks cannot pump input or replace map storage.
+i64 CmdApplyBulldozerTool(City *city, u32 flags, TileIndex tile, int options);
+// Rectangle TEST quotes the current cells; execution checks and pays each live edit after earlier footprint changes.
 // If no cells are admitted, the quote retains the last specific blocker in row order,
 // or CITY_COMMAND_COST_NOTHING_TO_REMOVE when there is none.
-// Command TEST calls are read-only. Invalid endpoints or option bits return a negative gameplay error.
-i64 CmdBulldoze(City *city, u32 flags, TileIndex tile, int animate);
-i64 CmdApplyBulldozerTool(City *city, u32 flags, TileIndex tile, int options);
+// Execution may open a tree-removal notice. TEST is read-only; invalid endpoints/options return a negative error.
 i64 CmdBulldozeRect(City *city, u32 flags, TileIndex start, TileIndex end, int options);
-
-// Read-only quotes for explicit tool variants; no active UI selection is consulted.
-CityCommandCost GetCityConstructionCost(const City *city, TileIndex start, TileIndex end, int group, int variant);
-CityCommandCost PriceCityConstruction(const City *city, TileIndex start, TileIndex end, int group, int variant);
-CityInfrastructureSpan GetCityConstructionSpan(const City *city, TileIndex start, TileIndex end, int group, int variant);
 
 // Placement/terrain operations returning i64 use negative gameplay errors and nonnegative success values.
 
@@ -60,40 +55,28 @@ i64 ApplyPreparedCityZoneRectangle(City *city, TileIndex start, TileIndex end);
 
 // Placement
 
-// Read-only admission for one cell and explicit tool choices. Terrain options apply to raise/lower tools;
-// no active command or UI selection is consulted. Building footprints and affordability need their own quote.
-bool CanPlaceCityToolCell(const City *city, TileIndex tile, int group, int variant, int terrain_options);
-int CityToolZoneCode(int group, int variant);
+// Surface eligibility shared by zoning quotes, rectangle previews and retained admission. Reads tp only;
+// rejects water, transport, buildings, radioactive waste, parks, slopes and military zones.
+bool CanZoneCityTile(const TileInfo *tp);
 i64 CalculateCityZoneCost(const City *city, TileIndex start, TileIndex end, int zone, int unit_cost);
-int GetCityFacilityTile(int group, int variant);
+// Read the zones in an inclusive rectangle without editing construction state; invalid endpoints return false.
+bool CityZoneRectangleContainsZone(const City *city, TileIndex start, TileIndex end, int zone);
 
 // Tables
 
-enum {
-  CITY_TOOL_COST_UNAVAILABLE = 0xFFFFFFFF,
-  CITY_TOOL_FOOTPRINT_UNAVAILABLE = 255,
-  CITY_TOOL_FOOTPRINT_GROUP_COUNT = CITY_TOOL_GROUP_QUERY
-};
+enum { CITY_TOOL_COST_UNAVAILABLE = 0xFFFFFFFF };
 
 // Immutable simulation data, available without loading an executable image.
-extern const u8 kCityToolFootprintSizes[CITY_TOOL_FOOTPRINT_GROUP_COUNT * CITY_TOOL_VARIANT_CAPACITY];
 extern const u32 kCityToolCosts[CITY_TOOL_GROUP_COUNT * CITY_TOOL_VARIANT_CAPACITY];
-// Square building sizes shared by demolition, stock codecs and native footprints.
-extern const u8 kZoneTerrainSurchargeFlags[16];
-extern const u8 kPowerPlantToolVariants[TK_COAL_POWER_PLANT - TK_GAS_POWER_PLANT + 1];
 
 // Terrain
 
 i64 MarkTerrainRaisePath(City *city, TileIndex tile, bool allow_water, TileIndex origin);
 i64 RaiseMarkedTerrain(City *city, TileIndex tile);
-bool CanRaiseTerrainCell(const City *city, int x, int y);
 i64 LowerCityTerrainCell(City *city, TileIndex tile_index, bool charge, int tool);
-int ClassifyCardinalDragDirection(int x, int y, int previous_x, int previous_y);
 i64 RaiseCityTerrainCell(City *city, TileIndex tile_index, int tool);
 i64 StepCityTerrainTowardHeight(City *city, TileIndex tile_index, int target_height,
     int tool);
-
-i64 ApplyBulldozerTile(City *city, TileIndex tile, int options, int tool);
 
 // Shared command admission is read-only in TEST mode; execution retains the family placement/payment order.
 i64 CmdRaiseOrStepTerrain(City *city, u32 flags, TileIndex tile,

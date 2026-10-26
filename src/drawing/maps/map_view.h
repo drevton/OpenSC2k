@@ -8,9 +8,10 @@ typedef struct CityExtraMapView CityExtraMapView;
 // Drawing retains the main camera plus this bounded set of auxiliary views.
 enum { CITY_EXTRA_MAP_VIEW_COUNT = 8 };
 
-// Borrowed for one synchronous paint/damage visit. A null view selects Drawing's main map target.
+// Read-only City data and a borrowed view for one synchronous paint/damage visit.
+// A null view selects Drawing's main map target.
 typedef struct CityMapPaint {
-  City *city;
+  const City *city;
   CityExtraMapView *view;
 } CityMapPaint;
 

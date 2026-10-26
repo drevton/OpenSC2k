@@ -1,11 +1,10 @@
-#include "drawing/maps/map_sprites.h"
-#include "drawing/sprites/surface.h"
 #include "drawing/display.h"
 
 #include <stdlib.h>
 
 #include "city/engine/city_types.h"
 #include "city/state.h"
+#include "drawing/maps/sprite_cache.h"
 #include "drawing/maps/map_cache.h"
 #include "drawing/maps/map_animation.h"
 #include "drawing/maps/map_effects.h"
@@ -13,6 +12,7 @@
 #include "drawing/maps/map_labels.h"
 #include "drawing/maps/map_render.h"
 #include "drawing/maps/map_view.h"
+#include "drawing/sprites/surface.h"
 #include "drawing/state.h"
 #include "game/state.h"
 
@@ -71,6 +71,32 @@ void ReleaseDrawingFramebuffer(Drawing *drawing) {
   for (int i = 0; i < CITY_EXTRA_MAP_VIEW_COUNT; ++i) drawing->views[i].cache.valid = false;
 }
 
+bool WriteDrawingScreenshot(const Drawing *drawing, FILE *file, bool physical) {
+  const Canvas *canvas = &drawing->framebuffer;
+  int step = physical ? 1 : drawing->map_pixel_scale;
+  // Include a final partial logical pixel, but sample only within the physical framebuffer.
+  int output_width = (canvas->width - 1) / step + 1;
+  int output_height = (canvas->height - 1) / step + 1;
+  bool ok = fprintf(file, "P6\n%d %d\n255\n", output_width, output_height) > 0;
+  u8 rgb[256 * 3];
+  for (int y = 0; ok && y < output_height; ++y) {
+    const u32 *row = canvas->pixels + (size_t)y * step * canvas->stride;
+    for (int first = 0; ok && first < output_width;) {
+      int count = IntMin(output_width - first, sizeof(rgb) / 3);
+      for (int x = 0; x < count; ++x) {
+        u32 color = row[(first + x) * step];
+        rgb[3 * x] = color >> 16;
+        rgb[3 * x + 1] = color >> 8;
+        rgb[3 * x + 2] = color;
+      }
+      size_t bytes = count * 3;
+      ok = fwrite(rgb, 1, bytes, file) == bytes;
+      first += count;
+    }
+  }
+  return ok;
+}
+
 bool BindDrawingMapTarget(Drawing *drawing, int scale, CityPoint position) {
   int slot = FindMapSpriteScale(&drawing->sprite_cache, scale);
   if (slot < 0) return false;
@@ -85,12 +111,14 @@ bool BindDrawingMapTarget(Drawing *drawing, int scale, CityPoint position) {
 }
 
 MapCachePixels CityMapCachePixels(Drawing *drawing) {
-  return (MapCachePixels){&drawing->map_target, drawing->scroll_colors, drawing->scroll_indices,
-      drawing->target_scale, drawing->target_x, drawing->target_y, true};
+  return (MapCachePixels){.surface = &drawing->map_target,
+      .scratch_colors = drawing->scroll_colors, .scratch_indices = drawing->scroll_indices,
+      .scale = drawing->target_scale, .x = drawing->target_x, .y = drawing->target_y,
+      .physical_coordinates = true};
 }
 
 void PaintDrawingMapPixels(CityRect rect, CityMapPaint *paint) {
-  City *city = paint->city;
+  const City *city = paint->city;
   Drawing *drawing = city->drawing;
   int scale = drawing->target_scale, x = drawing->target_x, y = drawing->target_y;
   int left = (rect.left - x) * 100, top = (rect.top - y) * 100;
@@ -102,23 +130,22 @@ void PaintDrawingMapPixels(CityRect rect, CityMapPaint *paint) {
 }
 
 void PrepareCityMapSpriteDamage(CityMapPaint *paint, CityCanvasVisiblePaint mark) {
-  City *city = paint->city;
+  const City *city = paint->city;
   Drawing *drawing = city->drawing;
   MapSpriteFootprints *sprites = paint->view ? &paint->view->sprites : &drawing->main_sprites;
   PublishCityMapEventDamage(city, sprites, mark, paint);
   CityMapAnimationFootprints *previous = paint->view ? &paint->view->animations : &drawing->main_animations;
-  SimulationRandomState before = BeginCityMapAnimationCapture(city);
+  BeginCityMapAnimationCapture(drawing);
   // The empty paint rectangle prevents rasterization. The normal scan rectangle
   // selects nearby effects in painter order without visiting the whole map.
   CityRect clip = {drawing->target_x, drawing->target_y, drawing->target_x, drawing->target_y};
   PaintCityMapFragment((CityRect){0}, clip, paint);
-  EndCityMapAnimationCapture(city, before);
+  EndCityMapAnimationCapture(drawing);
   PublishCityMapAnimationDamage(city, previous, mark, paint);
-  ReplayCityMapAnimations(drawing);
 }
 
 static void PaintCityMapFragment(CityRect rect, CityRect clip, CityMapPaint *paint) {
-  City *city = paint->city;
+  const City *city = paint->city;
   Drawing *drawing = city->drawing;
   int background = drawing->options.black_background ? 0 : 0x7B;
   drawing->map_target.canvas.clip = clip;

@@ -1,4 +1,4 @@
-#include "drawing/maps/map_sprites.h"
+#include "drawing/maps/sprite_cache.h"
 
 #include <limits.h>
 #include <stdlib.h>
@@ -9,6 +9,7 @@
 #include <SDL_thread.h>
 
 #include "assets/state.h"
+#include "city/maps/buildings.h"
 #include "drawing/maps/map_view.h"
 #include "drawing/sprites/sources.h"
 #include "drawing/state.h"
@@ -18,7 +19,8 @@
 
 enum {
   MAP_SPRITE_PREPARATION_WORKERS = 4,
-  MAP_BUILDING_PREVIEW_COUNT = CITY_CIVIC_KIND_COUNT * (CITY_CIVIC_VIEWS + 1) + CITY_CIVIC_VIEWS,
+  MAP_CIVIC_PREVIEW_COUNT = CITY_CIVIC_KIND_COUNT * (CITY_CIVIC_VIEWS + 1),
+  MAP_BUILDING_PREVIEW_COUNT = MAP_CIVIC_PREVIEW_COUNT + CITY_CIVIC_VIEWS,
 };
 
 // Retain the replacement before releasing the previous source. Failure leaves that entry unchanged;
@@ -35,33 +37,34 @@ static bool InstallLandscapeSprite(MapSpriteCache *cache, int id, const RunSprit
   return true;
 }
 
-static bool InstallResourceSprite(MapSpriteCache *cache, const CityResourceState *assets,
-    int id, int index, int scale) {
+// Sources are installed only after the cache has borrowed its validated Assets catalog.
+static bool InstallResourceSprite(MapSpriteCache *cache, int id, int index, int scale) {
+  const CityResourceState *assets = cache->assets;
   // Cache IDs identify the map level internally; resource IDs stay zoom independent.
   int level = id < CITY_MAP_SPRITE_COUNT ? id / CITY_MAP_SPRITES_PER_ZOOM :
       (id - MAP_LANDSCAPE_SPRITE_FIRST) / MAP_LANDSCAPE_SPRITES_PER_ZOOM;
-  u16 reference = ResolveSpriteVariant(assets->sprite_variants, index, level, assets->sprite_index_lookup[index]);
-  int source = (reference & CITY_SPRITE_HEADER_MASK) - 1;
-  const CityLandscapeSprite *art = &assets->landscape[source];
-  bool flipped = ((reference ^ assets->sprite_index_lookup[source]) & CITY_SPRITE_HEADER_FLIPPED) != 0;
-  return InstallLandscapeSprite(cache, id, art->sprite, art->scale * scale, art->baseline, art->offset_x, flipped);
+  LandscapeSpriteSource source = GetResourceSpriteVariant(assets, index, level, true);
+  const CityLandscapeSprite *art = source.artwork;
+  return InstallLandscapeSprite(cache, id, art->sprite, art->scale * scale, art->baseline, art->offset_x,
+      source.flipped);
 }
 
 bool InstallDrawingMapSpriteSources(Drawing *drawing, const CityAssets *assets) {
-  FreeMapSpriteCache(&drawing->sprite_cache);
-  drawing->sprite_cache.assets = assets;
+  MapSpriteCache *cache = &drawing->sprite_cache;
+  FreeMapSpriteCache(cache);
+  cache->assets = assets;
   for (int id = 0; id < CITY_MAP_SPRITE_COUNT; ++id) {
     int slot = id % CITY_MAP_SPRITES_PER_ZOOM;
     int resource = slot < assets->map_tile_sprite_count ? TileSpriteResourceIndex(assets, slot, 0) : slot;
     const CityLandscapeSprite *landscape = GetResourceSprite(assets, resource);
     if (landscape && landscape->sprite) {
-      if (!InstallResourceSprite(&drawing->sprite_cache, assets, id, resource,
+      if (!InstallResourceSprite(cache, id, resource,
           1 << (2 - id / CITY_MAP_SPRITES_PER_ZOOM))) return false;
     }
   }
   for (int id = CITY_LANDSCAPE_SELECTION_FIRST; id < CITY_LANDSCAPE_SELECTION_END; ++id) {
     const CityLandscapeSprite *selection = &assets->landscape[id];
-    if (!InstallLandscapeSprite(&drawing->sprite_cache,
+    if (!InstallLandscapeSprite(cache,
         MAP_SELECTION_SPRITE_FIRST + id - CITY_LANDSCAPE_SELECTION_FIRST, selection->sprite,
         selection->scale, selection->baseline, 0, false)) return false;
   }
@@ -69,16 +72,16 @@ bool InstallDrawingMapSpriteSources(Drawing *drawing, const CityAssets *assets) 
     for (int slope = 0; slope < MAP_SELECTION_SPRITE_SHAPES; ++slope) {
       const CityLandscapeSprite *water = &assets->landscape[CITY_LANDSCAPE_SLOPED_WATER_FIRST + slope];
       int cached = MAP_SLOPED_WATER_SPRITE_FIRST + zoom * MAP_SELECTION_SPRITE_SHAPES + slope;
-      if (!InstallLandscapeSprite(&drawing->sprite_cache, cached, water->sprite,
+      if (!InstallLandscapeSprite(cache, cached, water->sprite,
           water->scale << (2 - zoom), water->baseline, water->offset_x, false)) return false;
     }
     const CityLandscapeSprite *point = &assets->landscape[CITY_LANDSCAPE_POINT + zoom];
-    if (!InstallLandscapeSprite(&drawing->sprite_cache, MAP_POINT_SPRITE_FIRST + zoom, point->sprite,
+    if (!InstallLandscapeSprite(cache, MAP_POINT_SPRITE_FIRST + zoom, point->sprite,
         point->scale, point->baseline, point->offset_x, false)) return false;
     for (int id = CITY_LANDSCAPE_GROUND_FIRST; id < CITY_LANDSCAPE_POINT; ++id) {
       int cached = MAP_LANDSCAPE_SPRITE_FIRST + zoom * MAP_LANDSCAPE_SPRITES_PER_ZOOM +
           id - CITY_LANDSCAPE_GROUND_FIRST;
-      if (!InstallResourceSprite(&drawing->sprite_cache, assets, cached, id, 1 << (2 - zoom))) return false;
+      if (!InstallResourceSprite(cache, cached, id, 1 << (2 - zoom))) return false;
     }
     for (int id = CITY_LANDSCAPE_RIVER_SIDE_FIRST; id < CITY_LANDSCAPE_SPRITE_COUNT; ++id) {
       int resource = LandscapeSpriteResourceIndex(assets, id);
@@ -86,12 +89,12 @@ bool InstallDrawingMapSpriteSources(Drawing *drawing, const CityAssets *assets) 
       if (!bank || !bank->sprite) continue;
       int cached = MAP_LANDSCAPE_SPRITE_FIRST + zoom * MAP_LANDSCAPE_SPRITES_PER_ZOOM +
           id - CITY_LANDSCAPE_GROUND_FIRST;
-      if (!InstallResourceSprite(&drawing->sprite_cache, assets, cached, resource, 1 << (2 - zoom))) return false;
+      if (!InstallResourceSprite(cache, cached, resource, 1 << (2 - zoom))) return false;
     }
   }
   for (int frame = 0; frame < CITY_DEMOLITION_FRAME_COUNT; ++frame) {
     const CityLandscapeSprite *effect = &assets->demolition[frame];
-    if (!InstallLandscapeSprite(&drawing->sprite_cache,
+    if (!InstallLandscapeSprite(cache,
         MAP_DEMOLITION_SPRITE_FIRST + 2 * CITY_DEMOLITION_FRAME_COUNT + frame, effect->sprite,
         effect->scale, effect->baseline, effect->offset_x, false)) return false;
   }
@@ -193,12 +196,10 @@ static MapSpriteImage SelectMapSpriteImage(const MapSpriteCache *cache, int id, 
     resource = LandscapeSpriteResourceIndex(assets,
         id - MAP_LANDSCAPE_SPRITE_FIRST - 2 * MAP_LANDSCAPE_SPRITES_PER_ZOOM + CITY_LANDSCAPE_GROUND_FIRST);
   } else return image;
-  u16 reference = ResolveSpriteVariant(assets->sprite_variants, resource, 3, 0);
-  if (!reference) return image;
-  int header = (reference & CITY_SPRITE_HEADER_MASK) - 1;
-  const CityLandscapeSprite *art = &assets->landscape[header];
-  return (MapSpriteImage){art->sprite, 100 * art->scale, art->baseline, art->offset_x,
-      ((reference ^ assets->sprite_index_lookup[header]) & CITY_SPRITE_HEADER_FLIPPED) != 0};
+  LandscapeSpriteSource variant = GetResourceSpriteVariant(assets, resource, 3, false);
+  if (!variant.artwork) return image;
+  const CityLandscapeSprite *art = variant.artwork;
+  return (MapSpriteImage){art->sprite, 100 * art->scale, art->baseline, art->offset_x, variant.flipped};
 }
 
 static bool PrepareMapSpriteRange(MapSpriteCache *cache, SpritePreparationWorkspace *workspace,
@@ -307,33 +308,39 @@ static bool PrepareBuildingPreview(SpritePreparationWorkspace *workspace, RunSpr
   return true;
 }
 
-static int MapBuildingPreviewSource(int index) {
-  if (index < CITY_CIVIC_KIND_COUNT * (CITY_CIVIC_VIEWS + 1)) {
+typedef struct {
+  const RunSprite *source;
+  RunSprite **prepared;
+} MapBuildingPreview;
+
+// Pair the source image with its cache-owned output slot for a valid preview index. Neither is changed or retained;
+// preparation and progress weighting share this selection while the cache remains alive and its sources stay fixed.
+static MapBuildingPreview SelectMapBuildingPreview(MapSpriteCache *cache, int index) {
+  int source;
+  RunSprite **prepared;
+  if (index < MAP_CIVIC_PREVIEW_COUNT) {
     int kind = index / (CITY_CIVIC_VIEWS + 1), view = index % (CITY_CIVIC_VIEWS + 1);
+    prepared = &cache->building_previews[kind][view];
     if (kind + CITY_CIVIC_KIND_FIRST == CITY_MAP_TILE_SPRITE_WIND_POWER && view < CITY_CIVIC_VIEWS)
-      return MAP_LANDSCAPE_SPRITE_FIRST + 2 * MAP_LANDSCAPE_SPRITES_PER_ZOOM +
+      source = MAP_LANDSCAPE_SPRITE_FIRST + 2 * MAP_LANDSCAPE_SPRITES_PER_ZOOM +
           CITY_LANDSCAPE_WIND_PREVIEW_FIRST + view - CITY_LANDSCAPE_GROUND_FIRST;
-    return view == CITY_CIVIC_VIEWS ? CITY_SPRITE_CATALOG_LARGE_BASE + CITY_CIVIC_KIND_FIRST + kind :
-        MAP_LANDSCAPE_SPRITE_FIRST + 2 * MAP_LANDSCAPE_SPRITES_PER_ZOOM +
-        CITY_LANDSCAPE_CIVIC_FIRST + kind * CITY_CIVIC_VIEWS + view - CITY_LANDSCAPE_GROUND_FIRST;
+    else
+      source = view == CITY_CIVIC_VIEWS ? CITY_SPRITE_CATALOG_LARGE_BASE + CITY_CIVIC_KIND_FIRST + kind :
+          MAP_LANDSCAPE_SPRITE_FIRST + 2 * MAP_LANDSCAPE_SPRITES_PER_ZOOM +
+          CITY_LANDSCAPE_CIVIC_FIRST + kind * CITY_CIVIC_VIEWS + view - CITY_LANDSCAPE_GROUND_FIRST;
+  } else {
+    int view = index - MAP_CIVIC_PREVIEW_COUNT;
+    prepared = &cache->modern_wind_previews[view];
+    source = MAP_LANDSCAPE_SPRITE_FIRST + 2 * MAP_LANDSCAPE_SPRITES_PER_ZOOM +
+        CITY_LANDSCAPE_WIND_PREVIEW_FIRST + CITY_CIVIC_VIEWS + view - CITY_LANDSCAPE_GROUND_FIRST;
   }
-  int view = index - CITY_CIVIC_KIND_COUNT * (CITY_CIVIC_VIEWS + 1);
-  return MAP_LANDSCAPE_SPRITE_FIRST + 2 * MAP_LANDSCAPE_SPRITES_PER_ZOOM +
-      CITY_LANDSCAPE_WIND_PREVIEW_FIRST + CITY_CIVIC_VIEWS + view - CITY_LANDSCAPE_GROUND_FIRST;
+  return (MapBuildingPreview){cache->base[source], prepared};
 }
 
 static bool PrepareMapBuildingPreview(MapSpriteCache *cache, SpritePreparationWorkspace *workspace,
     int width, int height, const u32 *palette, int index) {
-  RunSprite **prepared;
-  if (index < CITY_CIVIC_KIND_COUNT * (CITY_CIVIC_VIEWS + 1)) {
-    int kind = index / (CITY_CIVIC_VIEWS + 1), view = index % (CITY_CIVIC_VIEWS + 1);
-    prepared = &cache->building_previews[kind][view];
-  } else {
-    int view = index - CITY_CIVIC_KIND_COUNT * (CITY_CIVIC_VIEWS + 1);
-    prepared = &cache->modern_wind_previews[view];
-  }
-  return PrepareBuildingPreview(workspace, prepared, cache->base[MapBuildingPreviewSource(index)],
-      width, height, palette);
+  MapBuildingPreview preview = SelectMapBuildingPreview(cache, index);
+  return PrepareBuildingPreview(workspace, preview.prepared, preview.source, width, height, palette);
 }
 
 // Fit construction previews synchronously. Publish dimensions only after the complete set succeeds;
@@ -352,20 +359,21 @@ static bool PrepareMapBuildingPreviews(MapSpriteCache *cache, int width, int hei
 }
 
 bool PrepareDrawingMapSprites(Drawing *drawing) {
+  MapSpriteCache *cache = &drawing->sprite_cache;
   // Every ordinary zoom, magnified zoom and auxiliary viewport is ready
   // before drawing. Only a display pixel-density change replaces this set.
-  drawing->sprite_cache.pixel_scale = drawing->map_pixel_scale * 100;
+  cache->pixel_scale = drawing->map_pixel_scale * 100;
   MapSpriteRequirements requirements = DrawingMapSpriteRequirements(drawing);
   bool missing = false;
   for (int i = 0; i < requirements.count; ++i)
-    if (FindMapSpriteScale(&drawing->sprite_cache, requirements.scales[i]) < 0) missing = true;
+    if (FindMapSpriteScale(cache, requirements.scales[i]) < 0) missing = true;
   if (missing) {
-    ReleaseMapSpriteScales(&drawing->sprite_cache);
+    ReleaseMapSpriteScales(cache);
     for (int i = 0; i < requirements.count; ++i)
-      if (PrepareMapSpriteScale(&drawing->sprite_cache, requirements.scales[i], drawing->colors) < 0)
+      if (PrepareMapSpriteScale(cache, requirements.scales[i], drawing->colors) < 0)
         return false;
   }
-  return PrepareMapBuildingPreviews(&drawing->sprite_cache,
+  return PrepareMapBuildingPreviews(cache,
       requirements.preview_width, requirements.preview_height, drawing->colors);
 }
 
@@ -379,25 +387,27 @@ typedef struct {
 struct MapSpritePreparation {
   MapSpriteCache *cache;
   MapSpritePreparationWorker workers[MAP_SPRITE_PREPARATION_WORKERS];
-  int scales[MAP_SPRITE_SCALE_COUNT], scale_count, worker_count;
-  int preview_width, preview_height, total, total_work;
+  MapSpriteRequirements requirements; // Immutable sizes shared by workers until they all join.
+  int worker_count, total, total_work;
   u32 palette[256];
   SDL_atomic_t next, completed, cancelled, failed;
 };
 
 static int MapSpritePreparationJobWork(const MapSpritePreparation *preparation, int job) {
+  const MapSpriteRequirements *requirements = &preparation->requirements;
   const RunSprite *source;
   u64 work;
   if (job < MAP_BUILDING_PREVIEW_COUNT) {
-    source = preparation->cache->base[MapBuildingPreviewSource(job)];
+    MapBuildingPreview preview = SelectMapBuildingPreview(preparation->cache, job);
+    source = preview.source;
     if (!source) return 1;
     // Preview fitting traverses source runs before sampling the small output.
     work = 1 + source->stream_size / 1024 + source->height +
-        (u64)preparation->preview_width * preparation->preview_height / 128;
+        (u64)requirements->preview_width * requirements->preview_height / 128;
   } else {
     int map_job = job - MAP_BUILDING_PREVIEW_COUNT;
-    int slot = map_job % preparation->scale_count, id = map_job / preparation->scale_count;
-    int scale = preparation->scales[slot];
+    int slot = map_job % requirements->count, id = map_job / requirements->count;
+    int scale = requirements->scales[slot];
     MapSpriteImage image = SelectMapSpriteImage(preparation->cache, id, scale);
     int divisor = image.divisor;
     source = image.image;
@@ -410,26 +420,27 @@ static int MapSpritePreparationJobWork(const MapSpritePreparation *preparation, 
     }
   }
   // Bound the sum for SDL's integer atomic counter, including very large artwork.
-  int maximum = INT_MAX / preparation->total;
-  return work < maximum ? (int)work : maximum;
+  u32 maximum = INT_MAX / preparation->total;
+  return (int)(work < maximum ? work : maximum);
 }
 
 static int PrepareMapSpritesWorker(void *context) {
   MapSpritePreparationWorker *worker = context;
   MapSpritePreparation *preparation = worker->preparation;
+  const MapSpriteRequirements *requirements = &preparation->requirements;
   while (!SDL_AtomicGet(&preparation->cancelled) && !SDL_AtomicGet(&preparation->failed)) {
     int job = SDL_AtomicAdd(&preparation->next, 1);
     if (job >= preparation->total) break;
     bool ok;
     if (job < MAP_BUILDING_PREVIEW_COUNT) {
       ok = PrepareMapBuildingPreview(preparation->cache, &worker->workspace,
-          preparation->preview_width, preparation->preview_height, preparation->palette, job);
+          requirements->preview_width, requirements->preview_height, preparation->palette, job);
     } else {
       // Start previews first, then interleave scales instead of leaving the
       // most expensive scale and previews at the end of the queue.
       int map_job = job - MAP_BUILDING_PREVIEW_COUNT;
-      int slot = map_job % preparation->scale_count, id = map_job / preparation->scale_count;
-      ok = PrepareMapSpriteRange(preparation->cache, &worker->workspace, slot, preparation->scales[slot],
+      int slot = map_job % requirements->count, id = map_job / requirements->count;
+      ok = PrepareMapSpriteRange(preparation->cache, &worker->workspace, slot, requirements->scales[slot],
           preparation->palette, id, 1);
     }
     if (!ok) { SDL_AtomicSet(&preparation->failed, 1); break; }
@@ -443,10 +454,8 @@ bool StartMapSpritePreparation(Drawing *drawing, MapSpriteRequirements requireme
   MapSpriteCache *cache = &drawing->sprite_cache;
   const int *scales = requirements.scales;
   int count = requirements.count;
-  int preview_width = requirements.preview_width, preview_height = requirements.preview_height;
-  const u32 *palette = drawing->colors;
   if (cache->preparation || count < 1 || count > MAP_SPRITE_SCALE_COUNT ||
-      preview_width <= 0 || preview_height <= 0) return false;
+      requirements.preview_width <= 0 || requirements.preview_height <= 0) return false;
   int maximum = CITY_MAP_MAX_TILE_WIDTH * 100 / (8 << CITY_MAP_ZOOM_LARGE);
   for (int i = 0; i < count; ++i) {
     if (scales[i] < 100 || scales[i] > maximum) return false;
@@ -459,11 +468,8 @@ bool StartMapSpritePreparation(Drawing *drawing, MapSpriteRequirements requireme
   FreeSpritePreparationWorkspace(&cache->preparation_workspace);
   cache->preview_width = cache->preview_height = 0;
   preparation->cache = cache;
-  preparation->scale_count = count;
-  memcpy(preparation->scales, scales, count * sizeof(*scales));
-  memcpy(preparation->palette, palette, sizeof(preparation->palette));
-  preparation->preview_width = preview_width;
-  preparation->preview_height = preview_height;
+  preparation->requirements = requirements;
+  memcpy(preparation->palette, drawing->colors, sizeof(preparation->palette));
   preparation->total = count * MAP_SPRITE_COUNT + MAP_BUILDING_PREVIEW_COUNT;
   for (int job = 0; job < preparation->total; ++job)
     preparation->total_work += MapSpritePreparationJobWork(preparation, job);
@@ -497,9 +503,10 @@ bool FinishMapSpritePreparation(MapSpriteCache *cache, bool cancel) {
   bool ok = !cancel && !SDL_AtomicGet(&preparation->failed) &&
       SDL_AtomicGet(&preparation->completed) == preparation->total_work;
   if (ok) {
-    memcpy(cache->scales, preparation->scales, preparation->scale_count * sizeof(int));
-    cache->preview_width = preparation->preview_width;
-    cache->preview_height = preparation->preview_height;
+    const MapSpriteRequirements *requirements = &preparation->requirements;
+    memcpy(cache->scales, requirements->scales, requirements->count * sizeof(int));
+    cache->preview_width = requirements->preview_width;
+    cache->preview_height = requirements->preview_height;
   }
   cache->preparation = NULL;
   free(preparation);

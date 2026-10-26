@@ -7,6 +7,7 @@
 #include "drawing/maps/map_view.h"
 #include "drawing/raster/canvas_primitives.h"
 #include "drawing/raster/canvas_raster_internal.h"
+#include "drawing/startup.h"
 #include "drawing/state.h"
 #include "game/state.h"
 #include "ui/map_views.h"
@@ -395,15 +396,6 @@ i32 Sc2kCanvasDesktopOpen(CityCanvasDesktop *desktop, Window window) {
   return index;
 }
 
-bool AttachCityWindowCallback(Window *window, CityWindowCallback *callback, void *context) {
-  if (!callback) return false;
-  CityWindowCompletion *completion = malloc(sizeof(*completion));
-  if (!completion) return false;
-  *completion = (CityWindowCompletion){window->completion, callback, context};
-  window->completion = completion;
-  return true;
-}
-
 // The record has left the stack. Its owned data stays alive through WINDOW_DESTROY.
 static void ReleaseClosedCityWindow(CityCanvasDesktop *desktop, Window *window) {
   if (desktop->game && desktop->interface->button_feedback.window_id == window->window_id)
@@ -411,12 +403,7 @@ static void ReleaseClosedCityWindow(CityCanvasDesktop *desktop, Window *window) 
   if (desktop->input_capture_window == window->window_id) desktop->input_capture_window = 0;
   if (desktop->hover_window == window->window_id) desktop->hover_window = 0;
   if (desktop->game) SendWindowEvent(desktop->game, window, &(WindowEvent){.kind = WINDOW_DESTROY});
-  while (window->completion) {
-    CityWindowCompletion *completion = window->completion;
-    window->completion = completion->next;
-    completion->next = desktop->interface->closed_windows;
-    desktop->interface->closed_windows = completion;
-  }
+  DeferCityWindowCallbacks(desktop, window);
   if (window->command_error && window->city && window->city->game->ui->error_tile_window == window->window_id) {
     SetCityErrorTile(window->city->game, INVALID_TILE);
     window->city->game->ui->error_tile_window = 0;
@@ -436,30 +423,6 @@ static void ReleaseClosedCityWindow(CityCanvasDesktop *desktop, Window *window) 
     CityInterfaceState *ui = desktop->interface;
     window->advisor_question->next = ui->closed_advisor_questions;
     ui->closed_advisor_questions = window->advisor_question;
-  }
-}
-
-void CompleteCityWindowCallbacks(City *city) {
-  if (city->game->command_depth) return;
-  CityInterfaceState *ui = city->game->ui;
-  while (ui->closed_windows) {
-    CityWindowCompletion *closed = ui->closed_windows, *pending = NULL;
-    ui->closed_windows = NULL;
-    // Resume in dismissal order, including windows closed together by replacement.
-    while (closed) {
-      CityWindowCompletion *next = closed->next;
-      closed->next = pending;
-      pending = closed;
-      closed = next;
-    }
-    while (pending) {
-      CityWindowCompletion *next = pending->next;
-      CityWindowCallback *callback = pending->callback;
-      void *context = pending->context;
-      free(pending);
-      callback(city, context);
-      pending = next;
-    }
   }
 }
 
@@ -837,7 +800,8 @@ static void PaintInactiveCityScreen(CityRect rect, void *context) {
   Drawing *drawing = city->drawing;
   Canvas canvas = drawing->framebuffer;
   canvas.clip = rect;
-  DrawCityStartupBackdrop(city->game, &canvas, rect);
+  if (!DrawCityStartupBackdrop(&city->game->resources->intro, &canvas, rect))
+    city->game->execution_failed = true;
   CompositeCityScreenDamage(rect, context);
 }
 

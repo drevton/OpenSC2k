@@ -14,10 +14,18 @@
 #include "city/infrastructure/highways.h"
 #include "city/infrastructure/power_lines.h"
 #include "city/engine/commands.h"
-#include "city/maps/layers.h"
+#include "city/maps/water.h"
+#include "city/maps/map.h"
 #include "city/presentation.h"
 #include "city/state.h"
 #include "city/tools/tools.h"
+
+#include <assert.h>
+
+// Surcharge classification used by construction; indexed by the decoded low four slope bits.
+static const u8 kLineTerrainSurchargeBySlope[16] = {
+  0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0
+};
 
 const u8 kLineTerrainOverrideBySlope[16] = {
   0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0
@@ -44,16 +52,19 @@ const u8 kLineHorizontalConnectionAllowed[256] = {
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 21, 21, 20, 1, 1, 1, 1, 1, 1, 1, 2, 3, 4, 5, 23, 22
 };
 
-const u8 kLineTerrainElevationDelta[16] = {
+// Expected rise when the tracer leaves each slope.
+static const u8 kLineTerrainElevationDelta[16] = {
   0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 0, 0
 };
 
-const u16 kInfrastructureTerrainByDirection[64] = {
+// Grading codes indexed by four times slope plus direction. Keep the full-width terrain values.
+static const u16 kInfrastructureTerrainByDirection[64] = {
   0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 256, 256, 1, 1, 256, 256, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
   0, 2, 1, 2, 1, 2, 3, 2, 3, 4, 3, 4, 3, 4, 1, 4, 1, 0, 0, 1, 6, 0, 0, 7, 11, 1, 9, 1, 10
 };
 
-const u8 kLineTerrainDirectionAllowed[64] = {
+// Nonzero blocks travel for the slope/direction pair; indexed by four times slope plus direction.
+static const u8 kLineTerrainDirectionBlocked[64] = {
   0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
   0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 1, 0, 2, 0, 1, 0
 };
@@ -91,7 +102,10 @@ int CityLineDirection(int x, int y, int end_x, int end_y) {
   return end_y >= y ? CITY_LINE_SOUTH : CITY_LINE_NORTH;
 }
 
-const CityInfrastructureDefinition kCityInfrastructure[CITY_INFRASTRUCTURE_COUNT] = {
+// Prepared placement stage and unit charge for each admitted infrastructure family.
+static const struct {
+  u8 stage, unit_cost;
+} kCityInfrastructure[CITY_INFRASTRUCTURE_COUNT] = {
   [CITY_INFRASTRUCTURE_ROAD] = {CITY_PLACEMENT_ROAD, 10},
   [CITY_INFRASTRUCTURE_RAIL] = {CITY_PLACEMENT_RAIL, 25},
   [CITY_INFRASTRUCTURE_POWER] = {CITY_PLACEMENT_POWER, 2},
@@ -256,8 +270,8 @@ bool CityLineCellAlreadyBuilt(const City *city, TileIndex tile, int stage) {
   return false;
 }
 
-// Validate the starting cell and prepare line endpoints and bounds. Requires writable initialized stage state and
-// candidate endpoints; returns false when no admitted starting route can be prepared.
+// Validate the starting cell in a complete native map and prepare line endpoints and bounds. Coordinates and stage
+// must be valid. Failure leaves the supplied state unchanged; success installs endpoints, direction and bounds.
 bool PrepareCityLine(const City *city, CityConstructionState *state, int x, int y, int end_x, int end_y) {
   const TileIndex tile_index = MapTileXY(city, x, y);
   const TileInfo *tp = &city->tile[tile_index];
@@ -271,12 +285,10 @@ bool PrepareCityLine(const City *city, CityConstructionState *state, int x, int 
         state->stage == CITY_PLACEMENT_ROAD ? TK_ROAD : TK_RAIL, direction & 1))
       return false;
   } else if (state->stage <= CITY_PLACEMENT_POWER) {
-    int terrain_code = ReadLegacyTerrainCode(city, tile_index);
-    if (((city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) &&
-            HasTileWater(tp)) ||
+    if (((city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) && HasTileWater(tp)) ||
         kind == TK_HIGHWAY_ENTRANCE || IsTileKindMultiHighway(kind) ||
         kind == TK_SUBWAY_TO_RAIL || IsTileKindBuilding(kind) ||
-        (terrain_code >= CITY_TERRAIN_WATER_FIRST && terrain_code < CITY_TERRAIN_BANK_32) || kind == TK_PARK)
+        ReadCityWaterGroundKind(tp) == TK_WATER || kind == TK_PARK)
       return false;
   }
   if (state->stage != CITY_PLACEMENT_PIPE && state->stage != CITY_PLACEMENT_SUBWAY &&
@@ -288,13 +300,14 @@ bool PrepareCityLine(const City *city, CityConstructionState *state, int x, int 
   state->endpoint_y = end_y;
   state->endpoint_x = end_x;
   state->direction = direction;
-  int terrain_code = ReadLegacyTerrainCode(city, tile_index);
+  int land_shape = ReadTerrainCode(tp);
+  // A dry cardinal slope constrains the initial direction.
   if (!CityLineCellAlreadyBuilt(city, tile_index, state->stage) &&
-      terrain_code != CITY_TERRAIN_FLAT && terrain_code <= CITY_TERRAIN_SHAPE_4) {
-    int terrain = 4 * (terrain_code & CITY_TERRAIN_SHAPE_MASK);
-    if (kLineTerrainDirectionAllowed[state->direction + terrain] != 0) {
+      land_shape != CITY_TERRAIN_FLAT && land_shape <= CITY_TERRAIN_SHAPE_4 && !HasTileWater(tp)) {
+    int slope_offset = 4 * land_shape;
+    if (kLineTerrainDirectionBlocked[state->direction + slope_offset] != 0) {
       state->direction = CityLineTerrainDirection(x, y, state->endpoint_x, state->endpoint_y);
-      if (kLineTerrainDirectionAllowed[state->direction + terrain] != 0) {
+      if (kLineTerrainDirectionBlocked[state->direction + slope_offset] != 0) {
         state->endpoint_y = y;
         state->endpoint_x = x;
       }
@@ -307,8 +320,8 @@ bool PrepareCityLine(const City *city, CityConstructionState *state, int x, int 
   return true;
 }
 
-// Advance an infrastructure line, respecting terrain and existing tiles. Requires a prepared stage/end and valid
-// cursor pointers; false stops traversal before an unsuitable next cell is placed.
+// Advance a line over the read-only native map. Requires prepared state and valid cursor pointers.
+// Rejected candidates may retain a direction choice; cursors advance only on success.
 bool AdvanceCityLine(const City *city, CityConstructionState *state, int *x, int *y) {
   if (*y == state->endpoint_y && *x == state->endpoint_x)
     return false;
@@ -319,7 +332,7 @@ bool AdvanceCityLine(const City *city, CityConstructionState *state, int *x, int
       (state->stage == CITY_PLACEMENT_ROAD || state->stage == CITY_PLACEMENT_RAIL);
   bool forced_direction = false;
   if (state->stage < CITY_PLACEMENT_SUBWAY) {
-    forced_direction = ReadCityStraightLineAxis(city, tile_index, 0) == 1 - (state->direction & 1);
+    forced_direction = ReadCityStraightLineAxis(city, tile_index) == 1 - (state->direction & 1);
   } else {
     int underground = tp->underground & CITY_UNDERGROUND_KIND_MASK;
     if (underground != TUK_CLEAR) {
@@ -331,7 +344,6 @@ bool AdvanceCityLine(const City *city, CityConstructionState *state, int *x, int
   if (already_built) forced_direction = false;
   if (under_bridge) forced_direction = true;
 
-  int terrain_code = ReadLegacyTerrainCode(city, tile_index);
   bool underwater_step = false;
   int reuse_direction = CityLineDirection(*x, *y, state->endpoint_x, state->endpoint_y);
   int next_y = *y + kLineYStep[reuse_direction];
@@ -348,54 +360,56 @@ bool AdvanceCityLine(const City *city, CityConstructionState *state, int *x, int
     underwater_step = HasTileWater(tp) || HasTileWater(next_tp);
     if (underwater_step) state->direction = reuse_direction;
   }
-  if (!existing_step && !underwater_step &&
-      (forced_direction || kLineTerrainOverrideBySlope[terrain_code & CITY_TERRAIN_SHAPE_MASK] != 0)) {
-    int elevation = ReadCityLandHeight(tp);
-    next_y = *y + kLineYStep[state->direction];
-    next_x = *x + kLineXStep[state->direction];
-    if (next_y < (i32)state->min_y || next_x < (i32)state->min_x
-        || next_y > (i32)state->max_y || next_x > (i32)state->max_x)
-      return false;
-    next_index = MapTileXY(city, next_x, next_y);
-    next_tp = &city->tile[next_index];
-    int next_terrain_code = ReadLegacyTerrainCode(city, next_index);
-    if (state->stage == CITY_PLACEMENT_RAIL && next_terrain_code != CITY_TERRAIN_FLAT &&
-        ReadCityLandHeight(next_tp) != elevation)
-      return false;
-    if (next_terrain_code < CITY_TERRAIN_BANK_END &&
-        kLineTerrainDirectionAllowed[4 * (next_terrain_code & CITY_TERRAIN_SHAPE_MASK) + state->direction] != 0)
-      return false;
-  } else if (!existing_step && !underwater_step) {
-    int desired_elevation = kLineTerrainElevationDelta[terrain_code & CITY_TERRAIN_SHAPE_MASK] +
-        ReadCityLandHeight(tp);
-    int direction = reuse_direction;
-    int next_terrain_code = ReadLegacyTerrainCode(city, next_index);
-    int next_elevation = ReadCityLandHeight(next_tp);
-    if ((next_terrain_code < CITY_TERRAIN_BANK_END &&
-            kLineTerrainDirectionAllowed[4 * (next_terrain_code & CITY_TERRAIN_SHAPE_MASK) + direction] != 0) ||
-        (kLineTerrainElevationDelta[next_terrain_code & CITY_TERRAIN_SHAPE_MASK] != 0 &&
-            (next_elevation == desired_elevation || next_elevation - desired_elevation == -2)) ||
-        (next_terrain_code == CITY_TERRAIN_FLAT && next_elevation - desired_elevation == -1)) {
-      direction = CityLineTerrainDirection(*x, *y, state->endpoint_x, state->endpoint_y);
-      next_y = *y + kLineYStep[direction];
-      next_x = *x + kLineXStep[direction];
+  if (!existing_step && !underwater_step) {
+    int terrain_code = ReadLegacyTerrainCode(city, tile_index);
+    if (forced_direction || kLineTerrainOverrideBySlope[terrain_code & CITY_TERRAIN_SHAPE_MASK] != 0) {
+      int elevation = ReadCityLandHeight(tp);
+      next_y = *y + kLineYStep[state->direction];
+      next_x = *x + kLineXStep[state->direction];
+      if (next_y < (i32)state->min_y || next_x < (i32)state->min_x
+          || next_y > (i32)state->max_y || next_x > (i32)state->max_x)
+        return false;
       next_index = MapTileXY(city, next_x, next_y);
       next_tp = &city->tile[next_index];
-      next_terrain_code = ReadLegacyTerrainCode(city, next_index);
-      next_elevation = ReadCityLandHeight(next_tp);
+      int next_terrain_code = ReadLegacyTerrainCode(city, next_index);
+      if (state->stage == CITY_PLACEMENT_RAIL && next_terrain_code != CITY_TERRAIN_FLAT &&
+          ReadCityLandHeight(next_tp) != elevation)
+        return false;
       if (next_terrain_code < CITY_TERRAIN_BANK_END &&
-          kLineTerrainDirectionAllowed[4 * (next_terrain_code & CITY_TERRAIN_SHAPE_MASK) + direction] != 0)
+          kLineTerrainDirectionBlocked[4 * (next_terrain_code & CITY_TERRAIN_SHAPE_MASK) + state->direction] != 0)
         return false;
-      if (kLineTerrainElevationDelta[next_terrain_code & CITY_TERRAIN_SHAPE_MASK] != 0 &&
-          (next_elevation == desired_elevation || next_elevation - desired_elevation == -2))
+    } else {
+      int desired_elevation = kLineTerrainElevationDelta[terrain_code & CITY_TERRAIN_SHAPE_MASK] +
+          ReadCityLandHeight(tp);
+      int direction = reuse_direction;
+      int next_terrain_code = ReadLegacyTerrainCode(city, next_index);
+      int next_elevation = ReadCityLandHeight(next_tp);
+      if ((next_terrain_code < CITY_TERRAIN_BANK_END &&
+              kLineTerrainDirectionBlocked[4 * (next_terrain_code & CITY_TERRAIN_SHAPE_MASK) + direction] != 0) ||
+          (kLineTerrainElevationDelta[next_terrain_code & CITY_TERRAIN_SHAPE_MASK] != 0 &&
+              (next_elevation == desired_elevation || next_elevation - desired_elevation == -2)) ||
+          (next_terrain_code == CITY_TERRAIN_FLAT && next_elevation - desired_elevation == -1)) {
+        direction = CityLineTerrainDirection(*x, *y, state->endpoint_x, state->endpoint_y);
+        next_y = *y + kLineYStep[direction];
+        next_x = *x + kLineXStep[direction];
+        next_index = MapTileXY(city, next_x, next_y);
+        next_tp = &city->tile[next_index];
+        next_terrain_code = ReadLegacyTerrainCode(city, next_index);
+        next_elevation = ReadCityLandHeight(next_tp);
+        if (next_terrain_code < CITY_TERRAIN_BANK_END &&
+            kLineTerrainDirectionBlocked[4 * (next_terrain_code & CITY_TERRAIN_SHAPE_MASK) + direction] != 0)
+          return false;
+        if (kLineTerrainElevationDelta[next_terrain_code & CITY_TERRAIN_SHAPE_MASK] != 0 &&
+            (next_elevation == desired_elevation || next_elevation - desired_elevation == -2))
+          return false;
+        if (next_terrain_code == CITY_TERRAIN_FLAT && next_elevation - desired_elevation == -1)
+          return false;
+      }
+      if (state->stage == CITY_PLACEMENT_RAIL && state->direction != direction &&
+          next_terrain_code != CITY_TERRAIN_FLAT)
         return false;
-      if (next_terrain_code == CITY_TERRAIN_FLAT && next_elevation - desired_elevation == -1)
-        return false;
+      state->direction = direction;
     }
-    if (state->stage == CITY_PLACEMENT_RAIL && state->direction != direction &&
-        next_terrain_code != CITY_TERRAIN_FLAT)
-      return false;
-    state->direction = direction;
   }
 
   if (state->stage != CITY_PLACEMENT_ALLOW_MILITARY &&
@@ -413,8 +427,9 @@ bool AdvanceCityLine(const City *city, CityConstructionState *state, int *x, int
           !CanPlaceCityBridgeUnderpass(city, next_index,
               state->stage == CITY_PLACEMENT_ROAD ? TK_ROAD : TK_RAIL,
               state->direction & 1)) return false;
-    } else if (!IsTileKindUnbuilt(kind) && !CityLineCellAlreadyBuilt(city, next_index, state->stage)) {
-      if (ReadCityStraightLineAxis(city, next_index, 0) != 1 - (state->direction & 1))
+    } else if (!IsTileKindUnbuilt(kind) && !existing_step &&
+        !CityLineCellAlreadyBuilt(city, next_index, state->stage)) {
+      if (ReadCityStraightLineAxis(city, next_index) != 1 - (state->direction & 1))
         return false;
     }
   } else {
@@ -423,7 +438,8 @@ bool AdvanceCityLine(const City *city, CityConstructionState *state, int *x, int
     if (tunnel_height == 1 || tunnel_height == 2)
       return false;
     int underground = next_tp->underground & CITY_UNDERGROUND_KIND_MASK;
-    if (underground != TUK_CLEAR && !CityLineCellAlreadyBuilt(city, next_index, state->stage)) {
+    if (underground != TUK_CLEAR && !existing_step &&
+        !CityLineCellAlreadyBuilt(city, next_index, state->stage)) {
       int shape = underground + (state->direction & 1);
       if (shape != TUK_PIPE_NS && shape != TUK_SUBWAY_NS)
         return false;
@@ -434,8 +450,15 @@ bool AdvanceCityLine(const City *city, CityConstructionState *state, int *x, int
   return true;
 }
 
+// Price native land slopes consistently for preview and quote loops. River beds and hydro spillways have no
+// terrain surcharge; bank and ordinary-water tiles use their stored land shape.
+static SC2K_FORCE_INLINE bool HasCityLineTerrainSurcharge(const TileInfo *tp) {
+  return kLineTerrainSurchargeBySlope[ReadTerrainCode(tp)] != 0 &&
+      tp->kind != TK_HYDRO_POWER && ReadCityWaterGroundKind(tp) != TK_RIVER;
+}
+
 // Invalidate the line preview and count terrain surcharge cells.
-bool PrepareCityZonePreview(City *city, TileIndex start, TileIndex end) {
+bool UpdateCityLinePreview(City *city, TileIndex start, TileIndex end) {
   CityPoint from = MapTilePt(city, start), to = MapTilePt(city, end);
   int x = from.x, y = from.y;
   if (PrepareCityLine(city, &city->construction, x, y, to.x, to.y) == 0) return false;
@@ -444,10 +467,8 @@ bool PrepareCityZonePreview(City *city, TileIndex start, TileIndex end) {
   do {
     TileIndex tile = MapTileXY(city, x, y);
     if (!CityLineCellAlreadyBuilt(city, tile, city->construction.stage)) {
-      int terrain_code = ReadLegacyTerrainCode(city, tile);
       ++city->construction.cell_count;
-      if (terrain_code < CITY_TERRAIN_BANK_48 &&
-          kZoneTerrainSurchargeFlags[terrain_code & CITY_TERRAIN_SHAPE_MASK] != 0)
+      if (HasCityLineTerrainSurcharge(&city->tile[tile]))
         ++city->construction.terrain_surcharge_count;
     }
     InvalidateTile(city, tile);
@@ -490,9 +511,7 @@ i64 CalculateCityLineCost(const City *city, TileIndex start, TileIndex end, City
     if (CityLineCellAlreadyBuilt(city, tile, state->stage)) continue;
     ++state->cell_count;
     if (preserve_terrain) continue;
-    int terrain = ReadLegacyTerrainCode(city, tile);
-    if (terrain < CITY_TERRAIN_BANK_48 &&
-        kZoneTerrainSurchargeFlags[terrain & CITY_TERRAIN_SHAPE_MASK]) ++state->terrain_surcharge_count;
+    if (HasCityLineTerrainSurcharge(&city->tile[tile])) ++state->terrain_surcharge_count;
   } while (highway ? AdvanceCityHighwayLine(city, state, &start_point.x, &start_point.y) :
       AdvanceCityLine(city, state, &start_point.x, &start_point.y));
   state->endpoint_x = start_point.x;
@@ -539,6 +558,27 @@ int GetCityLineConnectionCost(const City *city, TileIndex start, TileIndex end, 
   if (highway) start = CityHighwayPlacementAnchor(city, start);
   TileIndex endpoint = MapTileXY(city, plan.endpoint_x, plan.endpoint_y);
   return FindCityBorderConnection(city, start, endpoint, plan.direction, highway) == INVALID_TILE ? 0 : connection_cost;
+}
+
+// Prepare an infrastructure cell's terrain.
+void PrepareInfrastructureTerrainCell(City *city, TileIndex tile_index) {
+  assert(IsMapTileValid(city, tile_index));
+  if (CityLineCellAlreadyBuilt(city, tile_index, city->construction.stage)) return;
+  // Buried networks follow the existing ground; surface grading would reshape hills and water beds.
+  if ((city->fixes & (1ull << CITY_FIX_BURIED_UTILITY_TERRAIN)) &&
+      (city->construction.stage == CITY_PLACEMENT_PIPE || city->construction.stage == CITY_PLACEMENT_SUBWAY)) return;
+  int terrain_code = ReadLegacyTerrainCode(city, tile_index);
+  if (terrain_code >= CITY_TERRAIN_BANK_48)
+    return;
+  int terrain = terrain_code & CITY_TERRAIN_SHAPE_MASK;
+  if (kLineTerrainSurchargeBySlope[terrain] == 0)
+    return;
+  if (kLineTerrainOverrideBySlope[terrain] != 0) {
+    int prepared = kInfrastructureTerrainByDirection[city->construction.direction + 4 * terrain];
+    WriteLegacyCityTerrainCode(city, tile_index, prepared);
+  } else {
+    WriteLegacyCityTerrainCode(city, tile_index, CITY_TERRAIN_SHAPE_13);
+  }
 }
 
 // Advance before placing each cell: advancement updates live construction state consumed by terrain preparation and
@@ -708,7 +748,8 @@ i64 PlaceCityPowerLine(City *city, TileIndex origin_tile) {
 // remain in the family's placement routine. Only diagnostic observers may supply a missing pointer release.
 i64 PlaceCityInfrastructureLine(City *city, CityInfrastructureKind kind, TileIndex tile, TileIndex end) {
   const GameObservation *observer = city->game->observation;
-  if (observer && observer->line_endpoint_input && !city->command_choices.endpoint_supplied && !city->zone_drag_input)
+  if (observer && observer->line_endpoint_input && !city->command_choices.endpoint_supplied &&
+      !city->game->zone_drag_input)
     return observer->line_endpoint_input(city, kind, tile, end);
   switch (kind) {
   case CITY_INFRASTRUCTURE_HIGHWAY:

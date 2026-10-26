@@ -4,7 +4,7 @@
 #include "city/maps/terrain.h"
 #include "city/maps/buildings.h"
 #include "city/maps/layers.h"
-#include "city/saveload/map_format.h"
+#include "city/maps/map_types.h"
 #include "city/state.h"
 #include <string.h>
 
@@ -30,15 +30,17 @@ CityTileInformation ReadCityTileInformation(const City *city, TileIndex tile) {
   information.x = point.x;
   information.y = point.y;
   CityTileGeometry geometry = ReadCityTileGeometry(city, tile);
-  information.density = ReadDensity(city, tile);
-  information.density_history = ReadDensityHistory(city, tile);
-  information.traffic_density = ReadTrafficDensity(city, tile);
-  information.land_value = ReadLandValue(city, tile);
-  information.crime = ReadCrime(city, tile);
-  information.pollution = ReadPollution(city, tile);
-  information.police = ReadPoliceCoverage(city, tile);
-  information.fire = ReadFireCoverage(city, tile);
-  information.building_stage = CityTileCanStoreBuildingStage(&information.cell);
+  const CityHalfMapStatistics *half = &city->half[(point.y >> 1) * (city->map_width >> 1) + (point.x >> 1)];
+  const CityQuarterMapStatistics *quarter = &city->quarter[(point.y >> 2) * (city->map_width >> 2) + (point.x >> 2)];
+  information.density = quarter->density;
+  information.density_history = quarter->density_history;
+  information.traffic_density = half->traffic_density;
+  information.land_value = half->land_value;
+  information.crime = half->crime;
+  information.pollution = half->pollution;
+  information.police = quarter->police_coverage;
+  information.fire = quarter->fire_coverage;
+  information.building_stage = IsTileKindDryBuilding(information.cell.kind);
   int zone = ReadCityZoneKind(&information.cell);
   information.show_traffic = zone == ZONE_NONE &&
       (IsTileKindRoadRoute(kind) || IsTileKindStraightHighwayFamily(kind) || IsTileKindMultiHighway(kind) ||
@@ -159,8 +161,8 @@ void CalculateCityLandUse(const CityStatistics *statistics, u32 acres[CITY_LAND_
     u16 percent[CITY_LAND_USE_COUNT]) {
   // Select the first exclusive upper limit above the statistic; table order is significant.
   static const struct { u8 limit, category; } kLandUseGroups[] = {
-    {TKL_POWER_LINE_EAST_WEST, CITY_LAND_USE_RECREATION},
-    {TKL_ROAD_EAST_WEST, CITY_LAND_USE_POWER},
+    {TSTAT_POWER_LINE, CITY_LAND_USE_RECREATION},
+    {TSTAT_ROAD, CITY_LAND_USE_POWER},
     {TK_RESIDENTIAL_FIRST, CITY_LAND_USE_TRANSPORTATION},
     {TK_GAS_STATION_1X1_1, CITY_LAND_USE_RESIDENTIAL},
     {TK_WAREHOUSE_1X1_2, CITY_LAND_USE_COMMERCIAL},
@@ -205,7 +207,7 @@ void CalculateCityLandUse(const CityStatistics *statistics, u32 acres[CITY_LAND_
   memset(percent, 0, CITY_LAND_USE_COUNT * sizeof(percent[0]));
 
   // These thresholds describe statistic slots. Building slots retain their established IDs after native kind remaps.
-  for (int statistic = TKL_PARK; statistic < TK_COUNT; ++statistic) {
+  for (int statistic = TSTAT_PARK; statistic < TK_COUNT; ++statistic) {
     i32 index = 0;
     while (kLandUseGroups[index].limit <= statistic) {
       if (++index >= kGroupCount)

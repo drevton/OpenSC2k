@@ -1,6 +1,6 @@
 #include <stdio.h>
 
-#include "assets/state.h"
+#include "assets/resource_types.h"
 #include "game/audio.h"
 #include "city/events/news.h"
 #include "city/state.h"
@@ -8,7 +8,6 @@
 #include "game/errors.h"
 #include "game/observation.h"
 #include "game/state.h"
-#include "ui/dialogs/alerts.h"
 #include "ui/dialogs/dialogs.h"
 #include "ui/map.h"
 #include "ui/news/newspaper.h"
@@ -32,8 +31,7 @@ void DestroyCityNewspaperWindow(City *city, CityNewspaperDialog *dialog) {
 
 // Prepare picture state and the ranking prefix before the first paint. The caller retains any opening notice.
 CityNewspaperInitialization BeginCityNewspaperDialog(City *city, CityNewspaperDialog *dialog) {
-  CityResourceState *resources = city->game->resources;
-  if (resources->news_resources_unavailable != 0) {
+  if (!AreCityNewsResourcesAvailable(city)) {
     CityInterfaceState *ui = city->game->ui;
     if (dialog == ui->initializing_newspaper)
       ui->newspaper_closed_during_initialization = true;

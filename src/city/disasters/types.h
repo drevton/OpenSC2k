@@ -69,23 +69,27 @@ typedef struct {
   u16 last_type;
   u16 last_event_slot;
   i16 event_data;
-  i16 tile237_count;
-  i16 tile248_count;
+  // Working event counts, rebuilt during updates and adjusted during spawning/removal.
+  i16 train_count; // Surface and subway engines; car records are not counted.
+  i16 sailboat_count;
   i16 tornado_count;
   i16 monster_count;
-  i16 type1_count;
-  i16 type2_count;
-  i16 type16_count;
-  i16 border_water_count;
+  i16 airplane_count;
+  i16 helicopter_count;
+  i16 maxis_man_count;
+  i16 ship_count;
   u16 border_water_x;
   u16 border_water_y;
   i16 event_decay_ticks;
   u16 event_cleanup_ticks;
 } CityDisasterState;
 
+enum { CITY_OPERATION_PENDING = -2 };
+
 // Explicit operation locals retained across animation boundaries. No C stack
 // or tile snapshot is retained; resumption uses the live City.
-enum { CITY_OPERATION_PENDING = -2 };
+// The active disaster type selects the meaning of phase and the shared working fields;
+// phase codes belong to that effect, rather than one sequence shared by every disaster.
 typedef struct {
   u8 type, phase;
   i16 iteration, attempts;

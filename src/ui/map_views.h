@@ -1,10 +1,9 @@
 #ifndef SC2K_UI_MAP_VIEWS_H
 #define SC2K_UI_MAP_VIEWS_H
 
-#include "drawing/maps/map_camera.h"
+#include "city/types.h"
 
 typedef struct Game Game;
-typedef struct RoadCar RoadCar;
 typedef struct CityExtraMapView CityExtraMapView;
 typedef struct CityMapPaint CityMapPaint;
 typedef struct Window Window;
@@ -32,12 +31,11 @@ CityViewportControl CityViewportControlAt(const Window *window, int x, int y);
 // unless an operation explicitly converts them to desktop pixels.
 void OpenCityMapView(City *city);
 void PublishCityMapChanges(City *city);
-void PublishCityRoadCarDamage(City *city, const RoadCar *previous, const RoadCar *current);
 // Paint the main and extra map views using one shared frame-start scroll source.
-// Requires the prepared main target, collected sprite/effect/placement damage and a scoped paint City.
+// Requires the prepared main target and collected sprite/effect/placement damage. City is borrowed read-only.
 // Main animation replay must be prepared. Restore main camera/target state and disable its paint clip on all returns.
 // Return false on target-binding or retained Game error; do not clear the error or advance live City state.
-bool RenderCityMapViews(City *city);
+bool RenderCityMapViews(const City *city);
 // Synchronous sprite-damage callback. Context is a CityMapPaint; converts map pixels and clips to its window.
 void MarkCityMapSpriteDamage(CityRect rect, void *context);
 void MarkCityMapRect(CityRect rect, void *context);

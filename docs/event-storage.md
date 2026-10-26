@@ -15,6 +15,11 @@ object types; a union exposes each object's payload with meaningful names.
 | 12 | 10 | Object payload |
 | 22 | 2 | Runtime hash next link; omitted from saved records |
 
+The word at offset 2 has two names with distinct roles: `next_slot` links train
+coaches, while `state` stores aircraft/ship stages, disaster-actor state or an
+explosion's disaster type. Simulation and Drawing use the name for that event
+family; the aliases share the same bytes and add no storage.
+
 `CityMapEventMotion` defines the shared sub-tile offset pair once, as two `u8`
 values, each followed by an explicitly reserved zero byte. Ships instead use
 the compact payload below. One legacy unit is
@@ -39,16 +44,6 @@ Ships use all ten payload bytes, with adjacent fields and no packed upper bits:
 | 18 | 2 | Destination Y |
 | 20 | 2 | Destination X |
 
-The home is the entry tile recorded when spawning. Departure uses that ship's
-home, falling back to its current tile if the home is `INVALID_TILE`. Movement,
-interpolation, resizing and stock translation use the ship-specific layout.
-Native saves retain the home in the same 22-byte persistent prefix and reject
-out-of-map home indexes. Stock SC2 files omit the process's shared ship-home
-coordinate, so importing them initializes each home from that ship's current
-tile. Comparison imports use the live stock shared home. Stock export omits
-the per-ship home and zeros the unused ship goal byte. Conversion to an explosion
-clears the ship payload before retaining its movement offsets.
-
 Current positions are always tile indexes. Stock SC2 coordinate
 imports clamp invalid current positions and train next-tile coordinates to the
 map bounds. This is defined malformed-input handling, not a claim of unchanged
@@ -61,22 +56,10 @@ before release and do not continue updating the freed record. Fresh slots,
 including bulldozer slot zero, are cleared before initialization. Map resizing
 reindexes stored tiles for the new row stride, clamping when shrinking.
 
-Stock SC2 imports apply `max(legacy_offset - 1, 0)` once before
-multiplying by 16. This moves positive offsets back by one legacy unit and can
-change tile-crossing timing. Train/subway targets are tile coordinates and are
-excluded. Invalid legacy offsets above 16 are capped to the representable range.
-Comparison state conversion scales units without repeating the subtraction.
-Stock exports divide offsets by 16 (discarding any finer native precision).
-Native SC2K reload restores the 22 persistent bytes into zeroed 24-byte runtime
-records; repeated native save/load does not shift events or repeat the legacy
-offset adjustment.
-
-Stock XTHG and comparison transport remain 40 records of 12 bytes. Shared codecs
-translate complete records explicitly. Their declarations and stock record size
-live in `city/saveload/events_format.h`, independent of the runtime event API.
-`codec.c` privately normalizes stock coordinates and reconstructs base overlays
-after the complete stock record set is decoded. Runtime movement owns native
-hash membership without importing stock overlay stacks.
+Each family initializes fresh records through its named payload fields. Trains
+set `CITY_EVENT_TARGET_TILE` and store next-tile indexes; other families start
+with that bit clear and store sub-tile offsets. The shared target setter handles
+existing records whose payload representation depends on their live type.
 
 Native `XTHG.bin` stores consecutive
 little-endian 22-byte records, including reserved slot zero; its byte length
@@ -90,26 +73,28 @@ are not migrated.
 ## Runtime modules
 
 `movement.c` owns event-pool admission, hash membership, record coordinates,
-the common fixed-point step and stable slot-order updates.
+marker-skipping fixed-point movement and stable slot-order updates.
 It calls family handlers directly. Family handlers use the same pool and move
 records through its membership operations; they do not allocate a second index
 or keep another representation of the City event record.
 
 | Module | Responsibility |
 | --- | --- |
-| `aircraft.c` | Airplane/helicopter spawning, approaches, collisions and flight stages. |
+| `aircraft.c` | Airplane/helicopter spawning, requested air crashes, approaches, collisions and flight stages. |
 | `trains.c` | Train/subway spawning, linked-coach movement, route choice and reversal. |
 | `boats.c` | Ship/sailboat spawning, water admission, travel, arrival and departure. |
-| `disaster_actors.c` | Explosion, monster, tornado and Maxis Man creation and updates. |
+| `disaster_actors.c` | Explosion, monster, tornado and Maxis Man creation and updates, including disaster requests. |
 | `emergency.c` | Available police/fire/military units, warning gates, marker placement and recall. |
 
-`emergency.h` defines resolved service IDs and `CityEmergencyDispatchState`.
-City retains that state in `event_runtime.dispatch`; the nested state and event
-cadence still occupy 308 bytes together. Counts, field widths and one-based unit
-marker arrays are unchanged. Commands validate their payload and TEST admission;
-the emergency module performs dispatch and recall. Native resume serialization
-keeps its field order and widths. Comparison maps the nested members to the same
-named checkpoint fields and stock addresses.
+Disaster dispatch selects and schedules disasters. Mobile actor creation belongs
+to the corresponding event family, including pool admission, payload initialization,
+RNG draws, counters and immediate presentation requests. `disasters/effects.c`
+owns landscape effects and their resumable work; it does not initialize moving
+event records. The existing disaster entry points retain their results and call order.
+
+Emergency dispatch privately creates its stationary markers with zero direction, age and motion.
+Its constructor retains slot-order damage and the event-mode last-slot replacement policy;
+dispatch owns service admission and previous-marker bookkeeping.
 
 Each family keeps its own behavior helpers and lookup tables private. The shared
 event interface exposes the operations used by other modules, including the
@@ -118,20 +103,12 @@ private to `trains.c`; Drawing uses the ordinary four-way infrastructure vectors
 Simulation movement does not import Drawing or UI state. Damage and sound
 requests use the existing direct presentation/Audio interfaces.
 
-Spawner names identify their families (`TrySpawnCityAirplane`,
-`TrySpawnCityHelicopter`, `TrySpawnCityStationTrains` and
-`TrySpawnCityMarinaSailboats`) rather than event or tile numbers. The comparison
-address map retains the former names and source locations as historical aliases.
-
-The module reorganization preserves function behavior, table values, RNG calls,
-dispatcher order and event-record layout. It does not establish runtime
-comparison coverage.
-
 ## Movement contracts
 
 `AdvanceCityMapEventPosition` takes an explicit event-kind speed and eight-way
-heading. `AdvanceCityShipPosition` and `AdvanceCitySailboatPosition` use their own
-step tables and sub-tile periods. At an edge, ship movement unlinks but retains
+heading. `boats.c` privately owns `AdvanceCityShipPosition` and
+`AdvanceCitySailboatPosition`, with their step tables and sub-tile periods.
+Ship route probing and movement share the same step vectors. At an edge, ship movement unlinks but retains
 the event; sailboat movement releases it and excludes the last row and column.
 The caller must account for that difference.
 
@@ -150,13 +127,7 @@ lookups. Event-kind tables use named event initializers. UI asks Drawing for
 airplane bounds in an explicit camera; an unsupported zoom returns empty bounds.
 It does not read sprite tables to decide whether a sound source is visible.
 
-`map_events.h` owns the renderer's event histories and public drawing/bounds
-operations. Family sprite painters are private to the implementation. Unused
-comparison component-paint adapters and the obsolete crawler-piece painter have
-been removed; the native crawler uses one registered sprite.
-
-Random sprite painting advances the supplied paint City's RNG; native frames use
-a City paint copy. `CityMapEventSpriteBounds` is for live nonrandom sprites and
+Random sprite painting uses Drawing's paint RNG without changing City state. `CityMapEventSpriteBounds` is for live nonrandom sprites and
 does not advance RNG on that path. Explosions, monsters and tornadoes use captured
 animation footprints instead, preserving the same frame choices for damage and
 painting.
@@ -189,11 +160,6 @@ and rapids cannot admit a boat. An imported sailing record or a terrain edit
 that leaves a boat on such a surface removes it before its next movement step.
 Fully submerged slopes still have a level water surface and remain navigable.
 
-Small boats retain their separate pier and marina behavior and can pass beneath
-water infrastructure. They do not inherit large ships' drawbridge-clearance
-requirements. Disabling native landscape behavior retains the original sailboat
-water-presence check and RNG sequence for stock comparison.
-
 ## Pool and tile index
 
 The event pool shares the City's map backing allocation. Default capacities
@@ -206,14 +172,6 @@ follow map-area thresholds, including the tool slot:
 | 1,024 × 1,024 | 512 | 12,288 |
 | 2,048 × 2,048 | 1,024 | 24,576 |
 | 4,096 × 4,096 | 2,048 | 49,152 |
-
-A larger imported pool is retained after shrinking a map. The runtime Advanced
-Option **Larger moving-object pool** enables allocating beyond the stock 40
-slots; comparison disables it. Existing high slots continue updating when the
-option is turned off, subject to stock sailboat trimming when disabled.
-The shared stock ship-home pair remains comparison transport; native ships own
-their home tile individually. The option also raises ordinary vehicle caps to
-roughly twice OpenSC2K's map profiles:
 
 | Maximum area | Airplanes | Helicopters | Ships | Sailboats | Trains | Entries at caps |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -234,10 +192,6 @@ budget, so other events cannot consume the reserve indirectly through a new
 vehicle allocation. Admission scans the existing pool without allocating state.
 Each sailboat in a batch checks independently. Expanded mode retains existing
 boats above a reduced profile cap; the cap limits new admission.
-
-Disabling the option restores stock admission caps: 2 airplanes, 1 helicopter,
-1 ship, 4 sailboats and 5 trains, along with the stock 40-slot allocation bound
-and sailboat trimming. Comparison uses this disabled mode.
 
 OpenSC2K's SC2X map profiles use these separate vehicle caps:
 
@@ -292,11 +246,6 @@ map size. Records contain a u16 sprite ID and quarter-tile depth, clip-relative
 i16 pixel coordinates, palette ID, draw flags and opacity. Asset selection,
 projection and car paths are prepared once; replay only resolves cached sprites
 and immutable palettes and blits. Ground retains its existing first pass.
-
-The specialized in-place MSD radix sorter orders indices by depth, then original
-submission index. Equal depths therefore preserve insertion order, including
-construction pieces and smoke. Tiny buckets use direct-key insertion sorting;
-there are no comparison callbacks or second full-size sorting buffers.
 
 Before collecting, rectangles whose physical pixel area times 2^(2-zoom) exceeds
 1,000,000 are bisected along the longer side. Each half reuses the same workspace

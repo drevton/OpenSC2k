@@ -3,18 +3,12 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
 
 #include "base/file.h"
-#include "city/engine/city_name.h"
-#include "city/saveload/file.h"
-#include "city/saveload/path.h"
 #include "city/saveload/runtime.h"
 #include "city/saveload/state.h"
 #include "city/saveload/types.h"
-#include "city/state.h"
 #include "game/observation.h"
-#include "game/state.h"
 
 // Filesystem writes for the complete City Save caller.
 
@@ -33,10 +27,10 @@ struct NativeCitySaveAttempt {
   bool previous_misc_active, previous_misc_owned;
 };
 
-typedef struct {
+struct CitySaveStream {
   FILE *file;
   NativeCitySaveAttempt *attempt;
-} NativeCitySaveStream;
+};
 
 // Retain the first error within a save attempt, or the last error when no attempt exists. File must be valid and any
 // attempt must belong to it; later failures do not replace an attempt's original cause.
@@ -53,7 +47,7 @@ static void RememberSaveIOError(NativeCitySaveAttempt *attempt) {
 
 // Open the active attempt's selected destination, backing it up once when configured. Returns an owned unbuffered
 // stream wrapper or NULL with a retained error. caller_path is observation text, not the host destination.
-void *OpenCitySaveStream(CityFileRuntime *file, const char *caller_path) {
+CitySaveStream *OpenCitySaveStream(CityFileRuntime *file, const char *caller_path) {
   NativeCitySaveAttempt *attempt = file->save_io.attempt;
   if (attempt == NULL || attempt->destination == NULL) {
     RememberSaveError(file, attempt, EINVAL);
@@ -65,7 +59,7 @@ void *OpenCitySaveStream(CityFileRuntime *file, const char *caller_path) {
     return NULL;
   }
   attempt->started = true;
-  NativeCitySaveStream *stream = malloc(sizeof(*stream));
+  CitySaveStream *stream = malloc(sizeof(*stream));
   if (stream == NULL) {
     RememberSaveError(file, attempt, ENOMEM);
     ObserveCityFileIO(file, NATIVE_SAVE_OPEN, 0, 0, ENOMEM, caller_path, (u32)strlen(caller_path));
@@ -88,7 +82,7 @@ void *OpenCitySaveStream(CityFileRuntime *file, const char *caller_path) {
     free(stream);
     return NULL;
   }
-  *stream = (NativeCitySaveStream){output, attempt};
+  *stream = (CitySaveStream){output, attempt};
   ++attempt->open_streams;
   ObserveCityFileIO(file, NATIVE_SAVE_OPEN, 0, 1, 0, caller_path, (u32)strlen(caller_path));
   return stream;
@@ -96,8 +90,7 @@ void *OpenCitySaveStream(CityFileRuntime *file, const char *caller_path) {
 
 // Write a complete byte block and observe the actual write boundary. Requires an open attempt stream and size readable
 // bytes; false retains the first error and any partial output instead of deferring failure until flush.
-bool WriteCitySaveStream(void *stream, const void *bytes, u32 size) {
-  NativeCitySaveStream *output = stream;
+bool WriteCitySaveStream(CitySaveStream *output, const void *bytes, u32 size) {
   errno = 0;
   size_t written = fwrite(bytes, 1, size, output->file);
   i32 error = written == size ? 0 : errno != 0 ? errno : EIO;
@@ -109,8 +102,7 @@ bool WriteCitySaveStream(void *stream, const void *bytes, u32 size) {
 
 // Rewind an open attempt stream to rewrite its header. Returns whether the seek succeeded and retains its failure in
 // the attempt; it does not reset prior errors.
-bool SeekCitySaveStreamStart(void *stream) {
-  NativeCitySaveStream *output = stream;
+bool SeekCitySaveStreamStart(CitySaveStream *output) {
   errno = 0;
   bool success = fseek(output->file, 0, SEEK_SET) == 0;
   i32 error = success ? 0 : errno != 0 ? errno : EIO;
@@ -122,8 +114,7 @@ bool SeekCitySaveStreamStart(void *stream) {
 
 // Close and release a save-stream wrapper, preserving any close error on its attempt. The wrapper becomes invalid and
 // the open-stream count decreases even on failure.
-void CloseCitySaveStream(void *stream) {
-  NativeCitySaveStream *output = stream;
+void CloseCitySaveStream(CitySaveStream *output) {
   errno = 0;
   bool success = fclose(output->file) == 0;
   i32 error = success ? 0 : errno != 0 ? errno : EIO;
@@ -235,25 +226,6 @@ i32 EndCitySaveAttempt(CityFileRuntime *file, NativeCitySaveAttempt *attempt) {
   return error;
 }
 
-// Save using an explicit selected host destination inside a private attempt. Requires an active file operation and
-// valid path; returns true only when serialization and all attempt I/O completed successfully.
-bool SaveCityToDestination(City *city, CityPath *path, const char *destination) {
-  CityFileRuntime *file = city->game->file;
-  if (path == NULL || destination == NULL || destination[0] == 0) {
-    file->save_io.last_error = errno = EINVAL;
-    return false;
-  }
-  NativeCitySaveAttempt *attempt = BeginCitySaveAttempt(file);
-  if (attempt == NULL) return false;
-  if (!SelectCitySaveDestination(file, attempt, destination)) {
-    EndCitySaveAttempt(file, attempt);
-    return false;
-  }
-  bool saved = SaveCityFile(city, path);
-  int error = EndCitySaveAttempt(file, attempt);
-  return saved && !error;
-}
-
 // Read the active save attempt's error, or the last completed attempt's error. File must be initialized; this query
 // neither clears the error nor changes attempt nesting.
 i32 GetCitySaveIOError(const CityFileRuntime *file) {
@@ -266,39 +238,4 @@ i32 GetCitySaveIOError(const CityFileRuntime *file) {
 void FillCitySaveFileError(const CityFileRuntime *file, CityFileExceptionState *exception) {
   exception->cause = CITY_FILE_CAUSE_GENERIC;
   exception->os_error = GetCitySaveIOError(file);
-}
-
-// Accepted save paths
-
-// Derive the City's UTF-8 name from a host filename, stripping a recognized city extension. Path must be terminated;
-// name storage is copied through AssignCityName and does not borrow the path.
-void AssignCityNameFromSavePath(City *city, const char *path) {
-  const char *text = PathFilename(path);
-  int length = strlen(text);
-  const char *extension = strrchr(text, '.');
-  if (extension && (!strcasecmp(extension, ".sc2") || !strcasecmp(extension, ".sc2k")))
-    length = extension - text;
-  AssignCityName(city, length, (const u8 *)text);
-}
-
-// Save a byte-counted host path, optionally deriving the City name, with a file operation when needed. Text must
-// provide length readable bytes; returns success and releases its temporary path/operation before returning.
-bool SaveCityToPath(City *city, const u8 *text, int length, bool rename) {
-  CityFileRuntime operation;
-  bool owns_operation = city->game->file == NULL;
-  if (owns_operation) BeginCityFileOperation(city->game, &operation);
-  CityPath path = {0};
-  bool saved = false;
-  if (!SetCityPathBytes(city->game, &path, length, (const char *)text)) goto cleanup;
-  const char *extension = CityUsesSc2k(city) ? "sc2k" : "sc2";
-  if (!EnsureCitySaveExtension(city->game, &path, extension)) goto cleanup;
-  const char *destination = CityPathText(&path);
-  if (rename) AssignCityNameFromSavePath(city, destination);
-  saved = SaveCityToDestination(city, &path, destination);
-  // Saving may normalize the extension and reallocate path storage.
-  if (saved) SetCityPathBytes(city->game, &city->game->city_path, path.length, CityPathText(&path));
-cleanup:
-  FreeCityPathStorage(&path);
-  if (owns_operation) EndCityFileOperation(&operation);
-  return saved;
 }

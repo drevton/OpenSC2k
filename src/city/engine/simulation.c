@@ -17,6 +17,7 @@
 #include "city/engine/command_types.h"
 #include "city/events/news.h"
 #include "city/maps/tile_storage.h"
+#include "city/maps/map.h"
 #include "city/tools/types.h"
 #include "city/presentation.h"
 #include "city/engine/simulation.h"
@@ -35,14 +36,12 @@
 #include "city/events/events.h"
 #include "city/state.h"
 #include "city/tools/tools.h"
-#include "city/saveload/file.h"
 #include "game/errors.h"
 #include "game/observation.h"
 #include "game/state.h"
-#include "assets/state.h"
 #include "base/text.h"
 
-// Direct commands apply page effects; only the comparison adapter retains a window caller. Edition must be supported;
+// Direct commands apply page effects. Edition must be supported;
 // applies page effects or retains the diagnostic newspaper caller through its observation boundary.
 void SelectCityNewspaperEdition(City *city, int edition) {
   assert(IsCityNewspaperEditionValid(edition));
@@ -147,7 +146,7 @@ const CityTickContinuation *FindCityTickContinuation(const City *city, int token
 i64 BeginCityNewspaperOpening(City *city, int edition) {
   assert(IsCityNewspaperEditionValid(edition));
   city->newspaper.edition_index = edition;
-  bool ended = city->game->resources->news_resources_unavailable != 0;
+  bool ended = !AreCityNewsResourcesAvailable(city);
   CityNewspaperInitialization state = BeginCityNewspaperOpeningPresentation(city, edition);
   return GetGameError(city->game) ? 0 : SuspendCityTick(city,
       (CityTickContinuation){.dialog = CITY_TICK_DIALOG_NEWSPAPER_INITIALIZATION, .edition = edition,
@@ -194,7 +193,7 @@ i64 ResumeCityTick(City *city, int token, bool resume, int answer) {
       FinishCityNewspaperInitialization(city, work.edition);
     return 1;
   } else if (dialog == CITY_TICK_DIALOG_BUDGET) {
-    SetCityCursor(city, CITY_CURSOR_ARROW, 0);
+    SetCityCursor(city, CITY_CURSOR_ARROW, CITY_CURSOR_SELECT);
     result = CompleteCityMonthlyPhase(city, options);
   } else if (dialog == CITY_TICK_DIALOG_ECONOMY_NOTICE) {
     if (work.notice == CITY_NOTICE_ARCOLOGY_EXODUS_BEGUN) {
@@ -405,8 +404,57 @@ static i64 BeginCityMilitaryReward(City *city, u32 options, bool accept) {
 // tail; returns any following pending outcome rather than claiming the full tick finished.
 static i64 CompleteCityPopulationReward(City *city, u32 options) {
   RebuildCityUnlockState(city);
-  SetCityCursor(city, CITY_CURSOR_ARROW, 0);
+  SetCityCursor(city, CITY_CURSOR_ARROW, CITY_CURSOR_SELECT);
   return CheckCityMissionCriteria(city, options);
+}
+
+// Run one bounded batch of the currently scheduled simulation pass. Returns true when no work remains and false when
+// suspended or already running; the cursor and scratch state remain owned by City between calls.
+bool StepCitySimulationWork(City *city) {
+  CitySimulationWork *work = &city->simulation_work;
+  if (!work->phase) return true;
+  if (work->running) return false;
+  work->running = true;
+  bool complete = false;
+  enum { kSectionsPerBatch = 16, kMapBatch = kSectionsPerBatch * CITY_MAP_SECTION_CELL_COUNT,
+      kGrowthBatch = kMapBatch / 16 };
+  if (work->phase == CITY_PHASE_POWER) {
+    complete = StepCityPowerGrid(city, &work->utility, kMapBatch);
+  } else if (work->phase == CITY_PHASE_WATER_NETWORK) {
+    complete = StepCityWaterNetwork(city, &work->utility, kMapBatch);
+  } else if (work->phase == CITY_PHASE_ENVIRONMENT) {
+    complete = StepCityEnvironment(city, &work->environment, 4 * kMapBatch / city->map_width);
+  } else if (work->phase == CITY_PHASE_TRAFFIC_DECAY) {
+    if (!work->cursor) {
+      InvalidateMapLayer(city, CITY_MAP_CHANGE_TRAFFIC_DENSITY);
+      city->indicators.city_traffic = 0;
+    }
+    const int sections = city->map_cell_count / CITY_MAP_SECTION_CELL_COUNT;
+    int end = IntMin(sections, work->cursor + kSectionsPerBatch);
+    u32 total = city->indicators.city_traffic;
+    for (int section = work->cursor; section < end; ++section)
+      total += DecayTrafficDensitySection(city, section);
+    city->indicators.city_traffic = total;
+    work->cursor = end;
+    complete = end == sections;
+  } else if (work->phase >= CITY_PHASE_TILE_SCAN_FIRST && work->phase <= CITY_PHASE_TILE_SCAN_LAST) {
+    int quarter = work->phase - CITY_PHASE_TILE_SCAN_FIRST;
+    int count = IntMin(kGrowthBatch, city->map_cell_count / 16 - work->cursor);
+    ScanCityTileBatch(city, quarter % 4, quarter / 4,
+        work->cursor, count, work->large_city_effect);
+    work->cursor += count;
+    complete = work->cursor == city->map_cell_count / 16;
+  }
+  work->running = false;
+  if (complete) *work = (CitySimulationWork){0};
+  return complete;
+}
+
+// Drain the current simulation pass using its existing working state. Requires a caller outside the pass's running
+// callback; completion clears the pass without scheduling a new one.
+void FinishCitySimulationWork(City *city) {
+  if (city->simulation_work.running) return;
+  while (city->simulation_work.phase) StepCitySimulationWork(city);
 }
 
 // Advance the city clock, run the periodic-year gate, and dispatch the 25-phase step. Uses the immediate-presentation
@@ -428,7 +476,7 @@ i64 AdvanceCitySimulationPhaseWithOptions(City *city, u32 options) {
   city->clock.tick = tick_bits;
   InvalidateCityInformation(city->game, CITY_UPDATE_STATUS);
   AdvanceCityLandscape(city);
-  int month = UpdateCityCalendar(city, tick) % CITY_MONTH_COUNT;
+  UpdateCityCalendar(city, tick);
   if (city->fixes & (1ull << CITY_FIX_DAILY_VALUATION))
     RecalculateCityAssetValue(city);
   int phase = tick % CITY_PHASE_COUNT;
@@ -444,33 +492,57 @@ i64 AdvanceCitySimulationPhaseWithOptions(City *city, u32 options) {
     return GetGameError(city->game) == 0;
   }
 
-  if (phase == CITY_PHASE_MONTHLY_BOOKKEEPING) {
+  // Dispatch one phase; scan cases retain their existing x/y residue order.
+  switch (phase) {
+  case CITY_PHASE_MONTHLY_BOOKKEEPING:
     InvalidateCityInformation(city->game, CITY_UPDATE_STATUS);
     if (city->indicators.year_flag != 0) {
       const GameObservation *observer = city->game->observation;
       if (observer && observer->show_annual_budget) observer->show_annual_budget(city);
       else if (PrepareCityAnnualBudget(city)) {
         if (!city->game->ranked_events_suppressed || IsCityOutcomeNoticeActive(city)) {
-          RefreshBudgetDialogEstimates(city);
+          RefreshCityBudgetEstimates(city);
           if (options & CITY_TICK_DEFER_DIALOGS)
             return GetGameError(city->game) ? 0 : SuspendCityTick(city,
                 (CityTickContinuation){.options = options, .dialog = CITY_TICK_DIALOG_BUDGET});
         }
-        SetCityCursor(city, CITY_CURSOR_ARROW, 0);
+        SetCityCursor(city, CITY_CURSOR_ARROW, CITY_CURSOR_SELECT);
       }
     }
     return CompleteCityMonthlyPhase(city, options);
-  } else if (phase == CITY_PHASE_POWER) {
+  case CITY_PHASE_POWER:
     ScanPowerGridPhase(city);
-  } else if (phase == CITY_PHASE_ENVIRONMENT) {
+    break;
+  case CITY_PHASE_ENVIRONMENT:
     UpdateCityEnvironmentMaps(city);
-  } else if (phase >= CITY_PHASE_TILE_SCAN_FIRST && phase <= CITY_PHASE_TILE_SCAN_LAST) {
-    ScanQuarterCityTiles(city, ((phase - CITY_PHASE_TILE_SCAN_FIRST) % 4), ((phase - CITY_PHASE_TILE_SCAN_FIRST) / 4));
-  } else if (phase == CITY_PHASE_TRAFFIC_DECAY) {
+    break;
+  case CITY_PHASE_TILE_SCAN_Y0_X0:
+  case CITY_PHASE_TILE_SCAN_Y0_X1:
+  case CITY_PHASE_TILE_SCAN_Y0_X2:
+  case CITY_PHASE_TILE_SCAN_Y0_X3:
+  case CITY_PHASE_TILE_SCAN_Y1_X0:
+  case CITY_PHASE_TILE_SCAN_Y1_X1:
+  case CITY_PHASE_TILE_SCAN_Y1_X2:
+  case CITY_PHASE_TILE_SCAN_Y1_X3:
+  case CITY_PHASE_TILE_SCAN_Y2_X0:
+  case CITY_PHASE_TILE_SCAN_Y2_X1:
+  case CITY_PHASE_TILE_SCAN_Y2_X2:
+  case CITY_PHASE_TILE_SCAN_Y2_X3:
+  case CITY_PHASE_TILE_SCAN_Y3_X0:
+  case CITY_PHASE_TILE_SCAN_Y3_X1:
+  case CITY_PHASE_TILE_SCAN_Y3_X2:
+  case CITY_PHASE_TILE_SCAN_Y3_X3: {
+    int scan = phase - CITY_PHASE_TILE_SCAN_FIRST;
+    ScanQuarterCityTiles(city, scan % 4, scan / 4);
+    break;
+  }
+  case CITY_PHASE_TRAFFIC_DECAY:
     DecayTrafficDensity(city);
-  } else if (phase == CITY_PHASE_WATER_NETWORK) {
+    break;
+  case CITY_PHASE_WATER_NETWORK:
     ScanCityWaterNetwork(city);
-  } else if (phase == CITY_PHASE_ECONOMY) {
+    break;
+  case CITY_PHASE_ECONOMY: {
     const GameObservation *observer = city->game->observation;
     if (observer && observer->primary_economy) {
       observer->primary_economy(city);
@@ -487,13 +559,15 @@ i64 AdvanceCitySimulationPhaseWithOptions(City *city, u32 options) {
       }
       FinishCityEconomyPhase(city, notice.milestone);
     }
-  } else if (phase == CITY_PHASE_MISSION_UNLOCK) {
+    break;
+  }
+  case CITY_PHASE_MISSION_UNLOCK: {
     int unlock_index = city->unlocks.disaster_level;
     if (unlock_index >= 0 && unlock_index < CITY_REWARD_UNLOCK_COUNT) {
       u32 unlock_threshold = kDisasterUnlockPopulationThresholds[unlock_index];
       if (unlock_threshold != 0 && unlock_threshold < city->indicators.population) {
         int prior_index = unlock_index;
-        SetCityCursor(city, CITY_CURSOR_REWARDS, 0);
+        SetCityCursor(city, CITY_CURSOR_REWARDS, CITY_CURSOR_SELECT);
         city->unlocks.disaster_level = prior_index + 1;
         if (PrepareRankedCityEvent(city, CITY_NEWS_POPULATION_REWARD, prior_index)) {
           const GameObservation *observer = city->game->observation;
@@ -510,14 +584,19 @@ i64 AdvanceCitySimulationPhaseWithOptions(City *city, u32 options) {
     }
 
     return CheckCityMissionCriteria(city, options);
-  } else if (phase == CITY_PHASE_VIEW_REFRESH) {
+  }
+  case CITY_PHASE_VIEW_REFRESH:
     // Periodic presentation consumes changed tiles without discarding retained pixels.
     RefreshCityMapTiles(city);
     InvalidateCityInformation(city->game, CITY_UPDATE_POPULATION | CITY_UPDATE_INDUSTRY | CITY_UPDATE_HISTORY |
         CITY_UPDATE_FINANCES | CITY_UPDATE_POLICIES);
-  } else if (phase == CITY_PHASE_EVENTS_DISASTERS) {
+    break;
+  case CITY_PHASE_EVENTS_DISASTERS:
     InvalidateCityInformation(city->game, CITY_UPDATE_MAP | CITY_UPDATE_UTILITIES | CITY_UPDATE_NEIGHBORS);
     EvaluateCityProblemsAndRandomDisaster(city);
+    break;
+  default:
+    break;
   }
   return GetGameError(city->game) == 0;
 }
@@ -552,7 +631,7 @@ void SetCityTimerMode(City *city, int mode) {
     if (city->settings.timer_mode == CITY_TIMER_STOPPED)
       SetCityToolsVisible(city->game, 0);
     InitializeCityEmergencyDispatchState(city);
-    PlayCityEventMusicById(city->game, CITY_MUSIC_TRACK_04);
+    MaybePlayCityEventMusic(city->game, CITY_MUSIC_TRACK_04);
     city->settings.timer_mode = CITY_TIMER_EVENT;
     if (city->settings.speed == CITY_SPEED_UNLIMITED)
       city->settings.speed = CITY_SPEED_FAST;
@@ -560,4 +639,21 @@ void SetCityTimerMode(City *city, int mode) {
     SetCityToolsVisible(city->game, 1);
   }
   InvalidateCityInformation(city->game, CITY_UPDATE_STATUS);
+}
+
+// Enable or disable one gameplay-affecting runtime fix. Rejects presentation-only fixes, invalid indices and reserved
+// arguments; TEST has no effects and execution updates City deterministically.
+i64 CmdSetCityFix(City *city, u32 flags, int fix, int enabled, int reserved) {
+  if ((u32)fix >= CITY_FIX_COUNT ||
+      !(CITY_FIX_SIMULATION_MASK & (1ull << fix)) || (u32)enabled > 1 || reserved)
+    return CITY_COMMAND_COST_INVALID;
+  if (flags & CITY_COMMAND_TEST) return 0;
+  if (enabled) city->fixes |= 1ull << fix;
+  else city->fixes &= ~(1ull << fix);
+  if (fix == CITY_FIX_ASSET_VALUES || fix == CITY_FIX_TREATMENT_VALUE ||
+      fix == CITY_FIX_DAILY_VALUATION)
+    RecalculateCityAssetValue(city);
+  if (fix == CITY_FIX_LOADED_CONNECTIONS && enabled)
+    RecountCityIndustryConnections(city);
+  return 1;
 }

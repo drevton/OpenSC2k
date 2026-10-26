@@ -12,13 +12,13 @@
 #include "city/infrastructure/surface_lines.h"
 #include "city/maps/buildings.h"
 #include "city/maps/ground.h"
-#include "city/maps/layers.h"
 #include "city/maps/module.h"
 #include "city/maps/tile_storage.h"
 #include "city/maps/trees.h"
 #include "city/maps/water.h"
 #include "city/saveload/map_format.h"
 #include "city/tools/tools.h"
+#include "city/state.h"
 #include "drawing/maps/map_animation.h"
 #include "drawing/maps/map_vehicles.h"
 #include "drawing/maps/map_depth.h"
@@ -60,7 +60,7 @@ int CityMapSlopeFaceSides(const City *city, TileIndex tile, int shape, int heigh
   return sides;
 }
 
-void DrawCityMapTerrainFace(City *city, TileIndex tile, int zoom, int sprite, int screen_x, int ground_y,
+void DrawCityMapTerrainFace(const City *city, TileIndex tile, int zoom, int sprite, int screen_x, int ground_y,
     int sides) {
   Drawing *drawing = city->drawing;
   if (!IsCityMapGroundPass(drawing)) return;
@@ -83,7 +83,7 @@ void DrawCityMapTerrainFace(City *city, TileIndex tile, int zoom, int sprite, in
 
 // SC2 stores independent cell heights. Close exposed land and water edges
 // with the existing prepared vertical face, one level per blit.
-void DrawCityMapTerrainSkirt(City *city, TileIndex tile, int zoom, int screen_x, int ground_y, int base) {
+void DrawCityMapTerrainSkirt(const City *city, TileIndex tile, int zoom, int screen_x, int ground_y, int base) {
   if (!IsCityMapGroundPass(city->drawing)) return;
   int bottom[2] = {base, base};
   for (int side = 0; side < 2; ++side) {
@@ -114,7 +114,7 @@ static int TerrainTileSprite(const City *city, TileIndex tile, int zoom,
   return CityWaterSprite(city, tile, zoom, geometry);
 }
 
-void DrawCityMapTerrainTile(City *city, TileIndex tile, int zoom, int sprite, int screen_x, int ground_y,
+void DrawCityMapTerrainTile(const City *city, TileIndex tile, int zoom, int sprite, int screen_x, int ground_y,
     const CityTileGeometry *geometry) {
   Drawing *drawing = city->drawing;
   if (!IsCityMapGroundPass(drawing)) return;
@@ -152,7 +152,7 @@ void DrawCityMapTerrainTile(City *city, TileIndex tile, int zoom, int sprite, in
 // Raised tile artwork is deferred, including its baked base. Bridges submit front structures separately.
 static bool IsDepthObjectTile(const City *city, TileIndex tile) {
   const Drawing *drawing = city->drawing;
-  int kind = ReadTile(city, tile);
+  int kind = city->tile[tile].kind;
   if (IsTileKindBareGround(kind) || IsTileKindPlainTransport(kind)) return false;
   if (ReadCityTileClasses(kind) & TCLASS_GROUND_ARTWORK) return false;
   if (IsTileKindBuilding(kind) || kind == TK_PARK)
@@ -167,7 +167,7 @@ static bool IsDepthObjectTile(const City *city, TileIndex tile) {
 }
 
 static bool IsDepthObjectAnchor(const City *city, TileIndex tile) {
-  int kind = ReadTile(city, tile);
+  int kind = city->tile[tile].kind;
   return (!IsTileKindBuilding(kind) && !IsTileKindHighwayBridge(kind) &&
       (!IsTileKindMultiHighway(kind) || IsTileKindHighwayIncline(kind))) ||
       IsCityMapViewFootprintAnchor(city, tile);
@@ -176,15 +176,15 @@ static bool IsDepthObjectAnchor(const City *city, TileIndex tile) {
 static i32 DepthTilePosition(const City *city, TileIndex tile) {
   Drawing *drawing = city->drawing;
   CityPoint point = CityMapViewTilePoint(city, tile);
-  int kind = ReadTile(city, tile), x = point.x * 4096, y = point.y * 4096;
+  int kind = city->tile[tile].kind, x = point.x * 4096, y = point.y * 4096;
   CityTileGeometry geometry = ReadCityTileGeometry(city, tile);
   int height = geometry.surface_height;
   if (IsTileKindBuilding(kind) || kind == TK_PARK) {
-    CityPoint size = GetBuildingFootprintDimensions(kind, CityMapViewOrientation(city, tile));
-    x -= (size.x - 1) * 2048;
-    y += (size.y - 1) * 2048;
+    int size = GetBuildingFootprintSize(kind);
+    x -= (size - 1) * 2048;
+    y += (size - 1) * 2048;
   } else if ((IsTileKindMultiHighway(kind) && !IsTileKindHighwayIncline(kind)) || IsTileKindHighwayBridge(kind)) {
-    CityRect bounds = CityHighwayFootprintBounds(city, tile, &city->tile[0].terrain, sizeof(TileInfo));
+    CityRect bounds = CityHighwayFootprintBounds(city, tile);
     CityPoint a = CityMapCameraPoint(city, CityMapCameraRotation(drawing), bounds.left, bounds.top);
     CityPoint b = CityMapCameraPoint(city, CityMapCameraRotation(drawing), bounds.right - 1, bounds.bottom - 1);
     x = (a.x + b.x) * 2048;
@@ -198,7 +198,7 @@ static i32 DepthTilePosition(const City *city, TileIndex tile) {
 }
 
 // Zooms share tile traversal, visibility, module dispatch and overlays.
-void DrawCityMapTile(City *city, int zoom, TileIndex cell, int screen_x, int screen_y) {
+void DrawCityMapTile(const City *city, int zoom, TileIndex cell, int screen_x, int screen_y) {
   Drawing *drawing = city->drawing;
   const TileInfo *tp = &city->tile[cell];
   if (drawing->map_depth.phase == MAP_DEPTH_COLLECT) {
@@ -255,8 +255,7 @@ void DrawCityMapTile(City *city, int zoom, TileIndex cell, int screen_x, int scr
   int height = geometry.surface_height;
   int ground_y = screen_y - CityMapHeightStep(zoom) * height;
   int kind = tp->kind;
-  u32 classes = kCityTileClasses[kind];
-  const TileModule *module = kCityTileModules[(classes & CITY_TILE_MODULE_MASK) >> CITY_TILE_MODULE_SHIFT];
+  const TileModule *module = TileModuleForClasses(kCityTileClasses[kind]);
   if (drawing->map_depth.phase == MAP_DEPTH_GROUND && IsDepthObjectTile(city, cell)) {
     if (!module->draw_ground || !module->draw_ground(city, cell, zoom, screen_x, ground_y, &geometry))
       DrawCityMapTerrainTile(city, cell, zoom, -1, screen_x, ground_y, &geometry);
@@ -309,7 +308,7 @@ overlay:
 
 // The caller prepares the active map target and logical clip. Both sorted objects and direct ground painting use
 // the same clip-derived tile traversal; no map-size-specific fallback or repaint-from-tile cursor is retained.
-void DrawCityMapSurface(City *city, const CityMapViewConfig *view, int zoom) {
+void DrawCityMapSurface(const City *city, const CityMapViewConfig *view, int zoom) {
   Drawing *drawing = city->drawing;
   drawing->map_depth.bridge_palettes = city->game->resources->bridge_palettes;
   drawing->map_depth.underworld_palettes = city->game->resources->underworld_palettes;

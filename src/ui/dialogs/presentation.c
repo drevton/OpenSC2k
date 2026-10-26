@@ -4,7 +4,6 @@
 
 #include "assets/resource_types.h"
 #include "city/engine/simulation.h"
-#include "city/events/news.h"
 #include "city/presentation.h"
 #include "city/state.h"
 #include "game/commands.h"
@@ -171,12 +170,4 @@ void PresentCityMissionOutcome(City *city, i32 outcome) {
 void PresentCityDisasterUnlockOffer(City *city) {
   const GameObservation *observer = city->game->observation;
   if (observer && observer->present_unlock_offer) observer->present_unlock_offer(city);
-
-}
-
-// Event insertion is game-owned; this leaf presents the selected original edition.
-void PresentRankedCityEvent(City *city, u32 event_code, u32 event_data) {
-  CityNewspaperDialog dialog = {0};
-  dialog.edition_index = city->newspaper.edition_index;
-  RunPausedCityNewspaperDialog(city, &dialog);
 }

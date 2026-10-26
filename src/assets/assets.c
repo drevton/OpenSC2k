@@ -12,12 +12,15 @@
 #include "assets/fonts.h"
 #include "assets/graphics.h"
 #include "assets/resources.h"
-#include "drawing/sprites/sprites.h"
+#include "assets/run_sprite.h"
 #include "base/byte_order.h"
 #include "base/file.h"
 #include "base/text.h"
 
-enum { kArchiveHeaderBytes = 32, kAssetDecodedLimit = 512 * 1024 * 1024 };
+enum {
+  kArchiveHeaderBytes = 32, kArchiveRecordBytes = 24,
+  kAssetDecodedLimit = 512 * 1024 * 1024,
+};
 typedef enum AssetCategory { ASSET_INTRO, ASSET_GRAPHICS, ASSET_AUDIO } AssetCategory;
 typedef struct { AssetCategory category; const char *path; } AssetDescription;
 static const AssetDescription kAssetCatalog[CITY_ASSET_FILE_COUNT] = {
@@ -27,7 +30,7 @@ static const AssetDescription kAssetCatalog[CITY_ASSET_FILE_COUNT] = {
 };
 static const char *const kCategoryNames[] = {"intro", "graphics", "audio"};
 
-AssetOpenResult OpenAssetSource(AssetFile *file, CityAssets *assets, u32 id, const char *root) {
+AssetOpenResult OpenAssetSource(AssetFile *file, const CityAssets *assets, u32 id, const char *root) {
   if (!root) return OpenAssetSpan(file, GetAsset(assets, id));
   char *path = NULL;
   FormatText(&path, "%s/%s", root, kAssetCatalog[id].path);
@@ -73,6 +76,8 @@ void ReleaseCityAssets(CityAssets *assets) {
   ReleaseAssetBlocks(assets);
 }
 
+// SC2KPAK1 stores a compressed index, then consecutive compressed content blocks.
+// Index entries and block descriptors are separate little-endian record arrays.
 static AssetOpenResult LoadAssetArchive(CityAssets *assets, const char *root, AssetCategory category) {
   char *path = NULL;
   FormatText(&path, "%s/%s.sc2assets", root, kCategoryNames[category]);
@@ -80,46 +85,58 @@ static AssetOpenResult LoadAssetArchive(CityAssets *assets, const char *root, As
   free(path);
   if (!file) return errno == ENOENT ? ASSET_OPEN_MISSING : ASSET_OPEN_ERROR;
   struct stat status;
-  u8 header[kArchiveHeaderBytes], index[CITY_ASSET_FILE_COUNT * 48];
+  u8 header[kArchiveHeaderBytes];
+  u8 index[CITY_ASSET_FILE_COUNT * 2 * kArchiveRecordBytes];
   bool valid = !fstat(fileno(file), &status) && status.st_size >= kArchiveHeaderBytes &&
       fread(header, 1, sizeof(header), file) == sizeof(header) && !memcmp(header, "SC2KPAK1", 8);
-  u64 packed = valid ? ReadLE64(header + 8) : 0, size = valid ? ReadLE64(header + 16) : 0;
-  u32 count = valid ? ReadLE32(header + 24) : 0, blocks = valid ? ReadLE32(header + 28) : 0;
-  valid = valid && count > 0 && count <= CITY_ASSET_FILE_COUNT && blocks > 0 && blocks <= count &&
-      packed > 0 && packed <= (u64)status.st_size - kArchiveHeaderBytes && size == 24 * (count + blocks) &&
-      DecodeAssetSection(file, kArchiveHeaderBytes, packed, index, size);
-  u32 previous = 0;
-  for (u32 i = 0; valid && i < count; ++i) {
-    const u8 *entry = index + 24 * i;
+  u64 index_compressed_size = valid ? ReadLE64(header + 8) : 0;
+  u64 index_size = valid ? ReadLE64(header + 16) : 0;
+  u32 entry_count = valid ? ReadLE32(header + 24) : 0, block_count = valid ? ReadLE32(header + 28) : 0;
+  valid = valid && entry_count > 0 && entry_count <= CITY_ASSET_FILE_COUNT &&
+      block_count > 0 && block_count <= entry_count &&
+      index_compressed_size > 0 && index_compressed_size <= (u64)status.st_size - kArchiveHeaderBytes &&
+      index_size == kArchiveRecordBytes * (entry_count + block_count) &&
+      DecodeAssetSection(file, kArchiveHeaderBytes, index_compressed_size, index, index_size);
+  u32 previous_id = 0;
+  for (u32 entry_index = 0; valid && entry_index < entry_count; ++entry_index) {
+    const u8 *entry = index + kArchiveRecordBytes * entry_index;
     u32 id = ReadLE32(entry), block = ReadLE32(entry + 4);
-    valid = id < CITY_ASSET_FILE_COUNT && (!i || id > previous) && block < blocks &&
+    valid = id < CITY_ASSET_FILE_COUNT && (!entry_index || id > previous_id) && block < block_count &&
         kAssetCatalog[id].category == category && !assets->asset_spans[id].data;
-    previous = id;
+    previous_id = id;
   }
-  u64 content = kArchiveHeaderBytes + packed, end = 0;
-  for (u32 block = 0; valid && block < blocks; ++block) {
-    const u8 *record = index + 24 * (count + block);
-    u64 offset = ReadLE64(record), compressed = ReadLE64(record + 8), bytes = ReadLE64(record + 16);
-    valid = offset == end && compressed > 0 && compressed <= (u64)status.st_size - content - end &&
-        bytes > 0 && bytes <= kAssetDecodedLimit;
-    for (u32 i = 0; valid && i < count; ++i) {
-      const u8 *entry = index + 24 * i;
+  u64 content_offset = kArchiveHeaderBytes + index_compressed_size, content_end = 0;
+  // Block offsets are relative to the content area. Entries address bytes inside a decoded block.
+  for (u32 block = 0; valid && block < block_count; ++block) {
+    const u8 *record = index + kArchiveRecordBytes * (entry_count + block);
+    u64 block_offset = ReadLE64(record), compressed_size = ReadLE64(record + 8);
+    u64 decoded_size = ReadLE64(record + 16);
+    valid = block_offset == content_end && compressed_size > 0 &&
+        compressed_size <= (u64)status.st_size - content_offset - content_end &&
+        decoded_size > 0 && decoded_size <= kAssetDecodedLimit;
+    for (u32 entry_index = 0; valid && entry_index < entry_count; ++entry_index) {
+      const u8 *entry = index + kArchiveRecordBytes * entry_index;
       if (ReadLE32(entry + 4) != block) continue;
-      u64 start = ReadLE64(entry + 8), length = ReadLE64(entry + 16);
-      valid = length > 0 && start <= bytes && length <= bytes - start;
+      u64 asset_offset = ReadLE64(entry + 8), asset_size = ReadLE64(entry + 16);
+      valid = asset_size > 0 && asset_offset <= decoded_size && asset_size <= decoded_size - asset_offset;
     }
-    u8 *decoded = valid ? malloc(bytes) : NULL;
-    valid = valid && decoded && DecodeAssetSection(file, content + offset, compressed, decoded, bytes);
-    if (!valid) { free(decoded); break; }
+    u8 *decoded = valid ? malloc(decoded_size) : NULL;
+    valid = valid && decoded &&
+        DecodeAssetSection(file, content_offset + block_offset, compressed_size, decoded, decoded_size);
+    if (!valid) {
+      free(decoded);
+      break;
+    }
+    // Publish only a fully validated block. The preload caller releases earlier blocks if a later step fails.
     assets->asset_blocks[assets->asset_block_count++] = decoded;
-    for (u32 i = 0; i < count; ++i) {
-      const u8 *entry = index + 24 * i;
+    for (u32 entry_index = 0; entry_index < entry_count; ++entry_index) {
+      const u8 *entry = index + kArchiveRecordBytes * entry_index;
       if (ReadLE32(entry + 4) == block)
         assets->asset_spans[ReadLE32(entry)] = (ByteSpan){decoded + ReadLE64(entry + 8), ReadLE64(entry + 16)};
     }
-    end += compressed;
+    content_end += compressed_size;
   }
-  valid = valid && end == (u64)status.st_size - content;
+  valid = valid && content_end == (u64)status.st_size - content_offset;
   if (fclose(file)) valid = false;
   if (valid)
     for (u32 id = 0; id < CITY_ASSET_FILE_COUNT; ++id)

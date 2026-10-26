@@ -10,7 +10,8 @@
 #include "assets/state.h"
 #include "drawing/cursors.h"
 #include "drawing/display.h"
-#include "drawing/maps/map_sprites.h"
+#include "drawing/maps/sprite_cache.h"
+#include "drawing/maps/tables.h"
 #include "drawing/state.h"
 #include "game/state.h"
 #include "ui/sdl.h"
@@ -30,7 +31,7 @@ static bool GraphicsAssetLoadFailure(const char *name) {
 bool LoadApplicationGraphicsAssets(Game *game) {
   CityAssets *assets = game->resources;
   if (!PreloadCityAssetPacks(assets, false)) return false;
-  if (!LoadCityLandscapeAssets(assets)) return GraphicsAssetLoadFailure("landscape");
+  if (!LoadCityLandscapeAssets(assets, kCityMapKindSprites)) return GraphicsAssetLoadFailure("landscape");
   if (!LoadCityDemolitionAssets(assets)) return GraphicsAssetLoadFailure("demolition");
   if (!LoadCityCursorAssets(game, NULL)) return GraphicsAssetLoadFailure("cursors");
   if (!LoadCityMusicButtonAssets(assets, NULL)) return GraphicsAssetLoadFailure("music controls");
@@ -80,6 +81,21 @@ bool PrepareCityScreenBuffer(Game *game, CanvasSDL *display) {
   return true;
 }
 
+bool DrawCityLoadingScreen(Game *game, CanvasSDL *display, CityIntroStage stage,
+    int completed, int total, bool initial) {
+  Drawing *drawing = game->drawing;
+  int width = drawing->framebuffer.width, height = drawing->framebuffer.height;
+  if (!PrepareCityScreenBuffer(game, display) || Sc2kSDLConfigureFramebuffer(display, 100)) return false;
+  Canvas canvas = drawing->framebuffer;
+  initial |= width != canvas.width || height != canvas.height;
+  CityLoadingPaint paint = PaintCityLoadingScreen(&canvas, &game->resources->intro, stage, completed, total, initial);
+  if (paint.failed) game->execution_failed = true;
+  if (game->execution_failed) return false;
+  ClearScreenDamage(&drawing->upload_damage);
+  MarkScreenDirty(&drawing->upload_damage, paint.dirty);
+  return Sc2kSDLPresentFramebuffer(display, &drawing->framebuffer, &drawing->upload_damage, (CityRect){0}) == 0;
+}
+
 bool ScreenshotCityCanvas(const Game *game, const char *path, bool physical) {
   const Drawing *drawing = game->drawing;
   const Canvas *canvas = &drawing->framebuffer;
@@ -87,27 +103,7 @@ bool ScreenshotCityCanvas(const Game *game, const char *path, bool physical) {
   FILE *file = fopen(path, "wb");
   if (file == NULL)
     return false;
-  int step = physical ? 1 : drawing->map_pixel_scale;
-  // Include a final partial logical pixel, but sample only within the physical framebuffer.
-  int output_width = (canvas->width - 1) / step + 1;
-  int output_height = (canvas->height - 1) / step + 1;
-  bool ok = fprintf(file, "P6\n%d %d\n255\n", output_width, output_height) > 0;
-  u8 rgb[256 * 3];
-  for (int y = 0; ok && y < output_height; ++y) {
-    const u32 *row = canvas->pixels + (size_t)y * step * canvas->stride;
-    for (int first = 0; ok && first < output_width;) {
-      int count = IntMin(output_width - first, sizeof(rgb) / 3);
-      for (int x = 0; x < count; ++x) {
-        u32 color = row[(first + x) * step];
-        rgb[3 * x] = color >> 16;
-        rgb[3 * x + 1] = color >> 8;
-        rgb[3 * x + 2] = color;
-      }
-      size_t bytes = count * 3;
-      ok = fwrite(rgb, 1, bytes, file) == bytes;
-      first += count;
-    }
-  }
+  bool ok = WriteDrawingScreenshot(drawing, file, physical);
   return fclose(file) == 0 && ok;
 }
 

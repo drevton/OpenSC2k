@@ -1,3 +1,7 @@
+#include "ui/dialogs/game_options.h"
+
+#include <stdio.h>
+
 #include "assets/state.h"
 #include "audio/state.h"
 #include "city/state.h"
@@ -10,7 +14,7 @@
 #include "ui/windows/windows.h"
 #include "base/text.h"
 
-// Drawing subsystem: game options.
+// UI owns options layouts, hit testing and presentation; setting values stay with their declared owners.
 
 static const u32 kOptionsFace = 0xFF646488, kOptionsLight = 0xFFACACC0, kOptionsDark = 0xFF404064;
 static const u32 kOptionsGold = 0xFFE8B810, kOptionsBlue = 0xFF80C4FC, kOptionsLabel = 0xFFFCB030;
@@ -99,128 +103,107 @@ static int SettingsActionAt(const Game *game, CityRect window, int x, int y) {
 
 enum { OPTIONS_RESOLUTION = 41, OPTIONS_REFRESH, OPTIONS_DRIVER };
 
-#define OW_LEAF(k, ident, width, height, label)                                                    \
+#define OW_LEAF(k, ident, width, height, label) \
   {.kind = k, .id = ident, .min_width = width, .min_height = height, .text = label}
 #define OW_HELP(k, ident, width, height, label, help) \
   {.kind = k, .id = ident, .min_width = width, .min_height = height, .text = label, .tooltip = help}
 #define OW_SPACE(height) OW_LEAF(CITY_WIDGET_SPACER, 0, 0, height, NULL)
-#define OW_CHILDREN(k, width, height, pad, spacing, ...)                                           \
-  {.kind = k,                                                                                      \
-   .min_width = width,                                                                             \
-   .min_height = height,                                                                           \
-   .padding = pad,                                                                                 \
-   .gap = spacing,                                                                                 \
-   .children = (const CityWidget[]){__VA_ARGS__},                                                  \
-   .count = sizeof((const CityWidget[]){__VA_ARGS__}) / sizeof(CityWidget)}
-#define OW_GROUP(height, title, ...)                                                               \
-  {.kind = CITY_WIDGET_GROUP,                                                                      \
-   .min_height = height,                                                                           \
-   .padding = 6,                                                                                   \
-   .text = title,                                                                                  \
-   .children = (const CityWidget[]){__VA_ARGS__},                                                  \
-   .count = sizeof((const CityWidget[]){__VA_ARGS__}) / sizeof(CityWidget)}
-#define OW_VOLUME(name, ident, height)                                                             \
-  OW_CHILDREN(CITY_WIDGET_ROW, 0, height, 0, 0, OW_LEAF(CITY_WIDGET_LABEL, 0, 82, height, name),   \
-              {.kind = CITY_WIDGET_SLIDER,                                                         \
-               .id = ident,                                                                        \
-               .min_width = 180,                                                                   \
-               .min_height = height,                                                               \
-               .fill = 1, \
-               .tooltip = ident == GAME_OPTIONS_SCALE ? \
-                   "Change interface size. Hold Ctrl while dragging for continuous adjustment." : \
-                   ident == GAME_OPTIONS_MUSIC ? "Adjust music volume." : ident == GAME_OPTIONS_MASTER ? \
-                       "Adjust all music and effects together." : "Adjust sound effect volume."})
-static const CityWidget options_tabs = OW_CHILDREN
-(CITY_WIDGET_ROW, 0, 20, 0, 0,
-                                                   {.kind = CITY_WIDGET_BUTTON,
-                                                    .id = GAME_OPTIONS_TAB + GAME_OPTIONS_TAB_GENERAL,
-                                                    .min_width = 60,
-                                                    .min_height = 20,
-                                                    .fill = 1,
-                                                    .text = "General", .tooltip = "General interface and window settings."},
-                                                   {.kind = CITY_WIDGET_BUTTON,
-                                                    .id = GAME_OPTIONS_TAB + GAME_OPTIONS_TAB_GRAPHICS,
-                                                    .min_width = 60,
-                                                    .min_height = 20,
-                                                    .fill = 1,
-                                                    .text = "Graphics", .tooltip = "Graphics, display and font settings."},
-                                                   {.kind = CITY_WIDGET_BUTTON,
-                                                    .id = GAME_OPTIONS_TAB + GAME_OPTIONS_TAB_SOUND,
-                                                    .min_width = 60,
-                                                    .min_height = 20,
-                                                    .fill = 1,
-                                                    .text = "Sound", .tooltip = "Music and sound settings."},
-                                                   {.kind = CITY_WIDGET_BUTTON,
-                                                    .id = GAME_OPTIONS_TAB + GAME_OPTIONS_TAB_ADVANCED,
-                                                    .min_width = 60, .min_height = 20, .fill = 1,
-                                                    .text = "Advanced",
-                                                    .tooltip = "Browse and search individual settings and optional fixes."});
-static const CityWidget options_graphics = OW_CHILDREN
-(
-    CITY_WIDGET_COLUMN, 0, 233, 0, 18,
-    OW_GROUP(121, "Interface", OW_SPACE(6), OW_VOLUME("Interface size", GAME_OPTIONS_SCALE, 28),
-             OW_SPACE(7), OW_HELP(CITY_WIDGET_TOGGLE, GAME_OPTIONS_AUTO, 0, 14, "Auto-detect size",
-                 "Automatically choose an interface size for your display."),
-             OW_SPACE(3), OW_HELP(CITY_WIDGET_TOGGLE, GAME_OPTIONS_BEVELS, 0, 14, "Scale bevels",
-                 "Scale control borders along with the interface."),
-             OW_SPACE(3), OW_HELP(CITY_WIDGET_TOGGLE, GAME_OPTIONS_SPRITE_FONT, 0, 14, "Use traditional sprite font",
-                 "Use the traditional OpenTTD-style sprite font. Turn off for scalable Noto Sans."),
-             OW_SPACE(3), OW_HELP(CITY_WIDGET_TOGGLE, GAME_OPTIONS_FONT_ANTIALIAS, 0, 14, "Anti-alias fonts",
-                 "Smooth scalable font edges. Unavailable with the traditional sprite font.")),
-    OW_GROUP(94, "Display", OW_SPACE(7),
-             OW_LEAF(CITY_WIDGET_LABEL, OPTIONS_RESOLUTION, 0, 12, NULL), OW_SPACE(4),
-             OW_LEAF(CITY_WIDGET_LABEL, OPTIONS_REFRESH, 0, 12, NULL), OW_SPACE(6),
-             OW_HELP(CITY_WIDGET_TOGGLE, GAME_OPTIONS_FULLSCREEN, 0, 14, "Fullscreen",
-                 "Switch between fullscreen and a desktop window."), OW_SPACE(7),
-             OW_LEAF(CITY_WIDGET_LABEL, OPTIONS_DRIVER, 0, 10, NULL)));
-static const CityWidget options_general = OW_CHILDREN
-(
-    CITY_WIDGET_COLUMN, 0, 211, 0, 21,
-    OW_GROUP(84, "Windows", OW_SPACE(11),
-             OW_HELP(CITY_WIDGET_TOGGLE, GAME_OPTIONS_SNAP, 0, 14, "Snap windows",
-                 "Snap windows to nearby window and screen edges while dragging."), OW_SPACE(11),
-             OW_LEAF(CITY_WIDGET_LABEL, 0, 0, 10, "Drag title bars to move windows."), OW_SPACE(8),
-             OW_LEAF(CITY_WIDGET_LABEL, 0, 0, 10, "Nearby window and screen edges snap together.")),
-    OW_GROUP(106, "Controls", OW_SPACE(9),
-             OW_LEAF(CITY_WIDGET_LABEL, 0, 0, 10, "G: Game Options    J: Jazz Jukebox"),
-             OW_SPACE(9), OW_LEAF(CITY_WIDGET_LABEL, 0, 0, 10, "Space: start / pause    B: budget"),
-             OW_SPACE(9), OW_LEAF(CITY_WIDGET_LABEL, 0, 0, 10, "M: map data    O: ordinances"),
-             OW_SPACE(9),
-             OW_LEAF(CITY_WIDGET_LABEL, 0, 0, 10, "Ctrl+0: auto-detect interface size")));
-static const CityWidget options_sound = OW_CHILDREN
-(
-    CITY_WIDGET_COLUMN, 0, 193, 0, 12,
-    OW_GROUP(116, "Volume", OW_SPACE(4), OW_VOLUME("Master", GAME_OPTIONS_MASTER, 24),
-             OW_SPACE(4), OW_VOLUME("Sound effects", GAME_OPTIONS_EFFECTS, 24),
-             OW_SPACE(4), OW_VOLUME("Music", GAME_OPTIONS_MUSIC, 24), OW_SPACE(4),
-             OW_HELP(CITY_WIDGET_TOGGLE, GAME_OPTIONS_AMBIENT_SOUNDS, 0, 14, "Ambient sounds",
-                 "Enable routine vehicle, bird and other background city sounds.")),
-    OW_GROUP(93, "Music set", OW_SPACE(10),
-             OW_LEAF(CITY_WIDGET_LABEL, 0, 0, 10, "OpenMSX - 31 General MIDI tracks"), OW_SPACE(8),
-             OW_LEAF(CITY_WIDGET_LABEL, 0, 0, 10, "OpenMSX authors - GPL version 2"), OW_SPACE(16),
-             OW_CHILDREN(CITY_WIDGET_ROW, 0, 17, 0, 0,
-                         OW_HELP(CITY_WIDGET_BUTTON, GAME_OPTIONS_JUKEBOX, 132, 17, "Jazz Jukebox",
-                 "Open the music player and choose tracks (J)."),
-                         {.kind = CITY_WIDGET_SPACER, .fill = 1})));
+#define OW_CHILDREN(k, width, height, pad, spacing, ...) \
+  {.kind = k, .min_width = width, .min_height = height, .padding = pad, .gap = spacing, \
+      .children = (const CityWidget[]){__VA_ARGS__}, \
+      .count = sizeof((const CityWidget[]){__VA_ARGS__}) / sizeof(CityWidget)}
+#define OW_GROUP(height, title, ...) \
+  {.kind = CITY_WIDGET_GROUP, .min_height = height, .padding = 6, .text = title, \
+      .children = (const CityWidget[]){__VA_ARGS__}, \
+      .count = sizeof((const CityWidget[]){__VA_ARGS__}) / sizeof(CityWidget)}
+#define OW_VOLUME(name, ident, height) \
+  OW_CHILDREN(CITY_WIDGET_ROW, 0, height, 0, 0, \
+      OW_LEAF(CITY_WIDGET_LABEL, 0, 82, height, name), \
+      {.kind = CITY_WIDGET_SLIDER, .id = ident, .min_width = 180, .min_height = height, .fill = 1, \
+          .tooltip = ident == GAME_OPTIONS_SCALE ? \
+              "Change interface size. Hold Ctrl while dragging for continuous adjustment." : \
+              ident == GAME_OPTIONS_MUSIC ? "Adjust music volume." : ident == GAME_OPTIONS_MASTER ? \
+                  "Adjust all music and effects together." : "Adjust sound effect volume."})
+
+static const CityWidget kOptionsTabs = OW_CHILDREN(CITY_WIDGET_ROW, 0, 20, 0, 0,
+    {.kind = CITY_WIDGET_BUTTON, .id = GAME_OPTIONS_TAB + GAME_OPTIONS_TAB_GENERAL,
+        .min_width = 60, .min_height = 20, .fill = 1,
+        .text = "General", .tooltip = "General interface and window settings."},
+    {.kind = CITY_WIDGET_BUTTON, .id = GAME_OPTIONS_TAB + GAME_OPTIONS_TAB_GRAPHICS,
+        .min_width = 60, .min_height = 20, .fill = 1,
+        .text = "Graphics", .tooltip = "Graphics, display and font settings."},
+    {.kind = CITY_WIDGET_BUTTON, .id = GAME_OPTIONS_TAB + GAME_OPTIONS_TAB_SOUND,
+        .min_width = 60, .min_height = 20, .fill = 1,
+        .text = "Sound", .tooltip = "Music and sound settings."},
+    {.kind = CITY_WIDGET_BUTTON, .id = GAME_OPTIONS_TAB + GAME_OPTIONS_TAB_ADVANCED,
+        .min_width = 60, .min_height = 20, .fill = 1,
+        .text = "Advanced", .tooltip = "Browse and search individual settings and optional fixes."});
+
+static const CityWidget kOptionsGraphics = OW_CHILDREN(CITY_WIDGET_COLUMN, 0, 233, 0, 18,
+    OW_GROUP(121, "Interface",
+        OW_SPACE(6), OW_VOLUME("Interface size", GAME_OPTIONS_SCALE, 28),
+        OW_SPACE(7), OW_HELP(CITY_WIDGET_TOGGLE, GAME_OPTIONS_AUTO, 0, 14, "Auto-detect size",
+            "Automatically choose an interface size for your display."),
+        OW_SPACE(3), OW_HELP(CITY_WIDGET_TOGGLE, GAME_OPTIONS_BEVELS, 0, 14, "Scale bevels",
+            "Scale control borders along with the interface."),
+        OW_SPACE(3), OW_HELP(CITY_WIDGET_TOGGLE, GAME_OPTIONS_SPRITE_FONT, 0, 14, "Use traditional sprite font",
+            "Use the traditional OpenTTD-style sprite font. Turn off for scalable Noto Sans."),
+        OW_SPACE(3), OW_HELP(CITY_WIDGET_TOGGLE, GAME_OPTIONS_FONT_ANTIALIAS, 0, 14, "Anti-alias fonts",
+            "Smooth scalable font edges. Unavailable with the traditional sprite font.")),
+    OW_GROUP(94, "Display",
+        OW_SPACE(7), OW_LEAF(CITY_WIDGET_LABEL, OPTIONS_RESOLUTION, 0, 12, NULL),
+        OW_SPACE(4), OW_LEAF(CITY_WIDGET_LABEL, OPTIONS_REFRESH, 0, 12, NULL),
+        OW_SPACE(6), OW_HELP(CITY_WIDGET_TOGGLE, GAME_OPTIONS_FULLSCREEN, 0, 14, "Fullscreen",
+            "Switch between fullscreen and a desktop window."),
+        OW_SPACE(7), OW_LEAF(CITY_WIDGET_LABEL, OPTIONS_DRIVER, 0, 10, NULL)));
+
+static const CityWidget kOptionsGeneral = OW_CHILDREN(CITY_WIDGET_COLUMN, 0, 211, 0, 21,
+    OW_GROUP(84, "Windows",
+        OW_SPACE(11), OW_HELP(CITY_WIDGET_TOGGLE, GAME_OPTIONS_SNAP, 0, 14, "Snap windows",
+            "Snap windows to nearby window and screen edges while dragging."),
+        OW_SPACE(11), OW_LEAF(CITY_WIDGET_LABEL, 0, 0, 10, "Drag title bars to move windows."),
+        OW_SPACE(8), OW_LEAF(CITY_WIDGET_LABEL, 0, 0, 10, "Nearby window and screen edges snap together.")),
+    OW_GROUP(106, "Controls",
+        OW_SPACE(9), OW_LEAF(CITY_WIDGET_LABEL, 0, 0, 10, "G: Game Options    J: Jazz Jukebox"),
+        OW_SPACE(9), OW_LEAF(CITY_WIDGET_LABEL, 0, 0, 10, "Space: start / pause    B: budget"),
+        OW_SPACE(9), OW_LEAF(CITY_WIDGET_LABEL, 0, 0, 10, "M: map data    O: ordinances"),
+        OW_SPACE(9), OW_LEAF(CITY_WIDGET_LABEL, 0, 0, 10, "Ctrl+0: auto-detect interface size")));
+
+static const CityWidget kOptionsSound = OW_CHILDREN(CITY_WIDGET_COLUMN, 0, 193, 0, 12,
+    OW_GROUP(116, "Volume",
+        OW_SPACE(4), OW_VOLUME("Master", GAME_OPTIONS_MASTER, 24),
+        OW_SPACE(4), OW_VOLUME("Sound effects", GAME_OPTIONS_EFFECTS, 24),
+        OW_SPACE(4), OW_VOLUME("Music", GAME_OPTIONS_MUSIC, 24),
+        OW_SPACE(4), OW_HELP(CITY_WIDGET_TOGGLE, GAME_OPTIONS_AMBIENT_SOUNDS, 0, 14, "Ambient sounds",
+            "Enable routine vehicle, bird and other background city sounds.")),
+    OW_GROUP(93, "Music set",
+        OW_SPACE(10), OW_LEAF(CITY_WIDGET_LABEL, 0, 0, 10, "OpenMSX - 31 General MIDI tracks"),
+        OW_SPACE(8), OW_LEAF(CITY_WIDGET_LABEL, 0, 0, 10, "OpenMSX authors - GPL version 2"),
+        OW_SPACE(16), OW_CHILDREN(CITY_WIDGET_ROW, 0, 17, 0, 0,
+            OW_HELP(CITY_WIDGET_BUTTON, GAME_OPTIONS_JUKEBOX, 132, 17, "Jazz Jukebox",
+                "Open the music player and choose tracks (J)."),
+            {.kind = CITY_WIDGET_SPACER, .fill = 1})));
 #undef OW_HELP
 #undef OW_LEAF
 #undef OW_SPACE
 #undef OW_CHILDREN
 #undef OW_GROUP
 #undef OW_VOLUME
-static i32 OptionsLayout(int tab, CityWidgetLayout *out,
-    int left, int top, int right, int bottom) {
-  CityRect b = {left, top, right, bottom};
+
+enum { kOptionsLayoutCapacity = 96 };
+
+// Shared paint/input geometry. On a body-layout failure, retain only the completed tabs.
+static int OptionsLayout(int tab, CityRect b, CityWidgetLayout out[kOptionsLayoutCapacity]) {
   i32 first = Sc2kCanvasWidgetLayout(
-      &options_tabs, (CityRect){b.left + 12, b.top + 23, b.right - 12, b.top + 43}, out, 96);
+      &kOptionsTabs, (CityRect){b.left + 12, b.top + 23, b.right - 12, b.top + 43}, out, kOptionsLayoutCapacity);
   if (first < 0)
     return 0;
   if (tab == GAME_OPTIONS_TAB_ADVANCED) return first;
-  const CityWidget *body = tab == GAME_OPTIONS_TAB_GRAPHICS ? &options_graphics :
-      tab == GAME_OPTIONS_TAB_GENERAL ? &options_general : &options_sound;
+  const CityWidget *body = tab == GAME_OPTIONS_TAB_GRAPHICS ? &kOptionsGraphics :
+      tab == GAME_OPTIONS_TAB_GENERAL ? &kOptionsGeneral : &kOptionsSound;
   i32 rest = Sc2kCanvasWidgetLayout(
       body, (CityRect){b.left + 12, b.top + 63, b.right - 12, b.bottom - 26}, out + first,
-      96 - first);
+      kOptionsLayoutCapacity - first);
   return rest < 0 ? first : first + rest;
 }
 
@@ -440,8 +423,8 @@ void DrawGameOptions(Game *game, Canvas *c, const Window *window) {
     for (int pixel = 0; pixel < 3 + line * 2; ++pixel)
       CanvasFill(c, right - 3 - pixel, bottom - 3 - line * 2 + pixel,
           right - 2 - pixel, bottom - 2 - line * 2 + pixel, kOptionsDark);
-  CityWidgetLayout layout[96];
-  i32 count = OptionsLayout(ui->settings.tab, layout, left, top, right, bottom);
+  CityWidgetLayout layout[kOptionsLayoutCapacity];
+  int count = OptionsLayout(ui->settings.tab, b, layout);
   for (i32 i = 0; i < count; ++i) {
     const CityWidget *widget = layout[i].widget;
     b = layout[i].bounds;
@@ -542,19 +525,13 @@ const char *CityOptionsTooltipAt(const Game *game, const Window *window, int x, 
     case GAME_OPTIONS_PAGE_DOWN: case GAME_OPTIONS_SCROLL_THUMB: return "Scroll the settings list.";
     }
   }
-  CityWidgetLayout layout[96];
-  int count = OptionsLayout(tab, layout, window->bounds.left, window->bounds.top,
-      window->bounds.right, window->bounds.bottom);
+  CityWidgetLayout layout[kOptionsLayoutCapacity];
+  int count = OptionsLayout(tab, window->bounds, layout);
   return CityWidgetTooltipAt(layout, count, x, y);
 }
 
-i32 Sc2kCanvasGameOptionsSliderAt(const CitySettingsBrowser *browser, const Window *w,
-    i32 slider, i32 x, i32 continuous) {
-  if (!browser || !w || w->kind != CITY_CANVAS_GAME_OPTIONS)
-    return GAME_OPTIONS_NONE;
-  CityWidgetLayout layout[96];
-  i32 count = OptionsLayout(browser->tab, layout, w->bounds.left, w->bounds.top,
-      w->bounds.right, w->bounds.bottom);
+// Map a slider within an already prepared layout. Keep this owner-free so hit testing can reuse its geometry.
+static int OptionsSliderAt(const CityWidgetLayout *layout, int count, int slider, int x, int continuous) {
   for (i32 i = 0; i < count; ++i)
     if (layout[i].widget->kind == CITY_WIDGET_SLIDER && layout[i].widget->id == slider) {
       CityRect b = layout[i].bounds;
@@ -572,6 +549,15 @@ i32 Sc2kCanvasGameOptionsSliderAt(const CitySettingsBrowser *browser, const Wind
   return GAME_OPTIONS_NONE;
 }
 
+i32 Sc2kCanvasGameOptionsSliderAt(const CitySettingsBrowser *browser, const Window *w,
+    i32 slider, i32 x, i32 continuous) {
+  if (!browser || !w || w->kind != CITY_CANVAS_GAME_OPTIONS)
+    return GAME_OPTIONS_NONE;
+  CityWidgetLayout layout[kOptionsLayoutCapacity];
+  int count = OptionsLayout(browser->tab, w->bounds, layout);
+  return OptionsSliderAt(layout, count, slider, x, continuous);
+}
+
 i32 Sc2kCanvasGameOptionsActionAt(const Game *game, const Window *w,
     i32 x, i32 y, i32 continuous) {
   const DrawingOptions *options = &game->drawing->options;
@@ -584,13 +570,12 @@ i32 Sc2kCanvasGameOptionsActionAt(const Game *game, const Window *w,
     return GAME_OPTIONS_CLOSE;
   if (x >= w->bounds.right - 11 && x < w->bounds.right && y >= w->bounds.top && y < w->bounds.top + 14)
     return GAME_OPTIONS_RESET_SIZE;
-  CityWidgetLayout layout[96];
-  i32 count = OptionsLayout(browser->tab, layout, w->bounds.left, w->bounds.top,
-      w->bounds.right, w->bounds.bottom);
+  CityWidgetLayout layout[kOptionsLayoutCapacity];
+  int count = OptionsLayout(browser->tab, w->bounds, layout);
   i32 id = Sc2kCanvasWidgetHit(layout, count, x, y);
   if (!id && browser->tab == GAME_OPTIONS_TAB_ADVANCED) id = SettingsActionAt(game, w->bounds, x, y);
   if (id == GAME_OPTIONS_FONT_ANTIALIAS && options->sprite_font) return GAME_OPTIONS_NONE;
   if (id == GAME_OPTIONS_SCALE || id == GAME_OPTIONS_MUSIC || id == GAME_OPTIONS_EFFECTS || id == GAME_OPTIONS_MASTER)
-    return Sc2kCanvasGameOptionsSliderAt(browser, w, id, x, continuous);
+    return OptionsSliderAt(layout, count, id, x, continuous);
   return id;
 }

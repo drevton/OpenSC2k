@@ -68,14 +68,20 @@ void SetCityCtrlKeyPressed(CityInterfaceState *ui, bool pressed);
 void SetCityBorderConnectionAnswer(CityInterfaceState *ui, bool accept);
 void SetCitySpanChoice(CityInterfaceState *ui, i16 choice);
 
-// Convert SDL logical coordinates to framebuffer pixels, then to the captured window's logical coordinates.
-void CityInterfacePixels(Game *game, const CanvasSDLEvent *event, i32 *x, i32 *y);
+// Return the cached SDL framebuffer pointer when available; otherwise scale the supplied event coordinates
+// by the map pixel scale. Does not poll SDL, modify the event or apply a window's logical-coordinate transform.
+CityPoint CityInterfacePointerPixels(const Game *game, const CanvasSDLEvent *event);
+// Resolve the framebuffer pointer, then convert it into the captured window's logical coordinates.
 CanvasSDLEvent TransformCityInterfaceEvent(Game *game, const CanvasSDLEvent *event);
 void BeginCityCanvasButtonFeedback(Game *game, const CanvasSDLEvent *event);
-void HandleCityCanvasPointerDown(City *city, const CanvasSDLEvent *map_event);
-void HandleCityCanvasPointerMove(City *city, const CanvasSDLEvent *map_event);
-void HandleCityCanvasPointerUp(City *city, const CanvasSDLEvent *event);
-void ScrollCityCanvas(City *city, const CanvasSDLEvent *event);
-void DispatchCityCanvasEvent(City *city, CanvasSDLEvent *event);
+// Synchronous local input for Game's attached City, UI, Drawing and Audio. Events are borrowed for the call;
+// these functions retain gesture state in UI and send only resolved gameplay edits through City commands.
+void HandleCityCanvasPointerDown(Game *game, const CanvasSDLEvent *map_event);
+void HandleCityCanvasPointerMove(Game *game, const CanvasSDLEvent *map_event);
+void HandleCityCanvasPointerUp(Game *game, const CanvasSDLEvent *event);
+void ScrollCityCanvas(Game *game, const CanvasSDLEvent *event);
+// Scope command feedback around dispatch and deferred window completions, restoring the caller's scope.
+// Dispatch may update the writable event when focus loss finishes a captured stroke; it retains no event pointer.
+void DispatchCityCanvasEvent(Game *game, CanvasSDLEvent *event);
 
 #endif

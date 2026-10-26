@@ -5,6 +5,7 @@
 #include "city/saveload/types.h"
 
 typedef struct CityFileInput CityFileInput;
+typedef struct CitySaveStream CitySaveStream;
 
 // Fixed-width native fields. Packet size determines the available prefix.
 // Encode members explicitly in little endian; never serialize native padding.
@@ -50,7 +51,7 @@ bool ApplyCitySaveExtension(City *city, const u8 *bytes, u32 size);
 
 // META: explicit little-endian header followed by the city's UTF-8 name.
 // Bump this number whenever a release breaks the native save layout or meaning.
-enum { CITY_SAVE_FORMAT_VERSION = 3, CITY_SC2K_METADATA_SETTINGS_OFFSET = 24,
+enum { CITY_SAVE_FORMAT_VERSION = 4, CITY_SC2K_METADATA_SETTINGS_OFFSET = 24,
     CITY_SC2K_METADATA_HEADER_SIZE = CITY_SC2K_METADATA_SETTINGS_OFFSET + CITY_SAVE_EXTENSION_SIZE,
     CITY_SC2K_METADATA_LIMIT = CITY_SC2K_METADATA_HEADER_SIZE + 256 };
 
@@ -68,7 +69,12 @@ bool ReadCitySc2kMetadata(CitySc2kMetadata *metadata, const u8 *bytes, u32 size)
 // Decode VERS into owned fixed fields and revision text. Failure clears the output record.
 bool ReadCitySc2kVersion(CityFileVersion *version, const u8 *bytes, u32 size);
 
+// Requires an active file operation. Own temporary archive/metadata storage through its cleanup stack;
+// failures keep partial City writes, while success retains only unknown archive chunks and the native-format marker.
 bool LoadCitySc2k(City *city, CityFileInput *input);
-bool SaveCitySc2k(City *city, void *stream);
+// Finish pending simulation work before staging; reject remaining work, active questions or zone-drag input.
+// Record encoders only read City. Borrow an open save stream through completion; the caller retains close ownership.
+// Failure retains any completed work and any output already written.
+bool SaveCitySc2k(City *city, CitySaveStream *stream);
 
 #endif

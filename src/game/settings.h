@@ -42,6 +42,7 @@ typedef struct {
 } CitySetting;
 extern const int kCitySettingsCount;
 extern const CitySetting kCitySettings[];
+// Live-field reads require an initialized owner and a field matching the descriptor's stored type.
 // defaults selects config defaults for City-owned settings; local presentation values always use their live owners.
 int ReadCitySettingValue(const Game *game, const CitySetting *setting, bool defaults);
 // Write local preference fields only; City-owned descriptors are ignored. The caller applies presentation effects.
@@ -55,15 +56,17 @@ bool RunCitySettingCommand(Game *game, const CitySetting *setting, int value);
 void LoadGameSettings(Game *game);
 // Apply local preferences and gameplay defaults under the existing stock/native-city rules, then queue persistence.
 // A command-line scale override preserves the current automatic/scale values.
+// A later invalid value retains earlier preference updates and makes the configuration unwritable.
 void ApplyGameSettings(Game *game, bool scale_override);
 // Update the in-memory document from current preferences and City defaults, then queue a deferred write.
 // UI changes use this without disk I/O; gameplay settings come from defaults, not the current City.
+// Capture failure retains preceding document edits; changed contents still queue the existing deferred write.
 void StoreGameSettings(Game *game);
 // Apply gameplay defaults through City commands, stopping at the first failed command.
 bool ApplyGameCityDefaults(Game *game);
 bool CopyCitySettingsToDefaults(Game *game);
-// Read/change defaults for future cities without mutating the current City.
-int ReadGameCityDefault(const Game *game, const CitySetting *setting);
+// Change defaults for future cities without mutating the current City.
+// Read defaults through ReadCitySettingValue with defaults set to true.
 bool StoreGameCityDefault(Game *game, const CitySetting *setting, int value);
 // Host seconds: the first poll starts the queued write's delay. Failed writes retain changes for a later retry.
 void PollGameSettings(Game *game, double now);

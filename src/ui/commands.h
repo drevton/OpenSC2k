@@ -2,7 +2,7 @@
 #define SC2K_UI_COMMANDS_H
 
 #include "city/engine/cheats.h"
-#include "city/engine/commands.h"
+#include "city/engine/command_types.h"
 #include "city/types.h"
 
 typedef struct Game Game;

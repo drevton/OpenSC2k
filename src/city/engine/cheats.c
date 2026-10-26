@@ -1,8 +1,8 @@
 #include "city/engine/cheats.h"
 
+#include "base/integer.h"
 #include <string.h>
 
-#include "game/audio.h"
 #include "audio/types.h"
 #include "city/disasters/disasters.h"
 #include "city/economy/budget.h"
@@ -13,6 +13,8 @@
 #include "city/maps/buildings.h"
 #include "city/maps/labels.h"
 #include "city/maps/layers.h"
+#include "city/maps/terrain.h"
+#include "city/maps/tile_storage.h"
 #include "city/maps/map.h"
 #include "city/military.h"
 #include "city/presentation.h"
@@ -59,7 +61,7 @@ static bool BuildCheatHouse(City *city) {
     int height = ReadCityLandHeight(&city->tile[tile]);
     for (int i = 0; i < 3; ++i) {
       const TileInfo *tp = &city->tile[cells[i]];
-      if (!IsFlatDryUnbuiltTile(tp) || ReadUnderground(city, cells[i]) || ReadCityZoneKind(tp) ||
+      if (!IsFlatDryUnbuiltTile(tp) || ReadTileUndergroundKind(tp) || ReadCityZoneKind(tp) ||
           ReadCityLandHeight(tp) != height) available = false;
     }
     if (!available || PlaceSpecialZoneFootprint(city, tile, TK_BED_BREAKFAST_INN, 1) < 0) continue;

@@ -31,7 +31,8 @@ void FreeSpritePreparationWorkspace(SpritePreparationWorkspace *workspace);
 
 // Encoding and fixed image conversion
 
-// Encode borrowed pixels at a positive integer scale; stride is in pixels. Returns one owned reference,
+// Encode borrowed pixels with nearest-neighbor integer expansion; scale must be positive and stride is in pixels.
+// Fractional resizing uses ResampleRunSprite. Returns one owned reference,
 // or NULL for missing pixels, invalid dimensions/stride/scale, packed-size limits or allocation failure.
 RunSprite *EncodeRunSprite(const SpritePixel *pixels, int width, int height, int stride, int scale);
 // Fixed UI images use the same resampler as map sprites. Source is borrowed; the result owns one reference.
@@ -46,7 +47,7 @@ bool CopyRunSpriteRgba(const RunSprite *source, u32 *pixels, int stride,
 
 // One source region prepared at final raster dimensions. Zero-initialize before first use;
 // the slot owns both source and prepared references.
-typedef struct {
+typedef struct SpriteImage {
   RunSprite *source, *prepared;
   CityRect content;
 } SpriteImage;

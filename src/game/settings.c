@@ -33,10 +33,6 @@ static char *GameSettingsPath(const Game *game, const char *filename) {
   return path;
 }
 
-typedef enum GameSettingsTransfer {
-  SETTINGS_VALIDATE, SETTINGS_LOAD, SETTINGS_STORE
-} GameSettingsTransfer;
-
 static const void *CitySettingOwnerAddress(const Game *game, CitySettingOwner owner) {
   switch (owner) {
   case SETTING_GAME: return game;
@@ -47,6 +43,19 @@ static const void *CitySettingOwnerAddress(const Game *game, CitySettingOwner ow
   case SETTING_JUKEBOX: return &game->audio->jukebox;
   }
   return NULL;
+}
+
+// City defaults live in the config document; the fix mask is cached for City initialization and stock imports.
+static int ReadGameCityDefault(const Game *game, const CitySetting *setting) {
+  if (setting->command == CITY_COMMAND_SET_FIX) {
+    bool enabled = (game->default_city_fixes & setting->mask) != 0;
+    return setting->inverted ? !enabled : enabled;
+  }
+  if (game->settings) {
+    ConfigValue value = ReadConfigValue(&game->settings->document, setting->key);
+    if (value.type == CONFIG_INTEGER) return (int)value.integer;
+  }
+  return setting->default_value;
 }
 
 int ReadCitySettingValue(const Game *game, const CitySetting *setting, bool defaults) {
@@ -100,83 +109,142 @@ static void WriteGameSettingDefault(Game *game, const CitySetting *setting, int 
   } else WriteLocalSettingValue(game, setting, value);
 }
 
-static bool TransferGameSettings(Game *game, GameSettingsTransfer mode, bool scale_override) {
-  Config *config = &game->settings->document;
+// Validate the complete document before using its file policy and City defaults. This reads no live owner fields
+// and changes neither the document nor preferences; missing keys retain their descriptor defaults.
+static bool ValidateGameSettings(const Config *config) {
+  for (int i = 0; i < kCitySettingsCount; ++i) {
+    const CitySetting *setting = &kCitySettings[i];
+    ConfigValue value = ReadConfigValue(config, setting->key);
+    if (value.type != CONFIG_MISSING) {
+      if (value.type != CONFIG_INTEGER || value.integer < setting->minimum || value.integer > setting->maximum) {
+        fprintf(stderr, "Invalid configuration value: %s\n", setting->key);
+        return false;
+      }
+    }
+  }
+  ConfigValue save_directory = ReadConfigValue(config, "files.save_directory");
+  if (save_directory.type == CONFIG_INTEGER) return false;
+  ConfigValue soundfont = ReadConfigValue(config, "audio.soundfont");
+  if (soundfont.type == CONFIG_INTEGER) return false;
+  for (int list = 0; list < JUKEBOX_CUSTOM_PROGRAMMES; ++list) {
+    char key[32];
+    snprintf(key, sizeof(key), "music.playlist%d", list + 1);
+    ConfigValue saved = ReadConfigValue(config, key);
+    if (saved.type == CONFIG_INTEGER) return false;
+    JukeboxPlaylist parsed;
+    if (saved.type == CONFIG_STRING && !ParseJukeboxPlaylist(saved.string, &parsed)) return false;
+  }
+  for (int i = 0; i < CITY_KEY_BINDING_CAPACITY; ++i) {
+    char key[32];
+    snprintf(key, sizeof(key), "bindings.slot%d", i + 1);
+    ConfigValue saved = ReadConfigValue(config, key);
+    if (saved.type == CONFIG_INTEGER) return false;
+    CityKeyBinding parsed;
+    if (saved.type == CONFIG_STRING && *saved.string && !ParseCityKeyBinding(saved.string, &parsed)) return false;
+  }
+  return true;
+}
+
+// Apply in descriptor order, checking each value before its write. A later failure retains earlier owner updates;
+// scale overrides skip only the two display values, and missing preserved values come from their live owners.
+static bool ApplyConfiguredGameSettings(Game *game, bool scale_override) {
+  const Config *config = &game->settings->document;
   CityInterfaceState *ui = game->ui;
   CityAudioState *audio = game->audio;
   for (int i = 0; i < kCitySettingsCount; ++i) {
     const CitySetting *setting = &kCitySettings[i];
-    if (mode == SETTINGS_LOAD && scale_override && setting->owner == SETTING_DISPLAY &&
+    if (scale_override && setting->owner == SETTING_DISPLAY &&
         (setting->offset == offsetof(DrawingOptions, automatic) || setting->offset == offsetof(DrawingOptions, scale)))
       continue;
-    if (mode == SETTINGS_STORE) {
-      i64 value = ReadCitySettingValue(game, setting, true);
-      if (!SetConfigInteger(config, setting->key, value, setting->maximum == 1)) return false;
-      continue;
-    }
     i64 value = setting->default_value;
-    if (HasConfigKey(config, setting->key)) {
-      if (!ReadConfigInteger(config, setting->key, &value) ||
-          value < setting->minimum || value > setting->maximum) {
+    ConfigValue configured = ReadConfigValue(config, setting->key);
+    if (configured.type != CONFIG_MISSING) {
+      if (configured.type != CONFIG_INTEGER ||
+          configured.integer < setting->minimum || configured.integer > setting->maximum) {
         fprintf(stderr, "Invalid configuration value: %s\n", setting->key);
         return false;
       }
-    } else if (mode == SETTINGS_LOAD && setting->preserve_initial) {
+      value = configured.integer;
+    } else if (setting->preserve_initial) {
       value = ReadCitySettingValue(game, setting, true);
     }
-    if (mode == SETTINGS_LOAD) WriteGameSettingDefault(game, setting, (int)value);
+    WriteGameSettingDefault(game, setting, (int)value);
   }
-  const char *save_directory = ReadConfigString(config, "files.save_directory");
-  if (HasConfigKey(config, "files.save_directory") && !save_directory) return false;
-  if (mode == SETTINGS_STORE && !save_directory && !SetConfigString(config, "files.save_directory", "")) return false;
-  const char *soundfont = ReadConfigString(config, "audio.soundfont");
-  if (HasConfigKey(config, "audio.soundfont") && !soundfont) return false;
-  if (mode == SETTINGS_STORE) {
-    if (!SetConfigString(config, "audio.soundfont", audio->soundfont_path ? audio->soundfont_path : "")) return false;
-  } else if (mode == SETTINGS_LOAD && soundfont && *soundfont) {
-    if (!SetCitySoundFontPath(audio, soundfont)) return false;
+  ConfigValue save_directory = ReadConfigValue(config, "files.save_directory");
+  if (save_directory.type == CONFIG_INTEGER) return false;
+  ConfigValue soundfont = ReadConfigValue(config, "audio.soundfont");
+  if (soundfont.type == CONFIG_INTEGER) return false;
+  if (soundfont.type == CONFIG_STRING && *soundfont.string) {
+    if (!SetCitySoundFontPath(audio, soundfont.string)) return false;
   }
   for (int list = 0; list < JUKEBOX_CUSTOM_PROGRAMMES; ++list) {
     JukeboxPlaylist *playlist = &audio->jukebox.custom[list];
-    char key[32], text[JUKEBOX_PLAYLIST_TEXT_CAPACITY];
+    char key[32];
     snprintf(key, sizeof(key), "music.playlist%d", list + 1);
-    const char *saved = ReadConfigString(config, key);
-    if (HasConfigKey(config, key) && !saved) return false;
-    if (mode == SETTINGS_STORE) {
-      if (!FormatJukeboxPlaylist(playlist, text, sizeof(text))) return false;
-      if (!SetConfigString(config, key, text)) return false;
-    } else if (saved) {
+    ConfigValue saved = ReadConfigValue(config, key);
+    if (saved.type == CONFIG_INTEGER) return false;
+    if (saved.type == CONFIG_STRING) {
       JukeboxPlaylist parsed;
-      if (!ParseJukeboxPlaylist(saved, &parsed)) return false;
-      if (mode == SETTINGS_LOAD) {
-        memcpy(playlist->tracks, parsed.tracks, parsed.count);
-        playlist->count = parsed.count;
-      }
+      if (!ParseJukeboxPlaylist(saved.string, &parsed)) return false;
+      memcpy(playlist->tracks, parsed.tracks, parsed.count);
+      playlist->count = parsed.count;
     }
   }
-  if (mode == SETTINGS_LOAD) ui->console.binding_count = 0;
+  ui->console.binding_count = 0;
+  for (int i = 0; i < CITY_KEY_BINDING_CAPACITY; ++i) {
+    char key[32];
+    snprintf(key, sizeof(key), "bindings.slot%d", i + 1);
+    ConfigValue saved = ReadConfigValue(config, key);
+    if (saved.type == CONFIG_INTEGER) return false;
+    if (saved.type == CONFIG_STRING && *saved.string) {
+      CityKeyBinding parsed;
+      if (!ParseCityKeyBinding(saved.string, &parsed)) return false;
+      int index = ui->console.binding_count++;
+      ui->console.bindings[index] = parsed;
+    }
+  }
+  return true;
+}
+
+// Capture live presentation preferences and future-City defaults into the document. Keep existing wrong-type
+// string rejection and partial updates; queuing and writing the file remain the caller's responsibility.
+static bool CaptureGameSettings(Game *game) {
+  Config *config = &game->settings->document;
+  const CityInterfaceState *ui = game->ui;
+  const CityAudioState *audio = game->audio;
+  for (int i = 0; i < kCitySettingsCount; ++i) {
+    const CitySetting *setting = &kCitySettings[i];
+    i64 value = ReadCitySettingValue(game, setting, true);
+    if (!SetConfigInteger(config, setting->key, value, setting->maximum == 1)) return false;
+  }
+  ConfigValue save_directory = ReadConfigValue(config, "files.save_directory");
+  if (save_directory.type == CONFIG_INTEGER) return false;
+  if (save_directory.type == CONFIG_MISSING && !SetConfigString(config, "files.save_directory", "")) return false;
+  ConfigValue soundfont = ReadConfigValue(config, "audio.soundfont");
+  if (soundfont.type == CONFIG_INTEGER) return false;
+  if (!SetConfigString(config, "audio.soundfont", audio->soundfont_path ? audio->soundfont_path : "")) return false;
+  for (int list = 0; list < JUKEBOX_CUSTOM_PROGRAMMES; ++list) {
+    const JukeboxPlaylist *playlist = &audio->jukebox.custom[list];
+    char key[32], text[JUKEBOX_PLAYLIST_TEXT_CAPACITY];
+    snprintf(key, sizeof(key), "music.playlist%d", list + 1);
+    ConfigValue saved = ReadConfigValue(config, key);
+    if (saved.type == CONFIG_INTEGER) return false;
+    if (!FormatJukeboxPlaylist(playlist, text, sizeof(text))) return false;
+    if (!SetConfigString(config, key, text)) return false;
+  }
   for (int i = 0; i < CITY_KEY_BINDING_CAPACITY; ++i) {
     char key[32], binding[104];
     snprintf(key, sizeof(key), "bindings.slot%d", i + 1);
-    const char *saved = ReadConfigString(config, key);
-    if (HasConfigKey(config, key) && !saved) return false;
-    if (mode == SETTINGS_STORE) {
-      binding[0] = 0;
-      if (i < ui->console.binding_count) {
-        char first[48], second[48];
-        CityHotkeyToString(ui->console.bindings[i].key, first, sizeof(first));
-        CityHotkeyToString(ui->console.bindings[i].action, second, sizeof(second));
-        snprintf(binding, sizeof(binding), "%s %s", first, second);
-      }
-      if ((binding[0] || HasConfigKey(config, key)) && !SetConfigString(config, key, binding)) return false;
-    } else if (saved && *saved) {
-      CityKeyBinding parsed;
-      if (!ParseCityKeyBinding(saved, &parsed)) return false;
-      if (mode == SETTINGS_LOAD) {
-        int index = ui->console.binding_count++;
-        ui->console.bindings[index] = parsed;
-      }
+    ConfigValue saved = ReadConfigValue(config, key);
+    if (saved.type == CONFIG_INTEGER) return false;
+    binding[0] = 0;
+    if (i < ui->console.binding_count) {
+      char first[48], second[48];
+      CityHotkeyToString(ui->console.bindings[i].key, first, sizeof(first));
+      CityHotkeyToString(ui->console.bindings[i].action, second, sizeof(second));
+      snprintf(binding, sizeof(binding), "%s %s", first, second);
     }
+    if ((binding[0] || saved.type != CONFIG_MISSING) && !SetConfigString(config, key, binding)) return false;
   }
   return true;
 }
@@ -197,7 +265,7 @@ void LoadGameSettings(Game *game) {
   SetTextN(&settings->directory, settings->path, length);
   game->settings = settings;
   settings->writable = CreateDirectories(settings->directory) && LoadConfig(&settings->document, settings->path) &&
-      TransferGameSettings(game, SETTINGS_VALIDATE, false);
+      ValidateGameSettings(&settings->document);
   if (!settings->writable) {
     fprintf(stderr, "Cannot read configuration; preserving the file and using defaults.\n");
     FreeConfig(&settings->document);
@@ -206,16 +274,15 @@ void LoadGameSettings(Game *game) {
   for (int i = 0; i < kCitySettingsCount; ++i) {
     const CitySetting *setting = &kCitySettings[i];
     if (setting->owner != SETTING_GAME && setting->command != CITY_COMMAND_SET_FIX) continue;
-    i64 value = setting->default_value;
-    ReadConfigInteger(&settings->document, setting->key, &value);
-    WriteGameSettingDefault(game, setting, (int)value);
+    ConfigValue value = ReadConfigValue(&settings->document, setting->key);
+    WriteGameSettingDefault(game, setting, value.type == CONFIG_INTEGER ? (int)value.integer : setting->default_value);
   }
 }
 
 void ApplyGameSettings(Game *game, bool scale_override) {
   struct GameSettings *settings = game->settings;
   if (!settings) return;
-  if (!TransferGameSettings(game, SETTINGS_LOAD, scale_override)) {
+  if (!ApplyConfiguredGameSettings(game, scale_override)) {
     settings->writable = false;
     fprintf(stderr, "Could not apply configuration.\n");
     return;
@@ -257,20 +324,9 @@ bool ApplyGameCityDefaults(Game *game) {
 
 void StoreGameSettings(Game *game) {
   if (!game->settings || !game->settings->writable) return;
-  if (!TransferGameSettings(game, SETTINGS_STORE, false)) fprintf(stderr, "Could not update configuration.\n");
+  if (!CaptureGameSettings(game)) fprintf(stderr, "Could not update configuration.\n");
   if (game->settings->document.changed && !game->settings->write_at)
     game->settings->write_at = -1;
-}
-
-// City defaults live in the config document; the fix mask is cached for City initialization and stock imports.
-int ReadGameCityDefault(const Game *game, const CitySetting *setting) {
-  if (setting->command == CITY_COMMAND_SET_FIX) {
-    bool enabled = (game->default_city_fixes & setting->mask) != 0;
-    return setting->inverted ? !enabled : enabled;
-  }
-  i64 value = setting->default_value;
-  if (game->settings) ReadConfigInteger(&game->settings->document, setting->key, &value);
-  return (int)value;
 }
 
 // Intro edits change defaults without running a City command. An invalid on-disk config remains untouched;
@@ -323,7 +379,9 @@ void CloseGameSettings(Game *game) {
 
 // Borrowed configured text; NULL/empty selects ~/.opensc2k/Cities.
 static const char *GameSaveDirectory(const Game *game) {
-  return game->settings ? ReadConfigString(&game->settings->document, "files.save_directory") : NULL;
+  if (!game->settings) return NULL;
+  ConfigValue value = ReadConfigValue(&game->settings->document, "files.save_directory");
+  return value.type == CONFIG_STRING ? value.string : NULL;
 }
 
 bool GetCitySaveDirectory(Game *game, CityPath *output) {

@@ -28,6 +28,87 @@ void TerrainWaterDistances(TerrainWork *work) {
   }
 }
 
+// Limit height differences by the eight-neighbor distance envelope in both scan directions. Heights must hold the
+// complete work-sized array and may be a scratch copy; work geometry is read-only.
+void GradeTerrainHeights(const TerrainWork *work, int *heights) {
+  // Minimum envelope of initial height plus eight-neighbor distance. This
+  // also enforces cardinal grading; no separate four-neighbor pass is needed.
+  for (int pass = 0; pass < 2; pass++) {
+    int direction = pass ? -1 : 1;
+    for (int x = pass ? work->width - 1 : 0; x >= 0 && x < work->width; x += direction) {
+      for (int y = pass ? work->height - 1 : 0; y >= 0 && y < work->height; y += direction) {
+        int at = x * work->height + y, height = heights[at], nx = x - direction, ny = y - direction;
+        if (nx >= 0 && nx < work->width) {
+          int near = nx * work->height + y;
+          height = IntMin(height, heights[near] + 1);
+          if (y > 0) height = IntMin(height, heights[near - 1] + 1);
+          if (y < work->height - 1) height = IntMin(height, heights[near + 1] + 1);
+        }
+        if (ny >= 0 && ny < work->height) height = IntMin(height, heights[at - direction] + 1);
+        heights[at] = height;
+      }
+    }
+  }
+}
+
+// Repair unsupported generated corner combinations through a bounded work queue. Requires initialized terrain heights
+// and workspace; preserve_water controls whether admitted water cells can be changed.
+void FillUnsupportedTerrainSlopes(TerrainWork *work, bool preserve_water) {
+  // Scan the initial tiles directly, then revisit changed neighbors through
+  // the bounded FIFO. Future initial tiles already have a scheduled visit.
+  int head = 0, tail = 0, count = 0, initial = 0;
+  memset(work->seen, 0, work->cells);
+  while (initial < work->cells || count) {
+    int at;
+    if (initial < work->cells) at = initial++;
+    else {
+      at = work->queue[head];
+      head = (head + 1) % work->cells;
+      --count;
+      work->seen[at] = false;
+    }
+    if (preserve_water && (work->flags[at] & kWater)) continue;
+    int x = at >> work->height_shift, y = at & (work->height - 1);
+    int height = work->heights[at], maximum = height, mask = 0;
+    if (x > 0 && y > 0 && x + 1 < work->width && y + 1 < work->height) {
+      const int *h = work->heights + at;
+      int stride = work->height;
+      int north = h[-1], north_east = h[stride - 1], east = h[stride], south_east = h[stride + 1];
+      int south = h[1], south_west = h[1 - stride], west = h[-stride], north_west = h[-stride - 1];
+      maximum = IntMax(height, IntMax(
+          IntMax(IntMax(north, north_east), IntMax(east, south_east)),
+          IntMax(IntMax(south, south_west), IntMax(west, north_west))));
+      mask = (north > height ? kNeighborMasks[0] : 0) | (north_east > height ? kNeighborMasks[1] : 0) |
+          (east > height ? kNeighborMasks[2] : 0) | (south_east > height ? kNeighborMasks[3] : 0) |
+          (south > height ? kNeighborMasks[4] : 0) | (south_west > height ? kNeighborMasks[5] : 0) |
+          (west > height ? kNeighborMasks[6] : 0) | (north_west > height ? kNeighborMasks[7] : 0);
+    } else {
+      for (int d = 0; d < 8; d++) {
+        int nx = x + kClockwiseNeighborX[d], ny = y + kClockwiseNeighborY[d];
+        if (nx < 0 || ny < 0 || nx >= work->width || ny >= work->height) continue;
+        int near = work->heights[nx * work->height + ny];
+        maximum = IntMax(maximum, near);
+        if (near > height) mask |= kNeighborMasks[d];
+      }
+    }
+    int target = IntMax(height, maximum - 1);
+    if (mask == 5 || mask == 10 || mask == 15) target = IntMax(target, height + 1);
+    if (target == height) continue;
+    work->heights[at] = target;
+    for (int d = 0; d < 8; d++) {
+      int nx = x + kClockwiseNeighborX[d], ny = y + kClockwiseNeighborY[d];
+      if (nx < 0 || ny < 0 || nx >= work->width || ny >= work->height) continue;
+      int next = nx * work->height + ny;
+      if (next < initial && !work->seen[next] && (!preserve_water || !(work->flags[next] & kWater))) {
+        work->seen[next] = true;
+        work->queue[tail] = next;
+        tail = (tail + 1) % work->cells;
+        count++;
+      }
+    }
+  }
+}
+
 // Select a dry perimeter anchor near the supplied fixed-point angle. Requires initialized generation heights; returns
 // the fallback normalized point when no suitable edge is found.
 static TerrainVector TerrainPlateauAnchor(const TerrainWork *work, Fixed angle) {

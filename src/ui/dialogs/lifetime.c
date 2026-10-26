@@ -4,7 +4,7 @@
 
 #include "game/audio.h"
 #include "audio/types.h"
-#include "city/disasters/disasters.h"
+#include "city/disasters/types.h"
 #include "city/presentation.h"
 #include "city/state.h"
 #include "game/observation.h"
@@ -21,6 +21,7 @@
 #include "ui/dialogs/scenario.h"
 #include "ui/dialogs/spans.h"
 #include "ui/map.h"
+#include "ui/text/status.h"
 #include "ui/sdl.h"
 #include "ui/state.h"
 #include "ui/tools/tools.h"
@@ -149,7 +150,6 @@ bool BeginCityDialogPause(City *city, int token) {
   }
   if (free_slot == -1)
     return false;
-  // Optional comparison retains the original activation wait; native pauses never pump input.
   const GameObservation *observer = city->game->observation;
   if (observer && observer->before_dialog_pause && !observer->before_dialog_pause(city)) return false;
   // The first temporary pause saves the live speed for final dismissal.
@@ -183,8 +183,6 @@ bool EndCityDialogPause(City *city, int token) {
   return false;
 }
 
-// Invoke the retained blocking caller through an installed comparison observation adapter. Callback/context are
-// borrowed; without that adapter returns CITY_DIALOG_UNANSWERED instead of inventing a native modal reply.
 int RunPausedCityAction(City *city, int (*action)(City *city, void *context), void *context) {
   const GameObservation *observer = city->game->observation;
   if (observer && observer->run_paused_action) return observer->run_paused_action(city, action, context);
@@ -192,9 +190,6 @@ int RunPausedCityAction(City *city, int (*action)(City *city, void *context), vo
   return CITY_DIALOG_UNANSWERED;
 }
 
-// Native canvas requests share the original gate/pause ordering. Original framework-object dispatch remains in the
-// comparison backend. Callback/context remain borrowed; without a retained blocking adapter the unanswered result is
-// propagated unchanged.
 i32 RunPausedCityModalDialog(City *city, void *dialog) {
   return RunPausedCityAction(city, ChooseCityCanvasDialog, dialog);
 }

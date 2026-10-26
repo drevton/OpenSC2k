@@ -17,8 +17,7 @@ normal text rendering resumes at full sharpness. Clicking the paper, Escape, Ent
 or Space skips the entrance. If image allocation fails, the ordinary page appears
 on the next frame.
 
-The original paint routine still runs and retains its City/RNG effects and
-comparison capture. Afterwards, full headlines and bodies are composed using a
+Full headlines and bodies are composed using a
 scalar City preview with the same per-story seeds and its own shared token choices.
 The UI window owns these texts; reading and scrolling do not change
 City, regenerate articles or spend simulation random numbers.
@@ -28,11 +27,6 @@ window. The wheel, arrows, Page Up/Down and Home/End scroll the text. The scroll
 can be clicked. Back, Escape or Backspace returns to the front page. Opening the
 reader cancels the native automatic-close deadline. Closing the newspaper releases
 its text/picture storage and the existing temporary dialog pause.
-
-Native capture geometry uses a project-defined grid, with independent font sizes
-and alignment. The historical page rectangles, typography tables and token map
-live only in `src/city/comparison/resource_storage.c`; comparison initialization
-installs them explicitly. Stock template installation also restores its token map.
 
 ## Code ownership
 
@@ -55,7 +49,7 @@ and window input. It consumes captured text and pictures; painting does not comp
 Its completion is attached before pause reconciliation can dispatch nested UI work.
 
 `ui/news/newspaper_presentation.c` implements initialization/destruction and the text, rectangle and
-measurement presentation hooks. Comparison can observe those hooks without retaining a native capture.
+measurement presentation hooks.
 Window/dialog lifecycle declarations stay in `ui/news/newspaper.h`; capture internals do not leak through it.
 
 The shared window-stack, focus, pixel-coordinate and visibility interface is `ui/windows/windows.h`.
@@ -70,6 +64,3 @@ the byte-sized font sizes, then a zlib stream. Its payload is face/size/CP1252-m
 12-byte glyph records (u32 coverage offset, u8 width/height, i16 bearings, u16 26.6
 advance), followed by coverage pixels. The 32-pixel master provides scale-independent
 advances. Malformed font assets fail startup instead of falling back silently.
-
-Validation is limited to Release and comparison builds; no interactive run or
-simulation replay was requested for this presentation change.

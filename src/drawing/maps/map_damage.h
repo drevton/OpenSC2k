@@ -1,12 +1,12 @@
 #ifndef SC2K_DRAWING_MAP_DAMAGE_H
 #define SC2K_DRAWING_MAP_DAMAGE_H
 
-#include "city/maps/map.h"
 #include "drawing/types.h"
 #include "drawing/maps/map_camera.h"
 #include "drawing/maps/map_view.h"
 
 typedef struct Drawing Drawing;
+typedef struct SimulationMapChanges SimulationMapChanges;
 
 // Map Damage
 
@@ -22,7 +22,8 @@ typedef struct {
 typedef struct {
   const City *city;
   bool valid;
-  int width, height, cell_count;
+  int width, height;
+  u32 cell_count;
   void *storage;
   CityMapDrawingValues values;
   CityMapCamera regions[CITY_EXTRA_MAP_VIEW_COUNT + 1];

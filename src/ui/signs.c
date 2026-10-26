@@ -1,10 +1,10 @@
+#include "ui/signs.h"
 #include "ui/windows/window_internal.h"
 #include <string.h>
 #include "base/text.h"
 #include "ui/map_views.h"
 #include "ui/map.h"
 #include "city/maps/labels.h"
-#include "ui/signs.h"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -13,7 +13,7 @@
 #include "assets/state.h"
 #include "audio/state.h"
 #include "base/time.h"
-#include "city/maps/layers.h"
+#include "city/maps/terrain.h"
 #include "city/maps/map.h"
 #include "city/maps/map_types.h"
 #include "city/maps/tile_storage.h"
@@ -47,22 +47,32 @@ typedef enum CitySignControl {
   CITY_SIGN_COLOR_FIRST, CITY_SIGN_COLOR_LAST = CITY_SIGN_COLOR_FIRST + CITY_SIGN_COLOR_COUNT - 1
 } CitySignControl;
 
-static bool ReserveSignEntries(CitySignState *signs, int capacity) {
-  if (capacity <= signs->capacity) return true;
-  int requested = capacity;
-  capacity = IntMax(signs->capacity, 64);
+// Grow the UI cache only after both replacement arrays are ready. Entry text survives growth; the order array
+// is scratch rebuilt by SortCitySigns, so it need not be copied. Failure preserves the live arrays and flags.
+static bool ReserveSignEntries(CitySignState *signs, int requested) {
+  if (requested <= signs->capacity) return true;
+  int capacity = IntMax(signs->capacity, 64);
   while (capacity < requested) capacity *= 2;
   CitySignEntry *entries = calloc(capacity, sizeof(*entries));
   int *order = malloc(capacity * sizeof(*order));
-  if (!entries || !order) { free(entries); free(order); return false; }
+  if (!entries || !order) {
+    free(entries);
+    free(order);
+    return false;
+  }
   for (int slot = 0; slot < capacity; ++slot) entries[slot].tile = INVALID_TILE;
   if (signs->capacity) memcpy(entries, signs->entries, signs->capacity * sizeof(*entries));
-  free(signs->entries); free(signs->order);
-  signs->entries = entries; signs->order = order; signs->capacity = capacity;
+  free(signs->entries);
+  free(signs->order);
+  signs->entries = entries;
+  signs->order = order;
+  signs->capacity = capacity;
   signs->dirty = true;
   return true;
 }
 
+// Copy a changed City sign revision into UI-owned entries. No City borrow survives this call; allocation failure
+// leaves the old cache/revision available for a later retry. Changed text/tile entries dirty the list.
 void RefreshCitySignEntries(City *city) {
   CitySignState *signs = &city->game->ui->signs;
   if (!signs->indexed || signs->revision == city->signs.revision ||
@@ -98,6 +108,8 @@ void RebuildCitySigns(City *city) {
   }
 }
 
+// Compare text using character folding and whole digit runs, without integer parsing. Leading zeros do not break
+// ties; CompareSignSlots uses the stable slot when complete names compare equally.
 static int CompareSignNames(const char *a, const char *b) {
   while (*a && *b) {
     if (isdigit((u8)*a) && isdigit((u8)*b)) {
@@ -110,12 +122,14 @@ static int CompareSignNames(const char *a, const char *b) {
       if (difference) return difference;
       while (a < a_end) {
         if (*a != *b) return (u8)*a - (u8)*b;
-        ++a; ++b;
+        ++a;
+        ++b;
       }
     } else {
       int difference = tolower((u8)*a) - tolower((u8)*b);
       if (difference) return difference;
-      ++a; ++b;
+      ++a;
+      ++b;
     }
   }
   return (u8)*a - (u8)*b;
@@ -127,6 +141,8 @@ static int CompareSignSlots(const CitySignState *signs, int a, int b) {
   return result ? result : a - b;
 }
 
+// Restore the max-heap below root in the active order prefix. Comparisons read cached entries only; this uses no
+// callbacks, allocations or City state and retains slot ordering as the final tiebreaker.
 static void SiftSignOrder(CitySignState *signs, int root, int count) {
   int slot = signs->order[root];
   for (int child = root * 2 + 1; child < count; child = root * 2 + 1) {
@@ -138,6 +154,7 @@ static void SiftSignOrder(CitySignState *signs, int root, int count) {
   signs->order[root] = slot;
 }
 
+// Rebuild the filtered order only when dirty, then sort it in place and publish the matching caption.
 static void SortCitySigns(CitySignState *signs) {
   if (!signs->dirty) return;
   signs->count = 0;
@@ -149,7 +166,9 @@ static void SortCitySigns(CitySignState *signs) {
   }
   for (int root = signs->count / 2 - 1; root >= 0; --root) SiftSignOrder(signs, root, signs->count);
   for (int end = signs->count - 1; end > 0; --end) {
-    int first = signs->order[0]; signs->order[0] = signs->order[end]; signs->order[end] = first;
+    int first = signs->order[0];
+    signs->order[0] = signs->order[end];
+    signs->order[end] = first;
     SiftSignOrder(signs, 0, end);
   }
   snprintf(signs->caption, sizeof(signs->caption), "Sign List - %d Sign%s", signs->count, signs->count == 1 ? "" : "s");
@@ -463,6 +482,8 @@ static void ScrollSigns(CityInterfaceState *ui, const Window *window, int delta)
 static void ApplySignControl(City *city, Window *window, CitySignControl control) {
   CityInterfaceState *ui = city->game->ui;
   CitySignState *signs = &ui->signs;
+  // Navigation can focus/reorder windows. Keep the originating identity instead of borrowing its array slot.
+  u32 window_id = window->window_id;
   if (control == CITY_SIGN_CANCEL) { CloseSignEditor(city); return; }
   if (control == CITY_SIGN_OK || control == CITY_SIGN_DELETE) {
     if (RenameSign(city, signs->tile, signs->slot, control == CITY_SIGN_DELETE ? "" : signs->name.text, signs->color))
@@ -471,7 +492,7 @@ static void ApplySignControl(City *city, Window *window, CitySignControl control
   }
   if (control >= CITY_SIGN_COLOR_FIRST && control <= CITY_SIGN_COLOR_LAST) {
     signs->color = control - CITY_SIGN_COLOR_FIRST;
-    DirtySignWindow(ui, window->window_id);
+    DirtySignWindow(ui, window_id);
     return;
   }
   switch (control) {
@@ -510,7 +531,7 @@ static void ApplySignControl(City *city, Window *window, CitySignControl control
   case CITY_SIGN_SCROLL_UP: ScrollSigns(ui, window, -1); break;
   case CITY_SIGN_SCROLL_DOWN: ScrollSigns(ui, window, 1); break;
   case CITY_SIGN_SHADE:
-    DirtySignWindow(ui, window->window_id);
+    DirtySignWindow(ui, window_id);
     if (window->shaded) window->bounds.bottom = window->bounds.top + window->restore_height;
     else {
       window->restore_height = window->bounds.bottom - window->bounds.top;
@@ -519,14 +540,14 @@ static void ApplySignControl(City *city, Window *window, CitySignControl control
     window->shaded = !window->shaded;
     break;
   case CITY_SIGN_DEFAULT_SIZE:
-    DirtySignWindow(ui, window->window_id);
+    DirtySignWindow(ui, window_id);
     window->shaded = false;
     ResetCityWindowSize(window);
     break;
   case CITY_SIGN_STICKY: window->sticky = !window->sticky; break;
   default: break;
   }
-  DirtySignWindow(ui, window->window_id);
+  DirtySignWindow(ui, window_id);
 }
 
 typedef struct {
@@ -568,7 +589,9 @@ static TileIndex PickSignLabel(City *city, SignCamera camera, int pixel_x, int p
   if (!city->drawing->map_state.label_display) return INVALID_TILE;
   int x = SignSourceCoordinate(pixel_x - camera.x, camera.scale);
   int y = SignSourceCoordinate(pixel_y - camera.y, camera.scale);
-  CityRect tiles = VisibleCityMapTileBounds(city, camera.origin_x, camera.origin_y, camera.zoom, camera.rotation,
+  CityRect tiles = VisibleCityMapTileBounds(city,
+      (CityMapCamera){.origin_x = camera.origin_x, .origin_y = camera.origin_y,
+          .zoom = camera.zoom, .rotation = camera.rotation},
       (CityRect){x, y, x + 1, y + 1});
   TileIndex result = INVALID_TILE;
   int order = -1, last_y = -1, scale = 1 << camera.zoom;
@@ -616,17 +639,16 @@ bool HandleCityMapSignInput(City *city, CityExtraMapView *view, const CanvasSDLE
     return true;
   }
   if (event->kind != CANVAS_SDL_POINTER_DOWN || event->button != CANVAS_SDL_BUTTON_LEFT) return false;
-  int pixel_x, pixel_y;
-  CityInterfacePixels(city->game, event, &pixel_x, &pixel_y);
+  CityPoint pixels = CityInterfacePointerPixels(city->game, event);
   if (NativeSpanDialogWaiting(ui) || CityConnectionQuestionWaiting(ui) || CityMissionNoticeWaiting(ui) ||
       ui->startup_waiting || NativeScenarioDialogWaiting(ui)) return false;
   SignCamera camera = SignMapCamera(city, view);
   bool visible = false;
-  VisitCanvasMapPixels(&ui->desktop, camera.window, (CityRect){pixel_x, pixel_y, pixel_x + 1, pixel_y + 1},
+  VisitCanvasMapPixels(&ui->desktop, camera.window, (CityRect){pixels.x, pixels.y, pixels.x + 1, pixels.y + 1},
       SignPixelVisible, &visible);
   if (!visible) return false;
   if (signs->moving && FindCityCanvasWindow(&ui->desktop, signs->editor_window)) {
-    TileIndex destination = PickSignTile(city, camera, pixel_x, pixel_y);
+    TileIndex destination = PickSignTile(city, camera, pixels.x, pixels.y);
     if (!IsMapTileValid(city, destination)) return true;
     if (!signs->slot) {
       if (ReadCitySignOverlay(city, destination) != CITY_OVERLAY_NONE) return true;
@@ -642,14 +664,14 @@ bool HandleCityMapSignInput(City *city, CityExtraMapView *view, const CanvasSDLE
         (int)signs->tile, (int)destination, signs->slot) >= 0) CloseSignEditor(city);
     return true;
   }
-  TileIndex tile = PickSignLabel(city, camera, pixel_x, pixel_y);
+  TileIndex tile = PickSignLabel(city, camera, pixels.x, pixels.y);
   if (tile != INVALID_TILE) {
     if (event->ctrl) RenameSign(city, tile, ReadCitySignOverlay(city, tile), "", 0);
     else OpenCitySignEditor(city, tile);
     return true;
   }
   if (ui->desktop.selected_tool == CITY_CANVAS_TOOL_SIGN && !event->ctrl && !event->shift) {
-    tile = PickSignTile(city, camera, pixel_x, pixel_y);
+    tile = PickSignTile(city, camera, pixels.x, pixels.y);
     if (IsMapTileValid(city, tile)) {
       int slot = ReadCitySignOverlay(city, tile);
       if (!slot) {
@@ -772,8 +794,7 @@ bool SignWindowProcedure(Game *game, const Window *window, const WindowEvent *ev
     return true;
   }
   if (input->kind != CANVAS_SDL_POINTER_DOWN || input->button != CANVAS_SDL_BUTTON_LEFT) return false;
-  CanvasSDLEvent point = *input;
-  point.x = event->x; point.y = event->y;
+  CityPoint point = {event->x, event->y};
   u32 id = window->window_id;
   {
     CitySignControl control = CitySignControlAt(target, point.x, point.y);
@@ -827,9 +848,7 @@ bool SignWindowProcedure(Game *game, const Window *window, const WindowEvent *ev
   }
 }
 
-// Clear stale editors, error locations and transient map effects after City replacement. Requires the attached UI and
-// Drawing owners; refreshes charts and rebuilds the existing sign index when enabled.
-
+// Return borrowed control help for a sign window, or NULL for generic title-bar help.
 const char *CitySignTooltipAt(Game *game, const Window *window, int x, int y) {
   if ((window->kind == CITY_CANVAS_SIGN_EDIT || window->kind == CITY_CANVAS_SIGN_LIST) &&
       y < window->bounds.top + 14) {
@@ -849,7 +868,7 @@ const char *CitySignTooltipAt(Game *game, const Window *window, int x, int y) {
     if (control >= CITY_SIGN_COLOR_FIRST && control <= CITY_SIGN_COLOR_LAST) {
       if (control == CITY_SIGN_COLOR_FIRST) return "Default green. Leaves more room for the sign name.";
       if (strlen(game->ui->signs.name.text) >= CITY_OVERLAY_NAME_MAX_LENGTH)
-        return "Shorten the sign to 22 characters before choosing a color.";
+        return "Shorten the sign's name before choosing a color.";
       return "Choose the sign's color. Press OK to apply it, or Cancel to keep the current color.";
     }
     if (control == CITY_SIGN_TEXT) return "Click to place the caret, or move it with Left and Right.";

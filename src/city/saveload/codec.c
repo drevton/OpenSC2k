@@ -1,118 +1,14 @@
-#include "city/maps/labels.h"
-#include "city/saveload/events_format.h"
-#include "city/saveload/map_format.h"
-#include "city/events/events.h"
-#include "city/maps/map_types.h"
-#include "city/saveload/legacy_text.h"
-#include "base/byte_order.h"
-#include "city/state.h"
 #include "city/saveload/city_file_internal.h"
 
-// Object locations and train next tiles must be in bounds. Other target pairs are offsets; destination pairs can be
-// off-map aircraft waypoints. Event must be writable with its type already decoded; positions/train targets are
-// clamped while other targets retain offset semantics.
-static void DecodeStockCityEventCoordinates(City *city, CityMapEvent *event, int x, int y, int target_x, int target_y) {
-  event->tile = MapTileXY(city, IntClamp(x, 0, city->map_width - 1),
-      IntClamp(y, 0, city->map_height - 1));
-  if (IsCityMapEventTrain(event->type)) {
-    target_x = IntClamp(target_x, 0, city->map_width - 1);
-    target_y = IntClamp(target_y, 0, city->map_height - 1);
-  } else {
-    target_x = IntClamp(target_x, 0, 15) * CITY_EVENT_OFFSET_SCALE;
-    target_y = IntClamp(target_y, 0, 15) * CITY_EVENT_OFFSET_SCALE;
-  }
-  SetCityMapEventTarget(city, event, target_x, target_y);
-}
+#include <string.h>
 
-// Stock XTHG stores the offset approach waypoint in bytes. Native events store its runway reference point regardless
-// of the selected gameplay fixes. Narrow native coordinates and indexes only here for the stock byte format. Output
-// must hold one full stock record and event links be consistent; native coordinates/state are projected without
-// editing the source.
-void EncodeStockCityMapEvent(const City *city, u8 bytes[CITY_STOCK_EVENT_BYTES], const CityMapEvent *event) {
-  CityPoint position = ReadCityMapEventPosition(city, event);
-  CityPoint target = ReadCityMapEventTarget(city, event);
-  if (!(event->coordinate_flags & CITY_EVENT_TARGET_TILE)) {
-    target.x /= CITY_EVENT_OFFSET_SCALE;
-    target.y /= CITY_EVENT_OFFSET_SCALE;
-  }
-  bytes[0] = event->type; bytes[1] = event->direction; bytes[2] = event->state;
-  bytes[3] = position.y; bytes[4] = position.x; bytes[5] = event->age;
-  bytes[6] = target.y; bytes[7] = target.x;
-  bytes[10] = event->previous_overlay;
-  if (event->type == CITY_MAP_EVENT_SHIP) {
-    bytes[8] = event->ship.destination_y; bytes[9] = event->ship.destination_x;
-    bytes[11] = 0; // Ships do not consume the stock goal byte.
-  } else {
-    bytes[8] = event->raw.destination_y; bytes[9] = event->raw.destination_x;
-    bytes[11] = event->raw.goal;
-  }
-  if ((event->coordinate_flags & CITY_EVENT_HASH_LINKED) && !IsCityMapEventTrain(event->type)) {
-    // Reconstruct the stock hidden-overlay chain from canonical tile membership.
-    // Train followers can share their engine's tile without joining that chain;
-    // their saved overlay belongs to the movement record copied along the train.
-    bytes[10] = ReadCityStockBaseOverlay(city, event->tile);
-    for (int link = event->hash_next; link; link = city->events.event[link - 1].hash_next) {
-      if (city->events.event[link - 1].tile != event->tile) continue;
-      bytes[10] = CityEventOverlay(link - 1);
-      break;
-    }
-  }
-  if (event->type == CITY_MAP_EVENT_MAXIS_MAN && IsCityEventOverlay(event->maxis_man.goal))
-    bytes[11] = CityEventOverlaySlot(event->maxis_man.goal);
-  if (event->type == CITY_MAP_EVENT_AIRPLANE &&
-      (event->state & CITY_AIRPLANE_STAGE_MASK) == CITY_AIRPLANE_APPROACH) {
-    int x, y;
-    ReadCityAirplaneApproachOffset(event, &x, &y);
-    bytes[8] = event->raw.destination_y + y;
-    bytes[9] = event->raw.destination_x + x;
-  }
-}
-
-// Decode one complete stock event record into native coordinates, links and type-specific state. Bytes must hold
-// CITY_STOCK_EVENT_BYTES and City geometry must be initialized; output is reset first and hash membership is rebuilt
-// separately.
-void DecodeStockCityMapEvent(City *city, CityMapEvent *event, const u8 bytes[CITY_STOCK_EVENT_BYTES]) {
-  memset(event, 0, sizeof(*event));
-  event->type = bytes[0]; event->direction = bytes[1]; event->state = bytes[2]; event->age = bytes[5];
-  event->previous_overlay = bytes[10];
-  if (event->type == CITY_MAP_EVENT_SHIP) {
-    event->ship.home_tile = MapTileXYOrInvalid(city, city->disasters.border_water_x, city->disasters.border_water_y);
-    event->ship.destination_y = bytes[8]; event->ship.destination_x = bytes[9];
-  } else {
-    event->raw.destination_y = bytes[8]; event->raw.destination_x = bytes[9];
-    event->raw.goal = bytes[11];
-  }
-  if (event->type == CITY_MAP_EVENT_MAXIS_MAN && bytes[11] < CITY_STOCK_EVENT_SLOT_COUNT)
-    event->maxis_man.goal = CityEventOverlay(bytes[11]);
-  DecodeStockCityEventCoordinates(city, event, bytes[4], bytes[3], bytes[7], bytes[6]);
-  if (event->type == CITY_MAP_EVENT_AIRPLANE &&
-      (event->state & CITY_AIRPLANE_STAGE_MASK) == CITY_AIRPLANE_APPROACH) {
-    int x, y;
-    ReadCityAirplaneApproachOffset(event, &x, &y);
-    event->raw.destination_y = (u8)(bytes[8] - y);
-    event->raw.destination_x = (u8)(bytes[9] - x);
-  }
-}
-
-// Separate stock overlay stacks into native terrain overlays and per-tile event membership. Run after stock records
-// are decoded; clears unused event records and rebuilds hash links from active event locations.
-void ImportStockCityEventLinks(City *city) {
-  // Stock tiles keep only the top overlay. Native tiles retain the non-event
-  // association underneath, and every active record is indexed at its own tile.
-  for (TileIndex tile = 0; tile < (u32)city->map_cell_count; ++tile) {
-    TileInfo *tp = &city->tile[tile];
-    int overlay = tp->overlay;
-    for (int depth = 0; IsCityEventOverlay(overlay) && depth < CITY_STOCK_EVENT_SLOT_COUNT; ++depth)
-      overlay = city->events.event[CityEventOverlaySlot(overlay)].previous_overlay;
-    tp->overlay = IsCityEventOverlay(overlay) ? CITY_OVERLAY_NONE : overlay;
-  }
-  for (int slot = 0; slot < city->events.capacity; ++slot) {
-    CityMapEvent *event = &city->events.event[slot];
-    if (event->type == CITY_MAP_EVENT_UNUSED) memset(event, 0, sizeof(*event));
-    else if (IsMapTileValid(city, event->tile)) event->previous_overlay = city->tile[event->tile].overlay;
-  }
-  RebuildCityEventHash(city);
-}
+#include "city/events/events.h"
+#include "city/maps/labels.h"
+#include "city/maps/map_types.h"
+#include "city/saveload/events_format.h"
+#include "city/saveload/legacy_text.h"
+#include "city/saveload/map_format.h"
+#include "city/state.h"
 
 // Look up a four-byte stock chunk tag in the immutable schema table. Tag must provide four readable bytes; returns a
 // borrowed specification or NULL for an unknown chunk.
@@ -124,22 +20,32 @@ const CityFileChunkSpec *FindCityFileChunkSpec(const char tag[4]) {
 }
 
 // Resolve a schema record to its native City field or map-plane backing. Spec must be an admitted schema entry;
-// returns borrowed writable storage or NULL for unavailable/non-native storage.
-u8 *CityFileChunkData(City *city, const CityFileChunkSpec *spec) {
-  if (spec->storage == CITY_FILE_SIMULATION)
-    return (u8 *)city + spec->native_offset;
-  if (spec->storage == CITY_FILE_TILE)
-    return city->tile ? (u8 *)city->tile + spec->native_offset : NULL;
-  if (spec->storage == CITY_FILE_HALF_MAP)
-    return city->half ? (u8 *)city->half + spec->native_offset : NULL;
-  if (spec->storage == CITY_FILE_QUARTER_MAP)
-    return city->quarter ? (u8 *)city->quarter + spec->native_offset : NULL;
-  if (spec->storage == CITY_FILE_MAP) {
+// returns borrowed read-only storage or NULL for unavailable/non-native storage.
+const u8 *CityFileChunkData(const City *city, const CityFileChunkSpec *spec) {
+  switch (spec->storage) {
+  case CITY_FILE_SIMULATION:
+    return (const u8 *)city + spec->native_offset;
+  case CITY_FILE_TILE:
+    return city->tile ? (const u8 *)city->tile + spec->native_offset : NULL;
+  case CITY_FILE_HALF_MAP:
+    return city->half ? (const u8 *)city->half + spec->native_offset : NULL;
+  case CITY_FILE_QUARTER_MAP:
+    return city->quarter ? (const u8 *)city->quarter + spec->native_offset : NULL;
+  case CITY_FILE_MAP: {
     u8 *layer;
-    memcpy(&layer, (u8 *)city + spec->native_offset, sizeof(layer));
+    memcpy(&layer, (const u8 *)city + spec->native_offset, sizeof(layer));
     return layer;
   }
-  return NULL;
+  case CITY_FILE_ONLY:
+  default:
+    return NULL;
+  }
+}
+
+// The resolved storage belongs to the supplied mutable City. Keep the qualification change at this access boundary;
+// the shared resolver itself returns a read-only view.
+u8 *CityFileMutableChunkData(City *city, const CityFileChunkSpec *spec) {
+  return (u8 *)CityFileChunkData(city, spec);
 }
 
 // Decode packets independently of the caller's completion policy. A failing packet leaves prior output writes intact
@@ -223,25 +129,27 @@ void CityFileConvertWords(u8 *data, u32 size, u32 width) {
     }
 }
 
-// Convert the fixed stock label table's representation after reading it. Data must provide the complete table; this
-// codec step does not allocate or change the active City.
-static void ConvertLabelsFromFile(u8 *data) {
-  for (int index = 0; index < 256; ++index) {
-    u8 *slot = data + 25 * index;
-    u8 bytes[25];
+// Decode the complete stock label table into terminated UTF-8 staging slots in place. The slots keep their stock
+// byte stride; this does not expand them to City's wider names or change the active City.
+static void DecodeStockLabelTable(u8 *data) {
+  for (int index = 0; index < CITY_OVERLAY_NAME_COUNT; ++index) {
+    u8 *slot = data + CITY_OVERLAY_LEGACY_NAME_BYTES * index;
+    u8 bytes[CITY_OVERLAY_LEGACY_NAME_BYTES];
     memcpy(bytes, slot, sizeof(bytes));
-    DecodeLegacyCityText((char *)slot, 25, bytes + 1, IntMin(bytes[0], 23), CITY_TEXT_WINDOWS_1252);
+    DecodeLegacyCityText((char *)slot, CITY_OVERLAY_LEGACY_NAME_BYTES, bytes + 1,
+        IntMin(bytes[0], CITY_OVERLAY_LEGACY_NAME_MAX_LENGTH), CITY_TEXT_WINDOWS_1252);
   }
 }
 
-// Convert the complete fixed label table to its stock file representation in place. Caller owns the staging buffer and
-// must not confuse converted bytes with native UTF-8 labels.
-static void ConvertLabelsToFile(u8 *data) {
-  for (int index = 0; index < 256; ++index) {
-    u8 *slot = data + 25 * index;
-    char text[26];
-    memcpy(text, slot, 25); text[25] = 0;
-    int length = EncodeLegacyCityText(slot + 1, 23, text);
+// Encode the complete fixed-stride UTF-8 staging table into stock length-prefixed slots in place. The temporary
+// terminator bounds the source read; bytes beyond each written name retain their prior values.
+static void EncodeStockLabelTable(u8 *data) {
+  for (int index = 0; index < CITY_OVERLAY_NAME_COUNT; ++index) {
+    u8 *slot = data + CITY_OVERLAY_LEGACY_NAME_BYTES * index;
+    char text[CITY_OVERLAY_LEGACY_NAME_BYTES + 1];
+    memcpy(text, slot, CITY_OVERLAY_LEGACY_NAME_BYTES);
+    text[CITY_OVERLAY_LEGACY_NAME_BYTES] = 0;
+    int length = EncodeLegacyCityText(slot + 1, CITY_OVERLAY_LEGACY_NAME_MAX_LENGTH, text);
     slot[0] = length;
   }
 }
@@ -268,9 +176,9 @@ void CityFileConvertChunk(u8 *data, const CityFileChunkSpec *spec, CityFileDirec
     break;
   case CITY_FILE_LABELS:
     if (direction != CITY_FILE_EXPORT)
-      ConvertLabelsFromFile(data);
+      DecodeStockLabelTable(data);
     else
-      ConvertLabelsToFile(data);
+      EncodeStockLabelTable(data);
     break;
   case CITY_FILE_EVENTS:
   case CITY_FILE_BYTES:
@@ -279,71 +187,72 @@ void CityFileConvertChunk(u8 *data, const CityFileChunkSpec *spec, CityFileDirec
   }
 }
 
-// Copy a bounded schema chunk between staging bytes and native strided fields in the selected direction. Size must fit
-// both representations; export of overlays uses effective events, while load deliberately preserves direct partial
-// writes.
-void CopyCityFileChunkBytes(City *city, const CityFileChunkSpec *spec, u8 *bytes, u32 size,
-    CityFileDirection direction) {
+// Read City backing into bounded staging bytes without changing City. Overlay reads use effective event overlays;
+// kind projection and byte-order conversion remain separate codec steps.
+void ReadCityFileChunkBytes(const City *city, const CityFileChunkSpec *spec, u8 *bytes, u32 size) {
   if (spec->conversion == CITY_FILE_LABELS) {
-    for (u32 byte = 0; byte < size; ++byte) {
-      u8 *value = city->overlay_names.entry[byte / CITY_OVERLAY_LEGACY_NAME_BYTES].character +
-          byte % CITY_OVERLAY_LEGACY_NAME_BYTES;
-      if (direction != CITY_FILE_EXPORT) *value = bytes[byte];
-      else bytes[byte] = *value;
-    }
+    for (u32 byte = 0; byte < size; ++byte)
+      bytes[byte] = city->overlay_names.entry[byte / CITY_OVERLAY_LEGACY_NAME_BYTES].character[
+          byte % CITY_OVERLAY_LEGACY_NAME_BYTES];
     return;
   }
-  u8 *field = CityFileChunkData(city, spec);
+  const u8 *field = CityFileChunkData(city, spec);
   if (spec->storage != CITY_FILE_TILE && spec->storage != CITY_FILE_HALF_MAP &&
       spec->storage != CITY_FILE_QUARTER_MAP) {
-    if (direction != CITY_FILE_EXPORT) memcpy(field, bytes, size);
-    else memcpy(bytes, field, size);
+    memcpy(bytes, field, size);
     return;
   }
   for (u32 byte = 0; byte < size; ++byte) {
-    u8 *value = field + CityFileChunkByteOffset(spec, byte);
-    if (direction != CITY_FILE_EXPORT) *value = bytes[byte];
-    else if (!memcmp(spec->tag, "XTXT", 4)) bytes[byte] = ReadOverlay(city, byte);
-    else bytes[byte] = *value;
+    if (!memcmp(spec->tag, "XTXT", 4)) bytes[byte] = ReadOverlay(city, byte);
+    else bytes[byte] = field[CityFileChunkByteOffset(spec, byte)];
   }
 }
 
-// Import/export a complete schema chunk, including event/label boundary conversions. Data must hold the schema size
-// and City storage must be bound; false means unsupported or unavailable state, without rolling back preceding
-// effects.
-bool CityFileStateChunkBytes(City *city, const CityFileChunkSpec *spec, u8 *data, CityFileDirection direction) {
-  if (spec->conversion == CITY_FILE_LABELS && direction == CITY_FILE_EXPORT) {
+// Write admitted staging bytes directly without changing the source, preserving partial load writes.
+// Event decoding, kind translation and byte-order conversion remain separate import steps.
+void WriteCityFileChunkBytes(City *city, const CityFileChunkSpec *spec, const u8 *bytes, u32 size) {
+  if (spec->conversion == CITY_FILE_LABELS) {
+    for (u32 byte = 0; byte < size; ++byte)
+      city->overlay_names.entry[byte / CITY_OVERLAY_LEGACY_NAME_BYTES].character[
+          byte % CITY_OVERLAY_LEGACY_NAME_BYTES] = bytes[byte];
+    return;
+  }
+  u8 *field = CityFileMutableChunkData(city, spec);
+  if (spec->storage != CITY_FILE_TILE && spec->storage != CITY_FILE_HALF_MAP &&
+      spec->storage != CITY_FILE_QUARTER_MAP) {
+    memcpy(field, bytes, size);
+    return;
+  }
+  for (u32 byte = 0; byte < size; ++byte)
+    field[CityFileChunkByteOffset(spec, byte)] = bytes[byte];
+}
+
+// Export one complete schema-sized chunk, projecting map kinds, labels and events at the stock boundary. Numeric
+// byte-order conversion remains a separate step; unavailable backing returns false without changing City.
+bool ExportCityFileStateChunk(const City *city, const CityFileChunkSpec *spec, u8 *data) {
+  if (spec->conversion == CITY_FILE_LABELS) {
     ExportStockCityOverlayNames(city, data);
     return true;
   }
   if (spec->conversion == CITY_FILE_EVENTS) {
-    if (direction != CITY_FILE_EXPORT) memset(city->events.buckets, 0, CITY_EVENT_HASH_BUCKETS * sizeof(u16));
-    for (int slot = 0; slot < CITY_STOCK_EVENT_SLOT_COUNT; ++slot) {
-      if (direction != CITY_FILE_EXPORT) {
-        u8 record[CITY_STOCK_EVENT_BYTES];
-        memcpy(record, data + slot * CITY_STOCK_EVENT_BYTES, sizeof(record));
-        if (!IsCityMapEventTrain(record[0])) {
-          record[6] = IntMax(record[6] - 1, 0);
-          record[7] = IntMax(record[7] - 1, 0);
-        }
-        DecodeStockCityMapEvent(city, &city->events.event[slot], record);
-        // SC2 files omit the stock process's shared home coordinate. Use the
-        // imported ship's position; comparison imports use the live shared home.
-        if (record[0] == CITY_MAP_EVENT_SHIP)
-          city->events.event[slot].ship.home_tile = city->events.event[slot].tile;
-      } else EncodeStockCityMapEvent(city, data + slot * CITY_STOCK_EVENT_BYTES, &city->events.event[slot]);
-    }
+    EncodeStockCityMapEvents(city, data);
     return true;
   }
-  if (spec->storage != CITY_FILE_ONLY) {
-    u8 *target = CityFileChunkData(city, spec);
-    if (target == NULL)
-      return false;
-    if (direction != CITY_FILE_EXPORT) CopyCityFileChunkBytes(city, spec, data, spec->size, CITY_FILE_IMPORT);
-    else ExportCityMapChunk(city, spec, data, spec->size);
+  if (spec->storage == CITY_FILE_ONLY || CityFileChunkData(city, spec) == NULL) return false;
+  ExportCityMapChunk(city, spec, data, spec->size);
+  return true;
+}
+
+// Import one complete schema-sized staging chunk after byte-order conversion. Event records decode at this boundary;
+// labels retain their stock slot bytes until their later text conversion. Source bytes remain caller-owned and intact.
+bool ImportCityFileStateChunk(City *city, const CityFileChunkSpec *spec, const u8 *data) {
+  if (spec->conversion == CITY_FILE_EVENTS) {
+    DecodeStockCityMapEvents(city, data);
     return true;
   }
-  return false;
+  if (spec->storage == CITY_FILE_ONLY || CityFileChunkData(city, spec) == NULL) return false;
+  WriteCityFileChunkBytes(city, spec, data, spec->size);
+  return true;
 }
 
 // Project City-owned UTF-8 labels into the stock fixed-width label table. Destination must hold the full stock table;

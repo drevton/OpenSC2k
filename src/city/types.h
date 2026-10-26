@@ -4,6 +4,8 @@
 #include "base/types.h"
 
 typedef u32 TileIndex;
+// Keep this unsigned sentinel separate from signed coordinate dimensions.
+#define INVALID_TILE UINT32_MAX
 
 typedef struct City City;
 typedef struct CityResourceState CityAssets;

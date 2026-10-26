@@ -9,27 +9,84 @@
 // altitude keeps land/tunnel heights. Dry clear ground has no use for altitude[5..9]; it is not a water-presence test.
 // Water kinds use the low terrain nibble differently and are handled by water.c. Other fields follow tile_storage.h.
 
+#include "city/maps/ground.h"
+#include "city/infrastructure/surface_lines.h"
+
 #include "drawing/maps/map_sprites.h"
 #include "city/maps/buildings.h"
-#include "city/maps/ground.h"
 #include "city/maps/tables.h"
 #include "city/maps/terrain.h"
 #include "city/maps/module.h"
 
 #include <assert.h>
 
+#include "city/engine/commands.h"
 #include "city/engine/random.h"
+#include "city/infrastructure/bridges.h"
 #include "city/growth/growth.h"
 #include "city/maps/layers.h"
 #include "city/infrastructure/highways.h"
 #include "city/maps/trees.h"
 #include "city/maps/water.h"
+#include "city/maps/map.h"
 #include "city/presentation.h"
 #include "city/state.h"
-#include "city/terrain/terrain.h"
+#include "city/terrain/climate.h"
 #include "drawing/maps/map_terrain.h"
 #include "drawing/maps/map_camera.h"
 #include "drawing/maps/map_view.h"
+
+// Recognize clear ground, including an empty dry bridge underpass. Reads the supplied tile only;
+// it does not start recovery or remove ground cover.
+static bool IsClearCityGroundTile(const TileInfo *tp) {
+  if (tp->kind == TK_CLEAR) return true;
+  return IsTileKindBridgeMiddle(tp->kind) && !HasTileWater(tp) &&
+      ReadCityBridgeUnderpass(tp) == CITY_BRIDGE_UNDERPASS_NONE;
+}
+
+// Clearing bare recovery ground leaves the surface unchanged and costs nothing.
+bool IsCityGroundClearingNoop(const TileInfo *tp) {
+  if (!IsClearCityGroundTile(tp)) return false;
+  int ground = tp->terrain & 15;
+  return ground >= CITY_GROUND_RECOVERY_FIRST && ground <= CITY_GROUND_RECOVERY_GRASS_FIRST;
+}
+
+static bool IsGrassCover(int ground) {
+  return ground == CITY_GROUND_GRASS ||
+      (ground >= CITY_GROUND_SNOW_FIRST && ground <= CITY_GROUND_SNOW_LAST) ||
+      ground == CITY_GROUND_DESERT_HALF || ground == CITY_GROUND_DESERT_FULL ||
+      (ground > CITY_GROUND_RECOVERY_GRASS_FIRST && ground <= CITY_GROUND_RECOVERY_LAST);
+}
+
+// Recognize clear grass, including partially recovered grass that can be cleared again.
+// Bare recovery ground is handled separately as a no-op.
+bool IsClearCityGrassTile(const TileInfo *tp) {
+  return IsClearCityGroundTile(tp) && IsGrassCover(tp->terrain & 15);
+}
+
+bool CanClearCityGroundCover(const TileInfo *tp) {
+  if (!IsClearCityGroundTile(tp)) return false;
+  int ground = tp->terrain & 15;
+  return ground == CITY_GROUND_ROUGH || ground == CITY_GROUND_ROCKS || IsGrassCover(ground);
+}
+
+i64 ClearCityGroundTile(City *city, TileIndex tile) {
+  ReplaceCityTileAndStatistics(city, tile, ReadCityWaterGroundKind(&city->tile[tile]));
+  return 1;
+}
+
+static i64 ClearGroundTile(City *city, u32 flags, TileIndex tile) {
+  if (flags & CITY_COMMAND_TEST)
+    return CanClearCityGroundCover(&city->tile[tile]) ?
+        CITY_COMMAND_COST_OK : CITY_COMMAND_COST_NOTHING_TO_REMOVE;
+  return ClearCityGroundTile(city, tile);
+}
+
+static i64 ClearRemainsTile(City *city, u32 flags, TileIndex tile) {
+  if (flags & CITY_COMMAND_TEST)
+    return city->tile[tile].kind == TK_RADIOACTIVE_WASTE ? CITY_COMMAND_COST_NOTHING_TO_REMOVE : CITY_COMMAND_COST_OK;
+  return ClearCityGroundTile(city, tile);
+}
 
 // Ground and coverage occupy the low nibble, including exposed bank recovery.
 // Other wet tiles use it for their underlying water kind instead.
@@ -215,15 +272,14 @@ void GenerateCityGround(City *city) {
   }
 }
 
-// Test whether a valid neighboring building is developed enough to encourage paved transport ground. Uses kind,
-// construction stage and land value only; does not start construction or edit ground.
+// Completed zone buildings can encourage paved transport ground through development/land value or kind quality.
+// Reject other neighbors before decoding building state; the query never changes ground or construction.
 static bool CityBuildingEncouragesPaving(const City *city, TileIndex index) {
   const TileInfo *tp = &city->tile[index];
-  if (ReadCityBuildingConstructionStage(tp)) return false;
   int kind = tp->kind;
+  if (!IsTileKindZoneBuilding(kind) || ReadCityBuildingConstructionStage(tp)) return false;
   enum { PAVING_LAND_VALUE_MINIMUM = 128 };
-  if (IsTileKindZoneBuilding(kind) &&
-      kTileZoneCategory[kind - TK_RESIDENTIAL_FIRST] == CITY_BUILDING_DEVELOPED &&
+  if (kTileZoneCategory[kind - TK_RESIDENTIAL_FIRST] == CITY_BUILDING_DEVELOPED &&
       ReadLandValue(city, index) >= PAVING_LAND_VALUE_MINIMUM) return true;
   // Quality is a property of the building kind, not its footprint size.
   return (kind >= TK_LUXURY_HOMES_FIRST && kind <= TK_LUXURY_HOMES_LAST) ||
@@ -399,7 +455,7 @@ int CityGroundSpriteForShape(const City *city, TileIndex tile, int zoom, int sha
 
 // Draw natural clear/tree ground and its zone wash using prepared camera geometry, without a selection marker.
 // Tree silhouettes remain in the tree module; Drawing owns visibility, clipping, collection and final pixels.
-bool DrawCityGroundSurface(City *city, TileIndex tile, int zoom, int screen_x, int ground_y,
+bool DrawCityGroundSurface(const City *city, TileIndex tile, int zoom, int screen_x, int ground_y,
     const CityTileGeometry *tile_geometry) {
   Drawing *drawing = city->drawing;
   const TileInfo *tp = &city->tile[tile];
@@ -425,13 +481,13 @@ bool DrawCityGroundSurface(City *city, TileIndex tile, int zoom, int screen_x, i
   bool paint_ground = IsCityMapGroundPass(drawing);
   if (paint_ground) DrawCityMapSpriteAtBaseline(drawing, ground, screen_x, ground_y, 0);
   if (paint_ground && !geometry.land_shape && zone)
-    DrawCityMapSpriteAtBaseline(drawing, 290 + zone + 500 * zoom, screen_x, ground_y, 0);
+    DrawCityMapSpriteAtBaseline(drawing, MapSpriteZoomIndex(290 + zone, zoom), screen_x, ground_y, 0);
   return true;
 }
 
 // Whole-tile drawing adds selection once. The depth ground pass borrows only the surface above, so its zone wash
 // is painted before tree silhouettes without blending a second selection marker over the same tile.
-bool DrawCityGroundTile(City *city, TileIndex tile, int zoom, int screen_x, int ground_y,
+bool DrawCityGroundTile(const City *city, TileIndex tile, int zoom, int screen_x, int ground_y,
     const CityTileGeometry *geometry) {
   if (!DrawCityGroundSurface(city, tile, zoom, screen_x, ground_y, geometry)) return false;
   DrawCityMapPlacementTile(city, tile);
@@ -440,7 +496,7 @@ bool DrawCityGroundTile(City *city, TileIndex tile, int zoom, int screen_x, int 
 
 // Fallback ground artwork keeps park selection around the silhouette, while clear land and hidden details use
 // only the placement marker. Geometry and source layout are already projected into the active camera.
-void DrawCityGroundTileFallback(City *city, TileIndex tile, int layout, int zoom, int screen_x, int ground_y,
+void DrawCityGroundTileFallback(const City *city, TileIndex tile, int layout, int zoom, int screen_x, int ground_y,
     const CityTileGeometry *geometry) {
   Drawing *drawing = city->drawing;
   const TileInfo *tp = &city->tile[tile];
@@ -466,7 +522,7 @@ void DrawCityGroundTileFallback(City *city, TileIndex tile, int layout, int zoom
   }
 }
 
-static bool DrawRemainsTile(City *city, TileIndex tile, int zoom, int screen_x, int ground_y,
+static bool DrawRemainsTile(const City *city, TileIndex tile, int zoom, int screen_x, int ground_y,
     const CityTileGeometry *geometry) {
   Drawing *drawing = city->drawing;
   if (city->tile[tile].kind != TK_RADIOACTIVE_WASTE || !(city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) ||
@@ -484,5 +540,9 @@ static void TickGroundTile(City *city, TileIndex tile) {
   AdvanceCityGroundRecovery(city, tile);
 }
 
-const TileModule kCityGroundModule = {.tick = TickGroundTile, .draw = DrawCityGroundTile};
-const TileModule kCityRemainsModule = {.draw = DrawRemainsTile};
+const TileModule kCityGroundModule = {
+  .clear = ClearGroundTile, .tick = TickGroundTile, .draw = DrawCityGroundTile,
+};
+const TileModule kCityRemainsModule = {
+  .clear = ClearRemainsTile, .draw = DrawRemainsTile,
+};

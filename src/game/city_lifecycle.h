@@ -2,7 +2,7 @@
 #define SC2K_GAME_CITY_LIFECYCLE_H
 
 #include "city/saveload/types.h"
-#include "city/terrain/terrain.h"
+#include "city/terrain/types.h"
 #include "city/types.h"
 
 // Accepted local creation choices, independent of any window or preview buffer.
@@ -16,6 +16,7 @@ typedef struct CityCreationOptions {
 
 typedef struct Game Game;
 typedef struct CityFileRuntime CityFileRuntime;
+typedef struct CityLoadStream CityLoadStream;
 
 // Initialize supplied owners and load a terminated host path; an empty path creates the initial city.
 // Failure preserves completed initialization and partial load writes. Assets and presentation owners must be ready.
@@ -56,7 +57,7 @@ bool OpenCitySelectedFile(City *city, const u8 *text, int length, bool from_path
 // operation. Zero-initialize stream. Close consumes it even if the underlying file close throws.
 typedef struct CityScenarioInput {
   const char *path;
-  void *stream;
+  CityLoadStream *stream;
   bool from_path;
 } CityScenarioInput;
 void CloseCityScenarioInput(CityScenarioInput *input);

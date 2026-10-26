@@ -40,21 +40,21 @@ static void TrackScriptPlacementDrag(Game *game, const CityPointerInput input[2]
   City *city = game->city;
   CityZoneDragInput samples[2] = {{input[0].point, input[0].flags}, {input[1].point, input[1].flags}};
   // The tracker consumes until release; malformed scripts must not read beyond these two samples.
-  if (city->zone_drag_input || input[0].flags || !(input[1].flags & CITY_DRAG_INPUT_MASK) ||
+  if (game->zone_drag_input || input[0].flags || !(input[1].flags & CITY_DRAG_INPUT_MASK) ||
       (input[1].flags & ~CITY_DRAG_INPUT_MASK)) return;
   if (!IsMapTileValid(city, start) || cost < (infrastructure ? -32768 : 0) || cost > 32767) return;
   if (infrastructure && ((options & ~0x1FF) || (options & 255) > CITY_PLACEMENT_ALLOW_MILITARY)) return;
   ClearGameError(game);
-  city->zone_drag_endpoint = -1;
-  city->zone_drag_input = samples;
-  city->zone_drag_index = 0;
+  game->zone_drag_endpoint = -1;
+  game->zone_drag_input = samples;
+  game->zone_drag_index = 0;
   if (infrastructure) {
     city->construction.stage = options & 255;
-    city->zone_drag_endpoint = TrackCityPlacementDrag(game,
+    game->zone_drag_endpoint = TrackCityPlacementDrag(game,
         options & 256 ? game->drawing->drag_map_view : NULL, start, cost, CITY_DRAG_LINE);
-  } else city->zone_drag_endpoint = TrackCityZoneDrag(game, start, cost);
-  city->zone_drag_input = NULL;
-  city->zone_drag_index = 0;
+  } else game->zone_drag_endpoint = TrackCityZoneDrag(game, start, cost);
+  game->zone_drag_input = NULL;
+  game->zone_drag_index = 0;
 }
 
 bool ApplicationNextScriptAction(Game *game) {
@@ -78,7 +78,7 @@ bool ApplicationNextScriptAction(Game *game) {
     game->close_requested = 1;
   } else if (!strcmp(line, "quit")) {
     CanvasSDLEvent event = {.kind = CANVAS_SDL_CLOSE};
-    DispatchCityCanvasEvent(game->city, &event);
+    DispatchCityCanvasEvent(game, &event);
   } else if (!strcmp(line, "redraw")) {
     if (!RedrawCityCanvas(game->city, NULL))
       game->execution_failed = 1;
@@ -96,7 +96,7 @@ bool ApplicationNextScriptAction(Game *game) {
     CityHotkey key = CityHotkeyFromString(line + 4);
     CanvasSDLEvent event = {.kind = CANVAS_SDL_KEY_DOWN, .key = key,
         .shift = !!(key & CITY_HOTKEY_SHIFT), .ctrl = !!(key & CITY_HOTKEY_CTRL), .alt = !!(key & CITY_HOTKEY_ALT)};
-    DispatchCityCanvasEvent(game->city, &event);
+    DispatchCityCanvasEvent(game, &event);
   } else if (strncmp(line, "screenshot ", 11) == 0) {
     if (!RedrawCityCanvas(game->city, NULL) || !ScreenshotCityCanvas(game, line + 11, false))
       game->execution_failed = true;
@@ -106,7 +106,7 @@ bool ApplicationNextScriptAction(Game *game) {
       CanvasSDLEvent event = {.kind = CANVAS_SDL_TEXT_INPUT};
       CopyText(event.text, sizeof(event.text), text);
       text += strlen(event.text);
-      DispatchCityCanvasEvent(game->city, &event);
+      DispatchCityCanvasEvent(game, &event);
     }
   } else if (!strcmp(line, "activate") || !strcmp(line, "deactivate")) {
     HandleApplicationActivation(game, !strcmp(line, "activate"));
@@ -151,7 +151,6 @@ bool ApplicationNextScriptAction(Game *game) {
     CityCommand command;
     if (sscanf(line, "command %u %d %d %d %c", &command.id, &command.parameter1,
         &command.parameter2, &command.parameter3, &trailing) == 4) {
-      // Rejection is a command result, recorded for stock comparison.
       ExecuteRecordedCityCommandWithInput(game, command, NULL, 0);
       return true;
     }
@@ -224,14 +223,14 @@ bool ApplicationNextScriptAction(Game *game) {
     if (sscanf(line, "scroll %f %f %c", &wheel_x, &wheel_y, &trailing) == 2) {
       event.x = (i32)(wheel_x * 1024.0f);
       event.y = (i32)(wheel_y * 1024.0f);
-      ScrollCityCanvas(game->city, &event);
+      ScrollCityCanvas(game, &event);
       return true;
     }
     if (sscanf(line, "click %d %d %c", &event.x, &event.y, &trailing) == 2) {
       event.button = CANVAS_SDL_BUTTON_LEFT;
       BeginCityCanvasButtonFeedback(game, &event);
-      HandleCityCanvasPointerDown(game->city, &event);
-      HandleCityCanvasPointerUp(game->city, &event);
+      HandleCityCanvasPointerDown(game, &event);
+      HandleCityCanvasPointerUp(game, &event);
       return true;
     }
     char action[8];
@@ -245,14 +244,13 @@ bool ApplicationNextScriptAction(Game *game) {
       event.ctrl = !!(flags & CITY_POINTER_MODIFIER_CONTROL);
       if (!strcmp(action, "down")) {
         BeginCityCanvasButtonFeedback(game, &event);
-        HandleCityCanvasPointerDown(game->city, &event);
+        HandleCityCanvasPointerDown(game, &event);
       } else if (!strcmp(action, "move")) {
-        int x, y;
-        CityInterfacePixels(game, &event, &x, &y);
-        MoveCityTooltipPointer(game, x, y, MonotonicSeconds());
-        HandleCityCanvasPointerMove(game->city, &event);
+        CityPoint point = CityInterfacePointerPixels(game, &event);
+        MoveCityTooltipPointer(game, point.x, point.y, MonotonicSeconds());
+        HandleCityCanvasPointerMove(game, &event);
       } else
-        HandleCityCanvasPointerUp(game->city, &event);
+        HandleCityCanvasPointerUp(game, &event);
       return true;
     }
     fprintf(stderr, "Unknown input-script action: %s\n", line);

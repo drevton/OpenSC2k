@@ -1,9 +1,10 @@
-#include "drawing/maps/map_sprites.h"
+#include "drawing/maps/sprite_cache.h"
 #include "drawing/sprites/surface.h"
 #include "drawing/maps/placement.h"
 
 #include "assets/graphics.h"
-#include "city/maps/layers.h"
+#include "city/maps/terrain.h"
+#include "city/state.h"
 #include "drawing/maps/map_depth.h"
 #include "drawing/maps/map_camera.h"
 #include "drawing/state.h"

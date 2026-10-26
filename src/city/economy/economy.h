@@ -6,6 +6,11 @@
 
 // Economy
 
+// Initialize industry demand/baselines/accounts, sector-rate offsets, bonds and current sector defaults for a new
+// city. Only monthly slot zero changes; treasury, later monthly slots, calendar and neighbor accounts are retained.
+// Requires initialized City storage. No RNG, allocation or presentation; the caller owns setup sequencing.
+void InitializeNewCityEconomy(City *city);
+
 void UpdateMonthlyEconomyBookkeeping(City *city);
 // Apply the due January settlement once. After any facility/fiscal notices, Finish records the live month and rates.
 bool BeginCityAnnualSettlement(City *city);
@@ -22,6 +27,8 @@ typedef struct CityMilestoneNotice {
 // The show flag never suppresses finishing; weather advances from live City state.
 CityMilestoneNotice BeginCityEconomyPrimary(City *city);
 void FinishCityEconomyPrimary(City *city, int milestone);
+// Advance national/neighbor accounts, industry demand/allocation and age cohorts in that order.
+// Uses live City state and its deterministic random streams; an empty city still performs the economy phases.
 void UpdateCityEconomySecondary(City *city);
 
 #endif

@@ -19,11 +19,6 @@ typedef struct CityScenarioSelectionDialog {
   char selected_path[260];
 } CityScenarioSelectionDialog;
 
-typedef struct CityTextMessageDialog {
-  City *city;
-  u32 window;
-} CityTextMessageDialog;
-
 enum {
   CITY_SCENARIO_SELECTION_RESOURCE = 145,
   CITY_SCENARIO_NO_SELECTION = -1,
@@ -32,16 +27,16 @@ enum {
   CITY_SCENARIO_LIST_ROW_HEIGHT = 70,
   CITY_SCENARIO_SELECT_REQUIRED_RESOURCE = 59,
 };
-CityScenarioSelectionDialog *ConstructCityScenarioSelectionDialog(CityScenarioSelectionDialog *dialog, u32 parent);
-void DestroyCityScenarioSelectionDialog(CityScenarioSelectionDialog *dialog);
-int ShowCityTextMessageDialog(City *city, const char *text, int option, u32 parent);
-
 // Scenario Window
 bool OpenCityScenarioSelection(City *city, CityFileChoiceCallback *callback, void *context);
 void CompleteCityScenarioSelection(City *city);
 void ClearCityScenarioSelection(City *city);
+// The caller initializes dialog with the scenario resource and no selection. The picker owns window/list cleanup;
+// retained callers keep the dialog and its selected_path alive until their load operation returns.
 int RunCityScenarioSelectionDialog(City *city, CityScenarioSelectionDialog *dialog);
-int ShowCityScenarioTextDialog(CityTextMessageDialog *dialog, const char *text);
+// Borrow text through the retained presenter's return. Empty text returns NONE; without a presenter return CANCEL.
+// Loading completion and stream cleanup remain the caller's responsibility after dismissal.
+int ShowCityScenarioTextDialog(City *city, const char *text);
 void CloseCityScenarioSelectionDialog(City *city, CityScenarioSelectionDialog *dialog, int result);
 bool EditCityScenarioSelectionControl(City *city, int token, int control, int value);
 // Read the innermost picker's answer state without advancing or completing its caller.

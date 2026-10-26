@@ -2,7 +2,7 @@
 #define SC2K_UI_NAME_EDITOR_H
 
 #include "city/engine/command_types.h"
-#include "city/maps/labels.h"
+#include "city/maps/map_types.h"
 #include "city/types.h"
 
 typedef struct Game Game;

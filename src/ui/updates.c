@@ -89,20 +89,10 @@ bool UpdateCityWindowTimers(Game *game, double now) {
   for (int index = windows.count - 1; index >= 0; --index) {
     Window *window = FindCityCanvasWindow(desktop, windows.ids[index]);
     if (!window) continue;
-    if (window->kind == CITY_CANVAS_COMMAND_ERROR) {
-      // OpenTTD's default error duration is five real-time seconds.
-      if (!game->ui->command_error_close_at) game->ui->command_error_close_at = now + 5;
-      if (now >= game->ui->command_error_close_at) {
-        game->ui->command_error_close_at = 0;
-        Sc2kCanvasDesktopDismissWindow(desktop, window->window_id);
-        closed = true;
-      }
-      continue;
-    }
-    if (window->newspaper && window->newspaper->close_at && now >= window->newspaper->close_at) {
-      Sc2kCanvasDesktopDismissWindow(desktop, window->window_id);
-      closed = true;
-    }
+    u32 id = window->window_id;
+    dirty |= SendWindowEvent(game, window, &(WindowEvent){.kind = WINDOW_TIMER, .now = now});
+    // A timer may dismiss or reorder windows. Only the captured ID remains valid after delivery.
+    closed |= FindCityCanvasWindow(desktop, id) == NULL;
   }
   dirty |= UpdateCityNewspaperOpening(game, now);
   if (closed) ApplicationUpdateDialogPause(game->city);

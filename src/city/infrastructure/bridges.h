@@ -51,6 +51,7 @@ bool ValidateCityBridgeSpan(const City *city, TileIndex tile);
 // The stored field is BridgeStyle for road/rail heads and HighwayBridgeStyle for highway heads.
 int ReadCityBridgeStyle(const City *city, TileIndex tile);
 int ReadCityHighwayBridgePiece(const City *city, TileIndex tile);
+// Upper road surface: road/rail approaches rise one level; highway meshes add their raised carriageway above it.
 int ReadCityBridgeDeckHeight(const City *city, TileIndex tile);
 int CityBridgeHighwayZone(const City *city, TileIndex tile);
 int CityBridgeTransportKind(const TileInfo *tp, int direction);
@@ -66,16 +67,20 @@ int CityNativeRoadBridgeStyles(int length);
 // Command-payload projection only; decoding returns -2 for unsupported encodings.
 int DecodeCityRoadSpanChoice(int value);
 int EncodeCityRoadSpanChoice(int choice);
-// Admission is read-only; TEST returns a quote without mutation or presentation effects.
+// Read-only explicit-endpoint admission: diagonal drags project onto the dominant axis (X wins ties), then normalize
+// endpoints into increasing tile order. Failure has end == INVALID_TILE and notice/blocker data; success includes
+// both heads in length and reports compatible styles. No pricing, payment or presentation effects.
 CityInfrastructureSpan FindCityBridgeSpan(const City *city, TileIndex start, TileIndex end, bool rail);
+// TEST returns a quote without mutation or presentation effects; execution builds and returns its signed charge/error.
 i64 CmdBuildCityBridge(City *city, u32 flags, TileIndex start, TileIndex end, int options);
 // Underpass axis -1 admits a click; a drag must cross perpendicular to the bridge.
 bool CanPlaceCityBridgeUnderpass(const City *city, TileIndex tile, int kind, int axis);
 // Raw placement performs no charging; it updates statistics, connections and old/new damage.
 void PlaceCityBridgeUnderpass(City *city, TileIndex tile, int kind);
-// Clear an admitted middle's underlying transport, or start ground-cover recovery when the underpass is empty.
-// Performs no payment; preserves the bridge and water, updates counters/damage/effect, and leaves reconnection to caller.
-void ClearCityBridgeUnderpass(City *city, TileIndex tile);
+// Surface bulldozer callback shared by road/rail and highway bridge modules. A middle edits only its underpass;
+// a head removes the span. Ordinary highway tiles use the same callback and retain structural demolition.
+// CITY_COMMAND_TEST checks admission without effects; execution requires prior payment and old-extent invalidation.
+i64 ClearCityBridgeTile(City *city, u32 flags, TileIndex tile);
 // Remove only a native bridge, preserving its ground/water and reconnecting both ends. Origin must be valid.
 bool RemoveCityNativeBridge(City *city, TileIndex origin, bool animate);
 
@@ -88,14 +93,17 @@ bool IsCityDrawbridgeOpen(const City *city, TileIndex tile);
 bool CityBridgeAllowsBoat(const City *city, TileIndex tile);
 // Ship relocation/spawn/removal invalidates only leaves whose open state changes. Either position may be INVALID_TILE.
 void InvalidateCityDrawbridgesForShip(City *city, int slot, TileIndex previous, TileIndex current);
+// Far/near artwork depth in the bound Drawing camera. Heads use bank height; middle pieces use deck height.
+// Requires a valid bridge tile and attached Drawing; changes no state or RNG.
+i32 CityMapBridgeArtworkDepth(const City *city, TileIndex tile, bool foreground);
 // Camera projection never changes stored metadata. Deck artwork preserves custom overrides and native style palettes.
-void DrawCityBridgeDeckArtwork(City *city, TileIndex tile, int layout, int zoom, int screen_x, int baseline,
+void DrawCityBridgeDeckArtwork(const City *city, TileIndex tile, int layout, int zoom, int screen_x, int baseline,
     BridgeStyle style);
 // Caller owns pass selection and supplies the resolved underpass kind (road, rail or power).
-void DrawCityBridgeUnderpass(City *city, TileIndex tile, int kind, int zoom, int screen_x, int ground_y);
+void DrawCityBridgeUnderpass(const City *city, TileIndex tile, int kind, int zoom, int screen_x, int ground_y);
 // Ground pass for a valid bridge tile, including its underpass. Handles road, rail and highway bridge families;
 // geometry is camera-relative. Returns true after painting, without placement markers or object submission.
-bool DrawCityBridgeGround(City *city, TileIndex tile, int zoom, int screen_x, int ground_y,
+bool DrawCityBridgeGround(const City *city, TileIndex tile, int zoom, int screen_x, int ground_y,
     const CityTileGeometry *geometry);
 
 #endif

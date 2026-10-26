@@ -6,6 +6,7 @@
 #include "drawing/maps/map_damage.h"
 #include "drawing/maps/map_labels.h"
 #include "drawing/maps/map_render.h"
+#include "drawing/maps/map_sprites.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -15,7 +16,7 @@
 #include "city/events/events.h"
 #include "city/fixes.h"
 #include "city/maps/buildings.h"
-#include "city/maps/layers.h"
+#include "city/maps/map.h"
 #include "city/state.h"
 #include "drawing/maps/map_animation.h"
 #include "drawing/maps/map_events.h"
@@ -25,86 +26,17 @@
 
 // Map Damage
 
-static int LayerScale(CityMapChangeLayer layer) {
-  if (layer >= CITY_MAP_CHANGE_DENSITY)
-    return 4;
-  return layer >= CITY_MAP_CHANGE_POLLUTION ? 2 : 1;
-}
-
-static int CellValue(const City *city, int x, int y, CityMapChangeLayer layer) {
-  TileIndex tile = MapTileXY(city, x, y);
-  const TileInfo *tp = city->tile ? &city->tile[tile] : NULL;
-  switch (layer) {
-  case CITY_MAP_CHANGE_TILE:
-    return tp ? tp->kind : 0;
-  case CITY_MAP_CHANGE_FLAGS:
-    return tp ? tp->flags & ~TF_VISITED : 0;
-  case CITY_MAP_CHANGE_ZONE:
-    return tp ? tp->zone : 0;
-  case CITY_MAP_CHANGE_TERRAIN:
-    return tp ? tp->terrain : 0;
-  case CITY_MAP_CHANGE_UNDERGROUND:
-    return tp ? tp->underground & CITY_UNDERGROUND_KIND_MASK : 0;
-  case CITY_MAP_CHANGE_OVERLAY:
-    return tp ? tp->overlay : 0;
-  case CITY_MAP_CHANGE_ALTITUDE:
-    return tp ? tp->altitude : 0;
-  case CITY_MAP_CHANGE_POLLUTION:
-    return city->half != NULL ? ReadPollution(city, tile) : 0;
-  case CITY_MAP_CHANGE_TRAFFIC_DENSITY:
-    return city->half != NULL ? ReadTrafficDensity(city, tile) : 0;
-  case CITY_MAP_CHANGE_CRIME:
-    return city->half != NULL ? ReadCrime(city, tile) : 0;
-  case CITY_MAP_CHANGE_LAND_VALUE:
-    return city->half != NULL ? ReadLandValue(city, tile) : 0;
-  case CITY_MAP_CHANGE_DENSITY:
-    return city->quarter != NULL ? ReadDensity(city, tile) : 0;
-  case CITY_MAP_CHANGE_POLICE_COVERAGE:
-    return city->quarter != NULL ? ReadPoliceCoverage(city, tile) : 0;
-  case CITY_MAP_CHANGE_FIRE_COVERAGE:
-    return city->quarter != NULL ? ReadFireCoverage(city, tile) : 0;
-  case CITY_MAP_CHANGE_DENSITY_HISTORY:
-    return city->quarter != NULL ? ReadDensityHistory(city, tile) : 0;
-  default:
-    return 0;
-  }
-}
-
-static u8 *PreviousByteValues(const CityMapDrawingSnapshot *snapshot, CityMapChangeLayer layer) {
-  const CityMapDrawingValues *values = &snapshot->values;
-  switch (layer) {
-  case CITY_MAP_CHANGE_TILE:
-    return values->tiles;
-  case CITY_MAP_CHANGE_FLAGS:
-    return values->flags;
-  case CITY_MAP_CHANGE_ZONE:
-    return values->zones;
-  case CITY_MAP_CHANGE_TERRAIN:
-    return values->terrain;
-  case CITY_MAP_CHANGE_UNDERGROUND:
-    return values->underground;
-  case CITY_MAP_CHANGE_OVERLAY:
-    return values->overlays;
-  case CITY_MAP_CHANGE_POLLUTION:
-    return values->pollution;
-  case CITY_MAP_CHANGE_TRAFFIC_DENSITY:
-    return values->traffic_density;
-  case CITY_MAP_CHANGE_CRIME:
-    return values->crime;
-  case CITY_MAP_CHANGE_LAND_VALUE:
-    return values->land_value;
-  case CITY_MAP_CHANGE_DENSITY:
-    return values->density;
-  case CITY_MAP_CHANGE_POLICE_COVERAGE:
-    return values->police_coverage;
-  case CITY_MAP_CHANGE_FIRE_COVERAGE:
-    return values->fire_coverage;
-  case CITY_MAP_CHANGE_DENSITY_HISTORY:
-    return values->density_history;
-  default:
-    __builtin_unreachable(); // Altitude uses word storage below.
-  }
-}
+enum {
+  kSnapshotTileLayers = (1 << CITY_MAP_CHANGE_TILE) | (1 << CITY_MAP_CHANGE_FLAGS) | (1 << CITY_MAP_CHANGE_ZONE) |
+      (1 << CITY_MAP_CHANGE_TERRAIN) | (1 << CITY_MAP_CHANGE_UNDERGROUND) | (1 << CITY_MAP_CHANGE_OVERLAY) |
+      (1 << CITY_MAP_CHANGE_ALTITUDE),
+  kSnapshotHalfLayers = (1 << CITY_MAP_CHANGE_POLLUTION) | (1 << CITY_MAP_CHANGE_TRAFFIC_DENSITY) |
+      (1 << CITY_MAP_CHANGE_CRIME) | (1 << CITY_MAP_CHANGE_LAND_VALUE),
+  kSnapshotQuarterLayers = (1 << CITY_MAP_CHANGE_DENSITY) | (1 << CITY_MAP_CHANGE_POLICE_COVERAGE) |
+      (1 << CITY_MAP_CHANGE_FIRE_COVERAGE) | (1 << CITY_MAP_CHANGE_DENSITY_HISTORY),
+};
+_Static_assert((kSnapshotTileLayers | kSnapshotHalfLayers | kSnapshotQuarterLayers) == (1 << CITY_MAP_CHANGE_COUNT) - 1,
+    "snapshot capture and comparison cover every map change layer");
 
 // One conservative height per kind covers every footprint tile and camera rotation.
 static int DrawingTileHeight(const City *city, TileIndex tile) {
@@ -120,23 +52,31 @@ bool PrepareCityMapDrawingSnapshot(const City *city, CityMapDrawingSnapshot *sna
   if (snapshot->width == city->map_width && snapshot->height == city->map_height && snapshot->storage)
     return true;
   size_t count = city->map_cell_count;
+  CityMapDrawingValues *values = &snapshot->values;
+  const struct { u8 **destination; size_t count; } planes[] = {
+    {&values->tiles, count}, {&values->flags, count}, {&values->zones, count}, {&values->terrain, count},
+    {&values->underground, count}, {&values->overlays, count},
+    {&values->pollution, count >> 2}, {&values->traffic_density, count >> 2},
+    {&values->crime, count >> 2}, {&values->land_value, count >> 2},
+    {&values->density, count >> 4}, {&values->police_coverage, count >> 4},
+    {&values->fire_coverage, count >> 4}, {&values->density_history, count >> 4},
+    {&values->heights, count},
+  };
+  size_t altitude_bytes = count * sizeof(*values->altitude), bytes = altitude_bytes;
+  for (size_t plane = 0; plane < sizeof(planes) / sizeof(planes[0]); ++plane)
+    bytes += planes[plane].count;
   if (snapshot->cell_count != city->map_cell_count || !snapshot->storage) {
-    void *storage = calloc(count * 9 + count + (count >> 2), 1);
+    void *storage = calloc(bytes, 1);
     if (!storage) return false;
     free(snapshot->storage);
     snapshot->storage = storage;
   }
-  CityMapDrawingValues *values = &snapshot->values;
   values->altitude = snapshot->storage;
-  u8 *next = (u8 *)snapshot->storage + 2 * count;
-  u8 **layers[] = {&values->tiles, &values->flags, &values->zones, &values->terrain,
-      &values->underground, &values->overlays, &values->pollution, &values->traffic_density, &values->crime,
-      &values->land_value, &values->density, &values->police_coverage, &values->fire_coverage, &values->density_history};
-  for (int layer = 0; layer < 14; ++layer) {
-    *layers[layer] = next;
-    next += layer < 6 ? count : layer < 10 ? count >> 2 : count >> 4;
+  u8 *next = (u8 *)snapshot->storage + altitude_bytes;
+  for (size_t plane = 0; plane < sizeof(planes) / sizeof(planes[0]); ++plane) {
+    *planes[plane].destination = next;
+    next += planes[plane].count;
   }
-  values->heights = next;
   snapshot->width = city->map_width;
   snapshot->height = city->map_height;
   snapshot->cell_count = city->map_cell_count;
@@ -148,7 +88,7 @@ bool PrepareCityMapDrawingStorage(const City *city) {
   Drawing *drawing = city->drawing;
   bool resized = drawing->map_snapshot.width != city->map_width ||
       drawing->map_snapshot.height != city->map_height;
-  if (!PrepareCityEventDrawingStorage(city) ||
+  if (!PrepareDrawingEventStorage(drawing, city->events.capacity) ||
       !PrepareCityMapDrawingSnapshot(city, &drawing->map_snapshot)) return false;
   if (resized) {
     drawing->main_cache.valid = false;
@@ -163,25 +103,69 @@ bool PrepareCityMapDrawingStorage(const City *city) {
 }
 
 void ReleaseCityMapDrawingStorage(Drawing *drawing) {
-  ReleaseCityEventDrawingStorage(drawing);
+  ReleaseDrawingEventStorage(drawing);
   free(drawing->map_snapshot.storage);
   drawing->map_snapshot = (CityMapDrawingSnapshot){0};
   ReleaseCityMapAnimationStorage(drawing);
 }
 
-static int PreviousCellValue(const CityMapDrawingSnapshot *snapshot, int x, int y, CityMapChangeLayer layer) {
-  int scale = LayerScale(layer);
-  int index = (y / scale) * (snapshot->width / scale) + x / scale;
-  if (layer == CITY_MAP_CHANGE_ALTITUDE) return snapshot->values.altitude[index];
-  int value = PreviousByteValues(snapshot, layer)[index];
-  return layer == CITY_MAP_CHANGE_FLAGS ? value & ~TF_VISITED : value;
-}
-
+// Compare only requested layers of a valid tile against the prepared snapshot. Source records are borrowed
+// once per selected resolution; absent backing contributes zero, as it does during snapshot capture.
 static int ChangedMapLayers(const City *city, const CityMapDrawingSnapshot *snapshot, TileIndex tile, int layers) {
+  const CityMapDrawingValues *values = &snapshot->values;
   int x = MapTileX(city, tile), y = MapTileY(city, tile);
-  for (int layer = 0; layer < CITY_MAP_CHANGE_COUNT; ++layer)
-    if ((layers & (1 << layer)) && PreviousCellValue(snapshot, x, y, layer) == CellValue(city, x, y, layer))
-      layers &= ~(1 << layer);
+  if (layers & kSnapshotTileLayers) {
+    int previous = y * snapshot->width + x;
+    const TileInfo *tp = city->tile ? &city->tile[tile] : NULL;
+    if ((layers & (1 << CITY_MAP_CHANGE_TILE)) && values->tiles[previous] == (tp ? tp->kind : 0))
+      layers &= ~(1 << CITY_MAP_CHANGE_TILE);
+    if ((layers & (1 << CITY_MAP_CHANGE_FLAGS)) &&
+        (values->flags[previous] & ~TF_VISITED) == (tp ? tp->flags & ~TF_VISITED : 0))
+      layers &= ~(1 << CITY_MAP_CHANGE_FLAGS);
+    if ((layers & (1 << CITY_MAP_CHANGE_ZONE)) && values->zones[previous] == (tp ? tp->zone : 0))
+      layers &= ~(1 << CITY_MAP_CHANGE_ZONE);
+    if ((layers & (1 << CITY_MAP_CHANGE_TERRAIN)) && values->terrain[previous] == (tp ? tp->terrain : 0))
+      layers &= ~(1 << CITY_MAP_CHANGE_TERRAIN);
+    if ((layers & (1 << CITY_MAP_CHANGE_UNDERGROUND)) &&
+        values->underground[previous] == (tp ? tp->underground & CITY_UNDERGROUND_KIND_MASK : 0))
+      layers &= ~(1 << CITY_MAP_CHANGE_UNDERGROUND);
+    if ((layers & (1 << CITY_MAP_CHANGE_OVERLAY)) && values->overlays[previous] == (tp ? tp->overlay : 0))
+      layers &= ~(1 << CITY_MAP_CHANGE_OVERLAY);
+    if ((layers & (1 << CITY_MAP_CHANGE_ALTITUDE)) && values->altitude[previous] == (tp ? tp->altitude : 0))
+      layers &= ~(1 << CITY_MAP_CHANGE_ALTITUDE);
+  }
+  if (layers & kSnapshotHalfLayers) {
+    int previous = (y / 2) * (snapshot->width / 2) + x / 2;
+    int cell = (y / 2) * (city->map_width / 2) + x / 2;
+    const CityHalfMapStatistics *stats = city->half ? &city->half[cell] : NULL;
+    if ((layers & (1 << CITY_MAP_CHANGE_POLLUTION)) &&
+        values->pollution[previous] == (stats ? stats->pollution : 0))
+      layers &= ~(1 << CITY_MAP_CHANGE_POLLUTION);
+    if ((layers & (1 << CITY_MAP_CHANGE_TRAFFIC_DENSITY)) &&
+        values->traffic_density[previous] == (stats ? stats->traffic_density : 0))
+      layers &= ~(1 << CITY_MAP_CHANGE_TRAFFIC_DENSITY);
+    if ((layers & (1 << CITY_MAP_CHANGE_CRIME)) && values->crime[previous] == (stats ? stats->crime : 0))
+      layers &= ~(1 << CITY_MAP_CHANGE_CRIME);
+    if ((layers & (1 << CITY_MAP_CHANGE_LAND_VALUE)) &&
+        values->land_value[previous] == (stats ? stats->land_value : 0))
+      layers &= ~(1 << CITY_MAP_CHANGE_LAND_VALUE);
+  }
+  if (layers & kSnapshotQuarterLayers) {
+    int previous = (y / 4) * (snapshot->width / 4) + x / 4;
+    int cell = (y / 4) * (city->map_width / 4) + x / 4;
+    const CityQuarterMapStatistics *stats = city->quarter ? &city->quarter[cell] : NULL;
+    if ((layers & (1 << CITY_MAP_CHANGE_DENSITY)) && values->density[previous] == (stats ? stats->density : 0))
+      layers &= ~(1 << CITY_MAP_CHANGE_DENSITY);
+    if ((layers & (1 << CITY_MAP_CHANGE_POLICE_COVERAGE)) &&
+        values->police_coverage[previous] == (stats ? stats->police_coverage : 0))
+      layers &= ~(1 << CITY_MAP_CHANGE_POLICE_COVERAGE);
+    if ((layers & (1 << CITY_MAP_CHANGE_FIRE_COVERAGE)) &&
+        values->fire_coverage[previous] == (stats ? stats->fire_coverage : 0))
+      layers &= ~(1 << CITY_MAP_CHANGE_FIRE_COVERAGE);
+    if ((layers & (1 << CITY_MAP_CHANGE_DENSITY_HISTORY)) &&
+        values->density_history[previous] == (stats ? stats->density_history : 0))
+      layers &= ~(1 << CITY_MAP_CHANGE_DENSITY_HISTORY);
+  }
   return layers;
 }
 
@@ -190,12 +174,63 @@ void FilterDrawingMapChanges(const City *city, SimulationMapChanges *changes,
   if (!snapshot->valid || snapshot->city != city) changes->full = true;
 }
 
-static void StoreSnapshotCell(const City *city, CityMapDrawingSnapshot *snapshot, int x, int y, int layer) {
-  int scale = LayerScale(layer), stride = city->map_width / scale;
-  int index = (y / scale) * stride + x / scale;
-  int value = CellValue(city, x, y, layer);
-  if (layer == CITY_MAP_CHANGE_ALTITUDE) snapshot->values.altitude[index] = value;
-  else PreviousByteValues(snapshot, layer)[index] = value;
+// Capture selected layers in one pass per map resolution. The bounds already intersect the map; sources stay
+// unchanged throughout this synchronous copy. Cache the source and destination bindings before writing byte planes.
+static void StoreSnapshotLayers(const City *city, CityMapDrawingSnapshot *snapshot, CityRect area, int layers) {
+  const CityMapDrawingValues values = snapshot->values;
+  int width = city->map_width;
+  const TileInfo *tiles = city->tile;
+  const CityHalfMapStatistics *half = city->half;
+  const CityQuarterMapStatistics *quarter = city->quarter;
+  if (layers & kSnapshotTileLayers) {
+    for (int y = area.top; y < area.bottom; ++y) {
+      TileIndex row = y * width;
+      for (int x = area.left; x < area.right; ++x) {
+        TileIndex tile = row + x;
+        const TileInfo *tp = tiles ? &tiles[tile] : NULL;
+        if (layers & (1 << CITY_MAP_CHANGE_TILE)) values.tiles[tile] = tp ? tp->kind : 0;
+        if (layers & (1 << CITY_MAP_CHANGE_FLAGS)) values.flags[tile] = tp ? tp->flags & ~TF_VISITED : 0;
+        if (layers & (1 << CITY_MAP_CHANGE_ZONE)) values.zones[tile] = tp ? tp->zone : 0;
+        if (layers & (1 << CITY_MAP_CHANGE_TERRAIN)) values.terrain[tile] = tp ? tp->terrain : 0;
+        if (layers & (1 << CITY_MAP_CHANGE_UNDERGROUND))
+          values.underground[tile] = tp ? tp->underground & CITY_UNDERGROUND_KIND_MASK : 0;
+        if (layers & (1 << CITY_MAP_CHANGE_OVERLAY)) values.overlays[tile] = tp ? tp->overlay : 0;
+        if (layers & (1 << CITY_MAP_CHANGE_ALTITUDE)) values.altitude[tile] = tp ? tp->altitude : 0;
+      }
+    }
+  }
+  if (layers & kSnapshotHalfLayers) {
+    CityRect cells = {area.left / 2, area.top / 2, (area.right + 1) / 2, (area.bottom + 1) / 2};
+    for (int y = cells.top; y < cells.bottom; ++y) {
+      int row = y * (width / 2);
+      for (int x = cells.left; x < cells.right; ++x) {
+        int cell = row + x;
+        const CityHalfMapStatistics *stats = half ? &half[cell] : NULL;
+        if (layers & (1 << CITY_MAP_CHANGE_POLLUTION)) values.pollution[cell] = stats ? stats->pollution : 0;
+        if (layers & (1 << CITY_MAP_CHANGE_TRAFFIC_DENSITY))
+          values.traffic_density[cell] = stats ? stats->traffic_density : 0;
+        if (layers & (1 << CITY_MAP_CHANGE_CRIME)) values.crime[cell] = stats ? stats->crime : 0;
+        if (layers & (1 << CITY_MAP_CHANGE_LAND_VALUE)) values.land_value[cell] = stats ? stats->land_value : 0;
+      }
+    }
+  }
+  if (layers & kSnapshotQuarterLayers) {
+    CityRect cells = {area.left / 4, area.top / 4, (area.right + 3) / 4, (area.bottom + 3) / 4};
+    for (int y = cells.top; y < cells.bottom; ++y) {
+      int row = y * (width / 4);
+      for (int x = cells.left; x < cells.right; ++x) {
+        int cell = row + x;
+        const CityQuarterMapStatistics *stats = quarter ? &quarter[cell] : NULL;
+        if (layers & (1 << CITY_MAP_CHANGE_DENSITY)) values.density[cell] = stats ? stats->density : 0;
+        if (layers & (1 << CITY_MAP_CHANGE_POLICE_COVERAGE))
+          values.police_coverage[cell] = stats ? stats->police_coverage : 0;
+        if (layers & (1 << CITY_MAP_CHANGE_FIRE_COVERAGE))
+          values.fire_coverage[cell] = stats ? stats->fire_coverage : 0;
+        if (layers & (1 << CITY_MAP_CHANGE_DENSITY_HISTORY))
+          values.density_history[cell] = stats ? stats->density_history : 0;
+      }
+    }
+  }
 }
 
 static void StoreDrawingTileHeights(const City *city, CityMapDrawingSnapshot *snapshot, CityRect area) {
@@ -217,23 +252,15 @@ void UpdateDrawingMapSnapshot(const City *city, CityMapDrawingSnapshot *snapshot
   int layers = moved || changes->full || changes->tiles_changed ?
       (1 << CITY_MAP_CHANGE_COUNT) - 1 : changes->invalidated_layers;
   if (layers) {
-    CityRect area = VisibleCityMapTileBounds(city, region.origin_x, region.origin_y, region.zoom, region.rotation,
-        (CityRect){0, 0, region.width, region.height});
-    for (int layer = 0; layer < CITY_MAP_CHANGE_COUNT; ++layer) {
-      if (!(layers & (1 << layer))) continue;
-      int scale = LayerScale(layer);
-      for (int y = area.top / scale; y < (area.bottom + scale - 1) / scale; ++y)
-        for (int x = area.left / scale; x < (area.right + scale - 1) / scale; ++x)
-          StoreSnapshotCell(city, snapshot, x * scale, y * scale, layer);
-    }
+    CityRect area = VisibleCityMapTileBounds(city, region, (CityRect){0, 0, region.width, region.height});
+    StoreSnapshotLayers(city, snapshot, area, layers);
     int height_layers = (1 << CITY_MAP_CHANGE_TILE) | (1 << CITY_MAP_CHANGE_ZONE) |
         (1 << CITY_MAP_CHANGE_TERRAIN) | (1 << CITY_MAP_CHANGE_FLAGS) | (1 << CITY_MAP_CHANGE_ALTITUDE);
     if (layers & height_layers) {
       CityMapCamera previous = snapshot->regions[viewport];
       bool changed = changes->full || changes->tiles_changed || (changes->invalidated_layers & height_layers);
       if (moved && !changed && previous.width > 0 && previous.height > 0) {
-        CityRect retained = VisibleCityMapTileBounds(city, previous.origin_x, previous.origin_y,
-            previous.zoom, previous.rotation, (CityRect){0, 0, previous.width, previous.height});
+        CityRect retained = VisibleCityMapTileBounds(city, previous, (CityRect){0, 0, previous.width, previous.height});
         retained = IntersectCityRects(area, retained);
         if (retained.left < retained.right && retained.top < retained.bottom) {
           StoreDrawingTileHeights(city, snapshot, (CityRect){area.left, area.top, area.right, retained.top});
@@ -250,19 +277,21 @@ void UpdateDrawingMapSnapshot(const City *city, CityMapDrawingSnapshot *snapshot
   snapshot->valid = true;
 }
 
-static int MaximumElevation(int altitude, bool building_stage) {
+// Match ReadCityWaterHeight: construction progress and bridge-head style are metadata, not water planes.
+static int MaximumElevation(int altitude, int kind) {
   int land = altitude & CITY_ALTITUDE_LAND_MASK;
-  int water = building_stage ? land : (altitude >> CITY_ALTITUDE_WATER_SHIFT) & CITY_ALTITUDE_LAND_MASK;
+  int water = IsTileKindDryBuilding(kind) || IsTileKindBridgeHead(kind) ? land :
+      (altitude >> CITY_ALTITUDE_WATER_SHIFT) & CITY_ALTITUDE_LAND_MASK;
   int tunnel = (altitude >> CITY_ALTITUDE_TUNNEL_SHIFT) & CITY_ALTITUDE_LAND_MASK;
   int height = IntMax(land, water);
   return IntMax(height, tunnel);
 }
 
 static int PreviousSurfaceElevation(const CityMapDrawingSnapshot *snapshot, TileIndex tile) {
-  TileInfo record = {.kind = snapshot->values.tiles[tile], .flags = snapshot->values.flags[tile]};
   int altitude = snapshot->values.altitude[tile];
   int land = altitude & CITY_ALTITUDE_LAND_MASK;
-  int water = CityTileCanStoreBuildingStage(&record) ? land :
+  int kind = snapshot->values.tiles[tile];
+  int water = IsTileKindDryBuilding(kind) || IsTileKindBridgeHead(kind) ? land :
       (altitude >> CITY_ALTITUDE_WATER_SHIFT) & CITY_ALTITUDE_LAND_MASK;
   return IntMax(land, water);
 }
@@ -328,13 +357,9 @@ static void ProjectChangedMapCell(const City *city, const MapDamageProjection *p
   int old_sprite = snapshot ? kCityMapKindSprites[snapshot->values.tiles[tile]] : sprite;
   // Moving cars publish their own damage; density alone affects only data maps.
   if (!data_overlay && !forced && layers == (1 << CITY_MAP_CHANGE_TRAFFIC_DENSITY)) return;
-  int altitude = MaximumElevation(tp->altitude, CityTileCanStoreBuildingStage(tp));
-  bool old_stage = false;
-  if (snapshot) {
-    TileInfo previous = {.kind = snapshot->values.tiles[tile], .flags = snapshot->values.flags[tile]};
-    old_stage = CityTileCanStoreBuildingStage(&previous);
-  }
-  int old_altitude = snapshot ? MaximumElevation(snapshot->values.altitude[tile], old_stage) : CITY_ALTITUDE_LAND_MASK;
+  int altitude = MaximumElevation(tp->altitude, tp->kind);
+  int old_altitude = snapshot ? MaximumElevation(snapshot->values.altitude[tile], snapshot->values.tiles[tile]) :
+      CITY_ALTITUDE_LAND_MASK;
   altitude = IntMax(altitude, old_altitude);
   CityPoint point = CityMapCameraPoint(city, projection->camera.rotation, x, y);
   int screen_x = origin_x + (point.y - point.x) * 4 * scale;
@@ -386,7 +411,7 @@ void ProjectCityMapTileDamage(const City *city, TileIndex tile, CityMapCamera re
       for (int direction = 0; direction < 4; ++direction) {
         TileIndex neighbor = GetRelativeTileOrInvalid(city, tile, kX[direction], kY[direction]);
         if (neighbor == INVALID_TILE) continue;
-        if (IsTileKindPowerLine(ReadTile(city, neighbor)))
+        if (IsTileKindPowerLine(city->tile[neighbor].kind))
           ProjectChangedMapCell(city, &projection, neighbor, (1 << CITY_MAP_CHANGE_COUNT) - 1, true);
       }
     }
@@ -403,7 +428,6 @@ void ProjectCityMapTileDamage(const City *city, TileIndex tile, CityMapCamera re
 void ProjectSimulationMapDamage(const City *city, const SimulationMapChanges *changes,
     const CityMapDrawingSnapshot *snapshot,
     CityMapCamera region, bool data_overlay, CityCanvasVisiblePaint mark, void *context) {
-  int origin_x = region.origin_x, origin_y = region.origin_y, zoom = region.zoom;
   int width = region.width, height = region.height;
   if (changes->full) {
     mark((CityRect){0, 0, width, height}, context);
@@ -419,8 +443,7 @@ void ProjectSimulationMapDamage(const City *city, const SimulationMapChanges *ch
     layers |= (1 << CITY_MAP_CHANGE_COUNT) - 1;
   layers &= visible_layers;
   if (!layers) return;
-  CityRect area = VisibleCityMapTileBounds(city, origin_x, origin_y, zoom, region.rotation,
-      (CityRect){0, 0, width, height});
+  CityRect area = VisibleCityMapTileBounds(city, region, (CityRect){0, 0, width, height});
   for (int y = area.top; y < area.bottom; ++y)
     for (int x = area.left; x < area.right; ++x) {
       TileIndex tile = MapTileXY(city, x, y);

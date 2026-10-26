@@ -65,7 +65,7 @@ _Static_assert(offsetof(CanvasSDLEvent, key) == 16, "SDL host key offset matches
 CanvasSDL *Sc2kSDLOpen(Game *game, i32 width, i32 height, i32 scale, i32 hidden);
 // Detach matching UI display references before releasing cursors, gestures and host window resources.
 void Sc2kSDLClose(CanvasSDL *display);
-bool Sc2kSDLIsMinimized(CanvasSDL *display);
+bool Sc2kSDLIsMinimized(const CanvasSDL *display);
 const char *Sc2kSDLError(void);
 void Sc2kSDLTitle(CanvasSDL *display, const char *title);
 // Borrow the open display's logical width x height pixels; stride is in u32 pixels and must cover its width.
@@ -80,8 +80,8 @@ bool Sc2kSDLEvent(CanvasSDL *display, CanvasSDLEvent *event, i32 wait_ms);
 void WaitForCityCanvasFrame(int milliseconds);
 // Filter activation for the busy dialog gate; retain other canvas input in FIFO order.
 int PollCanvasActivation(CanvasSDL *display, bool *active);
-i32 Sc2kSDLOutputSize(CanvasSDL *display, i32 *width, i32 *height);
-i32 Sc2kSDLPixelScale(CanvasSDL *display);
+i32 Sc2kSDLOutputSize(const CanvasSDL *display, i32 *width, i32 *height);
+i32 Sc2kSDLPixelScale(const CanvasSDL *display);
 // Switch to physical framebuffer presentation and configure cursor/UI scale in 100..500.
 i32 Sc2kSDLConfigureFramebuffer(CanvasSDL *display, i32 ui_scale);
 // Requires framebuffer configuration. Borrow already rasterized physical pixels for this call; SDL only uploads them.
@@ -92,14 +92,16 @@ i32 Sc2kSDLPresentFramebuffer(CanvasSDL *display, const Canvas *canvas,
 // The gold arrow is used over controls/without a selected tool; map tools use
 // the white pointer and yellow badge. Both follow interface scale.
 void Sc2kSDLCursorTool(CanvasSDL *display, i32 tool, i32 over_map);
-bool Sc2kSDLUIPointer(CanvasSDL *display, i32 *x, i32 *y);
-bool Sc2kSDLFramebufferPointer(CanvasSDL *display, i32 *x, i32 *y);
-void Sc2kSDLDisplayOptions(CanvasSDL *display, DrawingOptions *options);
+// Read cached pointer coordinates without polling SDL or changing the display. A missing cache returns false
+// and preserves both outputs. UI coordinates use interface scale; framebuffer coordinates use physical pixels.
+bool Sc2kSDLUIPointer(const CanvasSDL *display, i32 *x, i32 *y);
+bool Sc2kSDLFramebufferPointer(const CanvasSDL *display, i32 *x, i32 *y);
+void Sc2kSDLDisplayOptions(const CanvasSDL *display, DrawingOptions *options);
 i32 Sc2kSDLFullscreen(CanvasSDL *display, i32 enabled);
 i32 Sc2kSDLReadPixels(CanvasSDL *display, u32 *pixels, i32 stride);
 void Sc2kSDLResize(CanvasSDL *display, i32 width, i32 height);
 void Sc2kSDLPasteText(char *text, size_t capacity, int *caret, int *select_all);
 bool Sc2kSDLOpenURL(const char *url);
-u32 Sc2kSDLWindowId(CanvasSDL *display);
+u32 Sc2kSDLWindowId(const CanvasSDL *display);
 
 #endif

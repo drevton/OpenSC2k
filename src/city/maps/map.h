@@ -1,9 +1,9 @@
 #ifndef SC2K_DOMAIN_SRC_CITY_MAPS_MAP_H
 #define SC2K_DOMAIN_SRC_CITY_MAPS_MAP_H
 
-#include "city/maps/map_types.h"
-#include "city/maps/tile_storage.h"
 #include "city/types.h"
+
+typedef struct TileInfo TileInfo;
 
 // Changes
 
@@ -26,14 +26,8 @@ typedef enum CityMapChangeLayer {
   CITY_MAP_CHANGE_COUNT
 } CityMapChangeLayer;
 
-// City owns these pending presentation notifications; they are not saved simulation data. Tile invalidations
-// call the direct UI damage hook immediately. Bulk simulation passes notify layers once.
-typedef struct {
-  u16 invalidated_layers;
-  bool tiles_changed;
-  bool full;
-  bool enabled;
-} SimulationMapChanges;
+// Map change storage is defined in map_types.h and borrowed by the invalidation API.
+typedef struct SimulationMapChanges SimulationMapChanges;
 
 void InvalidateMapLayer(City *city, CityMapChangeLayer layer);
 // Accept a valid tile or INVALID_TILE (no change); other indices violate the contract.
@@ -47,6 +41,12 @@ void ClearSimulationMapChanges(SimulationMapChanges *changes);
 
 // State
 
+// Select the fixed counter slot used by economy and environment tables. Requires a supported native kind;
+// unfinished stock imports retain their source key until native map storage is published. No state changes.
+int CityTileStatisticsKey(const City *city, int kind);
+// Read the surface counter slot of a borrowed City tile record, including construction and wet power-line projection.
+// Bridge underpasses are counted separately with the kind query. Does not change counters or tile metadata.
+int ReadCityTileStatisticsKey(const City *city, const TileInfo *tp);
 void RecountCityTileStatistics(City *city);
 void RebuildLoadedCityMapState(City *city);
 
@@ -54,9 +54,15 @@ void RebuildLoadedCityMapState(City *city);
 void InitializeCityLandscape(City *city);
 
 typedef struct CityTerrainMap CityTerrainMap;
-void GenerateCityLandscape(City *city, const CityTerrainMap *terrain);
-void AdvanceCityLandscape(City *city);
+typedef struct CityTerrainSettings CityTerrainSettings;
 
-i64 UpdateCityMapTileStates(City *city);
+// Prepare preview backing, copy/downsample live terrain and finish derived metadata. City is read-only.
+// False means preview backing could not be prepared.
+bool ReadCityTerrainPreview(const City *city, CityTerrainMap *map, const CityTerrainSettings *settings);
+// Install generated or imported terrain after the caller's City reset. Map dimensions must match allocated storage.
+// Failure sets Game's allocation error and preserves earlier tile writes; success includes statistics/RNG/climate.
+bool InstallCityTerrainMap(City *city, const CityTerrainMap *map, const CityTerrainSettings *settings);
+
+void AdvanceCityLandscape(City *city);
 
 #endif

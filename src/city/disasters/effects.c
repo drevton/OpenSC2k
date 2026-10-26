@@ -1,3 +1,6 @@
+#include "city/disasters/disasters.h"
+
+#include "base/integer.h"
 #include "game/timing.h"
 #include "city/maps/labels.h"
 #include "city/engine/random.h"
@@ -5,23 +8,21 @@
 #include "city/disasters/types.h"
 #include "city/maps/tile_storage.h"
 #include "city/maps/layers.h"
+#include "city/maps/terrain.h"
+#include "city/maps/water.h"
 #include "city/maps/tables.h"
 #include "game/audio.h"
 #include "city/presentation.h"
 #include <assert.h>
-#include <string.h>
 
 #include "game/observation.h"
-#include "city/disasters/disasters.h"
 #include "city/events/events.h"
 #include "city/maps/map.h"
 #include "city/state.h"
 #include "city/tools/tools.h"
 #include "city/saveload/file.h"
 #include "game/state.h"
-#include "assets/state.h"
 #include "city/maps/map_types.h"
-#include "city/saveload/map_format.h"
 
 static const u8 kDisasterDamagePriority[67] = {
   0, 1, 1, 1, 1, 1, 1, 1, 4, 8, 5, 5, 5, 5, 5, 5,
@@ -39,7 +40,7 @@ static const i8 kMicrowaveDisasterStepX[8] = {
   -1, -1, 0, 1, 1, 1, 0, -1,
 };
 
-enum {
+enum CityDisasterWorkPhase {
   CITY_DISASTER_WORK_READY, CITY_DISASTER_WORK_WAIT,
   CITY_DISASTER_WORK_DAMAGE,
 };
@@ -62,10 +63,14 @@ void CancelCityDisasterWork(City *city) {
 // Continue the fire/firestorm spiral and its fallback target attempts using City's retained disaster work. Calls must
 // preserve the same work lifetime; deterministic draws and successful strikes are not repeated after suspension.
 i64 ApplyCityFireDisaster(City *city, bool fire_storm) {
+  enum CityFireWorkPhase {
+    CITY_FIRE_SPIRAL_MOVE = 1, CITY_FIRE_SPIRAL_STRIKE = 2,
+    CITY_FIRE_RANDOM_TARGET = 3, CITY_FIRE_RANDOM_STRIKE = 4,
+  };
   CityDisasterWork *work = &city->disaster_work;
   if (!work->type) {
     *work = (CityDisasterWork){.type = fire_storm ? CITY_DISASTER_FIRE_STORM : CITY_DISASTER_FIRE,
-        .run_length = 1, .remaining = 65, .phase = 1};
+        .run_length = 1, .remaining = 65, .phase = CITY_FIRE_SPIRAL_MOVE};
     if (fire_storm) {
       work->y = city->disasters.location.y;
       work->x = city->disasters.location.x;
@@ -74,16 +79,17 @@ i64 ApplyCityFireDisaster(City *city, bool fire_storm) {
       work->x = city->geography.center_x + Sc2kCrtRandRange(city, 40) - 20;
     }
   }
-  while (work->phase < 3 && work->run_length < (fire_storm ? city->map_width : 64) && work->remaining) {
-    if (work->phase == 1) {
+  while (work->phase < CITY_FIRE_RANDOM_TARGET && work->run_length < (fire_storm ? city->map_width : 64) &&
+      work->remaining) {
+    if (work->phase == CITY_FIRE_SPIRAL_MOVE) {
       work->y += kCardinalNeighborY[work->direction];
       work->x += kCardinalNeighborX[work->direction];
       TileIndex tile = MapTileXYOrInvalid(city, work->x, work->y);
-      if (tile != INVALID_TILE && (fire_storm || IsTileKindBuilding(ReadTile(city, tile)))) {
-        work->phase = 2;
+      if (tile != INVALID_TILE && (fire_storm || IsTileKindBuilding(city->tile[tile].kind))) {
+        work->phase = CITY_FIRE_SPIRAL_STRIKE;
       }
     }
-    if (work->phase == 2) {
+    if (work->phase == CITY_FIRE_SPIRAL_STRIKE) {
       i64 result = ApplyDisasterCellEffect(city, MapTileXYOrInvalid(city, work->x, work->y), fire_storm);
       if (result) {
         work->applied = true;
@@ -92,7 +98,7 @@ i64 ApplyCityFireDisaster(City *city, bool fire_storm) {
         SetDisasterLocation(&city->disasters.location, work->x, work->y);
       }
     }
-    work->phase = 1;
+    work->phase = CITY_FIRE_SPIRAL_MOVE;
     if (++work->run_position >= work->run_length) {
       work->run_position = 0;
       if (work->direction & 1) ++work->run_length;
@@ -100,17 +106,17 @@ i64 ApplyCityFireDisaster(City *city, bool fire_storm) {
     }
   }
   if (!fire_storm && !work->applied) {
-    if (work->phase < 3) work->phase = 3;
+    if (work->phase < CITY_FIRE_RANDOM_TARGET) work->phase = CITY_FIRE_RANDOM_TARGET;
     while (work->attempts < 200) {
-      if (work->phase == 3) {
+      if (work->phase == CITY_FIRE_RANDOM_TARGET) {
         work->y = NextCityMapRandomModulo(city, city->map_height);
         work->x = NextCityMapRandomModulo(city, city->map_width);
-        work->phase = 4;
+        work->phase = CITY_FIRE_RANDOM_STRIKE;
       }
       i64 result = ApplyDisasterCellEffect(city, MapTileXYOrInvalid(city, work->x, work->y), 0);
       if (result) { work->applied = true; break; }
       ++work->attempts;
-      work->phase = 3;
+      work->phase = CITY_FIRE_RANDOM_TARGET;
     }
   }
   bool applied = work->applied;
@@ -161,62 +167,7 @@ bool ApplyCityRiotDisaster(City *city) {
   if (city->settings.auto_goto != 0)
     CenterCityMapOnEvent(city, origin_x, origin_y);
   PlayCitySound(city, tile_index, CITY_SOUND_DEMOLITION);
-  SetDisasterLocation((&city->disasters.location), x, y);
-  return true;
-}
-
-// Create the monster or tornado event if that disaster's active-count gate permits it. Returns false when already
-// active or no event can be created; successful creation updates deterministic event/disaster state.
-bool ApplyCityMobileDisaster(City *city, bool monster) {
-  if ((monster ? city->disasters.monster_count : city->disasters.tornado_count) >= 1)
-    return false;
-  int slot = FindFreeCityEventSlot(city);
-  if (slot == 0)
-    return false;
-
-  int y = city->disasters.location.y;
-  int x = city->disasters.location.x;
-  y = IntClamp(y, 0, city->map_height - 1);
-  x = IntClamp(x, 0, city->map_width - 1);
-
-  TileIndex tile_index = MapTileXY(city, x, y);
-  int overlay = ReadOverlay(city, tile_index);
-  if (IsCityEventOverlay(overlay))
-    ClearCityMapEventSlot(city, CityEventOverlaySlot(overlay));
-
-  CityMapEvent *event = &city->events.event[slot];
-  memset(event, 0, sizeof(*event));
-  event->type = monster ? CITY_MAP_EVENT_MONSTER : CITY_MAP_EVENT_TORNADO;
-  event->direction = monster ? CITY_HEADING_SOUTH : Sc2kCrtRand(city) & 7;
-  event->tile = tile_index;
-  if (monster) event->height = 15;
-  SetCityMapEventTarget(city, event, 128, 128);
-  int upper = Sc2kCrtRand(city) & 0x7F;
-  int lower = Sc2kCrtRand(city) & 0x7F;
-  if (monster) {
-    event->monster.upper_pose = upper;
-    event->monster.lower_pose = lower;
-  } else {
-    // Stock retains these randomized words even though tornadoes do not use them.
-    event->raw.destination_y = upper;
-    event->raw.destination_x = lower;
-  }
-  if (!monster) event->height = ReadCityLandHeight(&city->tile[tile_index]);
-  event->previous_overlay = ReadCityEventUnderlay(city, tile_index);
-  if (monster) {
-    if (city->mission.active != 0 || (Sc2kCrtRand(city) & 1) != 0)
-      event->monster.action = 0;
-    else
-      event->monster.action = Sc2kCrtRandRange(city, 3) + 1;
-  }
-  event->next_slot = 0;
-  if (monster) ++city->disasters.monster_count;
-  else ++city->disasters.tornado_count;
-  LinkCityMapEvent(city, slot);
-  city->disasters.last_event_slot = slot;
-  InvalidateCityMapEvent(city, slot);
-  if (city->settings.auto_goto != 0)
-    CenterCityMapOnEvent(city, monster ? IntMax(x - 8, 0) : x, monster ? IntMax(y - 8, 0) : y);
+  SetDisasterLocation(&city->disasters.location, x, y);
   return true;
 }
 
@@ -232,7 +183,7 @@ i64 ApplyCityRandomDisasterStrikes(City *city, bool delayed) {
   }
   if (work->phase) {
     if (!StepGameDelay(city->game, &city->game->animation_delay)) return CITY_OPERATION_PENDING;
-    work->phase = 0;
+    work->phase = CITY_DISASTER_WORK_READY;
     --work->attempts;
   }
   while (work->attempts > 0) {
@@ -242,7 +193,7 @@ i64 ApplyCityRandomDisasterStrikes(City *city, bool delayed) {
       SetDisasterLocation(&city->disasters.location, x, y);
       if (delayed ? ApplyCityFloodDisaster(city) : ApplyCityRiotDisaster(city)) work->applied = true;
       if (delayed) {
-        work->phase = 1;
+        work->phase = CITY_DISASTER_WORK_WAIT;
         BeginGameDelay(city->game, &city->game->animation_delay, 20, true);
         return CITY_OPERATION_PENDING;
       }
@@ -258,25 +209,27 @@ i64 ApplyCityRandomDisasterStrikes(City *city, bool delayed) {
   return applied;
 }
 
+// Search complete map storage in row order, without RNG or callbacks. The first matching tile wins,
+// including a footprint continuation; callers resolve any footprint after selecting their target.
+static TileIndex FindDisasterPlant(const City *city, TileKind kind) {
+  const TileInfo *tp = city->tile;
+  for (TileIndex tile = 0; tile < city->map_cell_count; ++tile, ++tp)
+    if (tp->kind == kind) return tile;
+  return INVALID_TILE;
+}
+
 // Find the first microwave power plant and damage a random eight-direction path from it.
 // Calls share City disaster work; each path step consumes its direction draw once.
 i64 ApplyCityMicrowaveDisaster(City *city) {
+  enum CityMicrowaveWorkPhase {
+    CITY_MICROWAVE_PREPARE = 0, CITY_MICROWAVE_STRIKE = 1,
+  };
   CityDisasterWork *work = &city->disaster_work;
   if (!work->type) {
-    int y = 0;
-    int x = 0;
-    bool found = false;
-    for (y = 0; y < city->map_height && !found; ++y) {
-      for (x = 0; x < city->map_width; ++x) {
-        if (ReadTile(city, MapTileXY(city, x, y)) == TK_MICROWAVE_POWER_PLANT) {
-          found = true;
-          break;
-        }
-      }
-    }
-    if (!found)
-      return false;
-    --y;
+    TileIndex plant = FindDisasterPlant(city, TK_MICROWAVE_POWER_PLANT);
+    if (plant == INVALID_TILE) return false;
+    CityPoint point = MapTilePt(city, plant);
+    int x = point.x, y = point.y;
 
     if (city->settings.auto_goto != 0)
       CenterCityMapOnEvent(city, x, y);
@@ -286,19 +239,19 @@ i64 ApplyCityMicrowaveDisaster(City *city) {
   while (work->remaining > 0) {
     TileIndex tile = MapTileXYOrInvalid(city, work->x, work->y);
     if (tile == INVALID_TILE) break;
-    if (work->phase || ReadTile(city, tile) != TK_MICROWAVE_POWER_PLANT) {
-      if (!work->phase) {
+    if (work->phase != CITY_MICROWAVE_PREPARE || city->tile[tile].kind != TK_MICROWAVE_POWER_PLANT) {
+      if (work->phase == CITY_MICROWAVE_PREPARE) {
         if (HasTileWater(&city->tile[tile])) {
           WriteOverlay(city, tile, CITY_OVERLAY_POLLUTION);
           InvalidateTile(city, tile);
         }
         if (work->remaining % 10 == 0 && city->settings.auto_goto)
           CenterCityMapOnEvent(city, work->x, work->y);
-        work->phase = 1;
+        work->phase = CITY_MICROWAVE_STRIKE;
       }
       ApplyDisasterCellEffect(city, tile, 1);
       PlayCitySound(city, tile, CITY_SOUND_POWER_LINES);
-      work->phase = 0;
+      work->phase = CITY_MICROWAVE_PREPARE;
     }
     --work->remaining;
     work->y += kMicrowaveDisasterStepY[work->direction];
@@ -331,8 +284,9 @@ bool ApplyCityFloodDisaster(City *city) {
         int x = origin_x + offset_x;
         TileIndex tile = MapTileXYOrInvalid(city, x, y);
         if (tile == INVALID_TILE) continue;
-        int terrain_code = ReadLegacyTerrainCode(city, tile);
-        if (terrain_code < CITY_TERRAIN_BANK_32 || terrain_code >= CITY_TERRAIN_BANK_48)
+        const TileInfo *tp = &city->tile[tile];
+        // Hydro spillways can also seed a flood.
+        if (tp->kind != TK_HYDRO_POWER && ReadCityWaterGroundKind(tp) != TK_WATER_BANK)
           continue;
         target_y = y;
         target_x = x;
@@ -349,14 +303,14 @@ bool ApplyCityFloodDisaster(City *city) {
       int y = NextCityMapRandomModulo(city, city->map_height);
       int x = NextCityMapRandomModulo(city, city->map_width);
       TileIndex tile_index = MapTileXY(city, x, y);
-      if (ReadLegacyTerrainCode(city, tile_index) != CITY_TERRAIN_FLAT) continue;
+      if (!IsFlatDryTile(&city->tile[tile_index])) continue;
       WriteOverlay(city, tile_index, CITY_OVERLAY_FLOOD);
       InvalidateTile(city, tile_index);
       if (city->settings.auto_goto != 0)
         CenterCityMapOnEvent(city, x, y);
       city->disasters.event_decay_ticks = 60;
       PlayCitySound(city, MapTileXY(city, origin_x, origin_y), CITY_SOUND_WATER);
-      SetDisasterLocation((&city->disasters.location), x, y);
+      SetDisasterLocation(&city->disasters.location, x, y);
       return true;
     }
     return false;
@@ -397,7 +351,7 @@ bool ApplyCityFloodDisaster(City *city) {
     CenterCityMapOnEvent(city, target_x, target_y);
   city->disasters.event_decay_ticks = 60;
   PlayCitySound(city, MapTileXY(city, origin_x, origin_y), CITY_SOUND_WATER);
-  SetDisasterLocation((&city->disasters.location), target_x, target_y);
+  SetDisasterLocation(&city->disasters.location, target_x, target_y);
   return true;
 }
 
@@ -411,7 +365,7 @@ bool ApplyCityPollutionDisaster(City *city) {
   TileIndex tile = MapTileXY(city, x, y);
   WriteOverlay(city, tile, CITY_OVERLAY_POLLUTION);
   InvalidateTile(city, tile);
-  SetDisasterLocation((&city->disasters.location), x, y);
+  SetDisasterLocation(&city->disasters.location, x, y);
   return true;
 }
 
@@ -431,7 +385,7 @@ int ApplyCityChemicalSpillDisaster(City *city) {
       changed = true;
       WriteOverlay(city, tile, CITY_OVERLAY_POLLUTION);
       InvalidateTile(city, tile);
-      SetDisasterLocation((&city->disasters.location), x, y);
+      SetDisasterLocation(&city->disasters.location, x, y);
     }
     --remaining;
   }
@@ -440,24 +394,27 @@ int ApplyCityChemicalSpillDisaster(City *city) {
   return changed;
 }
 
-// Demolish a footprint and retain its most severe event category.
-void DemolishCityFootprintForDisaster(City *city, TileIndex tile_index, int animate, int clear_overlays) {
+// Capture the selection before demolition. Facility damage uses the original kind;
+// other tiles use their live zone after removal and optional fire marking.
+void DemolishCityFootprintForDisaster(City *city, TileIndex tile_index, int animate, int mark_fire) {
   assert(IsMapTileValid(city, tile_index));
-  int tile = ReadTile(city, tile_index);
+  int tile = city->tile[tile_index].kind;
   if (IsTileKindTunnel(tile))
     return;
 
   CityTileArea area = ResolveBulldozeFootprint(city, tile_index);
   BulldozeCityTile(city, tile_index, animate != 0);
 
-  for (int dy = 0; dy < area.height; ++dy)
-    for (int dx = area.width - 1; dx >= 0; --dx) {
-      TileIndex cell = GetRelativeTileOrInvalid(city, area.start, dx, dy);
-      if (cell == INVALID_TILE) continue;
-      if (HasTileWater(&city->tile[cell]) || clear_overlays == 0) continue;
-      WriteOverlay(city, cell, CITY_OVERLAY_FIRE);
-      InvalidateTile(city, cell);
-    }
+  if (mark_fire) {
+    for (int dy = 0; dy < area.height; ++dy)
+      for (int dx = area.width - 1; dx >= 0; --dx) {
+        TileIndex cell = GetRelativeTileOrInvalid(city, area.start, dx, dy);
+        if (cell == INVALID_TILE) continue;
+        if (HasTileWater(&city->tile[cell])) continue;
+        WriteOverlay(city, cell, CITY_OVERLAY_FIRE);
+        InvalidateTile(city, cell);
+      }
+  }
 
   int category;
   if (IsTileKindFacility(tile))
@@ -470,46 +427,55 @@ void DemolishCityFootprintForDisaster(City *city, TileIndex tile_index, int anim
     city->disasters.event_data = category;
 }
 
-// Propagate overlay 0xFC through eligible adjacent city-map cells. Invalid candidate neighbors are ignored; admitted
-// cells update their overlay, damage and utility/disaster state in place.
-void SpreadCityMapFireToCell(City *city, TileIndex tile_index, int maximum_power_level) {
+// Disaster markers clear traffic in the valid tile's containing 2x2 record. The caller owns damage publication;
+// this plain field write adds no callbacks, RNG or neighbor updates.
+static SC2K_FORCE_INLINE void ClearTrafficAtTile(City *city, TileIndex tile) {
+  CityPoint point = MapTilePt(city, tile);
+  city->half[(point.y >> 1) * (city->map_width >> 1) + (point.x >> 1)].traffic_density = 0;
+}
+
+// Spread flooding at or below the source's land level. Invalid candidate neighbours are ignored;
+// admitted cells update their markers, traffic and disaster state in place.
+void SpreadCityFloodToCell(City *city, TileIndex tile_index, int flood_level) {
   if (tile_index == INVALID_TILE) return;
   InvalidateTile(city, tile_index);
-  if (ReadCityLandHeight(&city->tile[tile_index]) > maximum_power_level)
+  const TileInfo *tp = &city->tile[tile_index];
+  if (ReadCityLandHeight(tp) > flood_level)
     return;
 
-  int terrain_code = ReadLegacyTerrainCode(city, tile_index);
-  if (terrain_code >= CITY_TERRAIN_WATER_FIRST && terrain_code < CITY_TERRAIN_BANK_32)
+  // Ordinary open water needs no flood marker; rivers, banks and hydro spillways remain eligible.
+  if (tp->kind != TK_HYDRO_POWER && ReadCityWaterGroundKind(tp) == TK_WATER)
     return;
 
   int overlay = ReadOverlay(city, tile_index);
   if (overlay == CITY_OVERLAY_NONE) {
     WriteOverlay(city, tile_index, CITY_OVERLAY_FLOOD);
-    WriteTrafficDensity(city, tile_index, 0);
+    ClearTrafficAtTile(city, tile_index);
     return;
   }
-  if ((!overlay || IsCitySignOverlay(overlay))) {
-    if (!city->individual_facilities || !IsCitySignOverlay(overlay)) ClearOverlayAssociation(city, overlay);
+  if (IsCitySignOverlay(overlay)) {
+    if (!city->individual_facilities) ClearOverlayAssociation(city, overlay);
     WriteOverlay(city, tile_index, CITY_OVERLAY_FLOOD);
-    WriteTrafficDensity(city, tile_index, 0);
+    ClearTrafficAtTile(city, tile_index);
     return;
   }
   if (IsCityFacilityOverlay(overlay)) {
     DemolishCityFootprintForDisaster(city, tile_index, 1, 0);
     WriteOverlay(city, tile_index, CITY_OVERLAY_FLOOD);
-    WriteTrafficDensity(city, tile_index, 0);
+    ClearTrafficAtTile(city, tile_index);
     return;
   }
   if (overlay >= CITY_OVERLAY_EVENT_END && overlay < CITY_OVERLAY_BORDER_CONNECTION)
     ReplaceCityTileVariant(city, tile_index, TK_RUBBLE, NextCityMapRandomModulo(city, 4));
 }
 
-// Replace low-numbered overlay records with a transient marker. Invalid indices are ignored; overlay eligibility is
-// checked before writing and unrelated high-priority associations remain intact.
+// Replace an absent overlay or a sign with a transient marker. Invalid indices are ignored;
+// other overlay associations remain intact.
 void SetCityMapOverlayIfReplaceable(City *city, TileIndex tile_index, u8 overlay) {
   if (tile_index == INVALID_TILE) return;
   InvalidateTile(city, tile_index);
-  if ((!ReadOverlay(city, tile_index) || IsCitySignOverlay(ReadOverlay(city, tile_index))))
+  int previous = ReadOverlay(city, tile_index);
+  if (previous == CITY_OVERLAY_NONE || IsCitySignOverlay(previous))
     WriteOverlay(city, tile_index, overlay);
 }
 
@@ -532,12 +498,12 @@ void ResolveDestroyedCityMapCell(City *city, TileIndex tile_index) {
     return;
 
   WriteOverlay(city, tile_index, CITY_OVERLAY_NONE);
-  int tile = ReadTile(city, tile_index);
+  int tile = city->tile[tile_index].kind;
   if (IsTileKindTunnel(tile))
     return;
 
   if (IsTileKindMultiHighway(tile) || tile == TK_SUBWAY_TO_RAIL || IsTileKindBuilding(tile)) {
-    if (ReadFootprintCorners(city, tile_index) == CITY_ZONE_CORNER_MASK)
+    if (ReadFootprintCorners(city, tile_index) == CITY_FOOTPRINT_CORNERS_ALL)
       BulldozeCityTile(city, tile_index, false);
     return;
   }
@@ -554,26 +520,26 @@ bool ApplyDisasterCellEffect(City *city, TileIndex tile_index, int allow_low_til
   if (HasTileWater(&city->tile[tile_index]))
     return false;
 
-  int tile = ReadTile(city, tile_index);
+  int tile = city->tile[tile_index].kind;
   if (IsTileKindBareGround(tile) && allow_low_tiles == 0)
     return false;
 
   int overlay = ReadOverlay(city, tile_index);
   if (overlay == CITY_OVERLAY_NONE) {
     WriteOverlay(city, tile_index, CITY_OVERLAY_FIRE);
-    WriteTrafficDensity(city, tile_index, 0);
+    ClearTrafficAtTile(city, tile_index);
     return true;
   }
-  if ((!overlay || IsCitySignOverlay(overlay))) {
-    if (!city->individual_facilities || !IsCitySignOverlay(overlay)) ClearOverlayAssociation(city, overlay);
+  if (IsCitySignOverlay(overlay)) {
+    if (!city->individual_facilities) ClearOverlayAssociation(city, overlay);
     WriteOverlay(city, tile_index, CITY_OVERLAY_FIRE);
-    WriteTrafficDensity(city, tile_index, 0);
+    ClearTrafficAtTile(city, tile_index);
     return true;
   }
   if (IsCityFacilityOverlay(overlay)) {
     DemolishCityFootprintForDisaster(city, tile_index, 1, 1);
     WriteOverlay(city, tile_index, CITY_OVERLAY_FIRE);
-    WriteTrafficDensity(city, tile_index, 0);
+    ClearTrafficAtTile(city, tile_index);
     return true;
   }
   if (IsCityEventOverlay(overlay))
@@ -587,7 +553,7 @@ bool ApplyDisasterCellEffect(City *city, TileIndex tile_index, int allow_low_til
     else
       --city->infrastructure.service_bonus_a;
     WriteOverlay(city, tile_index, CITY_OVERLAY_FIRE);
-    WriteTrafficDensity(city, tile_index, 0);
+    ClearTrafficAtTile(city, tile_index);
     return true;
   }
 
@@ -603,18 +569,12 @@ i64 ApplyCityMeltdownDisaster(City *city) {
     int center_y = city->disasters.location.y;
     int center_x = city->disasters.location.x;
     TileIndex center = MapTileXYOrInvalid(city, center_x, center_y);
-    if (center == INVALID_TILE || ReadTile(city, center) != TK_NUCLEAR_POWER_PLANT) {
-      bool found = false;
-      for (int y = 0; y < city->map_height && !found; ++y)
-        for (int x = 0; x < city->map_width; ++x)
-          if (ReadTile(city, MapTileXY(city, x, y)) == TK_NUCLEAR_POWER_PLANT) {
-            center_y = y;
-            center_x = x;
-            found = true;
-            break;
-          }
-      if (!found)
-        return false;
+    if (center == INVALID_TILE || city->tile[center].kind != TK_NUCLEAR_POWER_PLANT) {
+      center = FindDisasterPlant(city, TK_NUCLEAR_POWER_PLANT);
+      if (center == INVALID_TILE) return false;
+      CityPoint point = MapTilePt(city, center);
+      center_y = point.y;
+      center_x = point.x;
     }
     if (city->settings.auto_goto != 0)
       CenterCityMapOnEvent(city, center_x, center_y);
@@ -663,6 +623,9 @@ static TileIndex CityDisasterEdgeTile(const City *city, bool vertical, int along
 // Sweep inland from the selected map edge, demolishing coastal structures and leaving flood overlays.
 // City disaster work retains the edge direction and scan progress until the hurricane passes finish.
 i64 ApplyCityHurricaneDisaster(City *city) {
+  enum CityHurricaneWorkPhase {
+    CITY_HURRICANE_SEARCH = 0, CITY_HURRICANE_DEMOLISH = 1,
+  };
   CityDisasterWork *work = &city->disaster_work;
   if (!work->type) {
     PlayCitySound(city, INVALID_TILE, CITY_SOUND_EARTHQUAKE);
@@ -674,14 +637,14 @@ i64 ApplyCityHurricaneDisaster(City *city) {
   int rotation = work->direction;
   bool vertical = rotation & 1, reverse = rotation < CITY_MAP_ROTATION_180;
   while (work->attempts < 20) {
-    if (!work->phase) {
+    if (work->phase == CITY_HURRICANE_SEARCH) {
       int across = NextCityMapRandomModulo(city, vertical ? city->map_width : city->map_height);
       int last = (vertical ? city->map_height : city->map_width) - 1;
       int along = reverse ? last : 0;
       bool check_tile = true;
       while (reverse ? along >= 0 : along <= last) {
         if ((reverse ? along > 0 : check_tile) &&
-            !IsTileKindUnbuilt(ReadTile(city, CityDisasterEdgeTile(city, vertical, along, across)))) break;
+            !IsTileKindUnbuilt(city->tile[CityDisasterEdgeTile(city, vertical, along, across)].kind)) break;
         int step = NextCityMapRandomModulo(city, 20);
         along += reverse ? -step : step;
         check_tile = along < last;
@@ -690,13 +653,13 @@ i64 ApplyCityHurricaneDisaster(City *city) {
         if (rotation == CITY_MAP_ROTATION_180) ++work->attempts;
         work->x = vertical ? across : along;
         work->y = vertical ? along : across;
-        work->phase = 1;
+        work->phase = CITY_HURRICANE_DEMOLISH;
       }
     }
-    if (work->phase) {
+    if (work->phase != CITY_HURRICANE_SEARCH) {
       DemolishCityFootprintForDisaster(city, MapTileXY(city, work->x, work->y),
           rotation == CITY_MAP_ROTATION_0 || rotation == CITY_MAP_ROTATION_270, 0);
-      work->phase = 0;
+      work->phase = CITY_HURRICANE_SEARCH;
     }
     ++work->attempts;
   }
@@ -709,7 +672,7 @@ i64 ApplyCityHurricaneDisaster(City *city) {
     int along = reverse ? last : 0;
     // Only the southward pass inspects the final row before rejecting it.
     while ((reverse ? along >= 0 : along < last + (rotation == CITY_MAP_ROTATION_270)) &&
-        IsTileKindBareGround(ReadTile(city, CityDisasterEdgeTile(city, vertical, along, across))))
+        IsTileKindBareGround(city->tile[CityDisasterEdgeTile(city, vertical, along, across)].kind))
       along += reverse ? -1 : 1;
     if (reverse ? along > 0 : along < last) {
       TileIndex tile = CityDisasterEdgeTile(city, vertical, along, across);
@@ -761,9 +724,8 @@ i64 ApplyCityVolcanoDisaster(City *city, bool terrain_water_allowed) {
       WriteOverlay(city, secondary, overlay);
       InvalidateTile(city, secondary);
     }
-    // Stock starts with an undefined stack word; the supported oracle seeds zero.
     if ((++work->redraw_counter & 3) == 0) {
-      work->phase = 1;
+      work->phase = CITY_DISASTER_WORK_WAIT;
       BeginGameDelay(city->game, &city->game->animation_delay, 20, true);
       return CITY_OPERATION_PENDING;
     }
@@ -791,7 +753,7 @@ i64 ApplyCityEarthquakeDisaster(City *city) {
   if (work->phase == CITY_DISASTER_WORK_WAIT) {
     if (!StepGameDelay(city->game, &city->game->animation_delay)) return CITY_OPERATION_PENDING;
     ++work->iteration;
-    work->phase = 0;
+    work->phase = CITY_DISASTER_WORK_READY;
   }
   if (work->phase < CITY_DISASTER_WORK_DAMAGE && work->iteration < 24) {
     BeginGameDelay(city->game, &city->game->animation_delay, 5, false);
@@ -810,7 +772,7 @@ i64 ApplyCityEarthquakeDisaster(City *city) {
     int offset_x = work->iteration % 65 - 32;
     if ((Sc2kCrtRand(city) & 0x3F) != 0) { ++work->iteration; continue; }
     TileIndex tile = MapTileXYOrInvalid(city, work->origin_x + offset_x, work->origin_y + offset_y);
-    if (tile == INVALID_TILE || IsTileKindLandscape(ReadTile(city, tile))) {
+    if (tile == INVALID_TILE || IsTileKindLandscape(city->tile[tile].kind)) {
       ++work->iteration;
       continue;
     }
@@ -819,56 +781,5 @@ i64 ApplyCityEarthquakeDisaster(City *city) {
     ++work->iteration;
   }
   *work = (CityDisasterWork){0};
-  return true;
-}
-
-// Create a crashing airplane over a randomly selected unmarked tile in the central map region.
-// Returns false if no tile or event slot is available; search probes still consume their draws.
-bool ApplyCityAirCrashDisaster(City *city) {
-  bool found = false;
-  int y;
-  int x;
-  int probes = 0;
-  bool bounded = (city->fixes & (1ull << CITY_FIX_BOUNDED_DISASTER_SEARCH)) != 0;
-  do {
-    y = NextCityMapRandomModulo(city, city->map_height / 2) + city->map_height / 4;
-    x = NextCityMapRandomModulo(city, city->map_width / 2) + city->map_width / 4;
-    found = ReadOverlay(city, MapTileXY(city, x, y)) == 0;
-    // Preserve ordinary stock choices and RNG consumption. Only a failed search
-    // falls back to a bounded scan; no temporary map-sized buffer is needed.
-    if (bounded && ++probes == 64 && !found) {
-      int end_y = city->map_height / 4 + city->map_height / 2;
-      int end_x = city->map_width / 4 + city->map_width / 2;
-      for (y = city->map_height / 4; y < end_y && !found; ++y) {
-        for (x = city->map_width / 4; x < end_x; ++x) {
-          if (ReadOverlay(city, MapTileXY(city, x, y)) == 0) {
-            found = true;
-            break;
-          }
-        }
-        if (found) break;
-      }
-      if (!found) return false;
-    }
-  } while (!found);
-
-  CityMapEvents *events = &city->events;
-  int slot = FindFreeCityEventSlot(city);
-  if (slot == 0)
-    return false;
-  CityMapEvent *event = &events->event[slot];
-  TileIndex tile_index = MapTileXY(city, x, y);
-  memset(event, 0, sizeof(*event));
-  event->type = CITY_MAP_EVENT_AIRPLANE;
-  event->tile = tile_index;
-  SetCityMapEventTarget(city, event, 128, 128);
-  event->height = 16;
-  event->previous_overlay = 0;
-  event->next_slot = CITY_AIRPLANE_CRASH;
-  LinkCityMapEvent(city, slot);
-  InvalidateCityMapEvent(city, slot);
-  SetDisasterLocation((&city->disasters.location), x, y);
-  if (city->settings.auto_goto != 0)
-    CenterCityMapOnEvent(city, x, y);
   return true;
 }

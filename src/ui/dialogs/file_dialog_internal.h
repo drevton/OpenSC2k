@@ -20,17 +20,18 @@ typedef struct NativeFileDialog {
   char *delete_path;
 } NativeFileDialog;
 
-// Caller-owned replacement-question scope. A successful Begin owns text/message copies until Finish.
+// Caller-owned replacement-question scope. Begin copies text; its window borrows that copy until Finish.
 typedef struct NativeReplacementPrompt {
   struct NativeReplacementPrompt *parent;
   u32 window_id;
   i32 token;
   i32 answer;
   u32 flags;
-  char *text, *message;
+  char *text;
 } NativeReplacementPrompt;
 
-void RememberCityFileDialogSize(City *city, NativeFileDialog *dialog);
+// Copy live window dimensions into UI's picker preferences. A missing window leaves the preferences unchanged.
+void RememberCityFileDialogSize(CityInterfaceState *ui, const NativeFileDialog *dialog);
 void SubmitCityFileDialog(City *city, NativeFileDialog *dialog, i32 accept, i32 overwrite);
 bool BeginCityFileDialog(City *city, NativeFileDialog *dialog, const CityFilePickerOptions *options);
 void FinishCityFileDialog(City *city, NativeFileDialog *dialog);

@@ -7,9 +7,6 @@
 
 typedef struct Game Game;
 
-// Native paths are host UTF-8; comparison paths retain their recorded Windows encoding.
-// Normal dialog paths fit inline. Longer command-line paths may use overflow storage.
-// Zero-initialize before first use. The value owns overflow; a whole-record copy does not duplicate that ownership.
 enum { CITY_FILE_DIALOG_PATH_LIMIT = 1023, CITY_PATH_CAPACITY = CITY_FILE_DIALOG_PATH_LIMIT + 1 };
 typedef struct CityPath {
   char text[CITY_PATH_CAPACITY];

@@ -23,19 +23,33 @@ typedef struct TileModule {
   // NULL uses only the shared ground-cover refresh. Economic growth keeps its separate scheduled scan.
   void (*tick)(City *city, TileIndex tile);
   // Drawing receives prepared camera geometry; false leaves drawing to the shared artwork path.
-  // May change Drawing and the supplied City's painter RNG for animated artwork. Native frames pass a paint copy
-  // of City so these draws never advance the live simulation RNG.
-  bool (*draw)(City *city, TileIndex tile, int zoom, int screen_x, int ground_y, const CityTileGeometry *geometry);
+  // May change Drawing and its painting RNG for animated artwork. Game seeds that stream once per frame;
+  // drawing must not advance City's simulation generators.
+  bool (*draw)(const City *city, TileIndex tile, int zoom, int screen_x, int ground_y,
+      const CityTileGeometry *geometry);
   // Sorted rendering calls this for each tile beneath a deferred object, after preparing that object's sprites.
   // Paint only ground/underpasses: no selection, overlays or object submission. NULL/false uses natural terrain.
   // Geometry is camera-relative; preserve the current clip and never change City or simulation RNG.
-  bool (*draw_ground)(City *city, TileIndex tile, int zoom, int screen_x, int ground_y,
+  bool (*draw_ground)(const City *city, TileIndex tile, int zoom, int screen_x, int ground_y,
       const CityTileGeometry *geometry);
+  // Surface bulldozing after shared fire/military checks. Requires a valid tile and zero or CITY_COMMAND_TEST flags.
+  // TEST returns zero or a negative admission error without mutation, RNG, payment or presentation effects.
+  // Execution clears an admitted tile after payment and old-extent invalidation, without repeating admission.
+  // Return success or a negative error; a late failure keeps prior effects. The tool reconnects neighbors and
+  // supplies shared feedback. NULL admits the kind and executes BulldozeCityTile for ordinary structures.
+  // Underground admission stays with the tool. Forced terrain/disaster removal bypasses this callback.
+  i64 (*clear)(City *city, u32 flags, TileIndex tile);
 } TileModule;
 
 extern const TileModule kCityGroundModule, kCityTreeModule, kCityWaterModule, kCityPowerModule;
 extern const TileModule kCitySurfaceLineModule, kCityHighwayModule, kCityBridgeModule, kCityBuildingModule;
 extern const TileModule kCityRemainsModule;
 extern const TileModule *const kCityTileModules[TILE_MODULE_COUNT];
+
+// Borrow the immutable callback family for an already-read kind classification. Individual callbacks may be NULL;
+// each dispatcher retains its documented fallback. No City or tile state is inspected here.
+static SC2K_FORCE_INLINE const TileModule *TileModuleForClasses(u32 classes) {
+  return kCityTileModules[(classes & CITY_TILE_MODULE_MASK) >> CITY_TILE_MODULE_SHIFT];
+}
 
 #endif

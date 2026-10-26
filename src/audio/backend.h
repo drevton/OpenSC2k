@@ -7,7 +7,8 @@
 typedef struct CityAudioState CityAudioState;
 
 // Live device lifecycle. Open reports MIDI availability; effects can still be open when MIDI is unavailable.
-// Initialize audio->jukebox before Open. Close releases both backends and preference text, even without Open.
+// Open requires a closed owner with an initialized jukebox; partial MIDI startup remains owned until Close.
+// Close releases both backends and preference text, even without Open.
 // Headless replay does not open devices; Close only touches devices after Open.
 bool NativeAudioOpen(CityAudioState *audio);
 void NativeAudioClose(CityAudioState *audio);
@@ -34,6 +35,7 @@ bool SetCitySoundFont(CityAudioState *audio, const char *path, bool enabled);
 void NativeAudioClick(CityAudioState *audio);
 // Apply the playlist's music/effects percentages together with Audio's master volume.
 void NativeAudioVolume(CityAudioState *audio);
+// Change the music focus gate without stopping playback or changing effect gain.
 void SetCityAudioFocus(CityAudioState *audio, bool focused);
 // Select already-loaded recording IDs for the replay controller or current tool. These perform no I/O,
 // allocation or playback. Missing/invalid recordings return false and preserve the previous selected ID.
@@ -59,8 +61,9 @@ bool PlayCityMixedEffect(CityAudioState *audio, int sound_id, int repetitions, u
 void StopCityMixedEffect(CityAudioState *audio, int sound_id);
 // CITY_SOUND_NONE queries any mixed voice. Single-effect and UI click voices are excluded.
 bool IsCityMixedEffectPlaying(const CityAudioState *audio, int sound_id);
-// Poll one completion while notifications are enabled. Pending/disabled leaves device unchanged;
-// finished/failed writes the current token and consumes the notification.
-CityMusicCompletion NativeAudioMusicNotification(CityAudioState *audio, u16 *device);
+// Poll one completion while notifications are enabled, returning its status and token together.
+// Pending/disabled consumes nothing and returns CITY_MUSIC_NO_TOKEN; a completion consumes the notification
+// once and captures the current token before the caller can advance or resume playback.
+CityMusicNotification NativeAudioMusicNotification(CityAudioState *audio);
 
 #endif

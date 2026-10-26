@@ -36,9 +36,6 @@ _Static_assert(sizeof(MapSpriteWork) == 224 * 1024, "Shared map sprite workspace
 // Camera-space centre in 1/4096 tile units, and elevation in 1/4096 height units.
 // Admission quantizes this value to quarter-tile precision; equal depths preserve submission order.
 i32 CityMapObjectDepth(int x, int y, int height);
-// Separate deck and near-side structure depths in the active camera leave room for bridge traffic.
-i32 CityMapBridgeArtworkDepth(const City *city, TileIndex tile, bool foreground);
-
 // Submit an already cached sprite at physical framebuffer coordinates to the current depth pass.
 // Sprite and immutable palette IDs must be valid for the bound cache; commands never retain temporary colors.
 // No image preparation or allocation occurs here.
@@ -51,9 +48,9 @@ bool SubmitCityMapSprite(Drawing *drawing, int sprite, int x, int y, u32 flags, 
 void DrawPreparedCityMapSprites(Drawing *drawing);
 
 // Paint the bound target/camera using paint_rect and the target's physical clip. Reuses the fixed workspace;
-// excessive area or queue overflow subdivides and retries, restoring the supplied City's RNG before a retry.
+// excessive area or queue overflow subdivides and retries, restoring Drawing's painting RNG before a retry.
 // Saves/restores the previous depth pass, paint rectangle and target clip, including on capacity failure.
-// Native frames supply a paint copy of City for random artwork; this operation does not bind a different camera.
-void DrawDepthSortedCityMap(City *city, const CityMapViewConfig *view, int zoom);
+// Uses the prepared painting stream without changing City generators or binding a different camera.
+void DrawDepthSortedCityMap(const City *city, const CityMapViewConfig *view, int zoom);
 
 #endif

@@ -21,41 +21,48 @@ void CompleteJukeboxTrack(Game *game, CityMusicCompletion notification, u16 devi
 
 // Poll the live backend once; accepted completions advance or resume the playlist.
 bool PollCityMusic(Game *game);
+// Apply event-cue admission and return the focus/iconic suppression value or track-attempt result.
+// Disabled music and invalid cue IDs return zero; zero therefore does not establish that playback started.
 i32 MaybePlayCityEventMusic(Game *game, int event_id);
 u32 PlayCityMusicTrack(Game *game, int track);
-bool PlayCityEventMusicById(Game *game, int event_id);
 void StopCityMusicSequence(Game *game);
 // Preserve the raw host notification and observer's result; the native controller rejects unknown values.
 int CompleteCityMusic(Game *game, int notification, int token);
-bool PlayNextCityEventMusicSequence(Game *game);
+// Advance the cue sequence even when playback is suppressed; a negative sequence index skips the request.
+void PlayNextCityEventMusicSequence(Game *game);
 // Read Audio's playback gate before selecting music. Selection can consume City RNG, even when music is disabled.
 void MaybePlayCityMusic(Game *game, bool advance_sequence);
-// Select after an idle schedule is admitted. Comparison uses this when its recorded receiver supplies the gate;
-// it does not replace or copy native Audio state. Sequence selection and random selection retain their RNG order.
 void SelectScheduledCityMusic(Game *game, bool advance_sequence);
 
-bool ToggleCityMusicPreference(Game *game);
+// Toggle the local preference, apply playback policy and store Game settings.
+void ToggleCityMusicPreference(Game *game);
+
+// Saved preferences
+
+// Stock saves retain two raw flags. Reading them does not query devices or change playback.
+typedef struct { u32 sound_enabled, music_enabled; } CitySavedAudioFields;
+CitySavedAudioFields ReadCitySavedAudio(const Game *game);
+// Apply each saved word when the codec reaches it, without playing, stopping or storing global settings.
+void ApplyCitySavedSoundPreference(Game *game, u32 enabled);
+void ApplyCitySavedMusicPreference(Game *game, u32 enabled);
+// At load's music-restoration point, keep a live jukebox's choice; otherwise keep the saved flag.
+// A disabled result stops the event sequence through the ordinary playback/observation path.
+void RestoreCityLoadedMusicPreference(Game *game);
 
 // Sound
 
-void StopCitySoundEvent(Game *game, i32 sound_id);
 void SyncCityFireSoundPause(Game *game);
-bool StopCitySound(Game *game, int sound_id);
-// Tile is the sound source; city-wide/UI sounds use INVALID_TILE.
-bool PlayCitySound(City *city, TileIndex tile, int sound_id);
-// Reset the shared helicopter cue deadline to the current simulation frame time after city creation or spawning.
-void ResetCityHelicopterSoundTiming(City *city);
-// Routine city activity; shares recordings with tool sounds but has its own local preference. Helicopter flight
-// cues share a five-second cooldown, advanced even when ambient sounds are muted.
-bool PlayCityAmbientSound(City *city, TileIndex tile, int sound_id);
-// Aircraft cues additionally require a visible plane in the live presentation.
-void PlayCityAirplaneSound(City *city, int slot, int sound_id);
-void PlayCitySoundEvent(City *city, TileIndex tile, int sound_id);
+// Stop matching playback and remove its queued/cached replay, without reporting a device result.
+void StopCitySound(Game *game, int sound_id);
 bool PlayCitySoundWithDelay(Game *game, i32 sound_id, i32 repetitions);
 void CompleteCitySoundPlayback(Game *game);
+// One delivered cadence decrements a nonzero sound countdown and completes playback exactly on reaching zero.
+// Completion retains the ordinary queued/cached replay and observer behavior; no host clock is sampled here.
+void AdvanceCitySoundCadence(Game *game);
 void StopAllCitySound(Game *game);
 void StopCitySoundIfLastMatches(Game *game, i32 sound_id);
 
-bool ToggleCitySoundPreference(Game *game);
+// Toggle the local preference, apply playback policy and store Game settings.
+void ToggleCitySoundPreference(Game *game);
 
 #endif

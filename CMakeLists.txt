@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(OpenSC2k VERSION 0.0.1 LANGUAGES C)
+project(OpenSC2k VERSION 0.2.0 LANGUAGES C)
 set(SC2K_VERSION_STAGE 1) # 0 development, 1 alpha, 2 beta, 3 stable.
 set(SC2K_VERSION_DISPLAY "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}")
 if(PROJECT_VERSION_PATCH GREATER 0)
@@ -165,6 +165,7 @@ add_library(sc2k_core STATIC
   src/assets/graphics.c
   src/assets/names.c
   src/assets/news.c
+  src/assets/run_sprite.c
   src/assets/sprites.c
 
   # audio
@@ -177,7 +178,6 @@ add_library(sc2k_core STATIC
   src/base/config.c
   src/base/file.c
   src/base/fixed.c
-  src/base/riff.c
   src/base/text.c
   src/base/time.c
   src/base/utf8.c
@@ -186,6 +186,7 @@ add_library(sc2k_core STATIC
   # city/disasters
   src/city/disasters/dispatch.c
   src/city/disasters/effects.c
+  src/city/disasters/tile_effects.c
 
   # city/economy
   src/city/economy/budget.c
@@ -204,7 +205,6 @@ add_library(sc2k_core STATIC
   src/city/engine/random.c
   src/city/engine/simulation.c
   src/city/engine/simulation_clock.c
-  src/city/engine/simulation_common.c
   src/city/engine/weather.c
 
   # city/events
@@ -239,16 +239,17 @@ add_library(sc2k_core STATIC
   src/city/maps/labels.c
   src/city/maps/kinds.c
   src/city/maps/layers.c
-  src/city/maps/rotation.c
+  src/city/maps/tables.c
   src/city/maps/state.c
   src/city/maps/terrain.c
   src/city/maps/tile_queue.c
-  src/city/maps/tile_scan.c
   src/city/maps/trees.c
   src/city/maps/water.c
 
   # city/saveload
+  src/city/saveload/archive.c
   src/city/saveload/codec.c
+  src/city/saveload/events_format.c
   src/city/saveload/container.c
   src/city/saveload/input.c
   src/city/saveload/legacy_text.c
@@ -265,6 +266,7 @@ add_library(sc2k_core STATIC
   src/city/saveload/save_chunks.c
   src/city/saveload/sc2k.c
   src/city/saveload/scenario.c
+  src/city/saveload/scenario_format.c
   src/city/saveload/schema.c
   src/city/saveload/summary.c
 
@@ -273,10 +275,14 @@ add_library(sc2k_core STATIC
   src/city/state.c
 
   # city/terrain
+  src/city/terrain/climate.c
   src/city/terrain/elevation.c
   src/city/terrain/features.c
   src/city/terrain/generator.c
+  src/city/terrain/map.c
   src/city/terrain/noise.c
+  src/city/terrain/settings.c
+  src/city/terrain/water.c
 
   # city/tools
   src/city/tools/demolition.c
@@ -285,6 +291,8 @@ add_library(sc2k_core STATIC
 
   # drawing
   src/drawing/bitmaps.c
+  src/drawing/newspaper.c
+  src/drawing/startup.c
   src/drawing/cursors.c
   src/drawing/frame_overlay.c
   src/drawing/palette.c
@@ -327,6 +335,7 @@ add_library(sc2k_core STATIC
   # game
   src/game/audio.c
   src/game/city_lifecycle.c
+  src/game/errors.c
   src/game/graphics.c
   src/game/observation.c
   src/game/settings_catalog.c
@@ -359,10 +368,13 @@ add_library(sc2k_core STATIC
   src/ui/hotkeys.c
   src/ui/input.c
   src/ui/map.c
+  src/ui/map_camera.c
   src/ui/map_saved_view.c
 
   # ui/menus
+  src/ui/menus/actions.c
   src/ui/menus/menu.c
+  src/ui/menus/catalog.c
 
   # ui/music
   src/ui/music/jukebox.c
@@ -379,6 +391,7 @@ add_library(sc2k_core STATIC
   # ui/startup
   src/ui/startup/startup_canvas.c
   src/ui/startup/startup_host.c
+  src/ui/startup/startup_layout.c
 
   # ui
   src/ui/command_feedback.c
@@ -391,6 +404,7 @@ add_library(sc2k_core STATIC
   src/ui/text/text.c
 
   # ui/tools
+  src/ui/tools/definitions.c
   src/ui/tools/cost_labels.c
   src/ui/tools/map_input.c
   src/ui/tools/placement.c

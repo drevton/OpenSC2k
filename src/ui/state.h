@@ -3,8 +3,9 @@
 
 #include "city/economy/state.h"
 #include "city/engine/input.h"
+#include "game/types.h"
 #include "city/presentation.h"
-#include "city/terrain/terrain.h"
+#include "city/terrain/types.h"
 #include "city/tools/types.h"
 #include "city/types.h"
 #include "ui/charts/charts.h"
@@ -195,7 +196,7 @@ typedef struct CityInterfaceState {
   u32 city_name_random;
   CityTerrainMap *terrain_preview;
   char terrain_mayor[33];
-  CityWindowCompletion *closed_windows;
+  CityWindowCompletion *closed_windows; // Owned deferred callbacks, drained outside commands by the event module.
   struct ScenarioListModel *scenario_window;
   int scenario_token;
   int startup_token;

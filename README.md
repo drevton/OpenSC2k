@@ -7,7 +7,8 @@ supply power and water, and manage city services and finances.
 
 The game runs on its own, without an original SimCity 2000 installation or game data files.
 You can import existing `.SC2` cities or generate a new landscape and build your own.
-OpenSC2k is under active development.
+OpenSC2k is under active development. The current release is **0.2 Alpha**.
+See the [release notes](docs/releases/0.2-alpha.md) for changes and save-format compatibility.
 
 [Download releases](https://github.com/drevton/OpenSC2k/releases) · [Build from source](#build-and-play)
 

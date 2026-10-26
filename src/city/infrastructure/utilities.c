@@ -7,17 +7,14 @@
 // kind and bridge axis/underpass metadata determine conductance; no connection mask is hidden in the flags.
 // Supply totals/continuations are City state, not tile payload. Other bytes keep tile_storage.h/family meanings.
 
-#include "city/engine/simulation_state.h"
 #include "city/infrastructure/utilities.h"
 
 #include "city/maps/terrain.h"
 #include "city/maps/tile_queue.h"
+#include "city/maps/map.h"
 #include "city/engine/random.h"
 #include "city/infrastructure/bridges.h"
-#include "city/engine/simulation.h"
-#include "city/maps/layers.h"
 #include "city/state.h"
-#include <stdlib.h>
 
 // The map scan and its connected component have independent stages. The scheduler retains both between batches.
 typedef enum CityUtilityScanStage {
@@ -34,11 +31,18 @@ static void ClearCityUtilitySection(City *city, int section, bool water) {
   int width = city->map_width, columns = width / CITY_MAP_SECTION_SIZE;
   TileIndex first = section / columns * CITY_MAP_SECTION_SIZE * width + section % columns * CITY_MAP_SECTION_SIZE;
   TileInfo *restrict tiles = city->tile + first;
+  if (!water) {
+    for (int y = 0; y < CITY_MAP_SECTION_SIZE; ++y) {
+      TileInfo *tp = tiles + y * width;
+      for (int x = 0; x < CITY_MAP_SECTION_SIZE; ++x, ++tp)
+        tp->flags &= ~(TF_VISITED | TF_POWERED);
+    }
+    return;
+  }
   for (int y = 0; y < CITY_MAP_SECTION_SIZE; ++y) {
     TileInfo *tp = tiles + y * width;
     for (int x = 0; x < CITY_MAP_SECTION_SIZE; ++x, ++tp) {
-      int clear_flags = TF_VISITED | (water ?
-          (tp->kind == TK_WATER_TOWER ? 0 : TF_WATERED) : TF_POWERED);
+      int clear_flags = TF_VISITED | (tp->kind == TK_WATER_TOWER ? 0 : TF_WATERED);
       tp->flags &= ~clear_flags;
     }
   }
@@ -51,11 +55,10 @@ static void BeginCityUtilityTraversal(City *city, CityUtilityTraversal *network,
   ResetCityTileQueueAndPush(city, x, y);
 }
 
-// Queue eligible neighbors of the current power-network cell. Requires a valid tile and initialized traversal;
-// neighbor admission and duplicate suppression belong to the existing queue path.
-static void PushPowerNeighbors(City *city, TileIndex cell, int x, int y, int visited) {
+// Queue eligible neighbors of the current power-network cell. tp must be the valid tile at point;
+// traversal must be initialized. Neighbor admission and duplicate suppression use the existing queue path.
+static void PushPowerNeighbors(City *city, const TileInfo *tp, PointU16 point, int visited) {
   u32 width = city->map_width, height = city->map_height;
-  const TileInfo *tp = &city->tile[cell];
   int bridge_axis = -1;
   if (IsTileKindBridge(tp->kind)) {
     if (ReadCityBridgeUnderpass(tp) != CITY_BRIDGE_UNDERPASS_POWER) return;
@@ -63,7 +66,7 @@ static void PushPowerNeighbors(City *city, TileIndex cell, int x, int y, int vis
   }
   for (int neighbor = 0; neighbor < 4; ++neighbor) {
     if ((neighbor & 1) == bridge_axis) continue;
-    u32 next_x = x + kUtilityNeighborX[neighbor], next_y = y + kUtilityNeighborY[neighbor];
+    u32 next_x = point.x + kUtilityNeighborX[neighbor], next_y = point.y + kUtilityNeighborY[neighbor];
     if (next_x >= width || next_y >= height) continue;
     TileIndex next = next_y * width + next_x;
     const TileInfo *np = &city->tile[next];
@@ -74,12 +77,12 @@ static void PushPowerNeighbors(City *city, TileIndex cell, int x, int y, int vis
   }
 }
 
-// Queue eligible neighbors of the current water-network cell. Requires a valid tile and initialized traversal; this
+// Queue eligible neighbors of the current water-network cell. Requires a valid point and initialized traversal; this
 // shares the route queue and must not overlap another queue owner.
-static void PushWaterNeighbors(City *city, int x, int y, int visited) {
+static void PushWaterNeighbors(City *city, PointU16 point, int visited) {
   u32 width = city->map_width, height = city->map_height;
   for (int neighbor = 0; neighbor < 4; ++neighbor) {
-    u32 next_x = x + kUtilityNeighborX[neighbor], next_y = y + kUtilityNeighborY[neighbor];
+    u32 next_x = point.x + kUtilityNeighborX[neighbor], next_y = point.y + kUtilityNeighborY[neighbor];
     if (next_x >= width || next_y >= height) continue;
     const TileInfo *np = &city->tile[next_y * width + next_x];
     if ((np->flags & TF_VISITED) == visited) PushCityTileCoordinate(city, next_x, next_y);
@@ -113,15 +116,14 @@ int CityWaterPumpSupply(const City *city, TileIndex tile) {
 
 // Count a connected power network, then assign its available supply. Uses the supplied budget to bound incremental
 // work; false retains its cursor for the next call, true completes the pass.
-static bool StepPowerNetwork(City *city, CityUtilityTraversal *network, int *budget) {
+static bool StepCityPowerComponent(City *city, CityUtilityTraversal *network, int *budget) {
   const int width = city->map_width;
   TileInfo *tiles = city->tile;
   if (network->stage == CITY_UTILITY_MEASURE) {
     while (*budget > 0 && city->route_queue_cursor.read != city->route_queue_cursor.write) {
       --*budget;
       PointU16 point = DequeueCityTileCoordinate(city);
-      int y = point.y, x = point.x;
-      TileIndex cell = y * width + x;
+      TileIndex cell = point.y * width + point.x;
       TileInfo *tp = &tiles[cell];
       if (tp->flags & TF_VISITED) continue;
       if (!(tp->flags & TF_POWERABLE)) continue;
@@ -166,7 +168,7 @@ static bool StepPowerNetwork(City *city, CityUtilityTraversal *network, int *bud
         break;
       }
       tp->flags |= TF_VISITED;
-      PushPowerNeighbors(city, cell, x, y, 0);
+      PushPowerNeighbors(city, tp, point, 0);
     }
     if (city->route_queue_cursor.read != city->route_queue_cursor.write) return false;
     city->infrastructure.power_total += network->available;
@@ -180,8 +182,7 @@ static bool StepPowerNetwork(City *city, CityUtilityTraversal *network, int *bud
   while (*budget > 0 && city->route_queue_cursor.read != city->route_queue_cursor.write) {
     --*budget;
     PointU16 point = DequeueCityTileCoordinate(city);
-    int y = point.y, x = point.x;
-    TileIndex cell = y * width + x;
+    TileIndex cell = point.y * width + point.x;
     TileInfo *tp = &tiles[cell];
     if (!(tp->flags & TF_VISITED)) continue;
     if (network->available != 0) {
@@ -189,7 +190,7 @@ static bool StepPowerNetwork(City *city, CityUtilityTraversal *network, int *bud
       tp->flags |= TF_POWERED;
     }
     tp->flags &= ~TF_VISITED;
-    PushPowerNeighbors(city, cell, x, y, TF_VISITED);
+    PushPowerNeighbors(city, tp, point, TF_VISITED);
   }
   if (city->route_queue_cursor.read != city->route_queue_cursor.write) return false;
   network->stage = CITY_UTILITY_COMPLETE;
@@ -205,8 +206,7 @@ static bool StepCityWaterComponent(City *city, CityUtilityTraversal *network, in
     while (*budget > 0 && city->route_queue_cursor.read != city->route_queue_cursor.write) {
       --*budget;
       PointU16 point = DequeueCityTileCoordinate(city);
-      int y = point.y, x = point.x;
-      TileIndex cell = y * width + x;
+      TileIndex cell = point.y * width + point.x;
       TileInfo *tp = &tiles[cell];
       if (tp->flags & TF_VISITED) continue;
       if (!(tp->flags & TF_PIPED)) continue;
@@ -232,7 +232,7 @@ static bool StepCityWaterComponent(City *city, CityUtilityTraversal *network, in
         }
       }
       tp->flags |= TF_VISITED;
-      PushWaterNeighbors(city, x, y, 0);
+      PushWaterNeighbors(city, point, 0);
     }
     if (city->route_queue_cursor.read != city->route_queue_cursor.write) return false;
     if (network->demand > network->available) network->demand = network->available;
@@ -247,8 +247,7 @@ static bool StepCityWaterComponent(City *city, CityUtilityTraversal *network, in
   while (*budget > 0 && city->route_queue_cursor.read != city->route_queue_cursor.write) {
     --*budget;
     PointU16 point = DequeueCityTileCoordinate(city);
-    int y = point.y, x = point.x;
-    TileIndex cell = y * width + x;
+    TileIndex cell = point.y * width + point.x;
     TileInfo *tp = &tiles[cell];
     if (!(tp->flags & TF_VISITED)) continue;
     switch (tp->kind) {
@@ -271,7 +270,7 @@ static bool StepCityWaterComponent(City *city, CityUtilityTraversal *network, in
       break;
     }
     tp->flags &= ~TF_VISITED;
-    PushWaterNeighbors(city, x, y, TF_VISITED);
+    PushWaterNeighbors(city, point, TF_VISITED);
   }
   if (city->route_queue_cursor.read != city->route_queue_cursor.write) return false;
   network->stage = CITY_UTILITY_COMPLETE;
@@ -289,7 +288,7 @@ static void ScanCityWaterComponent(City *city, int source_x, int source_y) {
 
 // Advance the supplied power-grid work state within the requested budget. Returns false while work remains and true
 // after final totals; the caller retains the same work and exclusive scratch/queue use between steps.
-bool StepCityPowerGrid(City *city, CitySimulationWork *work, int budget) {
+bool StepCityPowerGrid(City *city, CityUtilityScan *work, int budget) {
   const int cells = city->map_cell_count, width = city->map_width;
   TileInfo *tiles = city->tile;
   if (work->stage == CITY_UTILITY_SCAN_RESET) {
@@ -308,7 +307,7 @@ bool StepCityPowerGrid(City *city, CitySimulationWork *work, int budget) {
   }
   while (budget > 0) {
     if (work->stage == CITY_UTILITY_SCAN_COMPONENT) {
-      if (!StepPowerNetwork(city, &work->network, &budget)) return false;
+      if (!StepCityPowerComponent(city, &work->network, &budget)) return false;
       work->stage = CITY_UTILITY_SCAN_SOURCES;
     } else if (work->cursor < cells) {
       TileIndex cell = work->cursor++;
@@ -331,23 +330,53 @@ bool StepCityPowerGrid(City *city, CitySimulationWork *work, int budget) {
 // Phase 1 power-grid scan. Requires bound utility/scratch layers and exclusive queue use; completes the whole phase
 // rather than leaving incremental work pending.
 void ScanPowerGridPhase(City *city) {
-  CitySimulationWork work = {0};
+  CityUtilityScan work = {0};
   while (!StepCityPowerGrid(city, &work, INT32_MAX)) {}
 }
 
-// Compare two u32 source-order keys for sorting in ascending traversal order. Both arguments must point to readable
-// keys; returns negative, zero or positive without subtracting unsigned values.
-static int CompareWaterSourceOrder(const void *left, const void *right) {
-  u32 a = *(const u32 *)left, b = *(const u32 *)right;
-  return (a > b) - (a < b);
+// Sort the existing source keys in ascending traversal order, without comparison callbacks or another array.
+// Keys are below the power-of-two map cell count; the initial bit is half that count. Partition on each used bit,
+// recurse only into the smaller side, and finish small ranges with direct integer insertion sorting.
+static void SortWaterSourceRange(u32 *keys, int first, int end, u32 bit) {
+  while (end - first > 24 && bit) {
+    int left = first, right = end;
+    // Keys before left have this bit clear; keys from right onward have it set.
+    while (left < right) {
+      if (!(keys[left] & bit)) {
+        ++left;
+      } else {
+        u32 key = keys[left];
+        keys[left] = keys[--right];
+        keys[right] = key;
+      }
+    }
+    bit >>= 1;
+    if (left - first < end - left) {
+      if (left - first > 1) SortWaterSourceRange(keys, first, left, bit);
+      first = left;
+    } else {
+      if (end - left > 1) SortWaterSourceRange(keys, left, end, bit);
+      end = left;
+    }
+  }
+  for (int i = first + 1; i < end; ++i) {
+    u32 key = keys[i];
+    int at = i;
+    while (at > first && keys[at - 1] > key) {
+      keys[at] = keys[at - 1];
+      --at;
+    }
+    keys[at] = key;
+  }
 }
 
-// Decode a linear traversal position into coordinates for the selected map rotation. Position must fit the map and
-// direction must be a supported rotation; no map or cursor state changes.
+// Decode a linear traversal position into coordinates for the selected map rotation. Position must fit the map,
+// whose axes are supported powers of two; direction must be a supported rotation. No map or cursor state changes.
 static CityPoint WaterSourceAtPosition(const City *city, int position, int direction) {
   int width = city->map_width, height = city->map_height;
-  int x = direction & 1 ? position % width : position / height;
-  int y = direction & 1 ? position / width : position % height;
+  int span = direction & 1 ? width : height;
+  int inner = position & (span - 1), outer = position >> __builtin_ctz(span);
+  int x = direction & 1 ? inner : outer, y = direction & 1 ? outer : inner;
   if (direction == CITY_MAP_ROTATION_90 || direction == CITY_MAP_ROTATION_180) x = width - 1 - x;
   if (direction == CITY_MAP_ROTATION_180 || direction == CITY_MAP_ROTATION_270) y = height - 1 - y;
   return (CityPoint){x, y};
@@ -365,7 +394,7 @@ static void FinishWaterNetwork(City *city) {
 // Advance the section clearing, ordered source scan and connected-component water distribution. Budget controls
 // incremental progress and may be consumed by a whole section; false retains the City's cursor and true finalizes
 // coverage.
-bool StepCityWaterNetwork(City *city, CitySimulationWork *work, int budget) {
+bool StepCityWaterNetwork(City *city, CityUtilityScan *work, int budget) {
   const int cells = city->map_cell_count, width = city->map_width;
   if (work->stage == CITY_UTILITY_SCAN_RESET) {
     if (!work->cursor) {
@@ -430,7 +459,7 @@ static bool ScanWaterSourcesInOrder(City *city, int direction) {
     sources[count++] = direction & 1 ? tile_point.y * city->map_width + tile_point.x :
         tile_point.x * city->map_height + tile_point.y;
   }
-  if (count > 1) qsort(sources, count, sizeof(*sources), CompareWaterSourceOrder);
+  if (count > 1) SortWaterSourceRange(sources, 0, count, city->map_cell_count >> 1);
   for (int i = 0; i < count; ++i) {
     CityPoint point = WaterSourceAtPosition(city, sources[i], direction);
     int x = point.x, y = point.y;
@@ -447,12 +476,14 @@ void ScanCityWaterNetwork(City *city) {
   InvalidateMapLayer(city, CITY_MAP_CHANGE_POLICE_COVERAGE);
   city->infrastructure.water_percent = 0;
   city->infrastructure.water_total = 0;
-  for (int section = 0; section < city->map_cell_count / CITY_MAP_SECTION_CELL_COUNT; ++section)
+  const u32 sections = city->map_cell_count / CITY_MAP_SECTION_CELL_COUNT;
+  for (u32 section = 0; section < sections; ++section)
     ClearCityUtilitySection(city, section, true);
   // Keep the stock source order: limited water is assigned in traversal order.
   int direction = city->geography.rotation;
   if (direction < CITY_MAP_ROTATION_COUNT && !ScanWaterSourcesInOrder(city, direction)) {
-    for (int position = 0; position < city->map_cell_count; ++position) {
+    const u32 cells = city->map_cell_count;
+    for (u32 position = 0; position < cells; ++position) {
       CityPoint point = WaterSourceAtPosition(city, position, direction);
       int x = point.x, y = point.y;
       const TileInfo *tp = &city->tile[y * city->map_width + x];

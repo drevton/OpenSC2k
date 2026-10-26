@@ -11,6 +11,8 @@
 #include "city/engine/city_types.h"
 #include "city/engine/clock.h"
 #include "city/engine/commands.h"
+#include "city/events/news.h"
+#include "city/presentation.h"
 #include "city/state.h"
 #include "city/tools/tools.h"
 #include "city/tools/types.h"
@@ -21,6 +23,7 @@
 #include "ui/sdl.h"
 #include "ui/state.h"
 #include "ui/text/text.h"
+#include "ui/tools/tools.h"
 #include "ui/windows/windows.h"
 
 const char *const kCityWeatherText[] = {
@@ -143,6 +146,41 @@ void SetCityProblemDescription(CityStatusState *status, const char *text) {
   status->problem_description[length] = 0;
 }
 
+// Present the simulation's selected problem; wording and retained text belong to UI.
+void SetCityProblemNotice(City *city, int problem) {
+  CityInterfaceState *ui = city->game->ui;
+  if (!ui) return;
+  static const char *const kProblemDescriptions[CITY_PROBLEM_COUNT] = {
+    [CITY_PROBLEM_POWER] = "More power plants needed",
+    [CITY_PROBLEM_TRANSPORT] = "Residents want roads and rail",
+    [CITY_PROBLEM_POLICE] = "Residents want more police",
+    [CITY_PROBLEM_FIRE_STATION] = "More fire protection needed",
+    [CITY_PROBLEM_WATER] = "City water shortage",
+    [CITY_PROBLEM_HOSPITAL] = "More hospitals needed",
+    [CITY_PROBLEM_SCHOOL] = "Residents want more schools",
+    [CITY_PROBLEM_SEAPORT] = "Industry needs a seaport",
+    [CITY_PROBLEM_AIRPORT] = "Commerce needs an airport",
+    [CITY_PROBLEM_ZOO] = "Residents want a zoo",
+    [CITY_PROBLEM_STADIUM] = "Residents want a stadium",
+    [CITY_PROBLEM_MARINA] = "Residents want a marina",
+    [CITY_PROBLEM_PARK] = "Residents want more parks",
+    [CITY_PROBLEM_INDUSTRIAL_CONNECTION] = "Industry needs outside links",
+    [CITY_PROBLEM_COMMERCIAL_CONNECTION] = "Commerce needs outside links",
+  };
+  const char *text = "";
+  if (problem == CITY_PROBLEM_WEATHER) {
+    switch (city->weather.state) {
+    case CITY_WEATHER_BLIZZARD: text = "Heavy snow expected"; break;
+    case CITY_WEATHER_HURRICANE: text = "Hurricane approaching"; break;
+    case CITY_WEATHER_TORNADO: text = "Tornado risk reported"; break;
+    default: break;
+    }
+  } else if (problem >= 0) {
+    text = kProblemDescriptions[problem];
+  }
+  SetCityProblemDescription(&ui->status, text);
+}
+
 void ClearCityProblemDescription(CityStatusState *status) {
   status->problem_description[0] = 0;
 }
@@ -165,22 +203,65 @@ void RefreshCitySpeedStatus(City *city, i32 mode) {
 
 // Store a legend string/color and invalidate the status area when it changes.
 bool SetCityMapLegendColumn(Game *game, CityStatusState *status, int column, const char *text, u32 color) {
-  CityStatusLegend *legend = &status->legend;
-  if (column >= 0 && column < CITY_STATUS_COLUMN_COUNT) {
-    size_t length = strlen(text);
-    if (length >= CITY_STATUS_TEXT_CAPACITY) {
-      SetGameError(game, SC2K_ERROR_GUEST_BUFFER_TOO_SMALL);
-      return false;
-    }
-    if (legend->color[column] == color && !strcmp(legend->text[column], text)) return IsCityStatusAvailable(status);
-    memmove(legend->text[column], text, length + 1);
-    legend->color[column] = color;
-  }
   if (column < 0 || column >= CITY_STATUS_COLUMN_COUNT) {
     SetGameError(game, SC2K_ERROR_GUEST_BUFFER_TOO_SMALL);
-    return false; // Defined correction for original invalid rectangle stack indexing.
+    return false;
   }
+  size_t length = strlen(text);
+  if (length >= CITY_STATUS_TEXT_CAPACITY) {
+    SetGameError(game, SC2K_ERROR_GUEST_BUFFER_TOO_SMALL);
+    return false;
+  }
+  CityStatusLegend *legend = &status->legend;
+  if (legend->color[column] == color && !strcmp(legend->text[column], text)) return IsCityStatusAvailable(status);
+  memmove(legend->text[column], text, length + 1);
+  legend->color[column] = color;
   return InvalidateCityStatus(status);
+}
+
+// Format tool help or the selected name and construction cost.
+void FormatCityToolStatusText(char *text, u32 capacity, int tool) {
+  if (tool == CITY_CANVAS_TOOL_RAISE_TERRAIN || tool == CITY_CANVAS_TOOL_LOWER_TERRAIN) {
+    CopyText(text, capacity, tool == CITY_CANVAS_TOOL_RAISE_TERRAIN ?
+        "Raise terrain: drag to select a range of tiles, then release to raise them" :
+        "Lower terrain: drag to select a range of tiles, then release to lower them");
+    return;
+  }
+  if (tool == CITY_CANVAS_TOOL_STREAM) {
+    CopyText(text, capacity, "Place stream: click a source to grow a gently winding downhill stream");
+    return;
+  }
+  if (tool == CITY_CANVAS_TOOL_LEVEL_TERRAIN || tool == CITY_CANVAS_TOOL_STRETCH_TERRAIN) {
+    CopyText(text, capacity, tool == CITY_CANVAS_TOOL_LEVEL_TERRAIN ?
+        "Level terrain: drag an area to flatten it to the starting elevation" :
+        "Stretch terrain: grab a tile and drag up or down to change its height");
+    return;
+  }
+  if (tool == CITY_CANVAS_TOOL_ROAD_BRIDGE || tool == CITY_CANVAS_TOOL_RAIL_BRIDGE) {
+    CopyText(text, capacity, tool == CITY_CANVAS_TOOL_ROAD_BRIDGE ?
+        "Road bridge: drag between two endpoints" : "Rail bridge: drag between two endpoints");
+    return;
+  }
+  i32 packed = Sc2kCanvasMapPointerTools(tool, 0);
+  if (packed < 0) {
+    snprintf(text, capacity, "%s", "Centering Tool");
+    return;
+  }
+  i32 group = packed & 255;
+  i32 variant = (packed >> 8) & 255;
+  const char *name = CityToolName(group, variant);
+  u32 cost = group < CITY_TOOL_GROUP_QUERY ? kCityToolCosts[group * CITY_TOOL_VARIANT_CAPACITY + variant] : 0;
+  if (cost)
+    snprintf(text, capacity, "%s $%u", name, cost);
+  else
+    snprintf(text, capacity, "%s", name);
+}
+
+void UpdateCityToolStatus(City *city) {
+  Game *game = city->game;
+  CityInterfaceState *ui = game->ui;
+  FormatCityToolStatusText(ui->status.tool_text, sizeof(ui->status.tool_text),
+      ui->desktop.selected_tool);
 }
 
 // Tool/cost, city problem or disaster, and weather status strings.
@@ -209,7 +290,7 @@ void RefreshCityStatusPanel(City *city, CityStatusState *status, int speed, int 
     SetGameError(city->game, SC2K_ERROR_GUEST_BUFFER_TOO_SMALL);
     return;
   }
-  const char *name = game->resources->tool_names.name[group][variant];
+  const char *name = CityToolName(group, variant);
   int cost = (int)kCityToolCosts[group * CITY_TOOL_VARIANT_CAPACITY + variant];
   char tool_text[CITY_STATUS_TEXT_CAPACITY];
   if (cost != 0) {

@@ -6,6 +6,8 @@
 
 #include "audio/types.h"
 #include "city/economy/budget.h"
+#include "city/engine/commands.h"
+#include "city/infrastructure/bridges.h"
 #include "city/infrastructure/types.h"
 #include "city/presentation.h"
 #include "city/state.h"
@@ -49,7 +51,7 @@ void PresentCityCommandAudio(City *city, CityCommandId id, const CityCommandArgu
     case TK_POLICE_STATION: case TK_HOSPITAL: sound = CITY_SOUND_POLICE_OR_HOSPITAL; break;
     case TK_PARK: case TK_LARGE_PARK: case TK_STADIUM: case TK_MARINA: case TK_ZOO:
       sound = args->parameter1 == TK_ZOO ? CITY_SOUND_SAILBOAT_OR_ZOO : CITY_SOUND_CIVIC_PLACEMENT;
-      if (succeeded) PlayCityEventMusicById(game, CITY_MUSIC_TRACK_10);
+      if (succeeded) MaybePlayCityEventMusic(game, CITY_MUSIC_TRACK_10);
       break;
     default: break;
     }
@@ -122,9 +124,8 @@ i64 CheckCityConstructionCommand(City *city, CityCommand command) {
     TileIndex blocker = INVALID_TILE;
     if (command.id == CITY_COMMAND_BUILD_BRIDGE) {
       bool rail = (args.parameter2 & CITY_BRIDGE_COMMAND_RAIL) != 0;
-      CityCommandCost quote = GetCityConstructionCost(city, args.tile, args.parameter1,
-          rail ? CITY_TOOL_GROUP_RAIL : CITY_TOOL_GROUP_ROAD, rail ? CITY_RAIL_BRIDGE : CITY_ROAD_BRIDGE);
-      blocker = quote.error_tile;
+      CityInfrastructureSpan span = FindCityBridgeSpan(city, args.tile, args.parameter1, rail);
+      blocker = span.error_tile;
     }
     if (blocker == args.tile) blocker = INVALID_TILE;
     OpenCityCommandErrorWindow(city->game, CityCommandFailureSummary(&command),

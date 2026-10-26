@@ -1,10 +1,11 @@
-#include "city/engine/city_name.h"
 #include "city/engine/initialization.h"
+
+#include "city/engine/city_name.h"
 
 #include <string.h>
 
-#include "game/audio.h"
 #include "city/disasters/types.h"
+#include "city/economy/economy.h"
 #include "city/economy/history.h"
 #include "city/economy/facilities.h"
 #include "city/economy/tables.h"
@@ -16,17 +17,14 @@
 #include "city/events/events.h"
 #include "city/events/news.h"
 #include "city/maps/labels.h"
-#include "city/maps/layers.h"
+#include "city/maps/kinds.h"
+#include "city/maps/water.h"
 #include "city/maps/map.h"
 #include "city/maps/map_types.h"
 #include "city/maps/tile_storage.h"
 #include "city/military.h"
 #include "city/presentation.h"
-#include "city/saveload/map_format.h"
 #include "city/state.h"
-#include "city/terrain/terrain.h"
-#include "game/application.h"
-#include "game/errors.h"
 #include "game/state.h"
 
 // Reset overlay, annual-facility, and city-event state for a new city. Requires allocated map/event storage; discards
@@ -40,16 +38,13 @@ static void ResetNewCityOverlayAndEventState(City *city) {
 // Clear terrain-generation layers before a fresh new-city setup. Requires bound complete map layers; this resets
 // generated data rather than preserving a loaded City.
 static void ResetNewCityMapGenerationLayers(City *city) {
-  for (int y = 0; y < city->map_height; ++y) {
-    for (int x = 0; x < city->map_width; ++x) {
-      const TileIndex cell_index = MapTileXY(city, x, y);
-      TileInfo *tp = &city->tile[cell_index];
-      tp->altitude = 66;
-      tp->zone = 0;
-      tp->terrain = 0;
-      tp->kind = TK_CLEAR;
-      tp->flags = 0;
-    }
+  for (TileIndex tile = 0; tile < city->map_cell_count; ++tile) {
+    TileInfo *tp = &city->tile[tile];
+    tp->altitude = 66;
+    tp->zone = 0;
+    tp->terrain = 0;
+    tp->kind = TK_CLEAR;
+    tp->flags = 0;
   }
 }
 
@@ -76,55 +71,32 @@ void InitializeNewCitySimulationState(City *city) {
   city->clock.tick = 0;
   ResetNewCityOverlayAndEventState(city);
 
-  for (int y = 0; y < city->map_height; ++y) {
-    for (int x = 0; x < city->map_width; ++x) {
-      const TileIndex cell_index = MapTileXY(city, x, y);
-      TileInfo *tp = &city->tile[cell_index];
-      int tile = tp->kind;
-      if (!IsTileKindTree(tile)) {
-        if (CityTileCanStoreBuildingStage(tp))
-          tp->altitude &= CITY_ALTITUDE_CLEAR_WATER;
-        tp->kind = ReadCityWaterGroundKind(tp);
-        if (IsTileKindExposedWater(tp->kind)) tp->terrain &= CITY_TERRAIN_SHAPE_MASK;
-      }
-      if (!IsTileKindTree(tile)) {
-        tp->terrain &= 15;
-        tp->zone &= 31;
-      }
-      WriteCityZoneKind(tp, ZONE_NONE);
-      WriteUnderground(city, cell_index, TUK_CLEAR);
-      tp->flags &= TF_SALTWATER | TF_REGION_MASK;
+  int underground_metadata = (city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) ? CITY_UNDERGROUND_METADATA_MASK : 0;
+  for (TileIndex tile = 0; tile < city->map_cell_count; ++tile) {
+    TileInfo *tp = &city->tile[tile];
+    if (!IsTileKindTree(tp->kind)) {
+      if (IsTileKindDryBuilding(tp->kind))
+        tp->altitude &= CITY_ALTITUDE_CLEAR_WATER;
+      tp->kind = ReadCityWaterGroundKind(tp);
+      tp->terrain &= 15;
+      tp->zone &= 31;
     }
+    WriteCityZoneKind(tp, ZONE_NONE);
+    tp->underground = underground_metadata ? tp->underground & underground_metadata : TUK_CLEAR;
+    tp->flags &= TF_SALTWATER | TF_REGION_MASK;
   }
 
   CityStatistics *statistics = &city->statistics;
   memset(statistics->value, 0, sizeof(statistics->value));
-  city->special_tile_counts.count[CITY_SPECIAL_TILE_OTHER] = 0;
-  memset(city->special_tile_counts.count + 1, 0,
-      sizeof(city->special_tile_counts.count) - sizeof(city->special_tile_counts.count[CITY_SPECIAL_TILE_OTHER]));
+  memset(city->special_tile_counts.count, 0, sizeof(city->special_tile_counts.count));
   city->infrastructure.service_bonus_b = 0;
   city->infrastructure.service_bonus_a = 0;
   city->infrastructure.subway_tiles = 0;
   statistics->value[TK_CLEAR] = city->map_cell_count;
 
-  for (int y = 0; y < city->map_height / 2; ++y) {
-    for (int x = 0; x < city->map_width / 2; ++x) {
-      const TileIndex cell_index = MapTileXY(city, x << 1, y << 1);
-      WritePollution(city, cell_index, 0);
-      WriteTrafficDensity(city, cell_index, 0);
-      WriteLandValue(city, cell_index, 0);
-      WriteCrime(city, cell_index, 0);
-    }
-  }
-  for (int y = 0; y < city->map_height / 4; ++y) {
-    for (int x = 0; x < city->map_width / 4; ++x) {
-      const TileIndex cell_index = MapTileXY(city, x << 2, y << 2);
-      WritePoliceCoverage(city, cell_index, 0);
-      WriteFireCoverage(city, cell_index, 0);
-      WriteDensity(city, cell_index, 0);
-      WriteDensityHistory(city, cell_index, 127);
-    }
-  }
+  memset(city->half, 0, city->map_cell_count / 4 * sizeof(*city->half));
+  for (TileIndex index = 0; index < city->map_cell_count / 16; ++index)
+    city->quarter[index] = (CityQuarterMapStatistics){.density_history = 127};
 
   ResetCityNewTools(city);
 
@@ -158,7 +130,7 @@ void InitializeNewCitySimulationState(City *city) {
   city->weather.state = CITY_WEATHER_CHILLY;
 
   for (int series = 0; series < CITY_HISTORY_SERIES_COUNT; ++series) {
-    memset(GetCityHistoryRow(city, series), 0, sizeof(CityHistoryRow));
+    memset(&city->history[series], 0, sizeof(CityHistoryRow));
     city->history_maxima.value[series] = kCityHistoryMaximumDefaults.value[series];
   }
   city->history_maxima.value[CITY_HISTORY_POWER_PERCENT] = 100;
@@ -193,25 +165,7 @@ void InitializeNewCitySimulationState(City *city) {
     fourth_accounts->value[account] = 0;
   }
 
-  memset(city->economic_tables.sector_rates.offsets.value, 0, sizeof(city->economic_tables.sector_rates.offsets.value));
-  for (int sector = 0; sector < CITY_INDUSTRY_COUNT; ++sector) {
-    city->industry_demand.value[sector] = 0;
-    city->industry_baseline.value[sector] = 7;
-    city->industry_accounts.value[sector] = 0;
-  }
-  memset(city->economic_tables.bond_rates.rate, 0, sizeof(city->economic_tables.bond_rates.rate));
-  city->indicators.bond_rate_total = 0;
-  city->indicators.bond_count = 0;
-  for (int sector = 0; sector < CITY_ECONOMY_SECTOR_COUNT; ++sector) {
-    EconomySector *economy = &city->economy.sector[sector];
-    u32 default_rate = kCityDefaultEconomyRates.value[sector];
-    economy->monthly_amount[0] = 0;
-    economy->monthly_rate[0] = default_rate;
-    economy->current_amount = 0;
-    economy->current_rate = default_rate;
-    economy->accumulated = 0;
-    economy->projected_annual_total = 0;
-  }
+  InitializeNewCityEconomy(city);
 
   city->indicators.year_flag = 0;
   city->unlocks.ordinance_flags = 0;
@@ -223,16 +177,16 @@ void InitializeNewCitySimulationState(City *city) {
   city->indicators.arcology_population = 0;
   city->infrastructure.facility_total = 0;
   city->infrastructure.facility_ratio = 0;
-  city->disasters.type1_count = 0;
-  city->disasters.type2_count = 0;
-  city->disasters.border_water_count = 0;
+  city->disasters.airplane_count = 0;
+  city->disasters.helicopter_count = 0;
+  city->disasters.ship_count = 0;
   city->disasters.monster_count = 0;
   ResetCityHelicopterSoundTiming(city);
-  city->disasters.tile237_count = 0;
+  city->disasters.train_count = 0;
   city->infrastructure.counter_a = 0;
-  city->disasters.type16_count = 0;
+  city->disasters.maxis_man_count = 0;
   city->infrastructure.counter_b = 0;
-  city->disasters.tile248_count = 0;
+  city->disasters.sailboat_count = 0;
   city->infrastructure.counter_c = 0;
   city->disasters.tornado_count = 0;
   city->disasters.map_update_pending = 0;
@@ -261,40 +215,6 @@ i64 CmdStartCity(City *city, u32 flags, TileIndex tile, int reserved1, int reser
   return 1;
 }
 
-// Install a prepared terrain map into the reset City's existing storage. Legacy conversion can fail after writes;
-// success restores generator RNG state, statistics and climate before the caller resets the viewport.
-bool InstallCityTerrainMap(City *city, const CityTerrainMap *map, const CityTerrainSettings *settings) {
-  for (TileIndex tile = 0; tile < map->cell_count; ++tile) {
-    TileInfo *tp = &city->tile[tile];
-    tp->altitude = map->altitude[tile];
-    tp->zone = 0;
-    tp->terrain = 0;
-    if (map->legacy) tp->terrain = map->terrain[tile];
-    else WriteTerrainCode(tp, map->terrain[tile]);
-    tp->kind = map->legacy && !IsTileKindTree(map->buildings[tile]) ? TK_CLEAR : map->buildings[tile];
-    tp->flags = map->flags[tile];
-  }
-  if (map->legacy) {
-    BeginLegacyCityMapImport(city);
-    if (!ConvertCityMapToNative(city)) {
-      SetGameError(city->game, SC2K_ERROR_HOST_ALLOCATION_FAILURE);
-      return false;
-    }
-  }
-  RecountCityTileStatistics(city);
-  city->random.crt = map->process_state;
-  city->random.event = map->game_state;
-  city->geography.rotation = 0;
-  GenerateCityLandscape(city, map);
-  city->geography.ocean = map->ocean;
-  city->geography.river = map->river;
-  city->geography.edit_height = map->water_level;
-  city->geography.hills = settings->hills;
-  city->geography.water = settings->water;
-  city->geography.trees = settings->trees;
-  return true;
-}
-
 // Initialize the accepted year, difficulty, national economy, milestones and starting accounts. The caller has reset
 // the City's accounts and supplied setup values; all milestone draws and presentation calls retain their order.
 void InitializeCitySetupState(City *city, int start_year, int economy_year, int difficulty) {
@@ -317,8 +237,8 @@ void InitializeCitySetupState(City *city, int start_year, int economy_year, int 
   city->indicators.federal_interest_rate = 3;
   city->indicators.national_value = (3 * city->indicators.national_population) / 10;
   city->indicators.national_economy_trend = city->indicators.difficulty - CITY_DIFFICULTY_EASY;
-  WriteHistorySample(city, CITY_HISTORY_GNP, 0, 3);
-  WriteHistorySample(city, CITY_HISTORY_NATIONAL_POPULATION, 0, city->indicators.national_population);
+  city->history[CITY_HISTORY_GNP].sample[0] = 3;
+  city->history[CITY_HISTORY_NATIONAL_POPULATION].sample[0] = city->indicators.national_population;
   for (int index = 0; index < CITY_MILESTONE_COUNT; ++index) {
     int due = Sc2kCrtRandRange(city, 20) + kCityMilestoneBaseYears[index];
     city->economic_tables.milestone_years.due_year[index] = due < city->geography.start_year ? 0 : due;
@@ -350,7 +270,6 @@ void InitializeCitySetupState(City *city, int start_year, int economy_year, int 
   }
   if (city->geography.ocean != 0) {
     city->account_names.value[0] = 0;
-    memcpy(city->geography.neighbor_names.name[0], "Ocean", 6u);
     city->primary_accounts.value[0] = 0;
     city->secondary_accounts.value[0] = 0;
     city->fourth_accounts.value[0] = 0;

@@ -10,17 +10,21 @@
 // altitude[0..4] remains land/bed height. Footprint/facility identities are City records, not overlay byte IDs.
 // Utility flags, climate region, sign/effect overlay, tunnel depth and underground retain tile_storage.h meanings.
 
+#include "city/maps/buildings.h"
+
 #include "drawing/maps/map_sprites.h"
 #include "drawing/sprites/sources.h"
+#include "drawing/cursors.h"
+#include "drawing/raster/canvas_raster_internal.h"
+#include "drawing/sprites/surface.h"
+#include "drawing/state.h"
 #include "city/maps/labels.h"
 #include "city/events/events.h"
 #include "city/infrastructure/networks.h"
 #include "city/infrastructure/utilities.h"
 #include "city/maps/tile_queue.h"
-#include "city/saveload/map_format.h"
 #include "city/engine/random.h"
 #include "city/economy/facilities.h"
-#include "city/maps/buildings.h"
 #include "city/maps/terrain.h"
 
 #include <assert.h>
@@ -33,10 +37,11 @@
 #include "city/infrastructure/highways.h"
 #include "city/infrastructure/power_lines.h"
 #include "city/maps/layers.h"
+#include "city/maps/water.h"
 #include "city/maps/module.h"
+#include "city/maps/map.h"
 #include "city/presentation.h"
 #include "city/state.h"
-#include "city/tools/tools.h"
 #include "drawing/maps/map_animation.h"
 #include "drawing/maps/map_effects.h"
 #include "drawing/maps/map_terrain.h"
@@ -236,52 +241,57 @@ const u8 kTileDensityContribution[TK_HYDRO_POWER - TK_RESIDENTIAL_FIRST] = {
 #undef CITY_ZONED_BUILDING_PROPERTIES
 #undef CITY_OTHER_BUILDING_PROPERTIES
 
+int ReadBuildingOrientation(const City *city, TileIndex tile) {
+  const TileInfo *tp = &city->tile[tile];
+  return IsTileKindBuilding(tp->kind) ? DecodeBuildingOrientation(tp->terrain) : city->geography.rotation;
+}
+
 // One layout for all native rectangular building footprints. Existing building definitions still supply square
 // dimensions; links do not encode a size. Requires the complete writable rectangle within the map and a supported
 // facing; installs links only after its tile kinds exist.
 void InitializeCityBuildingFootprint(City *city, TileIndex top_left, int width, int height, int facing) {
-  int kind = ReadTile(city, top_left);
+  int kind = city->tile[top_left].kind;
   if (IsTileKindSingleTileFootprint(kind)) {
-    WriteTileZoneByte(&city->tile[top_left], ReadTileZoneByte(&city->tile[top_left]) & CITY_ZONE_KIND_MASK);
+    TileInfo *tp = &city->tile[top_left];
+    WriteTileZoneByte(tp, ReadTileZoneByte(tp) & CITY_ZONE_KIND_MASK);
     return;
   }
   if (!IsTileKindBuilding(kind)) return;
+  int orientation = EncodeBuildingOrientation(facing);
   for (int dy = 0; dy < height; ++dy) for (int dx = 0; dx < width; ++dx) {
     TileIndex tile = top_left + dy * city->map_width + dx;
     TileInfo *tp = &city->tile[tile];
     WriteTileZoneByte(tp, ReadCityZoneKind(tp) |
         (dx ? CITY_BUILDING_CONTINUE_X : 0) | (dy ? CITY_BUILDING_CONTINUE_Y : 0) |
-        EncodeBuildingOrientation(facing));
+        orientation);
   }
 }
 
-// Buildings currently have square footprints. All building-range kinds use the same immutable size table, shared with
-// stock codecs. Kind must be supported by the building-size table; returns zero dimensions for non-footprints and
-// currently ignores orientation.
-CityPoint GetBuildingFootprintDimensions(int kind, int orientation) {
-  (void)orientation;
+// Buildings have square footprints. All building-range kinds use the same immutable size table, shared with
+// stock codecs. Facing selects artwork, not the side length; non-footprint kinds return zero.
+int GetBuildingFootprintSize(int kind) {
   int size = kind == TK_PARK ? 1 : 0;
   if (IsTileKindBuilding(kind))
     size = kCityBuildingFootprintSize[kind - TK_RESIDENTIAL_FIRST];
-  return (CityPoint){size, size};
+  return size;
 }
 
 // Follow building continuation links to the native footprint anchor. Requires a valid starting tile; malformed links
 // or mismatched kinds return INVALID_TILE rather than selecting an unrelated footprint.
 TileIndex GetBuildingStartTile(const City *city, TileIndex tile) {
   assert(IsMapTileValid(city, tile));
-  int kind = ReadTile(city, tile);
+  int kind = city->tile[tile].kind;
   if (IsTileKindHighwayFootprint(kind) || IsTileKindHighwayBridge(kind))
     return CityHighwayAnchor(city, tile);
   if (!IsTileKindBuilding(kind)) return tile;
   int x = MapTileX(city, tile);
-  while (ReadTileZoneByte(&city->tile[tile]) & CITY_BUILDING_CONTINUE_X) {
-    if (!x || ReadTile(city, tile - 1) != kind) return INVALID_TILE;
+  while (city->tile[tile].terrain & CITY_BUILDING_CONTINUE_X) {
+    if (!x || city->tile[tile - 1].kind != kind) return INVALID_TILE;
     --x;
     --tile;
   }
-  while (ReadTileZoneByte(&city->tile[tile]) & CITY_BUILDING_CONTINUE_Y) {
-    if (tile < city->map_width || ReadTile(city, tile - city->map_width) != kind) return INVALID_TILE;
+  while (city->tile[tile].terrain & CITY_BUILDING_CONTINUE_Y) {
+    if (tile < city->map_width || city->tile[tile - city->map_width].kind != kind) return INVALID_TILE;
     tile -= city->map_width;
   }
   return tile;
@@ -289,14 +299,14 @@ TileIndex GetBuildingStartTile(const City *city, TileIndex tile) {
 
 // Check that a valid building cell's continuation metadata stays within a consistent footprint. Rejects broken links
 // left by decline rather than treating an interior remnant as a drawable corner.
-static bool HasValidCityBuildingLinks(const City *city, TileIndex tile, int zone) {
+static bool HasValidCityBuildingLinks(const City *city, TileIndex tile, int links) {
   const TileInfo *tiles = city->tile;
   int kind = tiles[tile].kind;
   // Decline can replace a large building's perimeter while leaving its center.
   // Broken continuation links must not turn that interior tile into a new corner.
-  if ((zone & CITY_BUILDING_CONTINUE_X) &&
+  if ((links & CITY_BUILDING_CONTINUE_X) &&
       (!MapTileX(city, tile) || tiles[tile - 1].kind != kind)) return false;
-  if ((zone & CITY_BUILDING_CONTINUE_Y) &&
+  if ((links & CITY_BUILDING_CONTINUE_Y) &&
       (tile < city->map_width || tiles[tile - city->map_width].kind != kind)) return false;
   return true;
 }
@@ -305,42 +315,42 @@ static bool HasValidCityBuildingLinks(const City *city, TileIndex tile, int zone
 // supported corner enum; result is read-only and malformed footprints return false.
 SC2K_PRESERVE_MOST bool IsCityBuildingCorner(const City *city, TileIndex tile, int corner) {
   const TileInfo *tp = &city->tile[tile];
-  if (!HasValidCityBuildingLinks(city, tile, ReadTileZoneByte(tp))) return false;
+  if (!HasValidCityBuildingLinks(city, tile, tp->terrain)) return false;
   bool right = (corner & 2) != 0;
   bool bottom = corner == CITY_BUILDING_CORNER_BOTTOM_LEFT || corner == CITY_BUILDING_CORNER_BOTTOM_RIGHT;
-  if (!right && (ReadTileZoneByte(tp) & CITY_BUILDING_CONTINUE_X)) return false;
-  if (!bottom && (ReadTileZoneByte(tp) & CITY_BUILDING_CONTINUE_Y)) return false;
+  if (!right && (tp->terrain & CITY_BUILDING_CONTINUE_X)) return false;
+  if (!bottom && (tp->terrain & CITY_BUILDING_CONTINUE_Y)) return false;
   if (right && MapTileX(city, tile) + 1 < city->map_width &&
       city->tile[tile + 1].kind == tp->kind &&
-      (ReadTileZoneByte(&city->tile[tile + 1]) & CITY_BUILDING_CONTINUE_X)) return false;
+      (city->tile[tile + 1].terrain & CITY_BUILDING_CONTINUE_X)) return false;
   TileIndex down = tile + city->map_width;
   if (bottom && down < city->map_cell_count && city->tile[down].kind == tp->kind &&
-      (ReadTileZoneByte(&city->tile[down]) & CITY_BUILDING_CONTINUE_Y)) return false;
+      (city->tile[down].terrain & CITY_BUILDING_CONTINUE_Y)) return false;
   return true;
 }
 
-// Compute visible corner bits from a valid building tile and matching strided zone metadata. Source must describe the
-// same map and footprint; invalid continuation links return an empty mask.
-SC2K_PRESERVE_MOST int CityBuildingCornerMask(const City *city, TileIndex tile, const u8 *zones, int stride) {
+// Compute visible corner bits from a valid building tile and its neighbours in City. Returns rotation-relative
+// CityFootprintCornerMask bits, or zero for invalid continuation links.
+SC2K_PRESERVE_MOST int CityBuildingCornerMask(const City *city, TileIndex tile) {
   const TileInfo *tp = &city->tile[tile];
-  int zone = zones[tile * stride], width = city->map_width;
-  if (!HasValidCityBuildingLinks(city, tile, zone)) return 0;
-  bool left = !(zone & CITY_BUILDING_CONTINUE_X), top = !(zone & CITY_BUILDING_CONTINUE_Y);
-  bool right = MapTileX(city, tile) + 1 >= width || city->tile[tile + 1].kind != tp->kind ||
-      !(zones[(tile + 1) * stride] & CITY_BUILDING_CONTINUE_X);
+  int links = tp->terrain, width = city->map_width;
+  if (!HasValidCityBuildingLinks(city, tile, links)) return 0;
+  bool left = !(links & CITY_BUILDING_CONTINUE_X), top = !(links & CITY_BUILDING_CONTINUE_Y);
+  bool right = MapTileX(city, tile) + 1 >= width || tp[1].kind != tp->kind ||
+      !(tp[1].terrain & CITY_BUILDING_CONTINUE_X);
   TileIndex down = tile + width;
-  bool bottom = down >= city->map_cell_count || city->tile[down].kind != tp->kind ||
-      !(zones[down * stride] & CITY_BUILDING_CONTINUE_Y);
+  bool bottom = down >= city->map_cell_count || tp[width].kind != tp->kind ||
+      !(tp[width].terrain & CITY_BUILDING_CONTINUE_Y);
   int mask = ((left ? CITY_FOOTPRINT_CORNERS_WEST : 0) | (right ? CITY_FOOTPRINT_CORNERS_EAST : 0)) &
       ((top ? CITY_FOOTPRINT_CORNERS_NORTH : 0) | (bottom ? CITY_FOOTPRINT_CORNERS_SOUTH : 0));
   int rotation = city->geography.rotation;
-  return (((mask << rotation) | (mask >> (4 - rotation))) << 4) & CITY_ZONE_CORNER_MASK;
+  return ((mask << rotation) | (mask >> (4 - rotation))) & CITY_FOOTPRINT_CORNERS_ALL;
 }
 
 // Decode construction progress from a native tile that supports it. Requires a readable tile record; unsupported
 // categories return zero rather than interpreting water-height bits as progress.
 int ReadCityBuildingConstructionStage(const TileInfo *tp) {
-  if (!CityTileCanStoreBuildingStage(tp)) return 0;
+  if (!IsTileKindDryBuilding(tp->kind)) return 0;
   return (tp->altitude & CITY_ALTITUDE_BUILDING_STAGE_MASK) >> CITY_ALTITUDE_BUILDING_STAGE_SHIFT;
 }
 
@@ -360,7 +370,7 @@ int CityBuildingConstructionKind(const TileInfo *tp) {
 bool SetCityBuildingConstructionStage(City *city, TileIndex tile, int stage) {
   if (stage < 0 || stage > CITY_BUILDING_CONSTRUCTION_STAGE_MAX || !IsMapTileValid(city, tile)) return false;
   TileInfo *tp = &city->tile[tile];
-  if (!CityTileCanStoreBuildingStage(tp)) return false;
+  if (!IsTileKindDryBuilding(tp->kind)) return false;
   int old_kind = CityBuildingConstructionKind(tp);
   if (!old_kind) old_kind = tp->kind;
   int altitude = tp->altitude;
@@ -383,10 +393,9 @@ bool SetCityBuildingConstructionStage(City *city, TileIndex tile, int stage) {
 void SetCityBuildingFootprintStage(City *city, TileIndex tile, int stage) {
   TileIndex anchor = GetBuildingStartTile(city, tile);
   if (anchor == INVALID_TILE) return;
-  CityPoint dimensions = GetBuildingFootprintDimensions(ReadTile(city, tile), ReadBuildingOrientation(city, tile));
-  int width = dimensions.x, height = dimensions.y;
-  for (int row = 0; row < height; ++row)
-    for (int column = 0; column < width; ++column)
+  int size = GetBuildingFootprintSize(city->tile[tile].kind);
+  for (int row = 0; row < size; ++row)
+    for (int column = 0; column < size; ++column)
       SetCityBuildingConstructionStage(city, anchor + row * city->map_width + column, stage);
 }
 
@@ -491,7 +500,7 @@ CityCommandCost GetCityBuildingCost(const City *city, TileIndex tile, int kind) 
   if (!IsMapTileValid(city, tile) || kind < 0 || kind >= TK_COUNT || !kCityBuildings[kind].size) return quote;
   quote.error = CITY_COMMAND_COST_BLOCKED;
   if (kind == TK_HYDRO_POWER) {
-    if (!IsTileKindExposedWater(ReadTile(city, tile)) ||
+    if (!IsTileKindExposedWater(city->tile[tile].kind) ||
         ReadCityTileGeometry(city, tile).water_surface != CITY_WATER_SURFACE_RAPIDS) return quote;
   } else {
     int size = kCityBuildings[kind].size;
@@ -730,7 +739,7 @@ i64 PlaceCityWaterPowerFacility(City *city, TileIndex tile_index) {
   if (ReadCityTileGeometry(city, tile_index).water_surface != CITY_WATER_SURFACE_RAPIDS) {
     return -CITY_NOTICE_HYDRO_REQUIRES_WATERFALL;
   }
-  if (!IsTileKindExposedWater(ReadTile(city, tile_index))) {
+  if (!IsTileKindExposedWater(city->tile[tile_index].kind)) {
     return CITY_COMMAND_COST_BLOCKED;
   }
 
@@ -772,44 +781,85 @@ static int BuildingConstructionProfile(int height) {
   return profile;
 }
 
-int CityBuildingSpriteFirst(int kind) {
-  return CityBuildingArtworkSourceFirst(kCityMapKindSprites[kind]);
-}
-
-int CityBuildingSprite(const City *city, int kind, int orientation) {
+static int CityBuildingSprite(const City *city, int kind, int orientation) {
   int sprite = kCityMapKindSprites[kind], first = CityBuildingArtworkSourceFirst(sprite);
   if (!(city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) || first < 0) return -1;
   return first + (orientation & 3);
 }
 
+// Construction uses prepared runs and the ordinary sprite renderer.
+bool DrawCityBuildingPreview(const City *city, Canvas *canvas, CityRect bounds, TileKind kind, int orientation) {
+  const Drawing *drawing = city->drawing;
+  int art = CityBuildingSprite(city, kind, orientation);
+  int view = art < 0 ? CITY_CIVIC_VIEWS : orientation & 3;
+  int preview = kCityMapKindSprites[kind] - CITY_CIVIC_KIND_FIRST;
+  const RunSprite *sprite = drawing->sprite_cache.building_previews[preview][view];
+  if (kind == TK_WIND_POWER && art >= 0 &&
+      city->geography.start_year + city->clock.year >= CITY_WIND_MODERN_YEAR)
+    sprite = drawing->sprite_cache.modern_wind_previews[view];
+  if (!sprite) return false;
+  CityRect box = CanvasRasterImageBounds(canvas, bounds);
+  CanvasRaster raster = CanvasRasterView(canvas);
+  SpriteSurface surface = drawing->screen_surface;
+  surface.canvas = *canvas;
+  surface.canvas.width = raster.width;
+  surface.canvas.height = raster.height;
+  surface.canvas.clip = CanvasRasterRect(canvas, IntersectCityRects(canvas->clip, bounds));
+  surface.canvas.raster = (CanvasRaster){0};
+  bool flipped = art < 0 && (orientation & 1);
+  DrawRunSprite(&surface, sprite, box.left + (box.right - box.left - sprite->width) / 2,
+      box.top + (box.bottom - box.top - sprite->height) / 2, SPRITE_COPY | (flipped ? SPRITE_FLIPPED : 0), NULL);
+  return true;
+}
+
+bool DecodeCityBuildingCursorIcon(const City *city, TileKind kind, const u32 palette[256],
+    u32 icon[SC2K_CURSOR_ASSET_ICON_PIXELS]) {
+  int art = CityBuildingSprite(city, kind, 0);
+  int sprite = CITY_SPRITE_CATALOG_LARGE_BASE + kCityMapKindSprites[kind];
+  if (art >= 0) {
+    // Wind previews include the rotor, which is a separate animated layer on the map.
+    if (kind == TK_WIND_POWER)
+      art = CITY_LANDSCAPE_WIND_PREVIEW_FIRST +
+          (city->geography.start_year + city->clock.year >= CITY_WIND_MODERN_YEAR ? CITY_CIVIC_VIEWS : 0);
+    sprite = MAP_LANDSCAPE_SPRITE_FIRST + 2 * MAP_LANDSCAPE_SPRITES_PER_ZOOM + art - CITY_LANDSCAPE_GROUND_FIRST;
+  }
+  return DecodeCityMapCursorIcon(city->drawing, sprite, palette, icon);
+}
+
 int CityBuildingSmokeIndex(int kind) {
   switch (kind) {
-  case TK_OIL_POWER_PLANT: return 0;
-  case TK_NUCLEAR_POWER_PLANT: return 1;
-  case TK_COAL_POWER_PLANT: return 2;
+  case TK_OIL_POWER_PLANT: return CITY_POWER_SMOKE_OIL;
+  case TK_NUCLEAR_POWER_PLANT: return CITY_POWER_SMOKE_NUCLEAR;
+  case TK_COAL_POWER_PLANT: return CITY_POWER_SMOKE_COAL;
   default: return -1;
   }
 }
 
 CityPoint CityBuildingSpriteExtent(const City *city, int sprite, int zoom) {
   const Drawing *drawing = city->drawing;
-  CityPoint extent = CityMapSpriteExtent(drawing, 500 * zoom + sprite);
+  CityPoint extent = CityMapSpriteExtent(drawing, MapSpriteZoomIndex(sprite, zoom));
   int original_width = extent.x;
   int first = CityBuildingArtworkSourceFirst(sprite);
   if (!(city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) || first < 0) return extent;
-  int smoke_kind = sprite == CITY_MAP_TILE_SPRITE_OIL_POWER_PLANT ? 0 :
-      sprite == CITY_MAP_TILE_SPRITE_NUCLEAR_POWER_PLANT ? 1 : sprite == CITY_MAP_TILE_SPRITE_COAL_POWER_PLANT ? 2 : -1;
+  const CityResourceState *assets = city->game->resources;
+  int smoke_profile = -1;
+  switch (sprite) {
+  case CITY_MAP_TILE_SPRITE_OIL_POWER_PLANT: smoke_profile = CITY_POWER_SMOKE_OIL; break;
+  case CITY_MAP_TILE_SPRITE_NUCLEAR_POWER_PLANT: smoke_profile = CITY_POWER_SMOKE_NUCLEAR; break;
+  case CITY_MAP_TILE_SPRITE_COAL_POWER_PLANT: smoke_profile = CITY_POWER_SMOKE_COAL; break;
+  default: break;
+  }
   for (int view = 0; view < CITY_CIVIC_VIEWS; ++view) {
-    const CityLandscapeSprite *art = GetTileSpriteSource(city->game->resources, sprite, view);
+    const CityLandscapeSprite *art = GetTileSpriteSource(assets, sprite, view);
     if (!art || !art->sprite) continue;
     int divisor = art->scale << (2 - zoom);
     extent.x = IntMax(extent.x, (art->sprite->width + divisor - 1) / divisor);
     extent.y = IntMax(extent.y, (art->sprite->height + divisor - 1) / divisor);
-    if (smoke_kind >= 0) {
-      const CityPowerSmoke *smoke = &city->game->resources->power_smoke[smoke_kind][view];
+    if (smoke_profile >= 0) {
+      const CityPowerSmoke *smoke = &assets->power_smoke[smoke_profile][view];
       for (int emitter = 0; emitter < smoke->count; ++emitter) {
         const CityPowerSmokeEmitter *source = &smoke->emitters[emitter];
-        const CityLandscapeSprite *plume = &city->game->resources->landscape[CITY_LANDSCAPE_POWER_SMOKE_FIRST +
+        const CityLandscapeSprite *plume = &assets->landscape[CITY_LANDSCAPE_POWER_SMOKE_FIRST +
             source->type * CITY_POWER_SMOKE_FRAMES];
         if (!plume->sprite) continue;
         int height = art->baseline - source->y + plume->baseline;
@@ -818,7 +868,7 @@ CityPoint CityBuildingSpriteExtent(const City *city, int sprite, int zoom) {
     }
   }
   if (sprite == CITY_MAP_TILE_SPRITE_WIND_POWER) {
-    const CityLandscapeSprite *rotor = &city->game->resources->landscape[CITY_LANDSCAPE_WIND_ROTOR_FIRST];
+    const CityLandscapeSprite *rotor = &assets->landscape[CITY_LANDSCAPE_WIND_ROTOR_FIRST];
     if (rotor->sprite) {
       int divisor = rotor->scale << (2 - zoom);
       extent.y = IntMax(extent.y, (rotor->baseline + divisor - 1) / divisor);
@@ -826,9 +876,9 @@ CityPoint CityBuildingSpriteExtent(const City *city, int sprite, int zoom) {
   }
   if (sprite >= CITY_BUILDING_ART_FIRST && sprite < CITY_BUILDING_ART_FIRST + CITY_BUILDING_ART_COUNT) {
     int divisor = 4 << (2 - zoom);
-    const CityBuildingArtwork *building = &city->game->resources->buildings[sprite - CITY_BUILDING_ART_FIRST];
+    const CityBuildingArtwork *building = &assets->buildings[sprite - CITY_BUILDING_ART_FIRST];
     int profile = BuildingConstructionProfile(building->structure_height);
-    const RunSprite *front = city->game->resources->landscape[first].sprite;
+    const RunSprite *front = assets->landscape[first].sprite;
     int width = front ? front->width : original_width * divisor;
     extent.y = IntMax(extent.y, (kCityConstructionHeights[profile] + width / 2 + 64 + divisor - 1) / divisor);
   }
@@ -842,24 +892,28 @@ static const u8 kCityBuildingSelectionOrder[TK_COUNT] = {
   [TK_LARGE_PARK] = CITY_BUILDING_SELECTION_BEFORE,
 };
 
-void DrawCityBuildingSelection(City *city, TileIndex anchor, CityBuildingSelectionPhase order, u32 options) {
+// Artwork combines the stored/default building facing with the bound camera's quarter turns.
+static int BuildingViewOrientation(const City *city, TileIndex tile) {
+  return (ReadBuildingOrientation(city, tile) + CityMapCameraRotation(city->drawing)) & 3;
+}
+
+void DrawCityBuildingSelection(const City *city, TileIndex anchor, CityBuildingSelectionPhase order, u32 options) {
   if (!(options & CITY_MAP_DRAW_PLACEMENT)) return;
-  int kind = ReadTile(city, anchor);
+  int kind = city->tile[anchor].kind;
   if (kCityBuildingSelectionOrder[kind] != order) return;
-  CityPoint dimensions = GetBuildingFootprintDimensions(kind, CityMapViewOrientation(city, anchor));
-  int width = dimensions.x, height = dimensions.y;
-  for (int u = 0; u < width; ++u) for (int v = 0; v < height; ++v) {
+  int size = GetBuildingFootprintSize(kind);
+  for (int u = 0; u < size; ++u) for (int v = 0; v < size; ++v) {
     TileIndex tile = CityMapViewNeighbor(city, anchor, -u, v);
     if (tile != INVALID_TILE) DrawCityMapPlacementTile(city, tile);
   }
 }
 
-static bool DrawBuildingConstruction(City *city, TileIndex cell, int zoom, int screen_x, int ground_y,
+static bool DrawBuildingConstruction(const City *city, TileIndex cell, int zoom, int screen_x, int ground_y,
     int size) {
   Drawing *drawing = city->drawing;
   CityResourceState *assets = city->game->resources;
   int stage = ReadCityBuildingConstructionStage(&city->tile[cell]);
-  int kind = ReadTile(city, cell);
+  int kind = city->tile[cell].kind;
   const CityBuildingArtwork *building = &assets->buildings[
       kCityMapKindSprites[kind] - CITY_BUILDING_ART_FIRST];
   int first = CITY_LANDSCAPE_CONSTRUCTION_FIRST + (size - 1) * CITY_CONSTRUCTION_PIECES;
@@ -875,14 +929,14 @@ static bool DrawBuildingConstruction(City *city, TileIndex cell, int zoom, int s
 }
 
 static int ReadBuildingGround(const City *city, int kind) {
-  int layout = kCityMapKindSprites[kind];
+  int sprite = kCityMapKindSprites[kind];
   const CityResourceState *assets = city->game->resources;
-  if (layout == CITY_MAP_TILE_SPRITE_PARK || layout >= CITY_CIVIC_KIND_FIRST) {
-    int index = layout == CITY_MAP_TILE_SPRITE_PARK ? CITY_CIVIC_KIND_COUNT : layout - CITY_CIVIC_KIND_FIRST;
+  if (sprite == CITY_MAP_TILE_SPRITE_PARK || sprite >= CITY_CIVIC_KIND_FIRST) {
+    int index = sprite == CITY_MAP_TILE_SPRITE_PARK ? CITY_CIVIC_KIND_COUNT : sprite - CITY_CIVIC_KIND_FIRST;
     return assets->civic_ground[index];
   }
-  if (layout >= CITY_BUILDING_ART_FIRST && layout < CITY_BUILDING_ART_FIRST + CITY_BUILDING_ART_COUNT)
-    return assets->buildings[layout - CITY_BUILDING_ART_FIRST].ground;
+  if (sprite >= CITY_BUILDING_ART_FIRST && sprite < CITY_BUILDING_ART_FIRST + CITY_BUILDING_ART_COUNT)
+    return assets->buildings[sprite - CITY_BUILDING_ART_FIRST].ground;
   return CITY_BUILDING_GROUND_TERRAIN;
 }
 
@@ -895,9 +949,9 @@ static bool BuildingGroundCoversTile(const City *city, TileIndex tile, int kind,
       (kind == TK_PARK && !CityMapTileDetailsVisible(city->drawing))) return false;
   TileIndex start = GetBuildingStartTile(city, tile);
   if (start == INVALID_TILE) return false;
-  CityPoint size = GetBuildingFootprintDimensions(kind, ReadBuildingOrientation(city, tile));
-  if (size.x == 1 && size.y == 1) return true;
-  TileIndex end = GetRelativeTileOrInvalid(city, start, size.x - 1, size.y - 1);
+  int size = GetBuildingFootprintSize(kind);
+  if (size == 1) return true;
+  TileIndex end = GetRelativeTileOrInvalid(city, start, size - 1, size - 1);
   if (end == INVALID_TILE) return false;
   CityPoint first = CityMapViewTilePoint(city, start);
   CityPoint last = CityMapViewTilePoint(city, end);
@@ -909,7 +963,7 @@ static bool BuildingGroundCoversTile(const City *city, TileIndex tile, int kind,
 
 // The material/baked-ground flags are resolved once for a whole footprint. Each tile still supplies its own geometry
 // and construction stage, so slopes, water and unequal terrain expose their existing ground and skirts.
-static void DrawBuildingGroundTile(City *city, TileIndex tile, int kind, int ground, int zoom,
+static void DrawBuildingGroundTile(const City *city, TileIndex tile, int kind, int ground, int zoom,
     int screen_x, int ground_y, const CityTileGeometry *geometry) {
   if (BuildingGroundCoversTile(city, tile, kind, ground, geometry)) {
     DrawCityMapTerrainSkirt(city, tile, zoom, screen_x, ground_y, geometry->surface_height);
@@ -921,22 +975,22 @@ static void DrawBuildingGroundTile(City *city, TileIndex tile, int kind, int gro
   DrawCityMapTerrainTile(city, tile, zoom, sprite, screen_x, ground_y, geometry);
 }
 
-static bool DrawBuildingGround(City *city, TileIndex tile, int zoom, int screen_x, int ground_y,
+static bool DrawBuildingGround(const City *city, TileIndex tile, int zoom, int screen_x, int ground_y,
     const CityTileGeometry *geometry) {
   int kind = city->tile[tile].kind;
   if ((!IsTileKindBuilding(kind) && kind != TK_PARK) ||
-      CityBuildingSprite(city, kind, CityMapViewOrientation(city, tile)) < 0) return false;
+      CityBuildingSprite(city, kind, BuildingViewOrientation(city, tile)) < 0) return false;
   DrawBuildingGroundTile(city, tile, kind, ReadBuildingGround(city, kind), zoom, screen_x, ground_y, geometry);
   return true;
 }
 
 // Shared/custom building artwork retains its ground, selection and warning order.
-void DrawCityBuildingFallback(City *city, TileIndex tile, int sprite, int zoom, int screen_x, int ground_y,
+void DrawCityBuildingFallback(const City *city, TileIndex tile, int sprite, int zoom, int screen_x, int ground_y,
     const CityTileGeometry *geometry) {
   Drawing *drawing = city->drawing;
   u32 options = CityMapDrawOptions(drawing);
   const TileInfo *tp = &city->tile[tile];
-  int zone = ReadCityZoneKind(tp), first = 500 * zoom;
+  int zone = ReadCityZoneKind(tp), first = MapSpriteZoomIndex(0, zoom);
   if (!(options & CITY_MAP_DRAW_BUILDINGS) || (!(options & CITY_MAP_DRAW_ZONE_GROUND) && zone)) {
     int ground = (options & CITY_MAP_DRAW_ZONE_GROUND) || !zone ?
         first + 300 + CityZoneGroundSpriteOffset(zone) : first + 290 + zone;
@@ -948,7 +1002,7 @@ void DrawCityBuildingFallback(City *city, TileIndex tile, int sprite, int zoom, 
   } else if (IsCityMapViewFootprintAnchor(city, tile)) {
     CityPoint extent = CityMapSpriteExtent(drawing, sprite);
     int flags = tp->flags;
-    int flipped = CityMapViewOrientation(city, tile) & 1;
+    int flipped = BuildingViewOrientation(city, tile) & 1;
     DrawCityBuildingSelection(city, tile, CITY_BUILDING_SELECTION_BEFORE, options);
     DrawCityMapSpriteAtBaseline(drawing, sprite, screen_x, ground_y + (extent.x >> 2) - (2 << zoom), flipped);
     DrawCityBuildingSelection(city, tile, CITY_BUILDING_SELECTION_AFTER, options);
@@ -958,7 +1012,7 @@ void DrawCityBuildingFallback(City *city, TileIndex tile, int sprite, int zoom, 
   }
 }
 
-static bool DrawBuildingTile(City *city, TileIndex cell, int zoom, int screen_x, int ground_y,
+static bool DrawBuildingTile(const City *city, TileIndex cell, int zoom, int screen_x, int ground_y,
     const CityTileGeometry *tile_geometry) {
   Drawing *drawing = city->drawing;
   u32 options = CityMapDrawOptions(drawing);
@@ -967,7 +1021,7 @@ static bool DrawBuildingTile(City *city, TileIndex cell, int zoom, int screen_x,
   int kind = tp->kind;
   bool small_park = kind == TK_PARK;
   int orientation = small_park ? (city->geography.rotation + CityMapCameraRotation(city->drawing)) & 3 :
-      CityMapViewOrientation(city, cell);
+      BuildingViewOrientation(city, cell);
   // The dam spans the river with spillways facing downhill. View 0 drains
   // east (shape 2); the camera-relative slope supplies all four directions.
   if (kind == TK_HYDRO_POWER &&
@@ -978,22 +1032,20 @@ static bool DrawBuildingTile(City *city, TileIndex cell, int zoom, int screen_x,
   if (small_park ? !(options & CITY_MAP_DRAW_DETAILS) || !(options & CITY_MAP_DRAW_BUILDINGS) :
       !(options & CITY_MAP_DRAW_BUILDINGS) ||
       (!(options & CITY_MAP_DRAW_ZONE_GROUND) && ReadCityZoneKind(tp))) return false;
-  int view = (id - CityBuildingSpriteFirst(kind)) & 3;
+  int view = orientation & 3;
   bool wind = kind == TK_WIND_POWER;
   int wind_form = wind && (tp->zone & CITY_WIND_MODERN_MASK) ? 1 : 0;
   if (wind_form) id = CITY_LANDSCAPE_WIND_MODERN_FIRST + view;
   if (!small_park && !IsCityMapViewFootprintAnchor(city, cell)) return true;
-  CityPoint dimensions = GetBuildingFootprintDimensions(kind, orientation);
-  int width = dimensions.x, height = dimensions.y;
-  int size = IntMax(width, height);
+  int size = GetBuildingFootprintSize(kind);
   int step_x = 4 << zoom, step_y = 2 << zoom;
   int anchor_height = geometry.surface_height;
   int ground = ReadBuildingGround(city, kind);
   // This is the footprint's leftmost tile. Paint its bounded ground union once,
   // before the full building, so transparent landscaping reveals real terrain
   // without later footprint cells painting over the building.
-  if (IsCityMapGroundPass(drawing)) for (int u = 0; u < width; ++u) {
-    for (int v = 0; v < height; ++v) {
+  if (IsCityMapGroundPass(drawing)) for (int u = 0; u < size; ++u) {
+    for (int v = 0; v < size; ++v) {
       TileIndex tile = CityMapViewNeighbor(city, cell, -u, v);
       if (tile == INVALID_TILE) continue;
       CityTileGeometry ground_geometry = tile == cell ? geometry : ReadCityMapViewGeometry(city, tile);
@@ -1006,7 +1058,7 @@ static bool DrawBuildingTile(City *city, TileIndex cell, int zoom, int screen_x,
   int cached = MAP_LANDSCAPE_SPRITE_FIRST + zoom * MAP_LANDSCAPE_SPRITES_PER_ZOOM +
       id - CITY_LANDSCAPE_GROUND_FIRST;
   DrawCityBuildingSelection(city, cell, CITY_BUILDING_SELECTION_BEFORE, options);
-  int baseline = ground_y + (height - 1) * step_y;
+  int baseline = ground_y + (size - 1) * step_y;
   if (CityBuildingConstructionKind(tp)) {
     if (!DrawBuildingConstruction(city, cell, zoom, screen_x, baseline, size)) return false;
   } else DrawCityMapSpriteAtBaseline(drawing, cached, screen_x, baseline, 0);
@@ -1019,7 +1071,7 @@ static bool DrawBuildingTile(City *city, TileIndex cell, int zoom, int screen_x,
     int cached_rotor = MAP_LANDSCAPE_SPRITE_FIRST + zoom * MAP_LANDSCAPE_SPRITES_PER_ZOOM +
         rotor - CITY_LANDSCAPE_GROUND_FIRST;
     DrawCityMapSpriteAtBaseline(drawing, cached_rotor, screen_x, ground_y, 0);
-    if (animation) EndCityMapSpriteAnimation(city);
+    if (animation) EndCityMapSpriteAnimation(drawing);
   }
   int smoke_kind = CityBuildingSmokeIndex(kind);
   if (smoke_kind >= 0) {
@@ -1039,7 +1091,7 @@ static bool DrawBuildingTile(City *city, TileIndex cell, int zoom, int screen_x,
             CITY_POWER_STEAM_ANCHOR_X : CITY_POWER_SMOKE_ANCHOR_X;
         if (source->flipped) anchor_x = CITY_POWER_SMOKE_WIDTH - anchor_x;
         i64 x_q8 = (i64)screen_x * 256 + (source->x - anchor_x) * 256 / divisor;
-        i64 baseline_q8 = (i64)(ground_y + (height - 1) * step_y) * 256 +
+        i64 baseline_q8 = (i64)baseline * 256 +
             (source->y - sprite_baseline) * 256 / divisor;
         int frame = (smoke_frame + cell + emitter * 5) % CITY_POWER_SMOKE_FRAMES;
         int id = CITY_LANDSCAPE_POWER_SMOKE_FIRST + source->type * CITY_POWER_SMOKE_FRAMES + frame;
@@ -1050,13 +1102,24 @@ static bool DrawBuildingTile(City *city, TileIndex cell, int zoom, int screen_x,
             id - CITY_LANDSCAPE_GROUND_FIRST;
         DrawCityMapSpriteAtBaselineQ8(drawing, cached_smoke, x_q8, baseline_q8, source->flipped);
       }
-      if (animation) EndCityMapSpriteAnimation(city);
+      if (animation) EndCityMapSpriteAnimation(drawing);
     }
   }
   if ((tp->flags & TF_POWER_SERVICE) == TF_POWERABLE)
-    DrawCityMapSprite(drawing, CITY_SPRITE_CATALOG_SMALL_POWER_WARNING + 500 * zoom,
-        screen_x + (width + height - 2) * step_x / 2, ground_y - step_x, 0);
+    DrawCityMapSprite(drawing, MapSpriteZoomIndex(CITY_SPRITE_CATALOG_SMALL_POWER_WARNING, zoom),
+        screen_x + (size - 1) * step_x, ground_y - step_x, 0);
   return true;
 }
 
-const TileModule kCityBuildingModule = {.draw = DrawBuildingTile, .draw_ground = DrawBuildingGround};
+static i64 ClearBuildingTile(City *city, u32 flags, TileIndex tile) {
+  if (flags & CITY_COMMAND_TEST) return CITY_COMMAND_COST_OK;
+  int kind = city->tile[tile].kind;
+  if (kind == TK_SUBWAY_STATION || IsTileKindTrainTransition(kind))
+    SetUndergroundTile(city, tile, TUK_CLEAR);
+  BulldozeCityTile(city, tile, true);
+  return 1;
+}
+
+const TileModule kCityBuildingModule = {
+  .clear = ClearBuildingTile, .draw = DrawBuildingTile, .draw_ground = DrawBuildingGround,
+};

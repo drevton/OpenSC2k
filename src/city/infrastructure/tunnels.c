@@ -18,11 +18,13 @@
 #include <assert.h>
 
 #include "assets/graphics.h"
-#include "game/audio.h"
+#include "audio/types.h"
 #include "city/engine/commands.h"
 #include "city/infrastructure/power_lines.h"
 #include "city/infrastructure/surface_lines.h"
 #include "city/maps/layers.h"
+#include "city/maps/water.h"
+#include "city/maps/map.h"
 #include "city/presentation.h"
 #include "city/state.h"
 #include "city/tools/tools.h"
@@ -32,30 +34,30 @@
 #include "game/observation.h"
 #include "game/state.h"
 
-// Search from a valid candidate entrance for the matching tunnel exit and chargeable length. Returns a value with
-// INVALID_TILE end and an error when unsupported; no terrain, treasury or RNG changes occur.
+// Search a candidate entrance for the matching exit and chargeable length. Invalid or unsupported origins return
+// INVALID_TILE end, with a notice code when one applies; no terrain, treasury or RNG changes occur.
 CityInfrastructureSpan FindCityRoadTunnel(const City *city, TileIndex origin_tile) {
   CityInfrastructureSpan span = {.start = origin_tile, .end = INVALID_TILE, .error_tile = INVALID_TILE};
   if (!IsMapTileValid(city, origin_tile)) return span;
   CityPoint origin_point = MapTilePt(city, origin_tile);
-  TileIndex tile_index = origin_tile;
-  int starting_tile = ReadTile(city, tile_index);
-  if (!IsTileKindLandscape(starting_tile) || starting_tile == TK_RADIOACTIVE_WASTE ||
-      ReadUnderground(city, tile_index) != TUK_CLEAR)
+  const TileInfo *tp = &city->tile[origin_tile];
+  int starting_kind = tp->kind;
+  if (!IsTileKindLandscape(starting_kind) || starting_kind == TK_RADIOACTIVE_WASTE ||
+      (tp->underground & CITY_UNDERGROUND_KIND_MASK) != TUK_CLEAR)
     return span;
 
-  int starting_terrain = ReadLegacyTerrainCode(city, tile_index);
+  int starting_terrain = ReadLegacyTerrainCode(city, origin_tile);
   if (starting_terrain < CITY_TERRAIN_SHAPE_1 || starting_terrain > CITY_TERRAIN_SHAPE_4) {
     span.error = CITY_NOTICE_TUNNEL_REQUIRES_HILLSIDE;
     return span;
   }
 
-  int starting_height = ReadCityLandHeight(&city->tile[tile_index]);
+  int starting_height = ReadCityLandHeight(tp);
   int direction = (starting_terrain + 2) & 3;
   int span_cells = 0;
   int end_y = origin_point.y;
   int end_x = origin_point.x;
-  TileIndex end_tile = tile_index;
+  TileIndex end_tile = origin_tile;
 
   for (;;) {
     if (end_y < 0 || end_x < 0 || end_y >= city->map_height - 1 || end_x >= city->map_width - 1) {
@@ -63,18 +65,18 @@ CityInfrastructureSpan FindCityRoadTunnel(const City *city, TileIndex origin_til
       return span;
     }
 
-    int altitude = ReadAltitudeWord(city, end_tile);
+    int altitude = tp->altitude;
     if ((altitude & CITY_ALTITUDE_TUNNEL_MASK) != 0) {
       span.error = CITY_NOTICE_TUNNEL_CANNOT_CROSS_TUNNELS;
       return span;
     }
-    int height_delta = ReadCityLandHeight(&city->tile[end_tile]) - starting_height;
+    int height_delta = ReadCityLandHeight(tp) - starting_height;
     if (height_delta > 30) {
       span.error = CITY_NOTICE_TUNNEL_TOO_DEEP;
       return span;
     }
     if (height_delta == 1) {
-      int underground = ReadUnderground(city, end_tile);
+      int underground = tp->underground & CITY_UNDERGROUND_KIND_MASK;
       if ((underground >= TUK_SUBWAY_FIRST && underground <= TUK_SUBWAY_NS_PIPE_EW) ||
           underground == TUK_MISSILE_SILO || underground == TUK_SUBWAY_ACCESS) {
         span.error = CITY_NOTICE_TUNNEL_UNDERGROUND_OBSTRUCTION;
@@ -90,7 +92,8 @@ CityInfrastructureSpan FindCityRoadTunnel(const City *city, TileIndex origin_til
       span.error = CITY_NOTICE_TUNNEL_UNSTABLE_EXIT;
       return span;
     }
-    if (ReadCityLandHeight(&city->tile[end_tile]) <= starting_height) {
+    tp = &city->tile[end_tile];
+    if (ReadCityLandHeight(tp) <= starting_height) {
       if (ReadLegacyTerrainCode(city, end_tile) != ((starting_terrain + 1) & 3) + 1) {
         span.error = CITY_NOTICE_TUNNEL_UNSTABLE_EXIT;
         return span;
@@ -106,19 +109,21 @@ CityInfrastructureSpan FindCityRoadTunnel(const City *city, TileIndex origin_til
 }
 
 // Build the validated tunnel's entrance/exit and update their surrounding connections. The span must belong to the
-// admitted tunnel search; construction effects happen once after confirmation.
-static bool FinishCityRoadTunnel(City *city, TileIndex origin_tile, CityInfrastructureSpan span,
+// admitted tunnel search; construction effects happen once after confirmation. Geometry stays captured while cost
+// is read from the live construction state. The caller supplies its public success result after this write phase.
+static void FinishCityRoadTunnel(City *city, CityInfrastructureSpan span,
     int starting_terrain, int starting_height) {
   int stride = kLineYStep[span.direction] * city->map_width + kLineXStep[span.direction];
-  TileIndex tile_index = origin_tile;
+  TileIndex tile_index = span.start;
   int span_cells = span.length - 1;
   static const i8 kNeighbors[4][2] = {{0, -1}, {0, 1}, {-1, 0}, {1, 0}};
   DebitCityCommandCost(city, city->construction.cost);
   InvalidateCityInformation(city->game, CITY_UPDATE_STATUS);
   ReplaceCityTileVariant(city, tile_index, TK_TUNNEL_ENTRANCE,
       starting_terrain - CITY_TERRAIN_SHAPE_1);
-  WriteAltitudeWord(city, tile_index, (ReadAltitudeWord(city, tile_index) & CITY_ALTITUDE_CLEAR_TUNNEL) |
-      CITY_ALTITUDE_TUNNEL_ENTRANCE);
+  TileInfo *tp = &city->tile[tile_index];
+  tp->altitude = (tp->altitude & CITY_ALTITUDE_CLEAR_TUNNEL) |
+      CITY_ALTITUDE_TUNNEL_ENTRANCE;
   for (int neighbor = 0; neighbor < 4; ++neighbor) {
     TileIndex adjacent = GetRelativeTileOrInvalid(city, tile_index, kNeighbors[neighbor][0], kNeighbors[neighbor][1]);
     if (adjacent != INVALID_TILE) UpdateRoadConnections(city, adjacent);
@@ -127,24 +132,25 @@ static bool FinishCityRoadTunnel(City *city, TileIndex origin_tile, CityInfrastr
 
   while (span_cells > 0) {
     tile_index += stride;
-    int altitude = ReadAltitudeWord(city, tile_index);
-    int terrain_delta = ReadCityLandHeight(&city->tile[tile_index]) - starting_height + 1;
+    tp = &city->tile[tile_index];
+    int altitude = tp->altitude;
+    int terrain_delta = ReadCityLandHeight(tp) - starting_height + 1;
     int terrain_height = terrain_delta * (1 << CITY_ALTITUDE_TUNNEL_SHIFT);
     if (IsMapTileValid(city, tile_index))
-      WriteAltitudeWord(city, tile_index, (altitude & CITY_ALTITUDE_CLEAR_TUNNEL) | terrain_height);
+      tp->altitude = (altitude & CITY_ALTITUDE_CLEAR_TUNNEL) | terrain_height;
     InvalidateTile(city, tile_index);
     --span_cells;
   }
 
   ReplaceCityTileVariant(city, tile_index, TK_TUNNEL_ENTRANCE, (starting_terrain + 1) & 3);
-  WriteAltitudeWord(city, tile_index, (ReadAltitudeWord(city, tile_index) & CITY_ALTITUDE_CLEAR_TUNNEL) |
-      CITY_ALTITUDE_TUNNEL_ENTRANCE);
+  tp = &city->tile[tile_index];
+  tp->altitude = (tp->altitude & CITY_ALTITUDE_CLEAR_TUNNEL) |
+      CITY_ALTITUDE_TUNNEL_ENTRANCE;
   for (int neighbor = 0; neighbor < 4; ++neighbor) {
     TileIndex adjacent = GetRelativeTileOrInvalid(city, tile_index, kNeighbors[neighbor][0], kNeighbors[neighbor][1]);
     if (adjacent != INVALID_TILE) UpdateRoadConnections(city, adjacent);
   }
   InvalidateTile(city, tile_index);
-  return true;
 }
 
 // Native commands receive the resolved confirmation; tunnel price is simulation data.
@@ -164,8 +170,9 @@ static i64 PlaceCityRoadTunnel(City *city, TileIndex tile, bool accept) {
   }
   i64 affordable = AffordableCityCommandCost(city, city->construction.cost);
   if (affordable < 0) return affordable;
-  return FinishCityRoadTunnel(city, tile, span, ReadLegacyTerrainCode(city, tile),
+  FinishCityRoadTunnel(city, span, ReadLegacyTerrainCode(city, tile),
       ReadCityLandHeight(&city->tile[tile]));
+  return 1;
 }
 
 // Place a road tunnel from its valid starting tile using the resolved confirmation bit. TEST returns the tunnel charge
@@ -201,7 +208,8 @@ bool PlaceCityRoadTerrainSpan(City *city, TileIndex origin_tile) {
     return false;
   }
 
-  return FinishCityRoadTunnel(city, origin_tile, span, starting_terrain, starting_height);
+  FinishCityRoadTunnel(city, span, starting_terrain, starting_height);
+  return true;
 }
 
 // Remove both tunnel entrances and clear the intervening depth markers. Power cleanup applies only to the selected
@@ -244,7 +252,39 @@ TileIndex RemoveCityRoadTunnel(City *city, TileIndex tile_index, bool animate) {
 
 // The map renderer supplies an already rotated/zoomed portal after its shared visibility and detail checks.
 // Terrain stays in the ground pass; the entrance uses the current depth pass and ordinary sprite clipping.
-void DrawCityRoadTunnelEntrance(City *city, TileIndex tile, int sprite, int zoom, int screen_x, int ground_y,
+int CityRoadTunnelViewAxis(const City *city, TileIndex cell, int floor) {
+  static const i8 kX[] = {-1, 1, 0, 0}, kY[] = {0, 0, -1, 1};
+  int connections[2] = {0};
+  for (int side = 0; side < 4; ++side) {
+    TileIndex next = CityMapViewNeighbor(city, cell, kX[side], kY[side]);
+    if (next == INVALID_TILE) continue;
+    const TileInfo *tp = &city->tile[next];
+    int depth = (tp->altitude & CITY_ALTITUDE_TUNNEL_MASK) >> CITY_ALTITUDE_TUNNEL_SHIFT;
+    if (depth && ReadCityLandHeight(tp) - depth + 1 == floor) ++connections[side >> 1];
+  }
+  if (connections[0] != connections[1]) return connections[1] > connections[0];
+  // Adjacent parallel tunnels can make local connectivity ambiguous. Follow
+  // only connected straight spans to their portals; no map-wide search/cache.
+  for (int side = 0; side < 4; ++side) {
+    TileIndex next = cell;
+    for (;;) {
+      next = CityMapViewNeighbor(city, next, kX[side], kY[side]);
+      if (next == INVALID_TILE) break;
+      const TileInfo *tp = &city->tile[next];
+      int depth = (tp->altitude & CITY_ALTITUDE_TUNNEL_MASK) >> CITY_ALTITUDE_TUNNEL_SHIFT;
+      if (!depth || ReadCityLandHeight(tp) - depth + 1 != floor) break;
+      if (depth == CITY_TUNNEL_DEPTH_ENTRANCE) {
+        int facing = (ReadTileVariant(tp) + CityMapCameraRotation(city->drawing)) & 3;
+        if (tp->kind == TK_TUNNEL_ENTRANCE &&
+            1 - (facing & 1) == (side >> 1)) return side >> 1;
+        break;
+      }
+    }
+  }
+  return connections[1] != 0;
+}
+
+void DrawCityRoadTunnelEntrance(const City *city, TileIndex tile, int sprite, int zoom, int screen_x, int ground_y,
     const CityTileGeometry *geometry) {
   Drawing *drawing = city->drawing;
   const TileInfo *tp = &city->tile[tile];
@@ -269,7 +309,7 @@ void DrawCityRoadTunnelEntrance(City *city, TileIndex tile, int sprite, int zoom
   if (((zoom == CITY_MAP_ZOOM_SMALL ? flags : tp->flags) & TF_POWER_SERVICE) == TF_POWERABLE) {
     CityPoint extent = CityMapSpriteExtent(drawing, sprite);
     int half_width = 4 << zoom;
-    DrawCityMapSprite(drawing, 500 * zoom + CITY_SPRITE_CATALOG_SMALL_POWER_WARNING,
+    DrawCityMapSprite(drawing, MapSpriteZoomIndex(CITY_SPRITE_CATALOG_SMALL_POWER_WARNING, zoom),
         screen_x + (extent.x >> 1) - half_width, ground_y - half_width, 0);
   }
 }

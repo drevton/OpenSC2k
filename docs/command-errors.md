@@ -64,9 +64,6 @@ return `CITY_COMMAND_NEEDS_CONFIRMATION`; the UI opens a nonmodal confirmation t
 owns its prompt and pending command. Yes rechecks TEST with `CITY_BOND_CONFIRMED`,
 then executes the complete command. No/close discards it. Ineligible actions show an
 ordinary error without entering a bond routine or its retained rejection notice.
-Diagnostic UI recording retains the audited ASK caller through the optional
-presentation override in `src/city/comparison/observation.c`.
-
 The bond handlers themselves require the explicit `CITY_BOND_CONFIRMED` option.
 Executing `CITY_BOND_ASK` without TEST rejects the request without opening a window
 or changing City. The UI, a script or a future network caller can submit the same
@@ -75,15 +72,6 @@ presentation state. Validation and the debt/cash effects use current City state.
 The shared command wrapper permits absent UI/Drawing owners for these commands
 when no simulation phase is pending. This does not yet make the simulation loop or
 all other command families usable without presentation owners.
-
-Original bond rejection notices and suspended ASK callers live in
-`src/city/comparison/bonds.c`. That adapter shares the City mutation functions, including
-the retained oldest rate and signed queue shift, while preserving diagnostic
-admission results. It is selected only by an optional diagnostic override; the
-normal build has no dependency on comparison sources.
-
-Validation: Release and comparison libraries compile; interactive error/cancellation
-flows have not been exercised as part of this change.
 
 Native Stretch Terrain is available in terrain edit mode. Grab a tile and drag vertically;
 each changed target elevation submits a command immediately, so terrain follows the drag.

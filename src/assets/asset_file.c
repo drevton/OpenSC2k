@@ -41,7 +41,7 @@ static bool InitializeAssetDecoder(AssetFile *asset) {
 }
 
 AssetOpenResult OpenAssetFile(AssetFile *asset, const char *path) {
-  *asset = (AssetFile){0};
+  *asset = (AssetFile){.kind = ASSET_FILE_RAW};
   asset->file = fopen(path, "rb");
   if (!asset->file) return errno == ENOENT ? ASSET_OPEN_MISSING : ASSET_OPEN_ERROR;
   struct stat status;
@@ -57,19 +57,23 @@ AssetOpenResult OpenAssetFile(AssetFile *asset, const char *path) {
     return ASSET_OPEN_ERROR;
   }
   if (count != sizeof(magic) || memcmp(magic, "\x28\xb5\x2f\xfd", sizeof(magic))) return ASSET_OPEN_OK;
-  if (InitializeAssetDecoder(asset)) return ASSET_OPEN_OK;
+  if (InitializeAssetDecoder(asset)) {
+    asset->kind = ASSET_FILE_ZSTD;
+    return ASSET_OPEN_OK;
+  }
   CloseAssetFile(asset);
   return ASSET_OPEN_ERROR;
 }
 
 static size_t DecodeAssetBytes(AssetFile *asset, void *destination, size_t size) {
+  bool bounded = asset->kind == ASSET_FILE_SECTION;
   ZSTD_outBuffer output = {destination, size, 0};
   while (output.pos < output.size && !asset->finished && !asset->failed) {
     if (asset->input_offset == asset->input_size) {
       size_t wanted = kAssetInputBytes;
-      if (asset->bounded_stream && asset->compressed_remaining < wanted) wanted = asset->compressed_remaining;
+      if (bounded && asset->compressed_remaining < wanted) wanted = asset->compressed_remaining;
       asset->input_size = fread(asset->input, 1, wanted, asset->file);
-      if (asset->bounded_stream) {
+      if (bounded) {
         asset->compressed_remaining -= asset->input_size;
         if (asset->input_size != wanted) asset->failed = true;
       }
@@ -86,23 +90,23 @@ static size_t DecodeAssetBytes(AssetFile *asset, void *destination, size_t size)
       asset->finished = true;
       // Each bounded archive section contains one complete checksummed frame.
       asset->failed = input.pos != input.size || ferror(asset->file) ||
-          (asset->bounded_stream ? asset->compressed_remaining != 0 : fgetc(asset->file) != EOF);
+          (bounded ? asset->compressed_remaining != 0 : fgetc(asset->file) != EOF);
     } else if (!progress) {
       // Empty input can still flush buffered output. No progress means truncation.
       asset->failed = true;
     }
   }
   asset->decoded_total += output.pos;
-  if (asset->bounded_stream && (asset->decoded_total > asset->length ||
+  if (bounded && (asset->decoded_total > asset->length ||
           (asset->finished && asset->decoded_total != asset->length))) asset->failed = true;
   return output.pos;
 }
 
 size_t ReadAssetFile(AssetFile *asset, void *destination, size_t size) {
   if (asset->failed) return 0;
-  if (!asset->decoder) {
+  if (asset->kind == ASSET_FILE_RAW || asset->kind == ASSET_FILE_MEMORY) {
     if (asset->length - asset->position < size) size = asset->length - asset->position;
-    if (asset->memory) {
+    if (asset->kind == ASSET_FILE_MEMORY) {
       memcpy(destination, asset->memory + asset->position, size);
       asset->position += size;
       return size;
@@ -138,10 +142,18 @@ int ReadAssetByte(AssetFile *asset) {
   return ReadAssetFile(asset, &value, 1) == 1 ? value : EOF;
 }
 
+ByteSpan ReadAssetSpan(AssetFile *asset, size_t size) {
+  if (asset->failed || asset->kind != ASSET_FILE_MEMORY || size > asset->length - asset->position)
+    return (ByteSpan){0};
+  ByteSpan span = {asset->memory + asset->position, size};
+  asset->position += size;
+  return span;
+}
+
 u8 *ReadAllAssetFile(AssetFile *asset, size_t limit, size_t *size) {
   *size = 0;
   // Raw files and borrowed spans have a known remaining length; allocate their result once.
-  if (!asset->decoder && asset->length > asset->position) {
+  if ((asset->kind == ASSET_FILE_RAW || asset->kind == ASSET_FILE_MEMORY) && asset->length > asset->position) {
     u64 remaining = asset->length - asset->position;
     if (remaining > limit) return NULL;
     u8 *data = malloc(remaining);
@@ -180,19 +192,20 @@ u8 *ReadAllAssetFile(AssetFile *asset, size_t limit, size_t *size) {
 }
 
 AssetOpenResult OpenAssetSpan(AssetFile *asset, ByteSpan span) {
-  *asset = (AssetFile){.memory = span.data, .length = span.size};
+  *asset = (AssetFile){.memory = span.data, .length = span.size, .kind = ASSET_FILE_MEMORY};
   return span.data ? ASSET_OPEN_OK : ASSET_OPEN_MISSING;
 }
 
 bool SeekAssetFile(AssetFile *asset, u64 position) {
-  if (asset->failed || asset->decoder || position > asset->length) return false;
-  if (!asset->memory && (position > INT64_MAX || fseeko(asset->file, position, SEEK_SET))) return false;
+  if (asset->failed || asset->kind == ASSET_FILE_ZSTD || asset->kind == ASSET_FILE_SECTION ||
+      position > asset->length) return false;
+  if (asset->kind == ASSET_FILE_RAW && (position > INT64_MAX || fseeko(asset->file, position, SEEK_SET))) return false;
   asset->position = position;
   return true;
 }
 
 bool DecodeAssetSection(FILE *file, u64 offset, u64 compressed, u8 *data, size_t size) {
-  AssetFile reader = {.file = file, .bounded_stream = true, .compressed_remaining = compressed, .length = size};
+  AssetFile reader = {.file = file, .kind = ASSET_FILE_SECTION, .compressed_remaining = compressed, .length = size};
   bool valid = offset <= INT64_MAX && !fseeko(file, offset, SEEK_SET);
   // The archive owns the stream; this operation owns only the decoder.
   valid = valid && InitializeAssetDecoder(&reader);

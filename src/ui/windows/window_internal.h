@@ -2,7 +2,6 @@
 #define SC2K_UI_WINDOW_INTERNAL_H
 
 #include "ui/windows/windows.h"
-#include "ui/windows/state.h"
 
 // Class policy and registered procedures belong to window implementations.
 enum {
@@ -50,6 +49,10 @@ WindowProcedure ToolStatusWindowProcedure;
 
 // Cancel held-button repeat when capture or the owning window ends.
 void CancelCityButtonRepeat(Game *game);
+
+// After WINDOW_DESTROY, detach completion records into UI's deferred queue without invoking callbacks.
+// Does not release window content. An empty list needs no UI binding; otherwise the bound UI must outlive delivery.
+void DeferCityWindowCallbacks(CityCanvasDesktop *desktop, Window *window);
 
 // Focus a visible window and preserve the drag index when reordering the stack.
 // Explicit navigation requests highlight it; pointer input passes false to clear that highlight.

@@ -1,7 +1,7 @@
 #ifndef SC2K_GAME_COMMANDS_H
 #define SC2K_GAME_COMMANDS_H
 
-#include "city/engine/commands.h"
+#include "city/engine/command_types.h"
 
 typedef struct Game Game;
 typedef struct CityPointerInput CityPointerInput;
@@ -33,9 +33,6 @@ bool RunCityCommand(Game *game, CityCommandId id, TileIndex tile, int parameter1
 bool RunCityCommandWithPayload(Game *game, CityCommandId id, TileIndex tile, int parameter1, int parameter2,
     int parameter3, const CityCommandPayload *payload, CityCommandCallback *callback, void *context);
 
-// Packet execution preserves the numerical handler return; WithInput reports only whether that value is nonnegative.
-// Optional comparison may supply pointer samples; native execution accepts none.
-// Ordinary UI actions use RunCityCommand.
 i64 ExecuteRecordedCityCommandWithPayload(Game *game, CityCommand packet, const CityPointerInput *input, u32 count,
     const u8 *text, u32 length);
 bool ExecuteRecordedCityCommandWithInput(Game *game, CityCommand packet, const CityPointerInput *input, u32 count);

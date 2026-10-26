@@ -21,10 +21,11 @@
 #include "city/infrastructure/bridges.h"
 #include "city/infrastructure/highways.h"
 #include "city/infrastructure/surface_lines.h"
-#include "game/audio.h"
+#include "audio/types.h"
 #include "city/maps/layers.h"
 #include "city/maps/module.h"
 #include "city/maps/water.h"
+#include "city/maps/map.h"
 #include "city/presentation.h"
 #include "city/state.h"
 #include "drawing/maps/map_terrain.h"
@@ -62,14 +63,15 @@ int CityPowerConnectionMask(const TileInfo *tp) {
 int FindCityPowerConnectionMask(const City *city, TileIndex tile) {
   assert(IsMapTileValid(city, tile));
   const TileInfo *tp = &city->tile[tile];
-  if (!IsTileKindPlainPowerLine(tp->kind) || IsCityWaterPowerLine(tp)) return CityPowerConnectionMask(tp);
+  if (!IsTileKindPlainPowerLine(tp->kind) || IsTileKindWaterPowerLine(tp->kind)) return CityPowerConnectionMask(tp);
   int shape = ReadTerrainCode(tp);
   int directions = shape >= CITY_TERRAIN_SHAPE_1 && shape <= CITY_TERRAIN_SHAPE_4 ?
       (shape & 1 ? CONN_NS : CONN_EW) : CONN_ALL;
   int mask = 0;
+  CityPoint point = MapTilePt(city, tile);
   for (int direction = 0; direction < 4; ++direction) {
     if (!(directions & (1 << direction))) continue;
-    TileIndex neighbor = GetRelativeTileOrInvalid(city, tile, kLineXStep[direction], kLineYStep[direction]);
+    TileIndex neighbor = MapTileXYOrInvalid(city, point.x + kLineXStep[direction], point.y + kLineYStep[direction]);
     if (neighbor == INVALID_TILE) continue;
     const TileInfo *other = &city->tile[neighbor];
     if (!(other->flags & TF_POWERABLE)) continue;
@@ -90,13 +92,14 @@ void UpdatePowerLineConnections(City *city, TileIndex tile) {
   TileInfo *tp = &city->tile[tile];
   if (!IsTileKindPlainPowerLine(tp->kind)) return;
   int mask = FindCityPowerConnectionMask(city, tile);
-  CityPoint point = PowerLinePatternPoint(city, tile);
+  CityPoint pattern = PowerLinePatternPoint(city, tile);
   // Leave three cable-only tiles between straight-run towers. Endpoints, bends
   // and junctions always have a tower; water spans keep their fixed straight axis.
-  bool tower = (point.x + point.y) % 4 == 0 || (mask != CONN_EW && mask != CONN_NS);
+  bool tower = (pattern.x + pattern.y) % 4 == 0 || (mask != CONN_EW && mask != CONN_NS);
+  CityPoint point = MapTilePt(city, tile);
   for (int direction = 0; direction < 4 && !tower; ++direction) {
     if (!(mask & (1 << direction))) continue;
-    TileIndex neighbor = GetRelativeTileOrInvalid(city, tile, kLineXStep[direction], kLineYStep[direction]);
+    TileIndex neighbor = MapTileXYOrInvalid(city, point.x + kLineXStep[direction], point.y + kLineYStep[direction]);
     if (neighbor == INVALID_TILE) continue;
     const TileInfo *np = &city->tile[neighbor];
     int kind = np->kind;
@@ -112,8 +115,8 @@ void UpdatePowerLineConnections(City *city, TileIndex tile) {
   InvalidateTile(city, tile);
   // Each neighboring wire half also depends on this tile's tower and height.
   for (int direction = 0; direction < 4; ++direction) {
-    TileIndex neighbor = GetRelativeTileOrInvalid(city, tile, kLineXStep[direction], kLineYStep[direction]);
-    if (neighbor != INVALID_TILE && IsTileKindPowerLine(ReadTile(city, neighbor))) InvalidateTile(city, neighbor);
+    TileIndex neighbor = MapTileXYOrInvalid(city, point.x + kLineXStep[direction], point.y + kLineYStep[direction]);
+    if (neighbor != INVALID_TILE && IsTileKindPowerLine(city->tile[neighbor].kind)) InvalidateTile(city, neighbor);
   }
 }
 
@@ -121,11 +124,12 @@ void UpdatePowerLineConnections(City *city, TileIndex tile) {
 void RefreshCityPowerConnections(City *city, TileIndex tile) {
   assert(IsMapTileValid(city, tile));
   UpdatePowerLineConnections(city, tile);
+  CityPoint point = MapTilePt(city, tile);
   for (int direction = 0; direction < 4; ++direction) {
-    TileIndex neighbor = GetRelativeTileOrInvalid(city, tile, kLineXStep[direction], kLineYStep[direction]);
+    TileIndex neighbor = MapTileXYOrInvalid(city, point.x + kLineXStep[direction], point.y + kLineYStep[direction]);
     if (neighbor == INVALID_TILE) continue;
     UpdatePowerLineConnections(city, neighbor);
-    if (IsTileKindPowerLine(ReadTile(city, neighbor))) InvalidateTile(city, neighbor);
+    if (IsTileKindPowerLine(city->tile[neighbor].kind)) InvalidateTile(city, neighbor);
   }
 }
 
@@ -133,7 +137,7 @@ void RefreshCityPowerConnections(City *city, TileIndex tile) {
 // derives stored topology once and must not inspect a partially decoded stock map.
 void InitializeCityPowerConnections(City *city) {
   for (TileIndex tile = 0; tile < city->map_cell_count; ++tile)
-    if (IsTileKindPlainPowerLine(ReadTile(city, tile))) UpdatePowerLineConnections(city, tile);
+    if (IsTileKindPlainPowerLine(city->tile[tile].kind)) UpdatePowerLineConnections(city, tile);
 }
 
 // Add a power-line cell and reconnect its four neighbors.
@@ -142,13 +146,15 @@ void PlaceCityPowerLineCell(City *city, TileIndex tile) {
   TileInfo *tp = &city->tile[tile];
   if (tp->flags & TF_POWERABLE) return;
   int kind = tp->kind;
-  int axis = ReadCityStraightLineAxis(city, tile, 0);
-  int replacement;
+  int replacement, axis = -1;
   if (IsTileKindLandscape(kind)) replacement = TK_POWER_LINE;
-  else if (kind == TK_ROAD && axis >= 0) replacement = TK_ROAD_POWER_CROSSING;
-  else if (kind == TK_RAIL && axis >= 0) replacement = TK_RAIL_POWER_CROSSING;
   else if (kind == TK_HIGHWAY) replacement = TK_HIGHWAY_POWER;
-  else return;
+  else {
+    if (!IsTileKindPlainTransport(kind)) return;
+    axis = ReadCityStraightLineAxis(city, tile);
+    if (axis < 0) return;
+    replacement = kind == TK_ROAD ? TK_ROAD_POWER_CROSSING : TK_RAIL_POWER_CROSSING;
+  }
   replacement = CityTileKindForWater(replacement, HasTileWater(tp));
   ReplaceCityTileAndStatistics(city, tile, replacement);
   if (IsTileKindGroundCrossing(replacement)) WriteCityCrossingAxis(tp, axis);
@@ -167,14 +173,14 @@ void PlaceCityPowerLineCell(City *city, TileIndex tile) {
 // banks and the water beneath the cables. Requires a valid origin; returns false for a different family and otherwise
 // removes only the matching axis-aligned water line.
 bool RemoveCityWaterPowerSpan(City *city, TileIndex origin, bool animate) {
-  if (!IsCityWaterPowerLine(&city->tile[origin])) return false;
+  if (!IsTileKindWaterPowerLine(city->tile[origin].kind)) return false;
   int mask = ReadTransportConnections(&city->tile[origin]);
   if (mask != CONN_EW && mask != CONN_NS) return false;
   int axis = (mask & CONN_NS) != 0;
   TileIndex first = origin;
   for (;;) {
     TileIndex previous = GetRelativeTileOrInvalid(city, first, -!axis, -axis);
-    if (previous == INVALID_TILE || !IsCityWaterPowerLine(&city->tile[previous]) ||
+    if (previous == INVALID_TILE || !IsTileKindWaterPowerLine(city->tile[previous].kind) ||
         ReadTransportConnections(&city->tile[previous]) != mask) break;
     first = previous;
   }
@@ -182,7 +188,7 @@ bool RemoveCityWaterPowerSpan(City *city, TileIndex origin, bool animate) {
   TileIndex tile = first;
   while (tile != INVALID_TILE) {
     TileInfo *tp = &city->tile[tile];
-    if (!IsCityWaterPowerLine(tp) || ReadTransportConnections(tp) != mask) break;
+    if (!IsTileKindWaterPowerLine(tp->kind) || ReadTransportConnections(tp) != mask) break;
     ReplaceCityTileAndStatistics(city, tile, ReadCityWaterGroundKind(tp));
     tp->flags &= ~(TF_POWERED | TF_POWERABLE);
     WriteTileZoneByte(tp, ReadTileZoneByte(tp) & CITY_ZONE_KIND_MASK);
@@ -194,10 +200,11 @@ bool RemoveCityWaterPowerSpan(City *city, TileIndex origin, bool animate) {
 }
 
 int CityMapPowerLayout(int mask, int shape) {
-  static const u8 kOffsets[16] = {0, 0, 1, 6, 0, 0, 7, 11, 1, 9, 1, 10, 8, 13, 12, 14};
-  if (shape >= 1 && shape <= 4) return CITY_MAP_TILE_SPRITE_POWER_LINE_FIRST + shape + 1;
-  if (shape >= 9 && shape <= 12) return CITY_MAP_TILE_SPRITE_POWER_LINE_FIRST + 1;
-  return CITY_MAP_TILE_SPRITE_POWER_LINE_FIRST + kOffsets[mask];
+  if (shape >= CITY_TERRAIN_SHAPE_1 && shape <= CITY_TERRAIN_SHAPE_4)
+    return CITY_MAP_TILE_SPRITE_POWER_LINE_FIRST + shape + 1;
+  if (shape >= CITY_TERRAIN_SHAPE_9 && shape <= CITY_TERRAIN_SHAPE_12)
+    return CITY_MAP_TILE_SPRITE_POWER_LINE_FIRST + 1;
+  return CITY_MAP_TILE_SPRITE_POWER_LINE_FIRST + kLineTileOffsetByConnectionMask[mask];
 }
 
 // Cable drawing reads stored connections and only the adjoining endpoint heights.
@@ -205,7 +212,7 @@ static int PowerAnchorQuarter(const CityTileGeometry *geometry) {
   return 4 * geometry->surface_height + __builtin_popcount(kTerrainRaisedCorners[geometry->surface_shape]);
 }
 
-static bool DrawPowerTile(City *city, TileIndex tile, int zoom, int screen_x, int ground_y,
+static bool DrawPowerTile(const City *city, TileIndex tile, int zoom, int screen_x, int ground_y,
     const CityTileGeometry *tile_geometry) {
   Drawing *drawing = city->drawing;
   const TileInfo *tp = &city->tile[tile];
@@ -222,7 +229,7 @@ static bool DrawPowerTile(City *city, TileIndex tile, int zoom, int screen_x, in
   if (!CityMapTileDetailsVisible(drawing)) return true;
   int rotation = CityMapCameraRotation(drawing);
   int mask = CityMapCameraMask(CityPowerConnectionMask(tp), rotation);
-  bool tower = CityPowerLineHasTower(tp);
+  bool tower = IsTileKindPowerLineTower(tp->kind);
   int layout = IsTileKindPlainPowerLine(kind) && geometry.water == CITY_WATER_NONE ?
       CityMapPowerLayout(mask, geometry.land_shape) : CityMapViewTileSpriteIndex(city, tile);
   bool ground_crossing = IsTileKindGroundCrossing(kind);
@@ -233,16 +240,18 @@ static bool DrawPowerTile(City *city, TileIndex tile, int zoom, int screen_x, in
   int first = MAP_LANDSCAPE_SPRITE_FIRST + zoom * MAP_LANDSCAPE_SPRITES_PER_ZOOM - CITY_LANDSCAPE_GROUND_FIRST;
   i64 baseline_q8 = (i64)ground_y * 256 -
       (anchor - 4 * geometry.surface_height) * CityMapHeightStep(zoom) * 64;
+  CityPoint point = MapTilePt(city, tile);
   for (int direction = 0; direction < 4; ++direction) {
     if (!(mask & (1 << direction))) continue;
     int grade = 0, other_support = 1;
     int world_direction = (direction + rotation) & 3;
-    TileIndex neighbor = GetRelativeTileOrInvalid(city, tile, kLineXStep[world_direction], kLineYStep[world_direction]);
+    TileIndex neighbor = MapTileXYOrInvalid(city, point.x + kLineXStep[world_direction],
+        point.y + kLineYStep[world_direction]);
     if (neighbor != INVALID_TILE) {
       CityTileGeometry neighbor_geometry = ReadCityMapViewGeometry(city, neighbor);
       grade = PowerAnchorQuarter(&neighbor_geometry) - anchor;
-      if (IsTileKindPowerLine(ReadTile(city, neighbor)))
-        other_support = CityPowerLineHasTower(&city->tile[neighbor]);
+      if (IsTileKindPowerLine(city->tile[neighbor].kind))
+        other_support = IsTileKindPowerLineTower(city->tile[neighbor].kind);
     }
     grade = IntMax(-CITY_POWER_WIRE_GRADE_LIMIT, IntMin(grade, CITY_POWER_WIRE_GRADE_LIMIT));
     int sprite = first + CITY_LANDSCAPE_POWER_WIRE_FIRST +
@@ -252,21 +261,21 @@ static bool DrawPowerTile(City *city, TileIndex tile, int zoom, int screen_x, in
   }
   if (tower) {
     int axis = mask == CONN_NS || mask == CONN_NORTH || mask == CONN_SOUTH;
-    CityPoint point = PowerLinePatternPoint(city, tile);
+    CityPoint pattern = PowerLinePatternPoint(city, tile);
     bool straight = mask == CONN_NS || mask == CONN_EW;
     int form = __builtin_popcount(mask) > 2 ? 5 : !straight ? 4 :
-        axis + (((point.x * 13 + point.y * 7) & 4) ? 2 : 0);
-    int sprite = IsCityWaterPowerLine(tp) ? CITY_LANDSCAPE_POWER_WATER_FIRST + axis :
+        axis + (((pattern.x * 13 + pattern.y * 7) & 4) ? 2 : 0);
+    int sprite = IsTileKindWaterPowerLine(tp->kind) ? CITY_LANDSCAPE_POWER_WATER_FIRST + axis :
         CITY_LANDSCAPE_POWER_TOWER_FIRST + geometry.surface_shape * CITY_POWER_TOWER_FORMS + form;
     DrawCityMapSpriteAtBaselineQ8(drawing, first + sprite, (i64)screen_x * 256, baseline_q8, 0);
   }
   if ((tp->flags & TF_POWER_SERVICE) == TF_POWERABLE)
-    DrawCityMapSprite(drawing, CITY_SPRITE_CATALOG_SMALL_POWER_WARNING + zoom * 500,
+    DrawCityMapSprite(drawing, MapSpriteZoomIndex(CITY_SPRITE_CATALOG_SMALL_POWER_WARNING, zoom),
         screen_x, ground_y - (4 << zoom), 0);
   return true;
 }
 
-static bool DrawPowerGround(City *city, TileIndex tile, int zoom, int screen_x, int ground_y,
+static bool DrawPowerGround(const City *city, TileIndex tile, int zoom, int screen_x, int ground_y,
     const CityTileGeometry *geometry) {
   Drawing *drawing = city->drawing;
   DrawCityMapTerrainTile(city, tile, zoom, -1, screen_x, ground_y, geometry);

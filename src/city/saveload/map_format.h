@@ -5,9 +5,6 @@
 #include "city/maps/tile_storage.h"
 #include "city/saveload/terrain_format.h"
 
-// Native XGND climate header precedes the existing snow/moisture lattice bytes.
-enum { CITY_SAVE_CLIMATE_HEADER_SIZE = 8 };
-
 // Stock XZON uses one-hot footprint corners. Native footprint links are
 // converted to this convention only for codecs and retained stock algorithms.
 enum {
@@ -16,10 +13,11 @@ enum {
   CITY_ZONE_CORNER_2 = 0x40, CITY_ZONE_CORNER_3 = 0x80,
 };
 
-// Original SC2 file and statistic IDs, independent of TileKind.
+// Stock SC2 surface and counter IDs. Native counter-slot names belong to maps/map_types.h.
 // Compact native infrastructure IDs are independent of the stock artwork catalog.
 // Translate complete tile records at import/export; never store these IDs as native kinds.
 typedef enum CityLegacySurfaceTile {
+  TKL_RUBBLE_FIRST = 1,
   TKL_RUBBLE_LAST = 4,
   TKL_PARK = 13,
   TKL_POWER_LINE_EAST_WEST = 14,
@@ -114,7 +112,6 @@ typedef enum CityLegacySurfaceTile {
 // Stock XBIT orientation/water bits. Native orientation uses zone metadata; kinds encode water presence.
 enum { CITY_LEGACY_MAP_FLAG_ROTATED = 0x02, CITY_LEGACY_MAP_FLAG_WATER = 0x04 };
 
-// Read-only stock projection of the full record, shared by SC2 and comparison exports.
 TileInfo TranslateCityTileToLegacy(const City *city, TileIndex tile);
 // Preserve live totals while splitting consolidated kinds into stock directional counters.
 void ReadCityLegacyTileCounts(const City *city, u32 counts[TK_COUNT]);
@@ -122,33 +119,32 @@ void DecodeCityLegacyTileCounts(const u8 *bytes, CityTileCounts *counts);
 // Source map must remain unchanged for the entire import pass; result must not alias it.
 bool TranslateCityTileFromLegacy(const City *city, TileIndex tile, TileInfo *result);
 void WriteLegacyCityTerrainCode(City *city, TileIndex tile, int value);
-// Read-only stock terrain projection for retained algorithms. Tile must be valid in the supplied City.
+// Read-only combined stock slope/bank/water code for retained algorithms. Tile must be valid; native riverbank
+// forms read unchanged neighbors. Raw import records retain their masked stock code. This does not decode native
+// surface geometry; use ReadCityTileGeometry for that, and never install this projection as a native terrain byte.
 int ReadLegacyTerrainCode(const City *city, TileIndex tile);
 // Project a supplied native shape or raw stock code using the tile's occupant/water metadata.
 int ProjectCityTerrainToLegacy(const City *city, TileIndex tile, int terrain);
 
 typedef struct CityFileChunkSpec CityFileChunkSpec;
-void ExportCityMapChunk(City *city, const CityFileChunkSpec *spec, u8 *bytes, u32 size);
-// Codec lifecycle: new cities start native; raw stock decoding is explicitly scoped.
-void InitializeCityMapFormat(City *city);
+void ExportCityMapChunk(const City *city, const CityFileChunkSpec *spec, u8 *bytes, u32 size);
+// Stock decoding is explicitly scoped; new map backing is initialized directly by City.
 void BeginLegacyCityMapImport(City *city);
 // Publish complete native tiles and counters before simulation rebuilding.
 bool ConvertCityMapToNative(City *city);
+// Decode stock byte overlays after geometry/events are loaded. Failure can retain the first successful reservation;
+// success consumes the bytes into native associations and rebuilds both hashes.
+bool ImportStockCityAssociations(City *city);
+
 // Finish landscape/facility initialization after the load's simulation rebuilding.
 bool ImportCityMapFormat(City *city);
 
-u32 CityGroundExtensionSize(const City *city);
-bool EncodeCityGroundExtension(const City *city, u8 *bytes, u32 size);
+// Apply native extension planes after stock records and their native-format marker. Allocation/header failures
+// leave tiles unchanged; invalid planes retain their writes. Copy climate bytes only after native validation and
+// agreement with the original stock projection. The caller owns load errors and later success rebuilding.
 bool ApplyCityGroundExtension(City *city, const u8 *bytes, u32 size);
-// Native save admission reads the records directly; no stock conversion or map copy.
-bool ValidateCityTileRecords(const City *city);
 
 // Stock sprite mirroring derived from native facing/axis, never native flags.
 bool LegacyCityTileFlip(const City *city, TileIndex tile);
-// Stock rubble classification retained by the original placement algorithm.
-bool IsLegacyRubbleKind(int kind);
-// Compatibility counter keys used by simulation bookkeeping; neither query changes counters or tile records.
-int CityTileStatisticsKind(const City *city, int kind);
-int CityTileStatisticAt(const City *city, TileIndex tile);
 
 #endif

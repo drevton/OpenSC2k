@@ -1,3 +1,5 @@
+#include "ui/dialogs/scenario.h"
+
 #include "base/file.h"
 #include "base/text.h"
 #include <stdio.h>
@@ -25,7 +27,6 @@
 #include "ui/dialogs/dialogs.h"
 #include "ui/dialogs/messages.h"
 #include "ui/dialogs/file_dialog.h"
-#include "ui/dialogs/scenario.h"
 #include "ui/dialogs/scenario_internal.h"
 #include "ui/input.h"
 #include "ui/sdl.h"
@@ -80,10 +81,10 @@ static void DrawScenarioDescription(Canvas *canvas, const char *text) {
 }
 
 static void DrawScenarioRow(ScenarioListModel *model, int index) {
-  Canvas row = {model->row_pixels + (size_t)index * model->row_width * CITY_SCENARIO_LIST_ROW_HEIGHT,
-      model->row_width, CITY_SCENARIO_LIST_ROW_HEIGHT, model->row_width,
-      {0, 0, model->row_width, CITY_SCENARIO_LIST_ROW_HEIGHT}};
-  u8 picture[4300] = {0};
+  Canvas row = {.pixels = model->row_pixels + (size_t)index * model->row_width * CITY_SCENARIO_LIST_ROW_HEIGHT,
+      .width = model->row_width, .height = CITY_SCENARIO_LIST_ROW_HEIGHT, .stride = model->row_width,
+      .clip = {0, 0, model->row_width, CITY_SCENARIO_LIST_ROW_HEIGHT}};
+  u8 picture[CITY_SCENARIO_PICTURE_BYTES] = {0};
   char description[4300] = {0};
   FILE *stream = fopen(model->paths[index], "rb");
   if (stream != NULL) {
@@ -269,7 +270,8 @@ bool OpenCityScenarioSelection(City *city, CityFileChoiceCallback *callback, voi
   if (!model) return false;
   model->callback = callback;
   model->context = context;
-  ConstructCityScenarioSelectionDialog(&model->owned_dialog, 0);
+  model->owned_dialog = (CityScenarioSelectionDialog){.base.resource_id = CITY_SCENARIO_SELECTION_RESOURCE,
+      .selected_index = CITY_SCENARIO_NO_SELECTION};
   if (!BeginCityScenarioSelection(city, model, &model->owned_dialog)) {
     free(model);
     return false;
@@ -286,7 +288,6 @@ void CompleteCityScenarioSelection(City *city) {
   CityFileChoiceCallback *callback = model->callback;
   void *context = model->context;
   FinishCityScenarioSelection(city, model);
-  DestroyCityScenarioSelectionDialog(&model->owned_dialog);
   city->drawing->palette.direct_animation = 0;
   free(model);
   callback(city, path, context);
@@ -308,9 +309,11 @@ static i32 ChooseCityScenarioDialog(City *city, CityScenarioSelectionDialog *dia
   return CITY_DIALOG_CANCEL;
 }
 
-i32 ShowCityScenarioTextDialog(CityTextMessageDialog *dialog, const char *text) {
-  const GameObservation *observer = dialog->city->game->observation;
-  if (observer && observer->scenario_text) return observer->scenario_text(dialog, text);
+int ShowCityScenarioTextDialog(City *city, const char *text) {
+  if (*text == 0) return CITY_DIALOG_NONE;
+  CityTextMessageDialog dialog = {.city = city};
+  const GameObservation *observer = city->game->observation;
+  if (observer && observer->scenario_text) return observer->scenario_text(&dialog, text);
 
   return CITY_DIALOG_CANCEL;
 }
@@ -322,19 +325,6 @@ static int ChooseRetainedScenario(City *city, void *context) {
 int RunCityScenarioSelectionDialog(City *city, CityScenarioSelectionDialog *dialog) {
   int answer = RunPausedCityAction(city, ChooseRetainedScenario, dialog);
   return answer == CITY_DIALOG_NONE ? CITY_DIALOG_CANCEL : answer;
-}
-
-// Scenario Dialog
-
-CityScenarioSelectionDialog *ConstructCityScenarioSelectionDialog(CityScenarioSelectionDialog *dialog, u32 parent) {
-  memset(dialog, 0, sizeof(*dialog));
-  dialog->base.resource_id = CITY_SCENARIO_SELECTION_RESOURCE;
-  dialog->selected_index = CITY_SCENARIO_NO_SELECTION;
-  return dialog;
-}
-
-void DestroyCityScenarioSelectionDialog(CityScenarioSelectionDialog *dialog) {
-  // Canvas lifetime and list storage are owned by the UI picker.
 }
 
 static void CancelCityScenarioSelection(City *city, CityScenarioSelectionDialog *dialog) {
@@ -352,12 +342,6 @@ static void AcceptCityScenarioSelection(City *city, CityScenarioSelectionDialog 
   if (!model->callback && index >= 0 && (size_t)index < model->count)
     CopyText(dialog->selected_path, sizeof(dialog->selected_path), model->paths[index]);
   CloseCityScenarioSelectionDialog(city, dialog, CITY_DIALOG_OK);
-}
-
-int ShowCityTextMessageDialog(City *city, const char *text, int option, u32 parent) {
-  if (*text == 0) return 0;
-  CityTextMessageDialog dialog = {.city = city};
-  return ShowCityScenarioTextDialog(&dialog, text);
 }
 
 // Handles this window's painting and input; paint coordinates are local to the window.
@@ -414,7 +398,7 @@ bool ScenarioWindowProcedure(Game *game, const Window *window, const WindowEvent
     if (key == CITY_KEY_ESCAPE) ScenarioCommand(city, CITY_DIALOG_CANCEL, 0);
     else if (key == CITY_KEY_RETURN) ScenarioCommand(city, CITY_DIALOG_OK, 0);
     else if (model->count != 0) {
-      i32 index = model->dialog->selected_index, selected = index;
+      int index = model->dialog->selected_index, selected;
       if (key == CITY_KEY_HOME) selected = 0;
       else if (key == CITY_KEY_END) selected = (i32)model->count - 1;
       else if (key == CITY_KEY_UP) selected = IntMax(index, 0) - 1;

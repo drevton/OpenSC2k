@@ -1,24 +1,22 @@
+#include "ui/startup/startup.h"
+#include "city/terrain/terrain.h"
+
 #include "city/engine/city_name.h"
 #include "base/text.h"
 #include "city/maps/labels.h"
-#include <assert.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "assets/catalog.h"
 #include "assets/resource_types.h"
-#include "assets/resources.h"
 #include "assets/state.h"
-#include "audio/state.h"
-#include "base/byte_order.h"
-#include "base/version.h"
-#include "city/engine/command_types.h"
-#include "city/engine/commands.h"
-#include "city/maps/map_types.h"
 #include "city/saveload/runtime.h"
 #include "city/saveload/summary.h"
+#include "city/maps/map.h"
+#include "city/maps/map_types.h"
 #include "city/state.h"
 #include "drawing/raster/canvas_primitives.h"
+#include "drawing/startup.h"
 #include "drawing/state.h"
 #include "game/city_lifecycle.h"
 #include "game/errors.h"
@@ -34,8 +32,8 @@
 #include "ui/input.h"
 #include "ui/music/jukebox.h"
 #include "ui/sdl.h"
-#include "ui/startup/startup.h"
 #include "ui/startup/startup_internal.h"
+#include "ui/startup/startup_layout.h"
 #include "ui/state.h"
 #include "ui/text/text.h"
 #include "ui/tools/tools.h"
@@ -63,14 +61,6 @@ static void NotifyStartupState(City *city) {
       if (ui->startup_desktop->windows[i].startup_layout)
         Sc2kDirtyMarkRect(&ui->startup_desktop->dirty, ui->startup_desktop->windows[i].bounds);
 }
-
-static bool BuildNativeStartupLayout(u32 resource, CityCanvasStartupWindow *layout);
-
-static bool StartupMenuLoadCity(City *city, CityStartupMenuDialog *dialog);
-static bool StartupMenuNewCity(City *city, CityStartupMenuDialog *dialog);
-static bool StartupMenuEditMap(City *city, CityStartupMenuDialog *dialog);
-static bool StartupMenuLoadScenario(City *city, CityStartupMenuDialog *dialog);
-static bool StartupMenuQuit(City *city, CityStartupMenuDialog *dialog);
 
 static Window *CanvasWindow(City *city, u32 id) {
   CityCanvasDesktop *desktop = city->game->ui->startup_desktop;
@@ -139,443 +129,6 @@ const CityCanvasStartupWindow *ReadCityStartupWindowLayout(City *city, u32 id) {
   return window ? &window->layout : NULL;
 }
 
-enum {
-  kTerrainCoastEdgeShift = kTerrainFeatureCount, kTerrainNoLakes = -1,
-  kTerrainSmallRiversFirst = 1 << (kTerrainCoastEdgeShift + 4),
-  kTerrainSmoothnessFirst = CITY_TERRAIN_VARIETY_COUNT
-};
-static const u32 kTerrainGroupMasks[] = {
-  kOcean | kRandomCoast,
-  kRiver | kBranch | kCrossing | kRejoin,
-  kRolling | kPlateau | kRidge | kBasin | kValley | kCanyon
-};
-
-static bool IsTerrainFeatureDropdown(int id) {
-  return id >= CITY_SETUP_COAST && id <= CITY_SETUP_LANDFORM;
-}
-
-static bool IsTerrainGroupedDropdown(int id) {
-  return IsTerrainFeatureDropdown(id) || id == CITY_SETUP_VARIETY;
-}
-
-static bool IsTerrainSmallRiverItem(int control, const CityDropdownItem *item) {
-  return control == CITY_SETUP_RIVER && item->value >= kTerrainSmallRiversFirst &&
-      item->value < kTerrainSmallRiversFirst + CITY_TERRAIN_SMALL_RIVERS_COUNT;
-}
-
-static u32 TerrainDropdownRadioGroup(int control, const CityDropdownItem *item) {
-  if (IsTerrainSmallRiverItem(control, item)) return 0;
-  if (control == CITY_SETUP_LANDFORM &&
-      (item->value == kTerrainNoLakes || (item->value & (kLake | kLakes)))) return kLake | kLakes;
-  return kTerrainGroupMasks[control - CITY_SETUP_COAST];
-}
-
-static bool TerrainDropdownItemDisabled(const CityTerrainSettings *settings, int group,
-    const CityDropdownItem *item) {
-  u32 features = settings->features;
-  if (item->kind == CITY_DROPDOWN_SEPARATOR) return true;
-  if (IsTerrainSmallRiverItem(group, item)) return false;
-  if (item->kind == CITY_DROPDOWN_RADIO) {
-    if (group == CITY_SETUP_RIVER && item->value) return (features & kCanyon) != 0;
-    if (group == CITY_SETUP_LANDFORM)
-      return item->value != kTerrainNoLakes &&
-          (DisabledCityTerrainFeatures(features & ~TerrainDropdownRadioGroup(group, item)) & item->value) != 0;
-    return false;
-  }
-  if (item->value == kCliffs) return !(features & kOcean);
-  if (item->value == kMeander || item->value == kSalty) return !(features & kRiver);
-  if (item->value == kDelta) return !(features & kRiver) || !(features & kOcean);
-  return false;
-}
-
-static int TerrainDropdownRadioItem(const CityTerrainSettings *settings, const CityCanvasStartupControl *control,
-    u32 group) {
-  int value = settings->features & group;
-  if (control->id == CITY_SETUP_COAST && (value & ~kOcean)) value &= ~kOcean;
-  if (control->id == CITY_SETUP_RIVER && (value & ~kRiver)) value &= ~kRiver;
-  for (int i = 0; i < control->item_count; ++i) {
-    const CityDropdownItem *item = &control->items[i];
-    if (item->kind != CITY_DROPDOWN_RADIO || TerrainDropdownRadioGroup(control->id, item) != group) continue;
-    if ((item->value == kTerrainNoLakes ? 0 : item->value) == value) return i;
-  }
-  // Existing UI choices can predate the single-choice groups. Prefer the first
-  // matching layout until the player chooses another base layout.
-  for (int i = 0; i < control->item_count; ++i)
-    if (control->items[i].kind == CITY_DROPDOWN_RADIO &&
-        TerrainDropdownRadioGroup(control->id, &control->items[i]) == group &&
-        (control->items[i].value & value)) return i;
-  return 0;
-}
-
-static CityCanvasStartupControl *SetupControl(City *city, int id);
-
-static void AddTerrainControl(CityCanvasStartupWindow *layout, int id, CityRect bounds,
-    int kind, int style, const char *text) {
-  assert(layout->control_count < CITY_STARTUP_CANVAS_CONTROLS);
-  CityCanvasStartupControl *control = &layout->controls[layout->control_count++];
-  *control = (CityCanvasStartupControl){.id = id, .visible = true, .control_class = kind,
-      .style = style | CITY_RESOURCE_STYLE_VISIBLE, .bounds = bounds};
-  CopyText(control->text, sizeof(control->text), text);
-  control->text_caret = strlen(control->text);
-  if (id >= CITY_SETUP_DIFFICULTY_FIRST && id < CITY_SETUP_DIFFICULTY_FIRST + CITY_SETUP_DIFFICULTY_COUNT)
-    control->tooltip = "Choose the city's difficulty and starting funds.";
-  else if (id >= CITY_SETUP_ERA_FIRST && id < CITY_SETUP_ERA_FIRST + CITY_SETUP_ERA_COUNT)
-    control->tooltip = "Choose the starting year. Technology becomes available as the city advances.";
-  else switch (id) {
-    case CITY_SETUP_YEAR: control->tooltip = "Change the starting year (1900 to 2050). Click to enter a year."; break;
-    case CITY_SETUP_YEAR_PREVIOUS: control->tooltip = "Start ten years earlier. Hold Shift for one year."; break;
-    case CITY_SETUP_YEAR_NEXT: control->tooltip = "Start ten years later. Hold Shift for one year."; break;
-    case CITY_SETUP_YEAR_INPUT: control->tooltip = "Enter a starting year from 1900 to 2050."; break;
-    case CITY_SETUP_RANDOM_NAME: control->tooltip = "Generate another random city name."; break;
-    case CITY_SETUP_LOAD_MAP:
-      control->tooltip = "Import terrain and trees from a city save, without its buildings. "
-          "Changing generation settings replaces the imported terrain.";
-      break;
-    case CITY_SETUP_REGENERATE: control->tooltip = "Generate different terrain with the same settings."; break;
-    case CITY_SETUP_NAME: control->tooltip = "Enter a name for the new city."; break;
-    case CITY_SETUP_MAYOR: control->tooltip = "Enter the mayor's name."; break;
-    case CITY_SETUP_HILLS: control->tooltip = "Adjust terrain height."; break;
-    case CITY_SETUP_WATER:
-      control->tooltip = "More water widens broad rivers, expands coasts and lakes, and adds scattered freshwater ponds.";
-      break;
-    case CITY_SETUP_TREES: control->tooltip = "Adjust the amount of tree cover."; break;
-    case CITY_SETUP_EDIT_TERRAIN:
-      control->tooltip = "Edit this terrain for free before starting the city. Keep the chosen city settings."; break;
-    case CITY_DIALOG_OK: control->tooltip = "Start the city with this terrain and these settings."; break;
-    case CITY_DIALOG_CANCEL: control->tooltip = "Cancel without replacing the current city."; break;
-  }
-}
-
-static void BuildCitySetupLayout(City *city, CityCanvasStartupWindow *layout) {
-  *layout = (CityCanvasStartupWindow){.client_bounds = {0, 0, 488, 306}, .terrain_setup = true};
-  CopyText(layout->title, sizeof(layout->title), "New City");
-  const int button = CITY_RESOURCE_CONTROL_BUTTON, edit = CITY_RESOURCE_CONTROL_EDIT;
-  AddTerrainControl(layout, 0, (CityRect){8, 6, 75, 20}, 0, 0, "City name");
-  AddTerrainControl(layout, CITY_SETUP_NAME, (CityRect){78, 6, 254, 20}, edit, 0, "New City");
-  AddTerrainControl(layout, CITY_SETUP_RANDOM_NAME, (CityRect){256, 6, 270, 20}, button, 0, "");
-  AddTerrainControl(layout, 0, (CityRect){8, 24, 75, 38}, 0, 0, "Mayor");
-  AddTerrainControl(layout, CITY_SETUP_MAYOR, (CityRect){78, 24, 270, 38}, edit, 0,
-      city->game->ui->terrain_mayor);
-  AddTerrainControl(layout, 0, (CityRect){8, 42, 75, 56}, 0, 0, "Difficulty");
-  static const CityDropdownItem kDifficulty[] = {
-    {"Easy - $20,000", CITY_SETUP_DIFFICULTY_EASY, CITY_DROPDOWN_PLAIN},
-    {"Medium - $10,000", CITY_SETUP_DIFFICULTY_MEDIUM, CITY_DROPDOWN_PLAIN},
-    {"Hard - $10,000 bond at 3%", CITY_SETUP_DIFFICULTY_HARD, CITY_DROPDOWN_PLAIN},
-  };
-  AddTerrainControl(layout, CITY_SETUP_DIFFICULTY, (CityRect){78, 42, 270, 56},
-      CITY_RESOURCE_CONTROL_DROPDOWN, 0, kDifficulty[0].text);
-  layout->controls[layout->control_count - 1].items = kDifficulty;
-  layout->controls[layout->control_count - 1].item_count = CITY_SETUP_DIFFICULTY_COUNT;
-  layout->controls[layout->control_count - 1].tooltip = "Choose starting funds and the city's difficulty.";
-  for (int i = 0; i < CITY_SETUP_DIFFICULTY_COUNT; ++i) {
-    AddTerrainControl(layout, CITY_SETUP_DIFFICULTY_FIRST + i, (CityRect){0}, button, CITY_RESOURCE_BUTTON_RADIO, "");
-    layout->controls[layout->control_count - 1].visible = false;
-  }
-  AddTerrainControl(layout, 0, (CityRect){8, 60, 75, 74}, 0, 0, "Start year");
-  AddTerrainControl(layout, CITY_SETUP_YEAR_PREVIOUS, (CityRect){78, 60, 92, 74}, button, 0, "");
-  AddTerrainControl(layout, CITY_SETUP_YEAR, (CityRect){92, 60, 256, 74}, button, 0, "1st Jan 1900");
-  AddTerrainControl(layout, CITY_SETUP_YEAR_NEXT, (CityRect){256, 60, 270, 74}, button, 0, "");
-  // Original era commands remain available to replay callers, without visible radio buttons.
-  for (int i = 0; i < CITY_SETUP_ERA_COUNT; ++i) {
-    AddTerrainControl(layout, CITY_SETUP_ERA_FIRST + i, (CityRect){0}, button, CITY_RESOURCE_BUTTON_RADIO, "");
-    layout->controls[layout->control_count - 1].visible = false;
-  }
-  AddTerrainControl(layout, 0, (CityRect){8, 78, 75, 92}, 0, 0, "Map size");
-  static const CityDropdownItem kMapSizes[] = {
-    {"128", 128, CITY_DROPDOWN_PLAIN},
-    {"256", 256, CITY_DROPDOWN_PLAIN},
-    {"512", 512, CITY_DROPDOWN_PLAIN},
-    {"1024", 1024, CITY_DROPDOWN_PLAIN},
-    {"2048", 2048, CITY_DROPDOWN_PLAIN},
-    {"4096", 4096, CITY_DROPDOWN_PLAIN},
-  };
-  for (int axis = 0; axis < 2; ++axis) {
-    int left = axis ? 182 : 78;
-    AddTerrainControl(layout, CITY_SETUP_MAP_WIDTH + axis, (CityRect){left, 78, left + 88, 92},
-        CITY_RESOURCE_CONTROL_DROPDOWN, 0, "128");
-    CityCanvasStartupControl *control = &layout->controls[layout->control_count - 1];
-    control->items = kMapSizes; control->item_count = sizeof(kMapSizes) / sizeof(*kMapSizes);
-    control->tooltip = axis ? "Choose the map height in tiles." : "Choose the map width in tiles.";
-  }
-  AddTerrainControl(layout, 0, (CityRect){168, 78, 182, 92}, 0, 0, "x");
-  static const CityDropdownItem kClimates[] = {
-    {"Normal", CITY_TERRAIN_NORMAL, CITY_DROPDOWN_PLAIN},
-    {"Desert", CITY_TERRAIN_DESERT, CITY_DROPDOWN_PLAIN},
-    {"Snowy", CITY_TERRAIN_SNOWY, CITY_DROPDOWN_PLAIN},
-    {"Mixed", CITY_TERRAIN_MIXED, CITY_DROPDOWN_PLAIN},
-    {"SimCity Classic", CITY_TERRAIN_SIMCITY, CITY_DROPDOWN_PLAIN},
-  };
-  AddTerrainControl(layout, 0, (CityRect){8, 96, 75, 110}, 0, 0, "Terrain");
-  AddTerrainControl(layout, CITY_SETUP_CLIMATE, (CityRect){78, 96, 270, 110},
-      CITY_RESOURCE_CONTROL_DROPDOWN, 0, "Normal");
-  CityCanvasStartupControl *climate = &layout->controls[layout->control_count - 1];
-  climate->items = kClimates; climate->item_count = sizeof(kClimates) / sizeof(*kClimates);
-  climate->tooltip = "Choose Normal, Desert, Snowy, Mixed or SimCity Classic's brown ground. "
-      "Snow follows elevation; Mixed combines snow, normal land and desert.";
-  static const CityDropdownItem kCoverage[] = {
-    {"0%", 0, CITY_DROPDOWN_PLAIN},
-    {"10%", 10, CITY_DROPDOWN_PLAIN},
-    {"20%", 20, CITY_DROPDOWN_PLAIN},
-    {"30%", 30, CITY_DROPDOWN_PLAIN},
-    {"40%", 40, CITY_DROPDOWN_PLAIN},
-    {"50%", 50, CITY_DROPDOWN_PLAIN},
-    {"60%", 60, CITY_DROPDOWN_PLAIN},
-    {"70%", 70, CITY_DROPDOWN_PLAIN},
-    {"80%", 80, CITY_DROPDOWN_PLAIN},
-    {"90%", 90, CITY_DROPDOWN_PLAIN},
-    {"100%", 100, CITY_DROPDOWN_PLAIN},
-  };
-  static const char *const kCoverageLabels[] = {"Snow", "Desert"};
-  static const char *const kCoverageHelp[] = {
-    "Target snow coverage of land, rounded to the nearest height band. Available in Snowy and Mixed terrain.",
-    "Target desert coverage of land. Height bands and green water margins make this approximate. "
-        "Available in Desert and Mixed terrain."
-  };
-  for (int i = 0; i < 2; ++i) {
-    int left = i ? 150 : 8;
-    AddTerrainControl(layout, 0, (CityRect){left, 114, left + 67, 128}, 0, 0, kCoverageLabels[i]);
-    AddTerrainControl(layout, CITY_SETUP_SNOW_COVERAGE + i, (CityRect){left + 70, 114, left + 120, 128},
-        CITY_RESOURCE_CONTROL_DROPDOWN, 0, "");
-    CityCanvasStartupControl *control = &layout->controls[layout->control_count - 1];
-    control->items = kCoverage; control->item_count = sizeof(kCoverage) / sizeof(*kCoverage);
-    control->tooltip = kCoverageHelp[i];
-  }
-  static const CityDropdownItem kCoasts[] = {
-    {"None", 0, CITY_DROPDOWN_RADIO},
-    {"Coast", kOcean, CITY_DROPDOWN_RADIO},
-    {"Random", kRandomCoast, CITY_DROPDOWN_RADIO},
-    {"", 0, CITY_DROPDOWN_SEPARATOR},
-    {"Cliffs", kCliffs, CITY_DROPDOWN_CHECKBOX},
-    {"", 0, CITY_DROPDOWN_SEPARATOR},
-    {"North", CITY_TERRAIN_COAST_NORTH << kTerrainCoastEdgeShift, CITY_DROPDOWN_CHECKBOX},
-    {"East", CITY_TERRAIN_COAST_EAST << kTerrainCoastEdgeShift, CITY_DROPDOWN_CHECKBOX},
-    {"South", CITY_TERRAIN_COAST_SOUTH << kTerrainCoastEdgeShift, CITY_DROPDOWN_CHECKBOX},
-    {"West", CITY_TERRAIN_COAST_WEST << kTerrainCoastEdgeShift, CITY_DROPDOWN_CHECKBOX},
-  };
-  static const CityDropdownItem kRivers[] = {
-    {"None", 0, CITY_DROPDOWN_RADIO},
-    {"Normal", kRiver, CITY_DROPDOWN_RADIO},
-    {"Forked", kBranch, CITY_DROPDOWN_RADIO},
-    {"Crossing", kCrossing, CITY_DROPDOWN_RADIO},
-    {"Rejoining", kRejoin, CITY_DROPDOWN_RADIO},
-    {"", 0, CITY_DROPDOWN_SEPARATOR},
-    {"Meanders", kMeander, CITY_DROPDOWN_CHECKBOX},
-    {"Delta", kDelta, CITY_DROPDOWN_CHECKBOX},
-    {"Saltwater", kSalty, CITY_DROPDOWN_CHECKBOX},
-    {"", 0, CITY_DROPDOWN_SEPARATOR},
-    {"No streams", kTerrainSmallRiversFirst + CITY_TERRAIN_SMALL_RIVERS_NONE, CITY_DROPDOWN_RADIO},
-    {"Few streams", kTerrainSmallRiversFirst + CITY_TERRAIN_SMALL_RIVERS_FEW, CITY_DROPDOWN_RADIO},
-    {"Streams", kTerrainSmallRiversFirst + CITY_TERRAIN_SMALL_RIVERS_MEDIUM, CITY_DROPDOWN_RADIO},
-    {"Many streams", kTerrainSmallRiversFirst + CITY_TERRAIN_SMALL_RIVERS_MANY, CITY_DROPDOWN_RADIO},
-  };
-  static const CityDropdownItem kLandforms[] = {
-    {"Natural", 0, CITY_DROPDOWN_RADIO},
-    {"Rolling hills", kRolling, CITY_DROPDOWN_RADIO},
-    {"Plateau", kPlateau, CITY_DROPDOWN_RADIO},
-    {"Mountain ridge", kRidge, CITY_DROPDOWN_RADIO},
-    {"Basin", kBasin, CITY_DROPDOWN_RADIO},
-    {"River valley", kValley, CITY_DROPDOWN_RADIO},
-    {"Canyon", kCanyon, CITY_DROPDOWN_RADIO},
-    {"", 0, CITY_DROPDOWN_SEPARATOR},
-    {"No lakes", kTerrainNoLakes, CITY_DROPDOWN_RADIO},
-    {"Few lakes", kLake, CITY_DROPDOWN_RADIO},
-    {"Many lakes", kLakes, CITY_DROPDOWN_RADIO},
-  };
-  static const char *const kGroupLabels[] = {"Coast", "River", "Landform"};
-  static const char *const kGroupHelp[] = {
-    "Choose a coast shape, optional cliffs, and North/East/South/West edges of the preview. "
-        "Random varies the number of coast sides, bays and offshore island groups. "
-        "Checked edges limit its eligible sides; without checked edges all four are eligible. "
-        "Adjacent sides are allowed; sides need not oppose each other. "
-        "Random admits partial ocean inlets along the chosen sides. "
-        "Each coast edge follows seeded random targets, with one- and two-tile steps making local shallows and inlets. "
-        "Water increases its breadth; the shore stays at least three tiles deep. "
-        "No checked edges defaults to East.",
-    "Choose a broad waterway layout, optional meanders and a coastal delta, and the amount of streams. "
-        "Main systems increase slowly with map size, up to four. "
-        "Streams are independent of the broad waterway; larger maps get more without increasing their width. "
-        "Streams follow downhill routes to existing water. Canyons disable only the broad waterway. "
-        "A delta requires both a river and coast. "
-        "Saltwater makes the entire broad waterway seawater at sea level with sloped shores. "
-        "Streams and separate lakes remain freshwater.",
-    "Choose one landform and independently choose no extra lakes, few lakes or many lakes. "
-        "Larger maps get more lakes of similar size. "
-        "River valley enables a river; canyon replaces rivers. Islands disable plateau."
-  };
-  const CityDropdownItem *groups[] = {kCoasts, kRivers, kLandforms};
-  const int counts[] = {sizeof(kCoasts) / sizeof(*kCoasts), sizeof(kRivers) / sizeof(*kRivers),
-      sizeof(kLandforms) / sizeof(*kLandforms)};
-  for (int group = 0; group < 3; ++group) {
-    int y = 136 + group * 18;
-    AddTerrainControl(layout, 0, (CityRect){8, y, 75, y + 14}, 0, 0, kGroupLabels[group]);
-    AddTerrainControl(layout, CITY_SETUP_COAST + group, (CityRect){78, y, 270, y + 14},
-        CITY_RESOURCE_CONTROL_DROPDOWN, 0, "");
-    CityCanvasStartupControl *control = &layout->controls[layout->control_count - 1];
-    control->items = groups[group]; control->item_count = counts[group]; control->tooltip = kGroupHelp[group];
-  }
-  static const CityDropdownItem kVariety[] = {
-    {"No regional variety", CITY_TERRAIN_VARIETY_NONE, CITY_DROPDOWN_RADIO},
-    {"Low variety", CITY_TERRAIN_VARIETY_LOW, CITY_DROPDOWN_RADIO},
-    {"Medium variety", CITY_TERRAIN_VARIETY_MEDIUM, CITY_DROPDOWN_RADIO},
-    {"High variety", CITY_TERRAIN_VARIETY_HIGH, CITY_DROPDOWN_RADIO},
-    {"", 0, CITY_DROPDOWN_SEPARATOR},
-    {"Very smooth", kTerrainSmoothnessFirst + CITY_TERRAIN_VERY_SMOOTH, CITY_DROPDOWN_RADIO},
-    {"Smooth", kTerrainSmoothnessFirst + CITY_TERRAIN_SMOOTH, CITY_DROPDOWN_RADIO},
-    {"Rough", kTerrainSmoothnessFirst + CITY_TERRAIN_ROUGH, CITY_DROPDOWN_RADIO},
-    {"Very rough", kTerrainSmoothnessFirst + CITY_TERRAIN_VERY_ROUGH, CITY_DROPDOWN_RADIO}
-  };
-  AddTerrainControl(layout, 0, (CityRect){8, 190, 75, 204}, 0, 0, "Variety");
-  AddTerrainControl(layout, CITY_SETUP_VARIETY, (CityRect){78, 190, 270, 204},
-      CITY_RESOURCE_CONTROL_DROPDOWN, 0, "");
-  CityCanvasStartupControl *variety = &layout->controls[layout->control_count - 1];
-  variety->items = kVariety; variety->item_count = sizeof(kVariety) / sizeof(*kVariety);
-  variety->tooltip = "Choose regional variety and terrain smoothness independently. "
-      "Higher variety creates smaller areas of plains, hills and plateaus; roughness adds small-scale terrain detail.";
-  AddTerrainControl(layout, 0, (CityRect){8, 214, 55, 228}, 0, 0, "Height");
-  AddTerrainControl(layout, CITY_SETUP_HILLS, (CityRect){58, 214, 270, 228},
-      CITY_RESOURCE_CONTROL_SLIDER, 0, "");
-  AddTerrainControl(layout, 0, (CityRect){8, 232, 55, 246}, 0, 0, "Water");
-  AddTerrainControl(layout, CITY_SETUP_WATER, (CityRect){58, 232, 270, 246},
-      CITY_RESOURCE_CONTROL_SLIDER, 0, "");
-  AddTerrainControl(layout, 0, (CityRect){8, 250, 55, 264}, 0, 0, "Trees");
-  AddTerrainControl(layout, CITY_SETUP_TREES, (CityRect){58, 250, 270, 264},
-      CITY_RESOURCE_CONTROL_SLIDER, 0, "");
-  AddTerrainControl(layout, CITY_SETUP_REGENERATE, (CityRect){8, 276, 119, 298}, button, 0, "Regenerate");
-  AddTerrainControl(layout, CITY_SETUP_LOAD_MAP, (CityRect){129, 276, 240, 298}, button, 0, "Load Map");
-  AddTerrainControl(layout, CITY_SETUP_EDIT_TERRAIN, (CityRect){250, 276, 361, 298}, button, 0, "Edit Terrain");
-  AddTerrainControl(layout, CITY_DIALOG_OK, (CityRect){371, 276, 480, 298}, button,
-      CITY_RESOURCE_BUTTON_DEFAULT, "Start City");
-}
-
-static const char *TerrainDropdownCaption(int control, const CityDropdownItem *item) {
-  if (control == CITY_SETUP_COAST && item->kind == CITY_DROPDOWN_CHECKBOX) {
-    switch (item->value >> kTerrainCoastEdgeShift) {
-      case CITY_TERRAIN_COAST_NORTH: return "N";
-      case CITY_TERRAIN_COAST_EAST: return "E";
-      case CITY_TERRAIN_COAST_SOUTH: return "S";
-      case CITY_TERRAIN_COAST_WEST: return "W";
-    }
-  }
-  switch (item->value) {
-    case kCrossing: return "Crossing";
-    case kRejoin: return "Rejoining";
-    case kRolling: return "Hills";
-    case kRidge: return "Ridge";
-    case kValley: return "Valley";
-    default: return item->text;
-  }
-}
-
-static void UpdateTerrainFeatureDropdown(City *city, CityCanvasStartupControl *control) {
-  const CityTerrainSettings *settings = &city->game->ui->terrain_settings;
-  control->checked = TerrainDropdownRadioItem(settings, control, kTerrainGroupMasks[control->id - CITY_SETUP_COAST]);
-  int lake_item = control->id == CITY_SETUP_LANDFORM ?
-      TerrainDropdownRadioItem(settings, control, kLake | kLakes) : -1;
-  u32 checked = 0, disabled = 0;
-  int edges = settings->coast_sides;
-  for (int i = 0; i < control->item_count; ++i) {
-    const CityDropdownItem *item = &control->items[i];
-    int edge = control->id == CITY_SETUP_COAST ? item->value >> kTerrainCoastEdgeShift : 0;
-    bool selected = item->kind == CITY_DROPDOWN_RADIO && (i == control->checked || i == lake_item);
-    if (IsTerrainSmallRiverItem(control->id, item))
-      selected = item->value == kTerrainSmallRiversFirst + settings->small_rivers;
-    if (item->kind == CITY_DROPDOWN_CHECKBOX) {
-      selected = edge ? (edges & edge) != 0 : (settings->features & item->value) != 0;
-    }
-    if (TerrainDropdownItemDisabled(settings, control->id, item)) disabled |= 1u << i;
-    if (selected) checked |= 1u << i;
-  }
-  control->text[0] = 0;
-  // Show both radio sections before optional modifiers so the river amount
-  // stays visible. The shared control ellipsizes any remaining overflow.
-  for (int pass = 0; pass < 2; ++pass) {
-    for (int i = 0; i < control->item_count; ++i) {
-      const CityDropdownItem *item = &control->items[i];
-      if (!(checked & (1u << i)) || (item->kind == CITY_DROPDOWN_RADIO) != (pass == 0)) continue;
-      if (control->id == CITY_SETUP_LANDFORM && item->value == kTerrainNoLakes) continue;
-      if (IsTerrainSmallRiverItem(control->id, item) &&
-          item->value == kTerrainSmallRiversFirst + CITY_TERRAIN_SMALL_RIVERS_NONE) continue;
-      if (control->id == CITY_SETUP_RIVER && !item->value &&
-          settings->small_rivers != CITY_TERRAIN_SMALL_RIVERS_NONE) continue;
-      size_t length = strlen(control->text);
-      snprintf(control->text + length, sizeof(control->text) - length, "%s%s", length ? ", " : "",
-          TerrainDropdownCaption(control->id, item));
-    }
-  }
-  CityCanvasDesktop *desktop = city->game->ui->startup_desktop;
-  if (desktop->dropdown.items && desktop->dropdown.control == control->id) {
-    desktop->dropdown.selected = control->checked;
-    SetCityDropdownChecks(desktop, checked, disabled, control->text);
-  }
-}
-
-static void UpdateTerrainSizeControls(City *city, CityCanvasStartupWindow *layout) {
-  CityTerrainSettings *settings = &city->game->ui->terrain_settings;
-  layout->map_width = settings->width ? settings->width : 128;
-  layout->map_height = settings->height ? settings->height : 128;
-  for (int i = 0; i < layout->control_count; ++i) {
-    CityCanvasStartupControl *control = &layout->controls[i];
-    if (control->id == CITY_SETUP_VARIETY) {
-      static const char *const kVarietyNames[] = {"None", "Low", "Medium", "High"};
-      int smooth_item = CITY_TERRAIN_VARIETY_COUNT + 1 + settings->smoothness;
-      control->checked = settings->variety;
-      snprintf(control->text, sizeof(control->text), "%s, %s",
-          kVarietyNames[settings->variety], control->items[smooth_item].text);
-      CityCanvasDesktop *desktop = city->game->ui->startup_desktop;
-      if (desktop->dropdown.items && desktop->dropdown.control == control->id) {
-        desktop->dropdown.selected = control->checked;
-        SetCityDropdownChecks(desktop, (1u << control->checked) | (1u << smooth_item), 0, control->text);
-      }
-      continue;
-    }
-    if (IsTerrainFeatureDropdown(control->id)) {
-      UpdateTerrainFeatureDropdown(city, control);
-      continue;
-    }
-    if (control->id == CITY_SETUP_CLIMATE) {
-      control->checked = settings->climate;
-      CopyText(control->text, sizeof(control->text), control->items[settings->climate].text);
-      continue;
-    }
-    if (control->id == CITY_SETUP_SNOW_COVERAGE || control->id == CITY_SETUP_DESERT_COVERAGE) {
-      bool snow = control->id == CITY_SETUP_SNOW_COVERAGE;
-      int value = snow ? settings->snow_coverage : settings->desert_coverage;
-      bool enabled = settings->climate == CITY_TERRAIN_MIXED ||
-          settings->climate == (snow ? CITY_TERRAIN_SNOWY : CITY_TERRAIN_DESERT);
-      control->style &= ~CITY_RESOURCE_STYLE_DISABLED;
-      if (!enabled) control->style |= CITY_RESOURCE_STYLE_DISABLED;
-      snprintf(control->text, sizeof(control->text), "%d%%", value);
-      for (int item = 0; item < control->item_count; ++item)
-        if (control->items[item].value == value) control->checked = item;
-      continue;
-    }
-    if (control->id != CITY_SETUP_MAP_WIDTH && control->id != CITY_SETUP_MAP_HEIGHT) continue;
-    int value = control->id == CITY_SETUP_MAP_WIDTH ? settings->width : settings->height;
-    if (!value) value = 128;
-    snprintf(control->text, sizeof(control->text), "%d", value);
-    for (int item = 0; item < control->item_count; ++item)
-      if (control->items[item].value == value) control->checked = item;
-  }
-}
-
-static void BuildYearQueryLayout(City *city, CityCanvasStartupWindow *layout) {
-  *layout = (CityCanvasStartupWindow){.client_bounds = {0, 0, 250, 40}, .year_query = true};
-  CopyText(layout->title, sizeof(layout->title), "Change starting year");
-  int year = city->game->ui->setup_window->dialog->start_year;
-  if (!year) year = 1900 + 50 * city->game->ui->setup_window->dialog->era;
-  char text[16]; snprintf(text, sizeof(text), "%d", year);
-  AddTerrainControl(layout, CITY_SETUP_YEAR_INPUT, (CityRect){2, 2, 232, 16}, CITY_RESOURCE_CONTROL_EDIT, 0, text);
-  AddTerrainControl(layout, CITY_SETUP_YEAR_CLEAR, (CityRect){232, 2, 248, 16}, CITY_RESOURCE_CONTROL_BUTTON, 0, "X");
-  AddTerrainControl(layout, CITY_SETUP_YEAR_DEFAULT, (CityRect){2, 19, 84, 38}, CITY_RESOURCE_CONTROL_BUTTON, 0, "Default");
-  AddTerrainControl(layout, CITY_DIALOG_CANCEL, (CityRect){84, 19, 166, 38}, CITY_RESOURCE_CONTROL_BUTTON, 0, "Cancel");
-  AddTerrainControl(layout, CITY_DIALOG_OK, (CityRect){166, 19, 248, 38}, CITY_RESOURCE_CONTROL_BUTTON, 0, "OK");
-  layout->controls[3].tooltip = "Keep the previous starting year.";
-  layout->controls[4].tooltip = "Use this starting year.";
-  layout->focused_control = CITY_SETUP_YEAR_INPUT;
-  layout->selected_text = 1;
-  layout->caret_visible = true;
-}
-
 static bool RefreshTerrainSetup(City *city) {
   CityInterfaceState *ui = city->game->ui;
   CityStartupResourceWindow *window = FindStartupResourceWindow(city, ui->setup_window->dialog->base.window_id);
@@ -606,7 +159,7 @@ static bool RefreshTerrainSetup(City *city) {
   InvalidateCityWindowBitmaps(&window->layout.drawing->base);
   window->layout.terrain_preview = ui->terrain_preview;
   window->layout.water_colors = city->game->resources->landscape_water_colors;
-  UpdateTerrainSizeControls(city, &window->layout);
+  RefreshCityTerrainControls(ui, &window->layout);
   for (int i = 0; i < window->layout.control_count; ++i) {
     CityCanvasStartupControl *control = &window->layout.controls[i];
     if (control->id >= CITY_SETUP_HILLS && control->id <= CITY_SETUP_TREES) {
@@ -668,7 +221,8 @@ static void OpenCityTerrainFile(City *city) {
   request->setup_token = city->game->ui->setup_window->token;
   CityPath directory = {0};
   bool ready = GetCitySaveDirectory(city->game, &directory);
-  CityFilePickerOptions options = {"*.sc2", CityPathText(&directory), "Load Map", true, AcceptCityTerrainFile, request};
+  CityFilePickerOptions options = {.name = "*.sc2", .directory = CityPathText(&directory), .title = "Load Map",
+      .open = true, .callback = AcceptCityTerrainFile, .context = request};
   bool opened = ready && OpenCityFileDialog(city, &options);
   FreeCityPathStorage(&directory);
   if (!opened) free(request);
@@ -682,46 +236,23 @@ static bool RegenerateCityTerrainSetup(City *city) {
   return GenerateCityTerrainPreview(city);
 }
 
-static bool MoveCityTerrainSetupPointer(City *city, CityStartupResourceWindow *window, int x, int y) {
+// Input comes from a registered setup window; its layout and bounds describe that same window.
+static bool MoveCityTerrainSetupPointer(City *city, const Window *window, int x) {
   CityInterfaceState *ui = city->game->ui;
   if (!ui->terrain_setup_active || ui->setup_window == NULL || ui->setup_window->answered) return false;
-  int id = window->layout.pressed_control;
+  const CityCanvasStartupWindow *layout = window->startup_layout;
+  int id = layout->pressed_control;
   if (id < CITY_SETUP_HILLS || id > CITY_SETUP_TREES) return false;
-  Window *canvas = CanvasWindow(city, window->window_id);
-  CityCanvasStartupControl *control = NULL;
-  for (int i = 0; i < window->layout.control_count; ++i)
-    if (window->layout.controls[i].id == id) control = &window->layout.controls[i];
-  if (control->control_class != CITY_RESOURCE_CONTROL_SLIDER) return false;
-  int position = x - canvas->bounds.left - 2 - control->bounds.left;
-  int value = IntClamp(position * 47 / (control->bounds.right - control->bounds.left - 1), 0, 47);
-  int *values[] = {&ui->terrain_settings.hills, &ui->terrain_settings.water, &ui->terrain_settings.trees};
-  if (*values[id - CITY_SETUP_HILLS] != value) {
-    *values[id - CITY_SETUP_HILLS] = value;
-    GenerateCityTerrainPreview(city);
-  }
-  (void)y;
-  return true;
-}
-
-static bool BuildNativeStartupLayout(u32 resource, CityCanvasStartupWindow *layout) {
-  if (resource == CITY_DIALOG_RESOURCE_STARTUP_MENU) {
-    static const struct { int control; const char *caption, *tooltip; } kButtons[] = {
-      {CITY_STARTUP_CONTROL_NEW_CITY, "New City", "Choose city settings and generate or edit terrain."},
-      {CITY_STARTUP_CONTROL_LOAD_CITY, "Load City", "Open a saved city."},
-      {CITY_STARTUP_CONTROL_SETTINGS, "Settings", "Open the game settings."},
-      {CITY_STARTUP_CONTROL_JUKEBOX, "Music Jukebox", "Choose music and adjust playback and volume."},
-      {CITY_STARTUP_CONTROL_WEBSITE, "Website", "Open www.opensc2k.com in your default browser."},
-      {CITY_STARTUP_CONTROL_QUIT, "Exit", "Exit OpenSC2k."}
-    };
-    CopyText(layout->title, sizeof(layout->title), SC2K_APP_TITLE);
-    layout->main_menu = true;
-    layout->focused_control = CITY_STARTUP_CONTROL_NEW_CITY;
-    layout->client_bounds = (CityRect){0, 0, 216, 280};
-    for (size_t i = 0; i < sizeof(kButtons) / sizeof(*kButtons); ++i) {
-      int top = (int)i * 40;
-      AddTerrainControl(layout, kButtons[i].control, (CityRect){8, top, 208, top + 36},
-          CITY_RESOURCE_CONTROL_BUTTON, 0, kButtons[i].caption);
-      layout->controls[layout->control_count - 1].tooltip = kButtons[i].tooltip;
+  for (int i = 0; i < layout->control_count; ++i) {
+    const CityCanvasStartupControl *control = &layout->controls[i];
+    if (control->id != id) continue;
+    if (control->control_class != CITY_RESOURCE_CONTROL_SLIDER) return false;
+    int position = x - window->bounds.left - 2 - control->bounds.left;
+    int value = IntClamp(position * 47 / (control->bounds.right - control->bounds.left - 1), 0, 47);
+    int *values[] = {&ui->terrain_settings.hills, &ui->terrain_settings.water, &ui->terrain_settings.trees};
+    if (*values[id - CITY_SETUP_HILLS] != value) {
+      *values[id - CITY_SETUP_HILLS] = value;
+      GenerateCityTerrainPreview(city);
     }
     return true;
   }
@@ -736,9 +267,10 @@ static u32 RegisterCityResourceOwner(City *city, CityStartupWindow *dialog, u32 
     if (window->dialog != NULL) continue;
     memset(window, 0, sizeof(*window));
     if (resource == CITY_DIALOG_RESOURCE_NEW_CITY)
-      BuildCitySetupLayout(city, &window->layout);
-    else if (resource == CITY_SETUP_YEAR_QUERY_RESOURCE) BuildYearQueryLayout(city, &window->layout);
-    else if (!BuildNativeStartupLayout(resource, &window->layout)) return false;
+      BuildCitySetupLayout(ui, &window->layout);
+    else if (resource == CITY_SETUP_YEAR_QUERY_RESOURCE)
+      BuildCityYearQueryLayout(ui->setup_window->dialog, &window->layout);
+    else if (!BuildCityStartupLayout(resource, &window->layout)) return false;
     Window canvas = {0};
     canvas.kind = CITY_CANVAS_STARTUP_MENU;
     canvas.procedure = resource == CITY_DIALOG_RESOURCE_STARTUP_MENU ? StartupWindowProcedure : SetupWindowProcedure;
@@ -820,12 +352,10 @@ bool AnswerCityStartupMenuDialog(City *city, int token, int choice) {
   CityStartupMenuState *pending = ui->startup_menu;
   if (pending == NULL || token != pending->token || pending->answered) return false;
   switch (choice) {
-    case CITY_STARTUP_LOAD_CITY: return StartupMenuLoadCity(city, pending->dialog);
-    case CITY_STARTUP_NEW_CITY: return StartupMenuNewCity(city, pending->dialog);
-    case CITY_STARTUP_EDIT_MAP: return StartupMenuEditMap(city, pending->dialog);
-    case CITY_STARTUP_LOAD_SCENARIO: return StartupMenuLoadScenario(city, pending->dialog);
-    case CITY_STARTUP_QUIT: return StartupMenuQuit(city, pending->dialog);
-    default: return false;
+  case CITY_STARTUP_LOAD_CITY: case CITY_STARTUP_NEW_CITY: case CITY_STARTUP_EDIT_MAP:
+  case CITY_STARTUP_LOAD_SCENARIO: case CITY_STARTUP_QUIT:
+    return EndCityStartupDialog(city, pending->dialog->window_id, choice);
+  default: return false;
   }
 }
 bool CityStartupMenuServiceAvailable(City *city) {
@@ -894,8 +424,7 @@ int ChooseCityStartupMenuDialog(City *city, CityStartupMenuDialog *dialog) {
   return -1;
 }
 
-bool SetCityStartupMenuPresentation(City *city, CityCanvasDesktop *desktop) {
-  CityInterfaceState *ui = city->game->ui;
+bool SetCityStartupMenuPresentation(CityInterfaceState *ui, CityCanvasDesktop *desktop) {
   if (desktop == NULL || ui->startup_menu != NULL || ui->setup_window != NULL ||
       ui->startup_desktop != NULL) return false;
   ui->startup_desktop = desktop;
@@ -1108,7 +637,7 @@ bool OpenCityCreationWindow(City *city, bool terrain, CityCreationCallback *call
   pending->callback = callback;
   pending->context = context;
   pending->preserve_terrain = !terrain;
-  ConstructNewCitySetupDialog(city, &pending->owned_dialog);
+  ConstructNewCitySetupDialog(&pending->owned_dialog);
   if (!terrain) {
     ui->terrain_settings.width = city->map_width; ui->terrain_settings.height = city->map_height;
     if (city->name.length) {
@@ -1173,10 +702,8 @@ static void OpenCitySetupDropdown(City *city, CityStartupResourceWindow *window,
   anchor.left += 2; anchor.right += 2; anchor.top += 16; anchor.bottom += 16;
   OpenCityDropdown(city->game->ui->startup_desktop, window->window_id, id, anchor,
       control->items, control->item_count, control->checked, &kCityDropdownGoldColors);
-  if (IsTerrainGroupedDropdown(id)) UpdateTerrainSizeControls(city, &window->layout);
+  if (IsTerrainGroupedDropdown(id)) RefreshCityTerrainControls(city->game->ui, &window->layout);
 }
-
-static void ActivateCitySetupControl(City *city, CityStartupResourceWindow *window, int control, bool shift);
 
 static void ActivateCitySetupControl(City *city, CityStartupResourceWindow *window, int control, bool shift) {
   CityInterfaceState *ui = city->game->ui;
@@ -1316,7 +843,7 @@ static void ActivateStartupMenuButton(Game *game, int control) {
   }
 }
 
-void InitializeCitySetupName(City *city, CityNewCitySetupDialog *dialog) {
+void InitializeCitySetupName(CityNewCitySetupDialog *dialog) {
   CopyText(dialog->city_name, sizeof(dialog->city_name), "New City");
 }
 void CaptureCitySetupName(City *city, CityNewCitySetupDialog *dialog) {
@@ -1340,19 +867,18 @@ bool UnregisterCityStartupWindow(City *city, CityStartupWindow *window) {
 
 // Setup
 
-// Setup defaults and the resource895 city name.
-CityNewCitySetupDialog *ConstructNewCitySetupDialog(City *city, CityNewCitySetupDialog *dialog) {
+// Initialize setup choices and their default name.
+CityNewCitySetupDialog *ConstructNewCitySetupDialog(CityNewCitySetupDialog *dialog) {
   dialog->base = (CityStartupWindow){.resource_id = CITY_DIALOG_RESOURCE_NEW_CITY};
   dialog->city_name[0] = 0;
   dialog->previous_name = (CityName){0};
   dialog->era = CITY_SETUP_ERA_1900;
   dialog->start_year = 0;
   dialog->difficulty = CITY_SETUP_DIFFICULTY_EASY;
-  InitializeCitySetupName(city, dialog);
+  InitializeCitySetupName(dialog);
   return dialog;
 }
 
-// Release setup name storage; original base destruction is comparison-only.
 void DestroyNewCitySetupDialog(CityNewCitySetupDialog *dialog) {
   ReleaseCitySetupName(dialog);
   dialog->base.window_id = 0;
@@ -1442,41 +968,17 @@ bool SetupWindowProcedure(Game *game, const Window *canvas_window, const WindowE
       if (selection->value < kTerrainSmoothnessFirst) ui->terrain_settings.variety = selection->value;
       else ui->terrain_settings.smoothness = selection->value - kTerrainSmoothnessFirst;
       if (!GenerateCityTerrainPreview(city)) ui->terrain_settings = previous;
-      UpdateTerrainSizeControls(city, &window->layout);
+      RefreshCityTerrainControls(ui, &window->layout);
       NotifyStartupState(city);
       return true;
     }
     if (IsTerrainFeatureDropdown(selection->control)) {
       CityCanvasStartupControl *control = SetupControl(city, selection->control);
       if (!control || !control->visible) return true;
-      int index = 0;
-      while (index < control->item_count && (control->items[index].value != selection->value ||
-          control->items[index].kind == CITY_DROPDOWN_SEPARATOR)) ++index;
-      if (index == control->item_count ||
-          TerrainDropdownItemDisabled(&ui->terrain_settings, control->id, &control->items[index])) return true;
-      const CityDropdownItem *item = &control->items[index];
       CityTerrainSettings previous = ui->terrain_settings;
-      CityTerrainSettings *settings = &ui->terrain_settings;
-      if (IsTerrainSmallRiverItem(control->id, item)) {
-        settings->small_rivers = item->value - kTerrainSmallRiversFirst;
-      } else if (item->kind == CITY_DROPDOWN_RADIO) {
-        settings->features &= ~TerrainDropdownRadioGroup(control->id, item);
-        if (control->id == CITY_SETUP_COAST && !item->value) {
-          settings->features &= ~(kCliffs | kDelta);
-          settings->coast_sides = 0;
-        } else if (control->id == CITY_SETUP_RIVER) {
-          if (item->value) settings->features |= kRiver | item->value;
-          else settings->features &= ~(kMeander | kDelta | kValley | kSalty);
-        } else if (item->value > 0) {
-          settings->features &= ~DisabledCityTerrainFeatures(item->value);
-          ToggleCityTerrainFeature(settings, item->value);
-        }
-      } else if (control->id == CITY_SETUP_COAST && item->value >> kTerrainCoastEdgeShift) {
-        settings->coast_sides ^= item->value >> kTerrainCoastEdgeShift;
-        settings->features |= kOcean;
-      } else ToggleCityTerrainFeature(settings, item->value);
+      if (!SelectCityTerrainFeature(&ui->terrain_settings, control, selection->value)) return true;
       if (!GenerateCityTerrainPreview(city)) ui->terrain_settings = previous;
-      UpdateTerrainSizeControls(city, &window->layout);
+      RefreshCityTerrainControls(ui, &window->layout);
       NotifyStartupState(city);
       return true;
     }
@@ -1500,7 +1002,7 @@ bool SetupWindowProcedure(Game *game, const Window *canvas_window, const WindowE
         else settings->desert_coverage = 100 - settings->snow_coverage;
       }
       if (!GenerateCityTerrainPreview(city)) ui->terrain_settings = previous;
-      UpdateTerrainSizeControls(city, &window->layout);
+      RefreshCityTerrainControls(ui, &window->layout);
       NotifyStartupState(city);
       return true;
     }
@@ -1510,7 +1012,7 @@ bool SetupWindowProcedure(Game *game, const Window *canvas_window, const WindowE
     int previous = *value;
     *value = selection->value;
     if (!GenerateCityTerrainPreview(city)) *value = previous;
-    UpdateTerrainSizeControls(city, &window->layout);
+    RefreshCityTerrainControls(ui, &window->layout);
     NotifyStartupState(city);
     return true;
   }
@@ -1554,7 +1056,7 @@ bool SetupWindowProcedure(Game *game, const Window *canvas_window, const WindowE
       return true;
     } else window->layout.pressed_control = hit;
     if (ui->terrain_setup_active && hit >= CITY_SETUP_HILLS && hit <= CITY_SETUP_TREES)
-      MoveCityTerrainSetupPointer(city, window, x, y);
+      MoveCityTerrainSetupPointer(city, canvas_window, x);
     NotifyStartupState(city);
     return true;
   }
@@ -1568,7 +1070,7 @@ bool SetupWindowProcedure(Game *game, const Window *canvas_window, const WindowE
     if (hit == control) ActivateCitySetupControl(city, window, control, shift);
     return true;
   }
-  case CANVAS_SDL_POINTER_MOVE: return MoveCityTerrainSetupPointer(city, window, x, y);
+  case CANVAS_SDL_POINTER_MOVE: return MoveCityTerrainSetupPointer(city, canvas_window, x);
   case CANVAS_SDL_KEY_DOWN: {
     CityHotkey key = sample->key;
     if (key == CITY_KEY_NONE) return false;
@@ -1611,21 +1113,23 @@ bool SetupWindowProcedure(Game *game, const Window *canvas_window, const WindowE
     } else if (key == CITY_KEY_TAB) {
       CityCanvasStartupWindow *layout = &window->layout;
       int current = 0;
+      CityCanvasStartupControl *focused = NULL;
       for (int i = 0; i < layout->control_count; i++)
-        if (layout->controls[i].id == field) current = i;
+        if (layout->controls[i].id == field) {
+          current = i;
+          focused = &layout->controls[i];
+        }
       for (int step = 1; step <= layout->control_count; step++) {
         CityCanvasStartupControl *control = &layout->controls[(current + step) % layout->control_count];
         if (control->id && control->control_class && control->visible &&
             !(control->style & CITY_RESOURCE_STYLE_DISABLED)) {
           layout->focused_control = control->id;
+          focused = control;
           break;
         }
       }
-      layout->selected_text = layout->focused_control == CITY_SETUP_NAME || layout->focused_control == CITY_SETUP_MAYOR;
-      if (layout->selected_text) {
-        CityCanvasStartupControl *focused = SetupControl(city, layout->focused_control);
-        focused->text_caret = strlen(focused->text);
-      }
+      layout->selected_text = focused && (focused->id == CITY_SETUP_NAME || focused->id == CITY_SETUP_MAYOR);
+      if (layout->selected_text) focused->text_caret = strlen(focused->text);
       NotifyStartupState(city);
     } else if (key == CITY_KEY_LEFT || key == CITY_KEY_RIGHT || key == CITY_KEY_UP || key == CITY_KEY_DOWN) {
       int delta = key == CITY_KEY_LEFT || key == CITY_KEY_UP ? -1 : 1;
@@ -1693,36 +1197,6 @@ int ShowCityStartupMenu(City *city) {
   int result = RunPausedCityAction(city, ChooseStartupMenu, &dialog);
   city->drawing->palette.direct_animation = 0;
   return result;
-}
-
-// Complete the startup menu with the terrain-editing choice. Requires the live startup interaction; returns
-// EndCityStartupDialog's completion result.
-static bool StartupMenuEditMap(City *city, CityStartupMenuDialog *dialog) {
-  return EndCityStartupDialog(city, dialog->window_id, CITY_STARTUP_EDIT_MAP);
-}
-
-// Complete the startup menu with the load-city choice. Requires the live startup interaction; returns
-// EndCityStartupDialog's completion result and does not load a file itself.
-static bool StartupMenuLoadCity(City *city, CityStartupMenuDialog *dialog) {
-  return EndCityStartupDialog(city, dialog->window_id, CITY_STARTUP_LOAD_CITY);
-}
-
-// Complete the startup menu with the scenario choice. Requires the live startup interaction; actual scenario
-// selection/loading belongs to the caller after the dialog returns.
-static bool StartupMenuLoadScenario(City *city, CityStartupMenuDialog *dialog) {
-  return EndCityStartupDialog(city, dialog->window_id, CITY_STARTUP_LOAD_SCENARIO);
-}
-
-// Complete the startup menu with the new-city choice. Requires the live startup interaction; returns the dialog
-// completion result without generating terrain here.
-static bool StartupMenuNewCity(City *city, CityStartupMenuDialog *dialog) {
-  return EndCityStartupDialog(city, dialog->window_id, CITY_STARTUP_NEW_CITY);
-}
-
-// Complete the startup menu with the quit choice. Requires the live startup interaction; shutdown remains the owning
-// caller's decision after the dialog closes.
-static bool StartupMenuQuit(City *city, CityStartupMenuDialog *dialog) {
-  return EndCityStartupDialog(city, dialog->window_id, CITY_STARTUP_QUIT);
 }
 
 const char *CityStartupTooltipAt(const Window *window, int x, int y, char *text, size_t size) {

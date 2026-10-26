@@ -110,11 +110,15 @@ bool PollCitySettingsCaret(Game *game, double now);
 
 // Action hit testing requires live Game/UI/Drawing owners and a live window.
 // Slider hit testing returns GAME_OPTIONS_NONE for a missing browser or window.
+// Hit testing computes layout once, reusing it when the hit control is a slider.
+// Slider results encode control ID plus value; scale snaps to 25-percent steps unless continuous is nonzero.
 i32 Sc2kCanvasGameOptionsActionAt(const Game *game, const Window *window,
     i32 x, i32 y, i32 continuous);
 i32 Sc2kCanvasGameOptionsSliderAt(const CitySettingsBrowser *browser, const Window *window,
     i32 slider, i32 x, i32 continuous);
 const char *CityOptionsTooltipAt(const Game *game, const Window *window, int x, int y);
+// Paint a prepared canvas with initialized Game/UI/Drawing/Assets owners. Reads live preference values;
+// changing settings and submitting City commands belong to the window's input handler.
 void DrawGameOptions(Game *game, Canvas *c, const Window *window);
 
 void SyncCityInterface(Game *game, CanvasSDL *display, i32 automatic_change);

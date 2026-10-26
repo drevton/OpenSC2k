@@ -4,6 +4,9 @@
 #include "city/types.h"
 #include "city/maps/tile_storage.h"
 
+typedef struct Canvas Canvas;
+typedef struct SpriteImage SpriteImage;
+
 enum { CITY_TREE_RANDOM = 0, CITY_TREE_SPECIES_MASK = 15, CITY_TREE_REMOVE = 16,
     CITY_TREE_CLIMATE_SHIFT = 8, CITY_TREE_CLIMATE_MASK = 15 << CITY_TREE_CLIMATE_SHIFT };
 
@@ -64,6 +67,10 @@ void GrowCityStockTrees(City *city, TileIndex tile);
 
 // Tree layout banks are shared with asset bounds and species previews; per-tile arrangements stay private.
 extern const u8 kCityTreeArtLayouts[196][4];
+// Draw a global species' common climate crop using immutable Assets and a caller-supplied Drawing cache.
+// CityTreeGlobalSpecies resolves the species index. Missing artwork/empty bounds are no-ops; false reports
+// preparation failure without replacing the prior cache. The caller owns application error handling.
+bool DrawCityTreePreview(const CityAssets *assets, Canvas *canvas, SpriteImage *cache, CityRect bounds, int species);
 // Align fallback silhouettes to their camera-relative ground slope.
 int CityTreeGroundOffset(int land_shape, int zoom);
 

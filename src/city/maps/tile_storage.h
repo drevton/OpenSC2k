@@ -2,6 +2,7 @@
 #define SC2K_CITY_MAPS_TILE_STORAGE_H
 
 #include "base/types.h"
+#include <assert.h>
 
 // Native TileInfo storage. Bit numbers are zero-based; stock file bytes are translated at the codec boundary.
 // kind[0..7]: one TK_ value, not a sprite ID or a bitset. Water presence comes from the kind's TCLASS_WATER.
@@ -345,12 +346,24 @@ enum {
   CITY_HIGHWAY_AXIS_X = 0, CITY_HIGHWAY_AXIS_Y = 1,
 };
 
+static SC2K_FORCE_INLINE int EncodeBuildingOrientation(int orientation) {
+  return (orientation << CITY_BUILDING_ORIENTATION_SHIFT) & CITY_BUILDING_ORIENTATION_MASK;
+}
+
+static SC2K_FORCE_INLINE int DecodeBuildingOrientation(int metadata) {
+  return (metadata & CITY_BUILDING_ORIENTATION_MASK) >> CITY_BUILDING_ORIENTATION_SHIFT;
+}
+
 // Native rubble appearance and entrance direction share a two-bit terrain payload.
 // Highway ramps additionally store their mirror state in terrain bit 6.
 enum {
   CITY_TILE_VARIANT_MASK = 0x30, CITY_TILE_VARIANT_SHIFT = 4,
   CITY_HIGHWAY_RAMP_MIRROR_MASK = 0x40,
 };
+
+static SC2K_FORCE_INLINE int ReadTileVariant(const TileInfo *tp) {
+  return (tp->terrain & CITY_TILE_VARIANT_MASK) >> CITY_TILE_VARIANT_SHIFT;
+}
 
 // XUND IDs: the shared connection table uses west/south/east/north
 // mask bits 1/2/4/8. Unlike XBLD, these IDs describe underground infrastructure.
@@ -398,6 +411,11 @@ typedef enum TileUndergroundKind {
 // XUND infrastructure IDs occupy six bits. The upper two bits are independent
 // persistent tile metadata, including when the infrastructure ID is clear.
 enum { CITY_UNDERGROUND_KIND_MASK = 0x3F, CITY_UNDERGROUND_METADATA_MASK = 0xC0 };
+
+// Return the stored infrastructure kind without the independent upper metadata bits.
+static SC2K_FORCE_INLINE u8 ReadTileUndergroundKind(const TileInfo *tp) {
+  return tp->underground & CITY_UNDERGROUND_KIND_MASK;
+}
 
 // Permanent region occupies bits 1..2. Stock orientation and water presence are codec-only flags.
 typedef enum TileFlags {
@@ -552,5 +570,47 @@ typedef enum CityTerrainShape {
 } CityTerrainShape;
 
 #define CITY_TERRAIN_SHAPE_MASK 0x0Fu
+
+// Packed record access changes only the supplied TileInfo; callers own statistics, topology and damage.
+// Store slopes 0..13, and assign nonzero zoning only to flat tiles. Growth/timing bits retain their existing rules.
+static SC2K_FORCE_INLINE int ReadCityZoneKind(const TileInfo *tp) {
+  return tp->zone & CITY_TILE_SLOPED ? ZONE_NONE : tp->zone & CITY_ZONE_KIND_MASK;
+}
+
+static SC2K_FORCE_INLINE u8 ReadTerrainCode(const TileInfo *tp) {
+  return tp->zone & CITY_TILE_SLOPED ? tp->zone & CITY_TERRAIN_SHAPE_MASK : CITY_TERRAIN_FLAT;
+}
+
+static SC2K_FORCE_INLINE void WriteTerrainCode(TileInfo *tp, int shape) {
+  assert(shape >= 0 && shape <= CITY_TERRAIN_SHAPE_13);
+  tp->zone = (tp->zone & CITY_TILE_GROWTH_MASK) |
+      (shape ? CITY_TILE_SLOPED | shape : ReadCityZoneKind(tp));
+}
+
+static SC2K_FORCE_INLINE void WriteCityZoneKind(TileInfo *tp, int zone) {
+  assert(!zone || !ReadTerrainCode(tp));
+  tp->zone = (tp->zone & CITY_TILE_GROWTH_MASK) |
+      (ReadTerrainCode(tp) ? tp->zone & 31 : zone & CITY_ZONE_KIND_MASK);
+}
+
+// Resolved zone and occupant metadata; the stored zone/slope discriminator is never exposed as a zone kind.
+static SC2K_FORCE_INLINE u8 ReadTileZoneByte(const TileInfo *tp) {
+  return (tp->terrain & CITY_ZONE_METADATA_MASK) | ReadCityZoneKind(tp);
+}
+
+static SC2K_FORCE_INLINE void WriteTileZoneByte(TileInfo *tp, int value) {
+  WriteCityZoneKind(tp, value & CITY_ZONE_KIND_MASK);
+  tp->terrain = (tp->terrain & 15) | (value & CITY_ZONE_METADATA_MASK);
+}
+
+// Ordinary road/rail/power payloads use the four cardinal connection bits.
+static SC2K_FORCE_INLINE int ReadTransportConnections(const TileInfo *tp) {
+  return tp->terrain >> CITY_ZONE_METADATA_SHIFT;
+}
+
+static SC2K_FORCE_INLINE void WriteTransportConnections(TileInfo *tp, int mask) {
+  tp->terrain = (tp->terrain & CITY_ZONE_KIND_MASK) |
+      mask << CITY_ZONE_METADATA_SHIFT;
+}
 
 #endif

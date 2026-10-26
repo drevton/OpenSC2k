@@ -1,18 +1,23 @@
 #include "drawing/maps/map_sprites.h"
+#include "drawing/maps/sprite_cache.h"
+#include "city/infrastructure/surface_lines.h"
 #include "drawing/sprites/surface.h"
 
 #include "assets/graphics.h"
 #include "assets/state.h"
+#include "base/byte_order.h"
 #include "city/infrastructure/bridges.h"
 #include "city/infrastructure/highways.h"
 #include "city/infrastructure/lines.h"
 #include "city/infrastructure/power_lines.h"
 #include "city/maps/buildings.h"
-#include "city/maps/layers.h"
+#include "city/maps/kinds.h"
 #include "city/maps/tables.h"
 #include "city/maps/terrain.h"
+#include "city/maps/water.h"
 #include "city/maps/tile_storage.h"
 #include "city/saveload/map_format.h"
+#include "city/state.h"
 #include "city/tools/types.h"
 #include "drawing/maps/map_depth.h"
 #include "drawing/maps/map_camera.h"
@@ -28,7 +33,8 @@
 // Select a rotated Drawing cache slot directly. Resource image indexes stay separate.
 int CityMapCameraSprite(const CityResourceState *assets, int sprite, int rotation) {
   if (sprite >= assets->map_tile_sprite_count) return sprite;
-  return assets->map_sprite_rotations[sprite][rotation & 3];
+  const u8 *views = assets->map_sprite_rotations + (size_t)sprite * 8;
+  return ReadLE16(views + (rotation & 3) * 2);
 }
 
 // Resolve tile appearance and the requested camera turn, independently of image resolution.
@@ -81,7 +87,7 @@ static int ResolveCityMapTileSprite(const City *city, TileIndex tile, int camera
     // Power lines have their own connection and slope artwork. Combine the
     // stored connection mask with the tile's land shape, then rotate the resulting
     // sprite into the requested view. Water spans use their own straight artwork.
-    if (IsCityWaterPowerLine(tp))
+    if (IsTileKindWaterPowerLine(tp->kind))
       return CityMapCameraSprite(city->game->resources, CITY_MAP_TILE_SPRITE_POWER_LINE_BRIDGE,
           camera_rotation + (camera_rotation + !(ReadTransportConnections(tp) & CONN_NS)) / 2);
     sprite = CityMapPowerLayout(ReadTransportConnections(tp), ReadTerrainCode(tp));
@@ -203,12 +209,12 @@ int CityMapViewTileFlip(const City *city, TileIndex tile) {
   const TileInfo *tp = &city->tile[tile];
   int rotation = CityMapCameraRotation(city->drawing), kind = tp->kind;
   if (kind == TK_HIGHWAY_ENTRANCE) return CityHighwayRampView(city, tile, rotation) >> 2;
-  if (IsCityWaterPowerLine(tp))
+  if (IsTileKindWaterPowerLine(tp->kind))
     return ((ReadTransportConnections(tp) & CONN_NS) != 0) ^ (rotation & 1);
   if (IsTileKindBridge(kind))
     return ReadCityBridgeAxis(tp) ^ (rotation & 1);
   if (IsTileKindBuilding(kind))
-    return (ReadBuildingOrientation(city, tile) - city->geography.rotation + rotation) & 1;
+    return (DecodeBuildingOrientation(tp->terrain) - city->geography.rotation + rotation) & 1;
   if (IsTileKindHighwayIncline(kind)) {
     int axis = ReadCityHighwayAxis(tp) ^ (rotation & 1);
     return axis ^ CityMapHighwayLayoutAxis(CityMapViewTileSpriteIndex(city, tile));
@@ -220,26 +226,6 @@ int CityMapViewTileFlip(const City *city, TileIndex tile) {
 CityPoint CityMapSpriteExtent(const Drawing *drawing, int id) {
   const MapSpriteMetrics *sprite = &drawing->map_state.sprite_metrics[id];
   return (CityPoint){sprite->width, sprite->baseline};
-}
-
-i32 CityMapBridgeArtworkDepth(const City *city, TileIndex tile, bool foreground) {
-  CityPoint point = CityMapViewTilePoint(city, tile);
-  // Both approach layers belong to the bank tile. Using the higher deck plane for
-  // its front layer moves it ahead of objects on the next ground tile.
-  int height = IsCityBridgeHead(&city->tile[tile]) ?
-      ReadCityLandHeight(&city->tile[tile]) : ReadCityBridgeDeckHeight(city, tile);
-  int edge = foreground ? 2048 : -2048;
-  return CityMapObjectDepth(point.x * 4096 + edge, point.y * 4096 + edge, height * 4096);
-}
-
-void DrawCityBridgeTrafficForeground(City *city, TileIndex tile, int sprite, int x, int baseline, int palette_offset) {
-  Drawing *drawing = city->drawing;
-  if (!drawing->map_depth.preparing) return;
-  i32 depth = drawing->map_depth.depth;
-  drawing->map_depth.depth = CityMapBridgeArtworkDepth(city, tile, true);
-  DrawCityMapPaletteSpriteAtBaseline(drawing, sprite, x, baseline, SPRITE_OPAQUE_PALETTE,
-      MAP_PALETTE_BRIDGE_FIRST + palette_offset);
-  drawing->map_depth.depth = depth;
 }
 
 // Palette IDs are resolved directly; no palette scans or copies occur per sprite.

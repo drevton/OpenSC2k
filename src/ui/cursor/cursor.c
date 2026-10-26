@@ -4,6 +4,7 @@
 #include "assets/cursors.h"
 #include "assets/graphics.h"
 #include "assets/state.h"
+#include "city/maps/buildings.h"
 #include "drawing/cursors.h"
 #include "drawing/state.h"
 #include "game/state.h"

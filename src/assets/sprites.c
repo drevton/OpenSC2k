@@ -1,7 +1,7 @@
-#include "drawing/sprites/sources.h"
+#include "assets/graphics.h"
+
 #include "city/maps/trees.h"
 #include "city/maps/tile_storage.h"
-#include "assets/graphics.h"
 #include "assets/catalog.h"
 
 #include <assert.h>
@@ -13,45 +13,7 @@
 #include "assets/asset_file.h"
 #include "assets/assets.h"
 #include "base/byte_order.h"
-#include "drawing/maps/tables.h"
-#include "drawing/sprites/sprites.h"
-
-bool ValidateSpriteVariants(SpriteVariants variants, int sprite_count, int header_count) {
-  int previous = -1;
-  for (u32 at = 0; at < variants.size;) {
-    if (variants.size - at < 4) return false;
-    const u8 *record = variants.data + at;
-    int sprite = ReadLE16(record), mask = record[2];
-    if (sprite <= previous || sprite >= sprite_count || !mask || (mask & ~15) || record[3]) return false;
-    previous = sprite;
-    at += 4;
-    for (int level = 0; level < 4; ++level) {
-      if (!(mask & (1 << level))) continue;
-      if (variants.size - at < 2) return false;
-      int header = ReadLE16(variants.data + at) & CITY_SPRITE_HEADER_MASK;
-      if (!header || header > header_count) return false;
-      at += 2;
-    }
-  }
-  return true;
-}
-
-u16 ResolveSpriteVariant(SpriteVariants variants, int sprite, int level, u16 fallback) {
-  // Preparation only. Painting uses the selected, prescaled image directly.
-  for (u32 at = 0; at < variants.size;) {
-    const u8 *record = variants.data + at;
-    int id = ReadLE16(record), mask = record[2];
-    if (id > sprite) break;
-    at += 4;
-    for (int bit = 0; bit < 4; ++bit) {
-      if (!(mask & (1 << bit))) continue;
-      if (id == sprite && bit == level) return ReadLE16(variants.data + at);
-      at += 2;
-    }
-    if (id == sprite) break;
-  }
-  return fallback;
-}
+#include "assets/run_sprite.h"
 
 const u16 kCityConstructionHeights[CITY_CONSTRUCTION_HEIGHTS] = {32, 64, 128, 192, 320, 512};
 
@@ -97,7 +59,7 @@ static bool ReadBuildingArtwork(AssetFile *file, const CityLandscapeSprite *spri
   return true;
 }
 
-/* Compact archive commands resolve shared images and references once at load time. */
+// Compact archive commands resolve shared images and references once at load time.
 typedef enum GraphicsCommand {
   GRAPHICS_END, GRAPHICS_PALETTE, GRAPHICS_IMAGE, GRAPHICS_SPRITE,
   GRAPHICS_WATER_COLORS, GRAPHICS_BRIDGE_PALETTES
@@ -120,17 +82,19 @@ static bool ReadGraphicsInteger(AssetFile *file, u32 *value) {
   return false;
 }
 
-static bool ReadGraphicsCommands(AssetFile *file, CityLandscapeSprite *sprites, int limit,
+// The binding loader has bounded limit to the stored header range. Keep command IDs unsigned until admitted;
+// zero is a valid image ID and the global palette sentinel, while sprite references are one-based.
+static bool ReadGraphicsCommands(AssetFile *file, CityLandscapeSprite *sprites, u32 limit,
     u8 water[20], u32 bridge[CITY_LANDSCAPE_BRIDGE_STYLES][256]) {
   RunSprite **images = calloc(limit, sizeof(*images));
   SpritePalette **palettes = calloc(limit, sizeof(*palettes));
   bool valid = images && palettes, finished = false, have_water = false, have_bridge = false;
   while (valid && !finished) {
     int command = ReadAssetByte(file);
-    u32 id, image, width, height, palette, size, baseline, scale, offset;
     switch (command) {
     case GRAPHICS_END: finished = true; break;
-    case GRAPHICS_PALETTE:
+    case GRAPHICS_PALETTE: {
+      u32 id;
       valid = ReadGraphicsInteger(file, &id) && id > 0 && id < limit && !palettes[id];
       int colors = valid ? ReadAssetByte(file) + 1 : 0;
       if (colors < 1 || colors > 256) { valid = false; break; }
@@ -144,7 +108,9 @@ static bool ReadGraphicsCommands(AssetFile *file, CityLandscapeSprite *sprites, 
         if (valid) table->colors[i] = 0xFF000000 | rgb[0] << 16 | rgb[1] << 8 | rgb[2];
       }
       break;
-    case GRAPHICS_IMAGE:
+    }
+    case GRAPHICS_IMAGE: {
+      u32 id, width, height, palette, size;
       valid = ReadGraphicsInteger(file, &id) && id < limit && !images[id] &&
           ReadGraphicsInteger(file, &width) && width > 0 && width <= GRAPHICS_MAX_WIDTH &&
           ReadGraphicsInteger(file, &height) && height > 0 && height <= GRAPHICS_MAX_HEIGHT &&
@@ -156,11 +122,13 @@ static bool ReadGraphicsCommands(AssetFile *file, CityLandscapeSprite *sprites, 
       valid = sprite != NULL;
       if (sprite) sprite->palette = RetainSpritePalette(palettes[palette]);
       break;
-    case GRAPHICS_SPRITE:
+    }
+    case GRAPHICS_SPRITE: {
+      u32 id, image, scale, baseline, offset, palette;
       valid = ReadGraphicsInteger(file, &id) && id > 0 && id <= limit && !sprites[id - 1].sprite &&
           ReadGraphicsInteger(file, &image) && image < limit && images[image] &&
           ReadGraphicsInteger(file, &scale) && scale > 0 && scale <= 32 &&
-          ReadGraphicsInteger(file, &baseline) && baseline <= images[image]->height &&
+          ReadGraphicsInteger(file, &baseline) && baseline <= (u32)images[image]->height &&
           // Cropping can leave the original canvas anchor outside the remaining image pixels.
           ReadGraphicsInteger(file, &offset) && offset <= 2 * GRAPHICS_MAX_WIDTH;
       if (!valid) break;
@@ -176,11 +144,13 @@ static bool ReadGraphicsCommands(AssetFile *file, CityLandscapeSprite *sprites, 
           (int)(offset >> 1) ^ -(int)(offset & 1)};
       valid = sprites[id].sprite != NULL;
       break;
+    }
     case GRAPHICS_WATER_COLORS:
       valid = !have_water && ReadAssetFile(file, water, 20) == 20;
       have_water = valid;
       break;
-    case GRAPHICS_BRIDGE_PALETTES:
+    case GRAPHICS_BRIDGE_PALETTES: {
+      u32 palette;
       valid = !have_bridge;
       for (int style = 0; valid && style < CITY_LANDSCAPE_BRIDGE_STYLES; ++style) {
         valid = ReadGraphicsInteger(file, &palette) && palette > 0 && palette < limit && palettes[palette];
@@ -188,10 +158,11 @@ static bool ReadGraphicsCommands(AssetFile *file, CityLandscapeSprite *sprites, 
       }
       have_bridge = valid;
       break;
+    }
     default: valid = false; break;
     }
   }
-  for (int i = 0; i < limit; ++i) {
+  for (u32 i = 0; i < limit; ++i) {
     if (images) FreeRunSprite(images[i]);
     if (palettes) FreeSpritePalette(palettes[i]);
   }
@@ -203,24 +174,27 @@ static bool ReadGraphicsCommands(AssetFile *file, CityLandscapeSprite *sprites, 
 // Resolve source aliases in the existing catalog. Headers remain unchanged until
 // every alias has retained its image, so mirrored canonical sources are safe too.
 static bool ResolveGraphicsSpriteIndexes(CityLandscapeSprite *sprites, int limit,
-    const u16 *lookup, int count) {
+    const u8 *lookup, int count) {
   for (int id = 0; id < limit; ++id)
-    if (sprites[id].sprite && (lookup[id] & CITY_SPRITE_HEADER_MASK) != id + 1) return false;
+    if (sprites[id].sprite && (ReadLE16(lookup + 2 * id) & CITY_SPRITE_HEADER_MASK) != id + 1) return false;
   for (int id = 0; id < count; ++id) {
-    int header = lookup[id] & CITY_SPRITE_HEADER_MASK;
-    if (header ? header > limit || !sprites[header - 1].sprite : lookup[id] != 0) return false;
+    u16 reference = ReadLE16(lookup + 2 * id);
+    int header = reference & CITY_SPRITE_HEADER_MASK;
+    if (header ? header > limit || !sprites[header - 1].sprite : reference != 0) return false;
   }
   for (int id = 0; id < limit; ++id) {
-    int header = lookup[id] & CITY_SPRITE_HEADER_MASK;
+    u16 reference = ReadLE16(lookup + 2 * id);
+    int header = reference & CITY_SPRITE_HEADER_MASK;
     if (!header || header == id + 1) continue;
     sprites[id] = sprites[header - 1];
     const RunSprite *source = sprites[id].sprite;
-    sprites[id].sprite = lookup[id] & CITY_SPRITE_HEADER_FLIPPED ?
+    sprites[id].sprite = reference & CITY_SPRITE_HEADER_FLIPPED ?
         ReferenceRunSprite(source, source->palette, true) : RetainRunSprite(source);
     if (!sprites[id].sprite) return false;
   }
   for (int id = 0; id < limit; ++id) {
-    if ((lookup[id] & CITY_SPRITE_HEADER_MASK) != id + 1 || !(lookup[id] & CITY_SPRITE_HEADER_FLIPPED)) continue;
+    u16 reference = ReadLE16(lookup + 2 * id);
+    if ((reference & CITY_SPRITE_HEADER_MASK) != id + 1 || !(reference & CITY_SPRITE_HEADER_FLIPPED)) continue;
     RunSprite *source = sprites[id].sprite;
     sprites[id].sprite = ReferenceRunSprite(source, source->palette, true);
     FreeRunSprite(source);
@@ -229,34 +203,28 @@ static bool ResolveGraphicsSpriteIndexes(CityLandscapeSprite *sprites, int limit
   return true;
 }
 
-static bool ReadGraphicsSpriteIndex(AssetFile *file, CityResourceState *assets, int count) {
+// count is read directly from the file. Validate it before sizing the borrowed lookup; never narrow wire counts.
+static bool ReadGraphicsSpriteIndex(AssetFile *file, CityResourceState *assets, u32 count) {
   if (count < CITY_LANDSCAPE_SPRITE_COUNT || count > 65536 ||
       count != assets->map_group_sprite_first + assets->map_group_sprite_count) return false;
-  size_t bytes = count * sizeof(u16);
-  if (bytes > file->length - file->position) return false;
-  const u16 *lookup = (const u16 *)(file->memory + file->position);
-  if (!SeekAssetFile(file, file->position + bytes)) return false;
-  assets->sprite_index_lookup = lookup;
+  ByteSpan lookup = ReadAssetSpan(file, count * sizeof(u16));
+  if (!lookup.data) return false;
+  assets->sprite_index_lookup = lookup.data;
   assets->map_sprite_index_count = count;
   return true;
 }
 
-static bool ReadKindHeightMetadata(AssetFile *file, CityResourceState *assets, const CityLandscapeSprite *sprites) {
+// Bindings and every referenced image group have already passed catalog validation. This chunk supplies native
+// per-kind heights; it does not repeat image lookup, choose a camera direction or access renderer state.
+static bool ReadKindHeightMetadata(AssetFile *file, CityResourceState *assets, const u16 kind_sprites[]) {
   u8 header[8];
   if (ReadAssetFile(file, header, sizeof(header)) != sizeof(header) || memcmp(header, "SC2KHGT1", 8) ||
       ReadAssetFile(file, assets->kind_sprite_heights, sizeof(assets->kind_sprite_heights)) !=
           sizeof(assets->kind_sprite_heights)) return false;
   for (int kind = 0; kind < TK_COUNT; ++kind) {
-    int layout = kCityMapKindSprites[kind];
-    bool building = CityBuildingArtworkSourceFirst(layout) >= 0;
+    bool building = CityBuildingArtworkSourceFirst(kind_sprites[kind]) >= 0;
     int height = assets->kind_sprite_heights[kind];
     if (building ? height < 4 : height != 0) return false;
-    if (!building) continue;
-    for (int view = 0; view < CITY_CIVIC_VIEWS; ++view) {
-      int index = TileSpriteResourceIndex(assets, layout, view);
-      int source = (assets->sprite_index_lookup[index] & CITY_SPRITE_HEADER_MASK) - 1;
-      if (!sprites[source].sprite) return false;
-    }
   }
   return true;
 }
@@ -266,10 +234,10 @@ static bool ReadGraphicsVariants(AssetFile *file, CityResourceState *assets) {
   if (ReadAssetFile(file, header, sizeof(header)) != sizeof(header)) return false;
   u32 size = ReadLE32(header);
   if (size > assets->map_sprite_index_count * 12) return false;
-  if (size > file->length - file->position) return false;
-  SpriteVariants variants = {file->memory + file->position, size};
-  if (!SeekAssetFile(file, file->position + size) ||
-      !ValidateSpriteVariants(variants, assets->map_sprite_index_count, assets->map_group_sprite_first)) return false;
+  ByteSpan bytes = ReadAssetSpan(file, size);
+  if (!bytes.data) return false;
+  SpriteVariants variants = {bytes.data, size};
+  if (!ValidateSpriteVariants(variants, assets->map_sprite_index_count, assets->map_group_sprite_first)) return false;
   assets->sprite_variants = variants;
   return true;
 }
@@ -277,42 +245,40 @@ static bool ReadGraphicsVariants(AssetFile *file, CityResourceState *assets) {
 static bool ValidateLandscapeSprites(CityLandscapeSprite *sprites,
     CityRect tree_bounds[CITY_LANDSCAPE_TREE_ART_COUNT], int count) {
   bool valid = true;
-  for (int item = 0; valid && item < count; ++item) {
-    u32 id = item, width, height;
-    RunSprite *sprite;
-    sprite = sprites[id].sprite;
+  for (int id = 0; valid && id < count; ++id) {
+    const RunSprite *sprite = sprites[id].sprite;
     if (!sprite) continue;
-    width = sprite->width; height = sprite->height;
+    int width = sprite->width, height = sprite->height;
     const u32 *rows = RunSpriteRows(sprite);
-    valid = valid && ValidateRunSprite(sprite);
+    valid = ValidateRunSprite(sprite);
     const u8 *data = RunSpriteData(sprite);
     bool tree_preview = id >= CITY_LANDSCAPE_TREE_FIRST && id < CITY_LANDSCAPE_POINT &&
         (id - CITY_LANDSCAPE_TREE_FIRST) % CITY_LANDSCAPE_TREE_STAGES == CITY_TREE_GROWN;
+    // Catalog families allow different indexed colors and animation tags; the policy is fixed for this image.
+    bool point = id >= CITY_LANDSCAPE_POINT && id < CITY_LANDSCAPE_RAPIDS_FIRST;
+    bool selector = (id >= CITY_LANDSCAPE_SELECTION_FIRST && id < CITY_LANDSCAPE_SELECTION_END) ||
+        (id >= CITY_LANDSCAPE_UNDERWORLD_SELECTION_FIRST && id < CITY_LANDSCAPE_HIGHWAY_MERGE_FIRST) ||
+        point || (id >= CITY_LANDSCAPE_BAKED_SELECTION_FIRST && id < CITY_LANDSCAPE_BAKED_FACE_FIRST);
+    bool infrastructure = (id >= CITY_MAP_TILE_SPRITE_POWER_LINE_FIRST &&
+        id <= CITY_MAP_TILE_SPRITE_HIGHWAY_LAST) ||
+        (id >= CITY_LANDSCAPE_ROAD_BRIDGE_FIRST && id < CITY_LANDSCAPE_CIVIC_FIRST);
+    bool civic = id >= CITY_LANDSCAPE_CIVIC_FIRST;
+    bool underworld_ground = (id >= CITY_LANDSCAPE_BAKED_UNDERWORLD_FIRST &&
+        id < CITY_LANDSCAPE_BAKED_PIPE_FIRST) || id == CITY_LANDSCAPE_BAKED_FACE_FIRST;
     CityRect visible = {width, height, 0, 0};
-    for (u32 y = 0; valid && y < height; ++y) {
+    for (int y = 0; valid && y < height; ++y) {
       const u8 *at = data + rows[y], *end = data + rows[y + 1];
       int x = at < end ? ReadSpriteInitialSkip(&at) : 0;
       while (valid && at < end) {
         int kind, pixels = ReadSpriteRun(&at, &kind), bytes = SpriteRunPayloadBytes(kind);
         if (SpriteRunIndexed(kind)) {
-          bool selector = (id >= CITY_LANDSCAPE_SELECTION_FIRST && id < CITY_LANDSCAPE_SELECTION_END) ||
-              (id >= CITY_LANDSCAPE_UNDERWORLD_SELECTION_FIRST && id < CITY_LANDSCAPE_HIGHWAY_MERGE_FIRST) ||
-              (id >= CITY_LANDSCAPE_POINT && id < CITY_LANDSCAPE_RAPIDS_FIRST) ||
-              (id >= CITY_LANDSCAPE_BAKED_SELECTION_FIRST && id < CITY_LANDSCAPE_BAKED_FACE_FIRST);
-          bool infrastructure = id >= CITY_MAP_TILE_SPRITE_POWER_LINE_FIRST && id <= CITY_MAP_TILE_SPRITE_HIGHWAY_LAST;
-          infrastructure |= id >= CITY_LANDSCAPE_ROAD_BRIDGE_FIRST &&
-              id < CITY_LANDSCAPE_CIVIC_FIRST;
-          bool civic = id >= CITY_LANDSCAPE_CIVIC_FIRST;
-          bool underworld_ground = (id >= CITY_LANDSCAPE_BAKED_UNDERWORLD_FIRST &&
-              id < CITY_LANDSCAPE_BAKED_PIPE_FIRST) || id == CITY_LANDSCAPE_BAKED_FACE_FIRST;
           for (int pixel = 0; pixel < pixels; ++pixel) {
             int index = at[pixel * bytes];
             if (sprite->palette && !SpriteRunAnimated(kind) && sprite->palette->colors[index] >> 24 != 255)
               valid = false;
             bool allowed = civic ? !SpriteRunAnimated(kind) || (index > 0 && index < SPRITE_ANIMATION_COLORS) :
                 infrastructure || underworld_ground || (selector ?
-                (index >= 1 && index <= 15) || index == 23 ||
-                (id >= CITY_LANDSCAPE_POINT && id < CITY_LANDSCAPE_RAPIDS_FIRST && index == 0xA9) :
+                (index >= 1 && index <= 15) || index == 23 || (point && index == 0xA9) :
                 index >= SPRITE_ANIMATION_WATER_FIRST && index < SPRITE_ANIMATION_COLORS);
             if (!allowed || (!civic && SpriteRunAnimated(kind) !=
                 (!selector && !infrastructure && !underworld_ground))) valid = false;
@@ -351,12 +317,11 @@ bool LoadCityDemolitionAssets(CityResourceState *assets) {
   if (opened != ASSET_OPEN_OK) return false;
   u8 header[28], water[20];
   bool valid = ReadAssetFile(&file, header, 12) == 12 && !memcmp(header, "SC2KLAN2", 8);
-  int count = valid ? ReadLE32(header + 8) : 0;
+  u32 count = valid ? ReadLE32(header + 8) : 0;
   valid = valid && count > 0 && count <= CITY_DEMOLITION_FRAME_COUNT &&
       ReadAssetFile(&file, water, sizeof(water)) == sizeof(water);
-  CityLandscapeSprite *sprites = calloc(CITY_DEMOLITION_FRAME_COUNT, sizeof(*sprites));
-  valid = valid && sprites;
-  for (int item = 0; valid && item < count; ++item) {
+  CityLandscapeSprite sprites[CITY_DEMOLITION_FRAME_COUNT] = {0};
+  for (u32 item = 0; valid && item < count; ++item) {
     valid = ReadAssetFile(&file, header, sizeof(header)) == sizeof(header);
     if (!valid) break;
     u32 id = ReadLE32(header), width = ReadLE32(header + 4), height = ReadLE32(header + 8);
@@ -364,46 +329,86 @@ bool LoadCityDemolitionAssets(CityResourceState *assets) {
     int offset_x = (i32)ReadLE32(header + 20);
     valid = id < CITY_DEMOLITION_FRAME_COUNT && !sprites[id].sprite && width > 0 && width <= 512 &&
         height > 0 && height <= 1024 && baseline <= height && scale > 0 && scale <= 32 &&
-        offset_x >= -(int)width && offset_x <= (int)width &&
-        size >= 4 * (height + 1) && size <= 4 * (height + 1) + 6 * width * height;
+        offset_x >= -(int)width && offset_x <= (int)width;
     if (!valid) break;
-    RunSprite *sprite = malloc(sizeof(*sprite) + size);
+    RunSprite *sprite = ReadAssetRunSprite(&file, width, height, size);
     if (!sprite) { valid = false; break; }
     sprites[id] = (CityLandscapeSprite){sprite, scale, baseline, offset_x};
-    *sprite = (RunSprite){.width = width, .height = height, .stream_size = size - 4 * (height + 1), .references = 1};
-    valid = ReadAssetFile(&file, sprite + 1, size) == size;
-    if (!valid) break;
-    u32 *rows = (u32 *)(sprite + 1);
-    for (u32 row = 0; row <= height; ++row) rows[row] = ReadLE32((u8 *)rows + 4 * row);
-    valid = ValidateRunSprite(sprite) && RunSpriteHasOnlyKinds(sprite, SPRITE_RUN_DIRECT_KINDS);
+    valid = RunSpriteHasOnlyKinds(sprite, SPRITE_RUN_DIRECT_KINDS);
   }
   for (int id = 0; valid && id < CITY_DEMOLITION_FRAME_COUNT; ++id) valid = sprites[id].sprite != NULL;
   valid = valid && ReadAssetByte(&file) == EOF && !file.failed;
   if (!CloseAssetFile(&file)) valid = false;
-  if (sprites) {
-    for (int id = 0; id < CITY_DEMOLITION_FRAME_COUNT; ++id) {
-      if (valid) {
-        FreeRunSprite(assets->demolition[id].sprite);
-        assets->demolition[id] = sprites[id];
-      } else FreeRunSprite(sprites[id].sprite);
-    }
+  for (int id = 0; id < CITY_DEMOLITION_FRAME_COUNT; ++id) {
+    if (valid) {
+      FreeRunSprite(assets->demolition[id].sprite);
+      assets->demolition[id] = sprites[id];
+    } else FreeRunSprite(sprites[id].sprite);
   }
-  free(sprites);
   return valid;
 }
 
-static bool LoadCityLandscapeSpriteSet(CityResourceState *assets) {
+// Decode unsigned emitter positions against plant images with validated positive dimensions. The caller supplies
+// temporary metadata; failure leaves its partial writes in place and the cursor open at the consumed position.
+static bool ReadPowerSmokeArtwork(AssetFile *file, const CityLandscapeSprite *sprites,
+    CityPowerSmoke power_smoke[CITY_POWER_SMOKE_KINDS][CITY_CIVIC_VIEWS]) {
+  u8 header[16];
+  bool valid = ReadAssetFile(file, header, 8) == 8 && !memcmp(header, "SC2KSMK1", 8);
+  static const u8 kPlantSprites[CITY_POWER_SMOKE_KINDS] = {
+    [CITY_POWER_SMOKE_OIL] = CITY_MAP_TILE_SPRITE_OIL_POWER_PLANT,
+    [CITY_POWER_SMOKE_NUCLEAR] = CITY_MAP_TILE_SPRITE_NUCLEAR_POWER_PLANT,
+    [CITY_POWER_SMOKE_COAL] = CITY_MAP_TILE_SPRITE_COAL_POWER_PLANT,
+  };
+  for (int profile = 0; valid && profile < CITY_POWER_SMOKE_KINDS; ++profile) {
+    for (int view = 0; valid && view < CITY_CIVIC_VIEWS; ++view) {
+      valid = ReadAssetFile(file, header, 4) == 4;
+      u32 count = valid ? ReadLE32(header) : 0;
+      valid = valid && count > 0 && count <= CITY_POWER_SMOKE_EMITTERS;
+      CityPowerSmoke *smoke = &power_smoke[profile][view];
+      smoke->count = count;
+      const CityLandscapeSprite *plant = &sprites[CITY_LANDSCAPE_CIVIC_FIRST +
+          (kPlantSprites[profile] - CITY_CIVIC_KIND_FIRST) * CITY_CIVIC_VIEWS + view];
+      valid = valid && plant->sprite;
+      for (u32 emitter = 0; valid && emitter < count; ++emitter) {
+        valid = ReadAssetFile(file, header, 16) == 16;
+        if (!valid) break;
+        u32 x = ReadLE32(header), y = ReadLE32(header + 4);
+        u32 type = ReadLE32(header + 8), flipped = ReadLE32(header + 12);
+        valid = x < (u32)plant->sprite->width && y < (u32)plant->sprite->height &&
+            type < CITY_POWER_SMOKE_TYPES && flipped <= 1;
+        smoke->emitters[emitter] = (CityPowerSmokeEmitter){x, y, type, flipped};
+      }
+    }
+  }
+  return valid;
+}
+
+// Decode vehicle palettes directly into Assets. Preserve earlier colors, including the rejected color, on failure;
+// the cursor stays open at the consumed position.
+static bool ReadRoadVehiclePalettes(AssetFile *file, u32 palettes[CITY_ROAD_VEHICLE_PALETTES][256]) {
+  u8 header[8], colors[CITY_ROAD_VEHICLE_PALETTES * 256 * 4];
+  bool valid = ReadAssetFile(file, header, sizeof(header)) == sizeof(header) && !memcmp(header, "SC2KCAR1", 8) &&
+      ReadAssetFile(file, colors, sizeof(colors)) == sizeof(colors);
+  for (int style = 0; valid && style < CITY_ROAD_VEHICLE_PALETTES; ++style)
+    for (int color = 0; valid && color < 256; ++color) {
+      u32 value = ReadLE32(colors + (style * 256 + color) * 4);
+      valid = (value >> 24) == 255;
+      palettes[style][color] = value;
+    }
+  return valid;
+}
+
+static bool LoadCityLandscapeSpriteSet(CityResourceState *assets, const u16 kind_sprites[]) {
   int limit = assets->map_group_sprite_first;
   AssetFile file;
   AssetOpenResult opened = OpenAssetSpan(&file, GetAsset(assets, CITY_ASSET_LANDSCAPE));
   if (opened != ASSET_OPEN_OK) return false;
-  u8 header[28], palette_bytes[20];
+  u8 header[12], palette_bytes[20];
   bool valid = ReadAssetFile(&file, header, 12) == 12 &&
       !memcmp(header, "SC2KGFX3", 8);
   if (valid) valid = ReadGraphicsSpriteIndex(&file, assets, ReadLE32(header + 8));
   if (valid) valid = ReadGraphicsVariants(&file, assets);
-  int count = limit;
-  valid = valid && count > 0 && count <= limit;
+  valid = valid && limit > 0;
   u32 bridge_palettes[CITY_LANDSCAPE_BRIDGE_STYLES][256] = {0};
   CityLandscapeSprite *sprites = calloc(limit, sizeof(*sprites));
   valid = valid && sprites;
@@ -426,9 +431,10 @@ static bool LoadCityLandscapeSpriteSet(CityResourceState *assets) {
     if (valid) valid = ResolveGraphicsSpriteIndexes(sprites, limit,
         assets->sprite_index_lookup, assets->map_sprite_index_count);
   }
+  // Header resolution proved every nonempty reference. Require the entire bound group bank before metadata reads.
   for (u32 id = assets->map_group_sprite_first; valid && id < assets->map_sprite_index_count; ++id)
-    valid = (assets->sprite_index_lookup[id] & CITY_SPRITE_HEADER_MASK) != 0;
-  if (valid) valid = ValidateLandscapeSprites(sprites, tree_bounds, count);
+    valid = (ReadLE16(assets->sprite_index_lookup + 2 * id) & CITY_SPRITE_HEADER_MASK) != 0;
+  if (valid) valid = ValidateLandscapeSprites(sprites, tree_bounds, limit);
   for (int first = CITY_LANDSCAPE_CIVIC_FIRST;
       valid && first < CITY_LANDSCAPE_POWER_SMOKE_FIRST; first += CITY_CIVIC_VIEWS) {
     const CityLandscapeSprite *front = &sprites[first];
@@ -450,32 +456,7 @@ static bool LoadCityLandscapeSpriteSet(CityResourceState *assets) {
           smoke->offset_x == 0;
     }
   }
-  if (valid) {
-    valid = ReadAssetFile(&file, header, 8) == 8 && !memcmp(header, "SC2KSMK1", 8);
-    static const u8 kSmokeKinds[] = {TK_OIL_POWER_PLANT, TK_NUCLEAR_POWER_PLANT,
-        TK_COAL_POWER_PLANT};
-    for (int kind = 0; valid && kind < CITY_POWER_SMOKE_KINDS; ++kind) {
-      for (int view = 0; valid && view < CITY_CIVIC_VIEWS; ++view) {
-        valid = ReadAssetFile(&file, header, 4) == 4;
-        int count = valid ? ReadLE32(header) : 0;
-        valid = valid && count > 0 && count <= CITY_POWER_SMOKE_EMITTERS;
-        CityPowerSmoke *smoke = &power_smoke[kind][view];
-        smoke->count = count;
-        const CityLandscapeSprite *plant = &sprites[CITY_LANDSCAPE_CIVIC_FIRST +
-            (kCityMapKindSprites[kSmokeKinds[kind]] - CITY_CIVIC_KIND_FIRST) * CITY_CIVIC_VIEWS + view];
-        valid = valid && plant->sprite;
-        for (int emitter = 0; valid && emitter < count; ++emitter) {
-          valid = ReadAssetFile(&file, header, 16) == 16;
-          if (!valid) break;
-          int x = ReadLE32(header), y = ReadLE32(header + 4);
-          int type = ReadLE32(header + 8), flipped = ReadLE32(header + 12);
-          valid = x >= 0 && x < plant->sprite->width && y >= 0 && y < plant->sprite->height &&
-              type >= 0 && type < CITY_POWER_SMOKE_TYPES && (flipped == 0 || flipped == 1);
-          smoke->emitters[emitter] = (CityPowerSmokeEmitter){x, y, type, flipped};
-        }
-      }
-    }
-  }
+  if (valid) valid = ReadPowerSmokeArtwork(&file, sprites, power_smoke);
   for (int id = CITY_LANDSCAPE_WIND_MODERN_FIRST; valid && id < CITY_LANDSCAPE_NUCLEAR_STEAM_FIRST; ++id) {
     const CityLandscapeSprite *wind = &sprites[id];
     valid = wind->sprite && wind->sprite->width == 128 && wind->sprite->height <= 2048 &&
@@ -498,19 +479,11 @@ static bool LoadCityLandscapeSpriteSet(CityResourceState *assets) {
       valid = ground < CITY_BUILDING_GROUND_COUNT && (!ground ||
           sprites[CITY_LANDSCAPE_BUILDING_GROUND_FIRST + ground - 1].sprite != NULL);
     }
-    u8 vehicle_colors[CITY_ROAD_VEHICLE_PALETTES * 256 * 4];
-    valid = valid && ReadAssetFile(&file, header, 8) == 8 && !memcmp(header, "SC2KCAR1", 8) &&
-        ReadAssetFile(&file, vehicle_colors, sizeof(vehicle_colors)) == sizeof(vehicle_colors);
-    for (int style = 0; valid && style < CITY_ROAD_VEHICLE_PALETTES; ++style)
-      for (int color = 0; valid && color < 256; ++color) {
-        u32 value = ReadLE32(vehicle_colors + (style * 256 + color) * 4);
-        valid = (value >> 24) == 255;
-        assets->road_vehicle_palettes[style][color] = value;
-      }
-    valid = valid && ReadKindHeightMetadata(&file, assets, sprites);
+    if (valid) valid = ReadRoadVehiclePalettes(&file, assets->road_vehicle_palettes);
+    valid = valid && ReadKindHeightMetadata(&file, assets, kind_sprites);
   }
   valid = valid && ReadAssetByte(&file) == EOF && !file.failed;
-  if (!valid) fprintf(stderr, "Invalid landscape sprite data at byte %zu\n", file.position);
+  if (!valid) fprintf(stderr, "Invalid landscape sprite data at byte %llu\n", (unsigned long long)file.position);
   if (!CloseAssetFile(&file)) valid = false;
   if (valid) memcpy(assets->power_smoke, power_smoke, sizeof(power_smoke));
   if (valid) {
@@ -552,7 +525,7 @@ static bool LoadCityLandscapeSpriteSet(CityResourceState *assets) {
   return valid;
 }
 
-static bool LoadCityMapGraphics(CityResourceState *assets) {
+static bool LoadCityMapGraphics(CityResourceState *assets, const u16 kind_sprites[]) {
   ByteSpan span = GetAsset(assets, CITY_ASSET_TILE_GRAPHICS);
   const u8 *data = span.data;
   bool valid = span.size >= 20 && !memcmp(data, "SC2KTIL1", 8);
@@ -562,14 +535,15 @@ static bool LoadCityMapGraphics(CityResourceState *assets) {
   valid = valid && layouts > 0 && layouts <= CITY_MAP_SPRITES_PER_ZOOM && first >= CITY_LANDSCAPE_SPRITE_COUNT &&
       first <= CITY_SPRITE_HEADER_MASK && count > 0 && count <= 65536 && first + count <= 65536 && !(first & 3) && !(count & 3) &&
       span.size == 20 + 10 * layouts;
-  const u16 *bindings = valid ? (const u16 *)(data + 20) : NULL;
-  const u16 (*rotations)[4] = valid ? (const u16 (*)[4])(bindings + layouts) : NULL;
+  const u8 *bindings = valid ? data + 20 : NULL;
+  const u8 *rotations = valid ? bindings + 2 * layouts : NULL;
   for (u32 i = 0; valid && i < layouts; ++i) {
-    valid = bindings[i] >= first && bindings[i] < first + count && rotations[i][0] == i;
-    for (int turn = 0; valid && turn < 4; ++turn) valid = rotations[i][turn] < layouts;
+    u32 binding = ReadLE16(bindings + 2 * i);
+    valid = binding >= first && binding < first + count && ReadLE16(rotations + 8 * i) == i;
+    for (int turn = 0; valid && turn < 4; ++turn) valid = ReadLE16(rotations + 2 * (4 * i + turn)) < layouts;
   }
   for (int kind = 0; valid && kind < TK_COUNT; ++kind)
-    valid = kCityMapKindSprites[kind] < layouts;
+    valid = kind_sprites[kind] < layouts;
   if (!valid) return false;
   assets->map_sprite_sources = bindings;
   assets->map_sprite_rotations = rotations;
@@ -583,8 +557,10 @@ static void InitializeMapSpriteMetrics(CityResourceState *assets) {
   for (int id = 0; id < CITY_MAP_SPRITE_COUNT; ++id) {
     int zoom = id / CITY_MAP_SPRITES_PER_ZOOM;
     int sprite = id % CITY_MAP_SPRITES_PER_ZOOM;
-    int index = sprite < assets->map_tile_sprite_count ? TileSpriteResourceIndex(assets, sprite, 0) : sprite;
-    u16 reference = ResolveSpriteVariant(assets->sprite_variants, index, zoom, assets->sprite_index_lookup[index]);
+    int index = sprite < assets->map_tile_sprite_count ?
+        ReadLE16(assets->map_sprite_sources + 2 * sprite) : sprite;
+    u16 fallback = ReadLE16(assets->sprite_index_lookup + 2 * index);
+    u16 reference = ResolveSpriteVariant(assets->sprite_variants, index, zoom, fallback);
     int header = reference & CITY_SPRITE_HEADER_MASK;
     const CityLandscapeSprite *art = header ? &assets->landscape[header - 1] : NULL;
     int divisor = art ? art->scale << (2 - zoom) : 1;
@@ -594,12 +570,12 @@ static void InitializeMapSpriteMetrics(CityResourceState *assets) {
   }
 }
 
-bool LoadCityLandscapeAssets(CityResourceState *assets) {
-  if (!LoadCityMapGraphics(assets)) {
+bool LoadCityLandscapeAssets(CityResourceState *assets, const u16 kind_sprites[]) {
+  if (!LoadCityMapGraphics(assets, kind_sprites)) {
     fprintf(stderr, "Invalid tile graphics bindings\n");
     return false;
   }
-  if (!LoadCityLandscapeSpriteSet(assets)) return false;
+  if (!LoadCityLandscapeSpriteSet(assets, kind_sprites)) return false;
   InitializeMapSpriteMetrics(assets);
   static const u8 kColors[CITY_UNDERWORLD_GROUND_STYLES][3] = {
     {113, 115, 106}, {120, 122, 120}, {65, 87, 153}, {116, 103, 84}

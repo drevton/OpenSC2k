@@ -37,7 +37,9 @@ bool OpenCityFileDialog(City *city, const CityFilePickerOptions *options);
 void CompleteCityFileDialogs(City *city);
 // An unanswered callback picker waits only while its window exists. Retained diagnostic pickers are excluded.
 bool CityFileDialogWaiting(const CityInterfaceState *ui);
-bool InitializeCityFileDialogPresentation(City *city, CityCanvasDesktop *desktop, const char *loaded_path);
+// Borrow the desktop, copy the initial destination, then initialize Game's host directory. Requires no save scope.
+// A directory failure retains the desktop and destination already installed; shutdown releases them.
+bool InitializeCityFileDialogPresentation(Game *game, CityCanvasDesktop *desktop, const char *loaded_path);
 
 void ShutdownCityFileDialogPresentation(City *city);
 // Validate a live picker/prompt token and copy an accepted path before dismissing its windows.
@@ -52,9 +54,9 @@ enum {
 
 // Retained replacement questions borrow text for the call and preserve their original reply values.
 i32 PresentCityReplacementQuestion(City *city, const char *text, u32 flags);
-// Retained Save As requires a live file scope. Its selected path is borrowed until that scope changes or ends.
-i32 ChooseCitySaveFile(City *city, const char *name, const char *filter, const char *directory);
-const char *ReadCitySaveSelectedPath(City *city);
+// Requires a live file scope. Its selected path is borrowed until that scope changes or ends;
+// obtain it again after callbacks that may change the selection.
+const char *ReadCitySaveSelectedPath(const City *city);
 
 // File notices copy borrowed text into window-owned storage. Load warnings preserve the imported City state.
 void PresentCityFileNotice(City *city, const char *text, bool error);

@@ -125,6 +125,10 @@ bool LoadCityInterfaceFont(CityAssets *assets, const char *graphics_root) {
   }
   valid = valid && ReadAssetByte(&file) == EOF && !file.failed;
   if (!CloseAssetFile(&file)) valid = false;
+  // Failed base decoding retains earlier replacements and untouched glyphs. Bounds must describe that same set.
+  font->max_advance = 0;
+  for (int code = 0; code < CITY_INTERFACE_FONT_GLYPHS; ++code)
+    font->max_advance = IntMax(font->max_advance, font->glyphs[0][code].advance);
   font->ready = valid && LoadCityCoverageFont(assets, graphics_root) &&
       LoadCityPublicationFont(assets, graphics_root);
   return font->ready;
@@ -134,6 +138,7 @@ bool LoadCityInterfaceFont(CityAssets *assets, const char *graphics_root) {
 void InitializeCityOverlayFont(CityOverlayFont *font) {
   memset(font, 0, sizeof(*font));
   for (int size = 0; size < CITY_OVERLAY_FONT_COUNT; ++size) {
+    font->max_advance[size] = 6 + size;
     for (int index = 0; index < CITY_OVERLAY_GLYPH_COUNT; ++index) {
       CityOverlayGlyph *glyph = &font->glyphs[size * CITY_OVERLAY_GLYPH_COUNT + index];
       glyph->advance = glyph->paint_advance = 6 + size;
@@ -170,9 +175,12 @@ bool LoadCityOverlayFont(CityAssets *assets, const char *graphics_root) {
   if (!valid) { free(bytes); return false; }
   CityOverlayGlyph *glyphs = font->glyphs;
   memset(font->glyphs, 0, sizeof(font->glyphs));
+  memset(font->max_advance, 0, sizeof(font->max_advance));
   for (size_t index = 0; index < glyph_count; ++index) {
     const u8 *record = bytes + index * SC2K_OVERLAY_FONT_RECORD_SIZE;
     glyphs[index].advance = record[0];
+    int zoom = index / CITY_OVERLAY_GLYPH_COUNT;
+    font->max_advance[zoom] = IntMax(font->max_advance[zoom], glyphs[index].advance);
     glyphs[index].paint_advance = record[1];
     glyphs[index].origin_offset = (i8)(record[2] < 128 ? record[2] : (i32)record[2] - 256);
     for (int row = 0; row < CITY_OVERLAY_GLYPH_HEIGHT; ++row)

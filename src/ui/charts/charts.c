@@ -2,6 +2,7 @@
 #include "base/text.h"
 #include "ui/charts/charts.h"
 
+#include <limits.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -76,6 +77,46 @@ static const u32 kHistoryColors[CITY_HISTORY_SERIES_COUNT] = {
   0xFFFFD080, 0xFF40D8E8, 0xFF60D898, 0xFFFF90C0,
   0xFFFF60FF, 0xFF6098F0, 0xFFD0B080, 0xFFB8E860
 };
+
+typedef struct { int x, y; } CityChartPoint;
+typedef struct {
+  CityChartPoint point[20];
+  u32 latest;
+  i32 count;
+} CityHistoryPlot;
+
+// Fill caller-owned plot coordinates and scale from a selected history series and period. Rejects invalid dimensions,
+// series, periods and NULL output; a successful plot borrows no City storage.
+static bool BuildCityHistoryPlot(const City *city, int series, int period, int width, int height,
+    CityHistoryPlot *plot) {
+  if (plot == NULL || series < 0 || series >= CITY_HISTORY_SERIES_COUNT || period < 0 ||
+      period > CITY_HISTORY_PERIOD_LAST || width < 4 || height < 4 || width > 32767 || height > 32767)
+    return false;
+  int maximum = (int)city->history_maxima.value[series];
+  if (maximum == 0)
+    return false;
+  const CityHistoryRow *row = &city->history[series];
+  // Plot each band from its oldest sample to its newest.
+  int last = period == CITY_HISTORY_PERIOD_YEAR ? CITY_HISTORY_MONTHLY_FIRST + CITY_HISTORY_MONTHLY_COUNT - 1 :
+      period == CITY_HISTORY_PERIOD_TEN_YEARS ? CITY_HISTORY_HALF_YEAR_FIRST + CITY_HISTORY_HALF_YEAR_COUNT - 1 :
+      CITY_HISTORY_FIVE_YEAR_FIRST + CITY_HISTORY_FIVE_YEAR_COUNT - 1;
+  plot->count = period == CITY_HISTORY_PERIOD_YEAR ? CITY_HISTORY_MONTHLY_COUNT :
+      period == CITY_HISTORY_PERIOD_TEN_YEARS ? CITY_HISTORY_HALF_YEAR_COUNT : CITY_HISTORY_FIVE_YEAR_COUNT;
+  // The final point uses five sixths of the available width.
+  int x_divisor = period == CITY_HISTORY_PERIOD_YEAR ? 6 * (CITY_HISTORY_MONTHLY_COUNT - 1) :
+      period == CITY_HISTORY_PERIOD_TEN_YEARS ? 6 * (CITY_HISTORY_HALF_YEAR_COUNT - 1) :
+      6 * (CITY_HISTORY_FIVE_YEAR_COUNT - 1);
+  for (int index = 0; index < plot->count; ++index) {
+    u32 sample = row->sample[last - index];
+    int product = (int)((u32)(height - 3) * sample);
+    if (product == INT_MIN && maximum == -1)
+      return false; // Reject division overflow in a malformed graph scale.
+    int offset = product / maximum;
+    plot->point[index] = (CityChartPoint){(width - 1) * 5 * index / x_divisor, height - 2 - offset};
+  }
+  plot->latest = row->sample[last - plot->count + 1];
+  return true;
+}
 
 static CityRect HistoryControlBounds(const Window *window, int control) {
   CityRect b = window->bounds;
@@ -160,7 +201,7 @@ static void DrawHistoryLegend(Canvas *canvas, const Window *window) {
     const CityCanvasChartControl *item = Sc2kCanvasChartControl(charts, CITY_PANEL_HISTORY,
         CITY_CONTROL_HISTORY_SERIES_FIRST + series);
     char value[32];
-    FormatGroupedInteger(value, sizeof(value), ReadHistorySample(window->city, series, 0));
+    FormatGroupedInteger(value, sizeof(value), window->city->history[series].sample[0]);
     int value_width = CityInterfaceTextWidth(canvas->interface_font, value);
     u32 ink = selected ? 0xFFFCFCFC : canvas_text;
     CityRect clip = canvas->clip;
@@ -411,12 +452,23 @@ static void DrawNeighborLabel(Canvas *canvas, CityRect bounds, const char *text)
   DrawCityInterfaceTextCentered(canvas->interface_font, canvas, bounds, text, 0xFFFCFCFC, false, 10);
 }
 
+// Native artwork has eight population stages, with empty local and neighboring cities sharing stage zero.
+static int NeighborArtworkStage(u32 population) {
+  if (!population) return CITY_NEIGHBOR_ART_EMPTY;
+  if (population < 2000) return CITY_NEIGHBOR_ART_COTTAGES;
+  if (population < 10000) return CITY_NEIGHBOR_ART_HAMLET;
+  if (population < 50000) return CITY_NEIGHBOR_ART_SMALL_CITY;
+  if (population < 100000) return CITY_NEIGHBOR_ART_LARGE_CITY;
+  if (population < 500000) return CITY_NEIGHBOR_ART_METROPOLIS;
+  return population < 1000000 ? CITY_NEIGHBOR_ART_HUGE_CITY : CITY_NEIGHBOR_ART_MEGACITY;
+}
+
 static void DrawNeighbors(Canvas *canvas, const Window *window) {
   // Draw the existing diamonds as-is. Neighbor origins differ by half an image
   // width and height; artwork receives only ordinary axis-aligned UI scaling.
   static const u8 kGrid[CITY_CANVAS_NEIGHBOR_ICON_COUNT][2] = {{1, 1}, {0, 0}, {2, 0}, {2, 2}, {0, 2}};
   static const u8 kPaintOrder[CITY_CANVAS_NEIGHBOR_ICON_COUNT] = {1, 2, 0, 4, 3};
-  // Same screen order as ReadCityNeighborPopulation, in the stored map's basis.
+  // Apply the screen-to-stored-side mapping once for both neighbor names and population.
   static const u8 kNeighborSides[4] = {2, 3, 0, 1};
   const CityResourceState *assets = window->city->game->resources;
   CityRect b = window->bounds;
@@ -429,24 +481,17 @@ static void DrawNeighbors(Canvas *canvas, const Window *window) {
   CanvasFill(canvas, b.left + 2, b.top + 14, b.right - 2, b.bottom - 2, 0xFF222A30);
   for (int i = 0; i < CITY_CANVAS_NEIGHBOR_ICON_COUNT; ++i) {
     bool local = i == CITY_CANVAS_NEIGHBOR_ICON_CENTER;
+    int side = local ? 0 : (kNeighborSides[i - 1] + window->city->geography.rotation) & 3;
     populations[i] = local ? ReadCityNeighborCentralPopulation(window->city) :
-        ReadCityNeighborPopulation(window->city, i - 1, window->city->geography.rotation);
+        ReadCityNeighborPopulation(window->city, side);
     int x = left + kGrid[i][0] * tile_width / 2, y = top + kGrid[i][1] * tile_height / 2;
     regions[i] = (CityRect){x, y, x + tile_width, y + tile_height};
-    names[i] = CityNameText(&window->city->name);
-    if (!local) {
-      int side = (kNeighborSides[i - 1] + window->city->geography.rotation) & 3;
-      names[i] = (const char *)window->city->geography.neighbor_names.name[side];
-    }
+    names[i] = local ? CityNameText(&window->city->name) : window->city->geography.neighbor_names.name[side];
   }
   for (int index = 0; index < CITY_CANVAS_NEIGHBOR_ICON_COUNT; ++index) {
     int i = kPaintOrder[index];
     CityRect region = regions[i];
-    int stage = CityNeighborPopulationIconRow(populations[i], i != CITY_CANVAS_NEIGHBOR_ICON_CENTER);
-    // Extend the native artwork beyond the stock 100,000-person ceiling.
-    if (populations[i] >= 1000000) stage = CITY_NEIGHBOR_ART_MEGACITY;
-    else if (populations[i] >= 500000) stage = CITY_NEIGHBOR_ART_HUGE_CITY;
-    else if (!populations[i]) stage = CITY_NEIGHBOR_ART_EMPTY;
+    int stage = NeighborArtworkStage(populations[i]);
     if (!DrawCanvasSprite(canvas, window->picture_drawing, assets->neighbors[stage], region))
       window->city->game->execution_failed = true;
   }
@@ -464,7 +509,7 @@ static void DrawNeighbors(Canvas *canvas, const Window *window) {
     canvas->clip = clip;
   }
   char value[32], summary[96];
-  u64 national = (u64)ReadHistorySample(window->city, CITY_HISTORY_NATIONAL_POPULATION, 0) * 1000;
+  u64 national = (u64)window->city->history[CITY_HISTORY_NATIONAL_POPULATION].sample[0] * 1000;
   FormatGroupedInteger(value, sizeof(value), national);
   snprintf(summary, sizeof(summary), "National population: %s", value);
   DrawCityInterfaceTextCentered(canvas->interface_font, canvas,
@@ -535,7 +580,7 @@ bool Sc2kCanvasChartActionAt(const Window *window, i32 x, i32 y,
 
 // Chart Host
 
-static bool InitializeChartLayout(CityChartState *charts, int slot) {
+static void InitializeChartLayout(CityChartState *charts, int slot) {
   static const char *const kTitles[] = {"City Graphs", "Population", "Neighbors", "Industry"};
   static const char *const kSeries[] = {"City size", "Residents", "Commerce", "Industry", "Traffic", "Pollution",
       "Land value", "Crime", "Electricity", "Water service", "Health", "Education", "Unemployment",
@@ -555,7 +600,6 @@ static bool InitializeChartLayout(CityChartState *charts, int slot) {
       CopyText(dialog->control[series].text, sizeof(dialog->control[series].text), kSeries[series]);
     }
   }
-  return true;
 }
 
 bool PrepareCityChartPaintState(City *city, int code) {
@@ -705,12 +749,12 @@ bool SelectCityChartControl(City *city, int code, int control, int value) {
   UpdateChartWindow(city, ChartSlot(code));
   return true;
 }
-bool BindCityChartPanels(City *city, CityCanvasDesktop *desktop) {
-  CityChartState *charts = &city->game->ui->charts;
+bool BindCityChartPanels(Game *game, CityCanvasDesktop *desktop) {
+  CityChartState *charts = &game->ui->charts;
   if (charts->ready) return charts->desktop == desktop;
   charts->desktop = desktop;
   for (int slot = 0; slot < CITY_CANVAS_CHART_COUNT; ++slot)
-    if (!InitializeChartLayout(charts, slot)) return false;
+    InitializeChartLayout(charts, slot);
   for (int i = 0; i < CITY_INDUSTRY_COUNT; ++i)
     charts->resources.industry[i] = kIndustryNames[i];
   charts->resources.workforce = "Workforce %s %d";
@@ -720,7 +764,7 @@ bool BindCityChartPanels(City *city, CityCanvasDesktop *desktop) {
     charts->demographic_captions[i] = kDemographicCaptions[i];
   charts->history_series = (1 << CITY_HISTORY_CITY_SIZE) | (1 << CITY_HISTORY_RESIDENTS) |
       (1 << CITY_HISTORY_CRIME) | (1 << CITY_HISTORY_EDUCATION);
-  CityResourceState *assets = city->game->resources;
+  const CityResourceState *assets = game->resources;
   for (int stage = 0; stage < CITY_NEIGHBOR_ART_COUNT; ++stage)
     if (!assets->neighbors[stage]) return false;
   charts->ready = true;

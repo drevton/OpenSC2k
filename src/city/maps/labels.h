@@ -2,46 +2,11 @@
 #define SC2K_CITY_MAPS_LABELS_H
 
 #include "city/types.h"
-#include <stddef.h>
 
-// Native UTF-8 slots and stock XLAB records have independent sizes.
-enum {
-  CITY_OVERLAY_NAME_COUNT = 256,
-  CITY_OVERLAY_NAME_BYTES = 32,
-  CITY_OVERLAY_LEGACY_NAME_BYTES = 25,
-  CITY_SIGN_COLOR_COUNT = 32,
-  CITY_OVERLAY_NAME_MAX_LENGTH = CITY_OVERLAY_NAME_BYTES - 1,
-  CITY_OVERLAY_LEGACY_NAME_MAX_LENGTH = CITY_OVERLAY_LEGACY_NAME_BYTES - 2,
-};
-
-typedef struct CityOverlayName {
-  u8 character[CITY_OVERLAY_NAME_BYTES];
-} CityOverlayName;
-
-// Sparse associations use indices as stable command tokens; hash links are rebuilt on load.
-typedef struct {
-  TileIndex tile;
-  u32 next;
-  CityOverlayName name;
-} CitySignRecord;
-
-typedef struct {
-  CitySignRecord *record;
-  u32 *buckets;
-  int capacity, used, free_slot;
-  u32 revision;
-} CitySigns;
-
-// Native UTF-8 label/team/mayor slots. Stock XLAB records are converted by the file codec.
-
-typedef struct {
-  CityOverlayName entry[CITY_OVERLAY_NAME_COUNT];
-} CityOverlayNames;
-_Static_assert(sizeof(CityOverlayName) == 32 && offsetof(CityOverlayName, character) == 0,
-    "native UTF-8 name record");
-_Static_assert(sizeof(CityOverlayNames) == 8192, "native XLAB name table");
-
+// Name records live in map_types.h; these operations borrow their City-owned storage.
+typedef struct CityOverlayName CityOverlayName;
 typedef struct CityAnnualFacilityRecord CityAnnualFacilityRecord;
+typedef struct CityNameCommandInput CityNameCommandInput;
 
 // Sparse signs and facility associations are City-owned. Tiles/slots must be valid where no admission result is given.
 // Borrowed record/name pointers must not survive reservation, reset, release or callbacks that may change storage.
@@ -52,29 +17,31 @@ void WriteOverlay(City *city, TileIndex tile, int value);
 int ReadCityBaseOverlay(const City *city, TileIndex tile);
 u8 ReadCityStockBaseOverlay(const City *city, TileIndex tile);
 int ReadCitySignOverlay(const City *city, TileIndex tile);
+// Resolve a valid tile's shared facility category or hashed building anchor. Shared categories bypass anchor lookup;
+// broken building links prevent a hashed association. Zero means no association.
 int ReadCityFacilityOverlay(const City *city, TileIndex tile);
 CityOverlayName *CityOverlayNameAt(City *city, int overlay);
 const CityOverlayName *ReadCityOverlayName(const City *city, int overlay);
 CityAnnualFacilityRecord *CityFacilityRecordAt(City *city, int slot);
 const CityAnnualFacilityRecord *ReadCityFacilityRecord(const City *city, int slot);
+// Exclusive scan limit: shared policy exposes the fixed records; individual policy also exposes extra used slots.
+// Holes remain in that range. Re-read after callbacks or policy changes rather than retaining a scan-wide snapshot.
 int CityFacilityRecordLimit(const City *city);
 bool CityHasExtendedAssociations(const City *city);
-// Ensure room for the requested slot count, including reserved slots. Existing capacity needs no allocation.
+// Ensure room for the unsigned slot count, including reserved slots. Existing capacity succeeds without allocation
+// or further validation. Growth rejects counts above map area plus the sign sentinel or reserved facility prefix.
 // Failure leaves the live arrays and counters unchanged. Successful growth preserves records/names, invalidates
 // sparse borrows and rebuilds that association's hash chains with a power-of-two capacity.
-bool ReserveCityFacilities(City *city, int requested);
-bool ReserveCitySigns(City *city, int requested);
+bool ReserveCityFacilities(City *city, u32 requested);
+bool ReserveCitySigns(City *city, u32 requested);
 // Rebuild both hashes from live records without allocation; advance the sign revision even for empty tables.
+// Rebuilt chains traverse slots in ascending order; reserved shared facilities stay outside the hash.
 void RebuildCityAssociationHashes(City *city);
 // Link a dynamic record with an allocated detail and valid tile. Reserved slots are ignored.
 // The caller must ensure the record is not already linked.
 void LinkCityFacility(City *city, int slot);
 // Release sparse sign/facility allocations and clear fixed facility records. Leaves tile overlays and names alone.
 void ReleaseCityAssociations(City *city);
-// Decode stock byte overlays after geometry/events are loaded. Failure can retain the first successful reservation;
-// success consumes the bytes into native associations and rebuilds both hashes.
-bool ImportStockCityAssociations(City *city);
-
 // New-city reset: release sparse associations, clear tile overlays, empty fixed names and restore the default mayor.
 // Requires bound map storage. Preserves fixed facility records; ResetCityFacilityState installs their defaults next.
 void ResetCityMapAssociations(City *city);
@@ -92,15 +59,16 @@ const char *CitySignTextName(const char *text);
 // Sign commands return a zero TEST price on admission and a negative error on rejection.
 i64 CmdRenameCitySign(City *city, u32 flags, TileIndex tile, int slot, const u8 *text, int length);
 i64 CmdMoveCitySign(City *city, u32 flags, TileIndex tile, TileIndex destination, int slot);
-void EditCityOverlayNameAtTile(City *city, TileIndex tile);
-void EditCityOverlayLabelAtCell(City *city, TileIndex tile);
-void ApplyCityStadiumTeamChoice(City *city, TileIndex tile, int team, const char *name);
-void AcceptCityStadiumTeamDialog(City *city, TileIndex tile, int team, const char *name);
 
-// Staged map/facility/team edits borrow City's command name only for this call. TEST returns zero on admission;
+// Prepare a valid tile's existing or available editable sign slot. Returns its overlay ID or a negative notice.
+// May reserve sign storage; does not attach the slot, collect text, report errors or invalidate the tile.
+int PrepareCityMapLabel(City *city, TileIndex tile);
+// Commit a captured slot without repeating admission or reservation. Cancellation removes the live sign;
+// every other answer uses the supplied bounded text. The caller validates its length and owns damage.
+void FinishCityMapLabelChoice(City *city, TileIndex tile, int slot, const CityNameCommandInput *state, int answer);
+
+// Staged map-label edits borrow City's command name only for this call. TEST returns zero on admission;
 // execution returns the edit's signed result and preserves diagnostic callbacks and their original return order.
 i64 CmdEditMapLabel(City *city, u32 flags, TileIndex tile, int answer);
-i64 CmdEditFacilityLabel(City *city, u32 flags, TileIndex tile, int answer);
-i64 CmdAssignStadiumTeam(City *city, u32 flags, TileIndex tile, int team);
 
 #endif

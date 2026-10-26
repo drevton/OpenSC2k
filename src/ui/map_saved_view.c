@@ -32,28 +32,13 @@ static CityPoint PickCitySavedViewDiagonalPoint(const City *city, int diagonal_x
   return chosen;
 }
 
-static int CityMapDiagonalToLegacyTile(const City *city, int diagonal_x, int diagonal_y, int zoom) {
+int CityMapDiagonalToSavedPosition(const City *city, int diagonal_x, int diagonal_y, int zoom) {
   CityPoint point = PickCitySavedViewDiagonalPoint(city, diagonal_x, diagonal_y, zoom);
   return point.y + 256 * point.x;
 }
 
-// Inverse projection for small map tiles.
-int CityMapDiagonalToTileSmall(const City *city, int diagonal_x, int diagonal_y) {
-  return CityMapDiagonalToLegacyTile(city, diagonal_x, diagonal_y, 0);
-}
-
-// Inverse projection for medium map tiles.
-int CityMapDiagonalToTileMedium(const City *city, int diagonal_x, int diagonal_y) {
-  return CityMapDiagonalToLegacyTile(city, diagonal_x, diagonal_y, 1);
-}
-
-// Inverse projection for large map tiles.
-int CityMapDiagonalToTileLarge(const City *city, int diagonal_x, int diagonal_y) {
-  return CityMapDiagonalToLegacyTile(city, diagonal_x, diagonal_y, 2);
-}
-
 // Stock saved-view fields pack world x in the high byte and world y in the low byte.
-int CityMapScreenToTile(const City *city, const CityMapViewConfig *view, int screen_x, int screen_y) {
+int CityMapScreenToSavedPosition(const City *city, const CityMapViewConfig *view, int screen_x, int screen_y) {
   TileIndex tile = PickCityMapTile(city, view, screen_x, screen_y);
   return IsMapTileValid(city, tile) ? (MapTileX(city, tile) << 8) | MapTileY(city, tile) : -1;
 }
@@ -68,16 +53,16 @@ CitySavedViewFields ReadCitySavedView(const City *city) {
     if (drawing->options.save_view_position) {
       int x = (view->view_rect.left + view->view_rect.right) / 2;
       int y = (view->view_rect.top + view->view_rect.bottom) / 2;
-      packed_position = CityMapScreenToTile(city, view, x, y);
+      packed_position = CityMapScreenToSavedPosition(city, view, x, y);
     } else {
-      packed_position = CityMapScreenToTile(city, view, point, point);
+      packed_position = CityMapScreenToSavedPosition(city, view, point, point);
     }
     mode = (i16)drawing->default_map_view->zoom;
   } else if (drawing->options.save_view_position) {
     packed_position = 128;
     mode = CITY_MAP_ZOOM_SMALL;
   } else {
-    packed_position = CityMapDiagonalToTileSmall(city, point + 6, point + 8);
+    packed_position = CityMapDiagonalToSavedPosition(city, point + 6, point + 8, CITY_MAP_ZOOM_SMALL);
     mode = CITY_MAP_ZOOM_MEDIUM;
   }
   return (CitySavedViewFields){packed_position, mode};

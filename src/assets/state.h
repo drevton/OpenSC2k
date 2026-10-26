@@ -1,11 +1,10 @@
 #ifndef SC2K_RESOURCE_STATE_H
 #define SC2K_RESOURCE_STATE_H
 
-#include "city/economy/facilities.h"
+#include "city/economy/types.h"
 #include "assets/resource_types.h"
 #include "city/engine/city_types.h"
 #include "city/maps/tile_storage.h"
-#include "city/tools/types.h"
 #include <stddef.h>
 
 #include "assets/ids.h"
@@ -31,9 +30,6 @@ typedef struct {
   char full[CITY_MONTH_COUNT][CITY_RESOURCE_NAME_CAPACITY];
   char abbreviated[CITY_MONTH_COUNT][CITY_RESOURCE_NAME_CAPACITY];
 } CityCalendarNames;
-typedef struct {
-  char name[CITY_TOOL_GROUP_COUNT][CITY_TOOL_VARIANT_CAPACITY][CITY_RESOURCE_NAME_CAPACITY];
-} CityToolNames;
 
 typedef struct {
   const char *headline, *body;
@@ -42,7 +38,7 @@ typedef struct {
 } CityNewspaperArticle;
 
 typedef struct CityNewspaperResources {
-  const CityNewspaperArticle *articles; // Borrowed native writing; NULL when comparison installs stock templates.
+  const CityNewspaperArticle *articles;
   u8 *text;
   u32 *offsets;
   size_t text_capacity, offsets_capacity;
@@ -68,16 +64,16 @@ typedef struct CityResourceState {
   CityNewsRankingResources rankings;
   CityNewspaperResources newspaper;
   CityCalendarNames calendar_names;
-  CityToolNames tool_names;
   const char *facility_information[CITY_FACILITY_INFO_COUNT][CITY_FACILITY_INFO_LINE_COUNT];
   struct RunSprite *neighbors[CITY_NEIGHBOR_ART_COUNT];
   MapSpriteMetrics map_sprite_metrics[CITY_MAP_SPRITE_COUNT];
   CityLandscapeSprite *landscape;
   u16 landscape_count;
-  // Borrowed from the decoded graphics pack for the Assets lifetime.
-  const u16 *map_sprite_sources;
-  const u16 (*map_sprite_rotations)[4];
-  const u16 *sprite_index_lookup;
+  // Borrowed little-endian table bytes, retained for the Assets lifetime.
+  // Pack members need not align these tables.
+  const u8 *map_sprite_sources;
+  const u8 *map_sprite_rotations;
+  const u8 *sprite_index_lookup;
   SpriteVariants sprite_variants;
   u16 map_tile_sprite_count, map_group_sprite_first;
   u32 map_group_sprite_count;

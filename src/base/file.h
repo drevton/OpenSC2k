@@ -42,7 +42,8 @@ typedef struct {
   bool directory, regular;
 } HostFileInfo;
 bool ReadHostFileInfo(const char *path, HostFileInfo *info);
-// Entry names and metadata are borrowed only during the callback. False stops the listing.
+// Entry names and metadata are borrowed only during the callback. Missing metadata skips that entry.
+// Callback false stops the listing. Opening, iteration or close failure also returns false.
 bool VisitDirectory(const char *path,
     bool (*visit)(const char *name, const HostFileInfo *info, void *context), void *context);
 bool ReadDirectoryFreeBytes(const char *path, u64 *bytes);
@@ -52,9 +53,10 @@ int RedirectErrorLog(const char *path);
 void RestoreErrorLog(int descriptor);
 // On success leave the stream at its start. Failure returns -1 and may leave its position changed.
 i64 FileByteLength(FILE *file);
-// Create a sibling temporary file and call write_contents once if it opens. The callback borrows the stream;
-// it must return normally without closing it. Replace path only after writing, flushing, syncing and closing succeed.
-// Failure attempts to remove the temporary file. The parent directory is not synced.
+// Exclusively create a sibling temporary file in binary mode and call write_contents once if its stream opens.
+// The callback borrows the stream and must return normally without closing it. Replace path only after the callback,
+// stream status, flush, sync and close succeed. Failure attempts to remove only a temporary file this call created.
+// Retain an available failure errno through cleanup, or report EIO; success clears errno. The parent is not synced.
 bool WriteFileAtomically(const char *path, bool (*write_contents)(FILE *file, void *context), void *context);
 
 // File Status

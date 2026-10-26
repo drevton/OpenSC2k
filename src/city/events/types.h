@@ -38,8 +38,8 @@ typedef enum CityMapHeading {
   CITY_HEADING_COUNT = 8, CITY_HEADING_MASK = 7,
 } CityMapHeading;
 
-// Low nibble of an airplane's next_slot; its high nibble stores runway heading.
-// Helicopters reuse the byte with their own stage values.
+// Low nibble of an airplane's state; its high nibble stores runway heading.
+// Helicopters use their own stage values.
 typedef enum CityAirplaneStage {
   CITY_AIRPLANE_TAKEOFF = 0, CITY_AIRPLANE_LANDING = 1, CITY_AIRPLANE_CRUISE = 2,
   CITY_AIRPLANE_APPROACH = 3, CITY_AIRPLANE_ALIGN_RUNWAY = 4, CITY_AIRPLANE_CRASH = 7,
@@ -68,7 +68,7 @@ typedef enum CityMonsterAction {
   CITY_MONSTER_REGRADE_TERRAIN = 2, CITY_MONSTER_PLACE_WIND_POWER = 3,
 } CityMonsterAction;
 
-// Maxis Man next_slot is a movement state, not a linked event-slot index.
+// Maxis Man movement states, stored in state.
 typedef enum CityMaxisManState {
   CITY_MAXIS_MAN_TRACK_TARGET = 0,
   CITY_MAXIS_MAN_RANDOM_STEP = 1,
@@ -124,6 +124,7 @@ typedef struct CityMapEvent {
   u8 type;
   // Aircraft/ships use eight-way headings; trains/sailboats use four-way directions; explosions use stages.
   u8 direction;
+  // Trains link their next coach by slot. Other event families store their stage or disaster type here.
   union {
     u16 next_slot;
     u16 state;
@@ -164,6 +165,7 @@ enum { CITY_NATIVE_EVENT_BYTES = 22 };
 _Static_assert(offsetof(CityMapEvent, type) == 0, "native event type layout");
 _Static_assert(offsetof(CityMapEvent, direction) == 1, "native event direction layout");
 _Static_assert(offsetof(CityMapEvent, state) == 2, "native event state layout");
+_Static_assert(offsetof(CityMapEvent, next_slot) == 2, "native train coach link shares the state word");
 _Static_assert(offsetof(CityMapEvent, age) == 4, "native event age layout");
 _Static_assert(offsetof(CityMapEvent, previous_overlay) == 6, "native event overlay layout");
 _Static_assert(offsetof(CityMapEvent, motion.offset_y) == 12, "native event Y fraction layout");

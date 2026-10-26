@@ -14,9 +14,7 @@ play. They represent population stages, not specific neighboring cities:
 | 6 | 500,000–999,999 | Huge city with dense midrises and office towers |
 | 7 | 1,000,000+ | Megacity with a broad urban footprint and tall skyline |
 
-The original CityNeighborPopulationIconRow stops at 100,000 and remains unchanged
-for comparison. Native draw_neighbors adds the 500,000 and 1,000,000 thresholds and
-selects stage 0 for an empty local city. Thus Starter City (130,029) uses stage 5,
+NeighborArtworkStage selects all eight stages directly, including stage 0 for an empty local city. Thus Starter City (130,029) uses stage 5,
 whereas Petaluma (1,339,170) uses stage 7. Artwork does not affect simulation or RNG.
 
 Sources were created with built-in ImageGen, using the project's own house,
@@ -84,8 +82,7 @@ count as u16, payload size as u32, 256 RGB palette entries, then native sprite r
 offsets and runs. All eight 512×256 canvases are retained. Palette index zero is
 reserved for transparency and never appears in a visible run. The loader validates
 dimensions, stage order, palettes, sprite streams and EOF. Invalid packs fail
-rather than falling back to old graphics. Original comparison adapters may still
-read the stock bitmap for their historical resource behavior.
+rather than falling back to old graphics.
 
 The current map window already uses authored assets/ui/map-data/icons.dat.
 The obsolete resource-247 decoder, startup load, caches and diagnostic setter

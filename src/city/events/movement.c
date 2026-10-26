@@ -1,5 +1,5 @@
 #include "city/engine/clock.h"
-#include "city/economy/history.h"
+#include "city/economy/types.h"
 // Shared City event pool, per-tile hash and fixed-point movement.
 // Family handlers own behavior; this module owns record membership and updates events in stable slot order.
 
@@ -9,16 +9,12 @@
 #include <assert.h>
 #include <string.h>
 
-#include "game/audio.h"
+#include "audio/types.h"
 #include "city/engine/city_types.h"
 #include "city/engine/random.h"
 #include "city/infrastructure/bridges.h"
 #include "city/presentation.h"
 #include "city/state.h"
-
-typedef enum CityEventMoveMode {
-  CITY_EVENT_MOVE_SKIP_MARKERS, CITY_EVENT_MOVE_SHIP, CITY_EVENT_MOVE_SAILBOAT
-} CityEventMoveMode;
 
 const i8 kCityMapEventSubtileYStep[8] = {
   0, 1, 1, 1, 0, -1, -1, -1
@@ -28,22 +24,6 @@ const i8 kCityMapEventSubtileXStep[8] = {
   -1, -1, 0, 1, 1, 1, 0, -1
 };
 
-static const i8 kCityShipStepY[8] = {
-  0, 3, 4, 3, 0, -3, -4, -3
-};
-
-static const i8 kCityShipStepX[8] = {
-  -4, -3, 0, 3, 4, 3, 0, -3
-};
-
-static const i8 kCitySailboatStepY[8] = {
-  0, 16, 0, -16, -16, 0, 16, 0
-};
-
-static const i8 kCitySailboatStepX[8] = {
-  -16, 0, 16, 0, 0, 1, 0, -1
-};
-
 static const u8 kCityMapEventSubtileSpeed[CITY_MAP_EVENT_KIND_COUNT] = {
   [CITY_MAP_EVENT_AIRPLANE] = 16,
   [CITY_MAP_EVENT_HELICOPTER] = 8,
@@ -51,10 +31,6 @@ static const u8 kCityMapEventSubtileSpeed[CITY_MAP_EVENT_KIND_COUNT] = {
   [CITY_MAP_EVENT_MONSTER] = 8,
   [CITY_MAP_EVENT_TORNADO] = 8,
   [CITY_MAP_EVENT_MAXIS_MAN] = 16,
-};
-
-static const u8 kCityMapEventInitialAge[24] = {
-  0, 6, 4, 6, 0, 8, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 9, 10, 11, 12, 13, 3, 1, 0
 };
 
 // Tile membership is derived from event->tile. Hash order is stable slot order, independent of allocation/movement
@@ -96,12 +72,12 @@ int CityEventAllocationLimit(const City *city) {
 bool CanSpawnCityVehicle(const City *city, int type) {
   int count, stock_limit;
   switch (type) {
-  case CITY_MAP_EVENT_AIRPLANE: count = city->disasters.type1_count; stock_limit = 2; break;
-  case CITY_MAP_EVENT_HELICOPTER: count = city->disasters.type2_count; stock_limit = 1; break;
-  case CITY_MAP_EVENT_SHIP: count = city->disasters.border_water_count; stock_limit = 1; break;
-  case CITY_MAP_EVENT_SAILBOAT: count = city->disasters.tile248_count; stock_limit = 4; break;
+  case CITY_MAP_EVENT_AIRPLANE: count = city->disasters.airplane_count; stock_limit = 2; break;
+  case CITY_MAP_EVENT_HELICOPTER: count = city->disasters.helicopter_count; stock_limit = 1; break;
+  case CITY_MAP_EVENT_SHIP: count = city->disasters.ship_count; stock_limit = 1; break;
+  case CITY_MAP_EVENT_SAILBOAT: count = city->disasters.sailboat_count; stock_limit = 4; break;
   case CITY_MAP_EVENT_TRAIN_ENGINE:
-  case CITY_MAP_EVENT_SUBWAY_ENGINE: count = city->disasters.tile237_count; stock_limit = 5; break;
+  case CITY_MAP_EVENT_SUBWAY_ENGINE: count = city->disasters.train_count; stock_limit = 5; break;
   default: return false;
   }
   if (!(city->fixes & (1ull << CITY_FIX_EXPANDED_EVENTS))) return count < stock_limit;
@@ -149,8 +125,9 @@ bool CanSpawnCityVehicle(const City *city, int type) {
 
 // Return the first unused event slot, excluding reserved slot zero. Returns an admitted unused index or the no-slot
 // result; it does not reserve or initialize the selected record.
-int FindFreeCityEventSlot(City *city) {
-  for (int slot = CITY_EVENT_SLOT_FIRST; slot < CityEventAllocationLimit(city); ++slot)
+int FindFreeCityEventSlot(const City *city) {
+  int limit = CityEventAllocationLimit(city);
+  for (int slot = CITY_EVENT_SLOT_FIRST; slot < limit; ++slot)
     if (city->events.event[slot].type == CITY_MAP_EVENT_UNUSED)
       return slot;
   return 0;
@@ -183,30 +160,40 @@ void LinkCityMapEvent(City *city, int slot) {
 }
 
 // Move a valid event slot to its new tile and maintain its hash membership. Destination validity controls whether it
-// can be linked; this changes the event position, not the underlying terrain tile.
+// can be linked; this changes the event position, not the underlying terrain tile. Link/unlink edit the pool in place.
 void MoveCityMapEvent(City *city, int slot, TileIndex tile) {
-  TileIndex previous = city->events.event[slot].tile;
-  if (city->events.event[slot].tile != tile) UnlinkCityMapEvent(city, slot);
-  city->events.event[slot].tile = tile;
+  CityMapEvent *event = &city->events.event[slot];
+  TileIndex previous = event->tile;
+  if (previous != tile) UnlinkCityMapEvent(city, slot);
+  event->tile = tile;
   LinkCityMapEvent(city, slot);
-  if (city->events.event[slot].type == CITY_MAP_EVENT_SHIP)
+  if (event->type == CITY_MAP_EVENT_SHIP)
     InvalidateCityDrawbridgesForShip(city, slot, previous, tile);
 }
 
 // Find the first event on the requested tile in stable slot order. Requires initialized event buckets; returns the
 // slot index or -1 and does not remove the event.
 int FirstCityMapEventOnTile(const City *city, TileIndex tile) {
-  for (int link = city->events.buckets[CityEventBucket(tile)]; link; link = city->events.event[link - 1].hash_next)
-    if (city->events.event[link - 1].tile == tile) return link - 1;
+  int link = city->events.buckets[CityEventBucket(tile)];
+  while (link) {
+    const CityMapEvent *event = &city->events.event[link - 1];
+    if (event->tile == tile) return link - 1;
+    link = event->hash_next;
+  }
   return -1;
 }
 
 // Find the next event sharing the valid starting slot's tile. Requires an intact hash chain; returns a slot index or
 // -1 without changing iteration or event state.
 int NextCityMapEventOnTile(const City *city, int slot) {
-  TileIndex tile = city->events.event[slot].tile;
-  for (int link = city->events.event[slot].hash_next; link; link = city->events.event[link - 1].hash_next)
-    if (city->events.event[link - 1].tile == tile) return link - 1;
+  const CityMapEvent *event = &city->events.event[slot];
+  TileIndex tile = event->tile;
+  int link = event->hash_next;
+  while (link) {
+    event = &city->events.event[link - 1];
+    if (event->tile == tile) return link - 1;
+    link = event->hash_next;
+  }
   return -1;
 }
 
@@ -218,7 +205,7 @@ void ClearCityMapEvents(City *city) {
 // Reconstruct all per-tile event buckets from native event positions. Requires allocated events/buckets; clears old
 // link flags and produces stable ascending-slot chains independently of insertion history.
 void RebuildCityEventHash(City *city) {
-  memset(city->events.buckets, 0, CITY_EVENT_HASH_BUCKETS * sizeof(u16));
+  memset(city->events.buckets, 0, CITY_EVENT_HASH_BUCKETS * sizeof(*city->events.buckets));
   // Descending slots pushed at the front produce ascending lists in linear time.
   for (int slot = city->events.capacity - 1; slot >= 0; --slot) {
     CityMapEvent *event = &city->events.event[slot];
@@ -298,38 +285,6 @@ void ReindexCityMapEvents(City *city, int width, int height) {
   }
 }
 
-// Allocate one event record and install its overlay marker. Type and destination must be admitted; City owns the
-// record and index and allocation failure leaves no new active event.
-void CreateCityMapEventAtTile(City *city, TileIndex tile_index, int type, int direction) {
-  assert(tile_index < (u32)city->map_cell_count);
-  int slot;
-  int limit = CityEventAllocationLimit(city);
-  for (slot = CITY_EVENT_SLOT_FIRST; slot < limit; ++slot) {
-    if (city->events.event[slot].type == CITY_MAP_EVENT_UNUSED)
-      break;
-    InvalidateCityMapEvent(city, slot);
-  }
-  if (slot == limit) {
-    if (city->settings.timer_mode != CITY_TIMER_EVENT)
-      return;
-    slot = limit - 1;
-    ClearCityMapEventSlot(city, slot);
-  }
-  if (ReadOverlay(city, tile_index) != 0)
-    return;
-
-  CityMapEvent *event = &city->events.event[slot];
-  memset(event, 0, sizeof(*event));
-  event->type = (u8)type;
-  event->direction = (u8)direction;
-  event->tile = tile_index;
-  SetCityMapEventTarget(city, event, 0, 0);
-  event->age = kCityMapEventInitialAge[type];
-  event->previous_overlay = ReadCityEventUnderlay(city, tile_index);
-  LinkCityMapEvent(city, slot);
-  InvalidateCityMapEvent(city, slot);
-}
-
 // Dispatch enabled event slots and reset the event-frame accumulators. Requires consistent active event records and
 // links; each handler may move or remove its slot and may consume deterministic RNG.
 void UpdateCityMapEvents(City *city) {
@@ -350,19 +305,19 @@ void UpdateCityMapEvents(City *city) {
   ++city->event_runtime.animation_phase;
   if (city->event_runtime.animation_phase > 1023)
     city->event_runtime.animation_phase = 0;
-  city->disasters.type1_count = 0;
-  city->disasters.type2_count = 0;
-  city->disasters.border_water_count = 0;
+  city->disasters.airplane_count = 0;
+  city->disasters.helicopter_count = 0;
+  city->disasters.ship_count = 0;
   city->disasters.monster_count = 0;
-  city->disasters.tile237_count = 0;
-  city->disasters.type16_count = 0;
-  city->disasters.tile248_count = 0;
+  city->disasters.train_count = 0;
+  city->disasters.maxis_man_count = 0;
+  city->disasters.sailboat_count = 0;
   city->disasters.tornado_count = 0;
 
-  if ((int)ReadHistorySample(city, CITY_HISTORY_TRAFFIC, 0) > 35 && (Sc2kCrtRand(city) & 0xFF) == 0)
+  if ((int)city->history[CITY_HISTORY_TRAFFIC].sample[0] > 35 && (Sc2kCrtRand(city) & 0xFF) == 0)
     PlayCityAmbientSound(city, INVALID_TILE, CITY_SOUND_BUS_DEPOT);
   if (city->statistics.value[TK_POLICE_STATION] != 0 &&
-      (int)ReadHistorySample(city, CITY_HISTORY_CRIME, 0) > 40 && (Sc2kCrtRand(city) & 0xFF) == 0)
+      (int)city->history[CITY_HISTORY_CRIME].sample[0] > 40 && (Sc2kCrtRand(city) & 0xFF) == 0)
     PlayCityAmbientSound(city, INVALID_TILE, CITY_SOUND_POLICE_OR_HOSPITAL);
 
   for (int slot = CITY_EVENT_SLOT_FIRST; slot < city->events.capacity; ++slot) {
@@ -397,7 +352,7 @@ void UpdateCityMapEvents(City *city) {
       break;
     case CITY_MAP_EVENT_TRAIN_ENGINE:
     case CITY_MAP_EVENT_SUBWAY_ENGINE:
-      ++city->disasters.tile237_count;
+      ++city->disasters.train_count;
       UpdateCityMapTrain(city, slot);
       break;
     case CITY_MAP_EVENT_TORNADO:
@@ -441,72 +396,44 @@ void ClearCityMapEventSlot(City *city, int slot) {
   if (ship != INVALID_TILE) InvalidateCityDrawbridgesForShip(city, slot, ship, INVALID_TILE);
 }
 
-// Move a valid event record by the selected fixed-point distance when the next position remains supported. Returns
-// whether movement can continue; updates its position/hash through the existing event movement path.
-static bool AdvanceCityEventByStep(City *city, int slot, int x_step, int y_step,
-    int fraction_size, CityEventMoveMode mode) {
+// Move a live event using the speed_type event kind's speed and an explicit eight-way direction.
+// Transfers hash membership, skipping occupied markers; an off-map step releases the event.
+void AdvanceCityMapEventPosition(City *city, int speed_type, int slot, int direction) {
+  int x_step = kCityMapEventSubtileSpeed[speed_type] * kCityMapEventSubtileXStep[direction];
+  int y_step = kCityMapEventSubtileSpeed[speed_type] * kCityMapEventSubtileYStep[direction];
   CityMapEvent *event = &city->events.event[slot];
   CityPoint position = ReadCityMapEventPosition(city, event);
   CityPoint offset = ReadCityMapEventTarget(city, event);
   int next_y = offset.y + CITY_EVENT_OFFSET_SCALE * y_step;
   int next_x = offset.x + CITY_EVENT_OFFSET_SCALE * x_step;
   int cell_y_step = 0, cell_x_step = 0;
-  if (next_y >= fraction_size) { next_y -= fraction_size; cell_y_step = 1; }
-  if (next_y < 0) { next_y += fraction_size; cell_y_step = -1; }
-  if (next_x >= fraction_size) { next_x -= fraction_size; cell_x_step = 1; }
-  if (next_x < 0) { next_x += fraction_size; cell_x_step = -1; }
+  if (next_y >= CITY_EVENT_TILE_FRACTION) { next_y -= CITY_EVENT_TILE_FRACTION; cell_y_step = 1; }
+  if (next_y < 0) { next_y += CITY_EVENT_TILE_FRACTION; cell_y_step = -1; }
+  if (next_x >= CITY_EVENT_TILE_FRACTION) { next_x -= CITY_EVENT_TILE_FRACTION; cell_x_step = 1; }
+  if (next_x < 0) { next_x += CITY_EVENT_TILE_FRACTION; cell_x_step = -1; }
   SetCityMapEventTarget(city, event, next_x, next_y);
-  if (cell_y_step == 0 && cell_x_step == 0) return true;
+  if (cell_y_step == 0 && cell_x_step == 0) return;
 
   int y = position.y + cell_y_step, x = position.x + cell_x_step;
   UnlinkCityMapEvent(city, slot);
-  // Sailboat movement deliberately excludes the final row and column.
-  if (x < 0 || y < 0 || x >= city->map_width - (mode == CITY_EVENT_MOVE_SAILBOAT) ||
-      y >= city->map_height - (mode == CITY_EVENT_MOVE_SAILBOAT)) {
-    if (mode != CITY_EVENT_MOVE_SHIP) ClearCityMapEventSlot(city, slot);
-    return false;
+  if (x < 0 || y < 0 || x >= city->map_width || y >= city->map_height) {
+    ClearCityMapEventSlot(city, slot);
+    return;
   }
   TileIndex tile = event->tile + cell_y_step * city->map_width + cell_x_step;
-  if (mode == CITY_EVENT_MOVE_SKIP_MARKERS) {
-    while (IsCityEventOrMarkerOverlay(ReadOverlay(city, tile))) {
-      event->tile = tile;
-      y += cell_y_step;
-      x += cell_x_step;
-      tile = MapTileXYOrInvalid(city, x, y);
-      if (tile == INVALID_TILE) {
-        ClearCityMapEventSlot(city, slot);
-        return false;
-      }
+  while (IsCityEventOrMarkerOverlay(ReadOverlay(city, tile))) {
+    event->tile = tile;
+    y += cell_y_step;
+    x += cell_x_step;
+    tile = MapTileXYOrInvalid(city, x, y);
+    if (tile == INVALID_TILE) {
+      ClearCityMapEventSlot(city, slot);
+      return;
     }
   }
   event->tile = tile;
-  if (mode != CITY_EVENT_MOVE_SAILBOAT) event->previous_overlay = ReadCityEventUnderlay(city, tile);
+  event->previous_overlay = ReadCityEventUnderlay(city, tile);
   LinkCityMapEvent(city, slot);
-  return true;
-}
-
-// Move a live event using the speed_type event kind's speed and an explicit eight-way direction.
-// Transfers hash membership, skipping occupied markers; an off-map step releases the event.
-void AdvanceCityMapEventPosition(City *city, int speed_type, int slot, int direction) {
-  AdvanceCityEventByStep(city, slot, kCityMapEventSubtileSpeed[speed_type] * kCityMapEventSubtileXStep[direction],
-      kCityMapEventSubtileSpeed[speed_type] * kCityMapEventSubtileYStep[direction],
-      CITY_EVENT_TILE_FRACTION, CITY_EVENT_MOVE_SKIP_MARKERS);
-}
-
-// Move a live ship using its eight-way step table and CITY_EVENT_SHIP_FRACTION period.
-// At the map edge, return false with the event unlinked but retained for the ship handler to finish.
-bool AdvanceCityShipPosition(City *city, int slot) {
-  int direction = city->events.event[slot].direction;
-  return AdvanceCityEventByStep(city, slot, kCityShipStepX[direction], kCityShipStepY[direction],
-      CITY_EVENT_SHIP_FRACTION, CITY_EVENT_MOVE_SHIP);
-}
-
-// Move a live sailboat using its cardinal step table and CITY_EVENT_TILE_FRACTION period.
-// Preserve its retained underlay; release the event if the step leaves the map excluding its last row/column.
-bool AdvanceCitySailboatPosition(City *city, int slot) {
-  int direction = city->events.event[slot].direction;
-  return AdvanceCityEventByStep(city, slot, kCitySailboatStepX[direction], kCitySailboatStepY[direction],
-      CITY_EVENT_TILE_FRACTION, CITY_EVENT_MOVE_SAILBOAT);
 }
 
 // Occasionally turn an eight-way heading left or right using the City CRT generator. Direction must be supported and

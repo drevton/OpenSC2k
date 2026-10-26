@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "base/integer.h"
 #include "base/text.h"
 #include "city/economy/economy.h"
 #include "city/economy/tables.h"
@@ -77,7 +78,6 @@ void Sc2kCanvasBudgetFromCity(const City *city, CityBudgetPanel *budget) {
     [CITY_ECONOMY_TUNNELS] = CITY_BUDGET_ROW_TRANSIT,
   };
   const CityEconomyMonths *economy = &city->economy;
-  const CityBudgetSectorDivisors *divisors = &kBudgetSectorDivisors;
   i32 accumulated_total = 0;
   i32 estimated_total = 0;
   memset(budget, 0, sizeof(*budget));
@@ -94,7 +94,7 @@ void Sc2kCanvasBudgetFromCity(const City *city, CityBudgetPanel *budget) {
     int annual_rate = rate * sector->current_amount;
     int projected = city->indicators.year_flag ? 12 * annual_rate :
         sector->accumulated + annual_rate * (11 - city->clock.month);
-    i32 divisor = divisors->value[index];
+    i32 divisor = kCityEconomySectorDivisors[index];
     i32 row = kRowBySector[index];
     budget->to_date[row] += sector->accumulated / (12 * divisor);
     budget->estimate[row] += projected / (12 * divisor);

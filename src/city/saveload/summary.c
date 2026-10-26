@@ -1,4 +1,7 @@
 #include "city/saveload/map_format.h"
+#include "city/terrain/terrain.h"
+#include "city/terrain/climate.h"
+#include "city/saveload/map_native.h"
 #include "city/saveload/types.h"
 #include "city/saveload/legacy_text.h"
 #include "city/saveload/summary.h"
@@ -12,8 +15,8 @@
 
 #include "city/saveload/city_file_internal.h"
 #include "city/saveload/sc2k.h"
-#include "base/riff.h"
-#include "city/maps/layers.h"
+#include "city/saveload/archive.h"
+#include "city/maps/water.h"
 
 // Decode the selected stock MISC economy fields into caller-owned summary metadata. Misc must contain the complete
 // required record; this does not touch the live City or change stream position.
@@ -72,11 +75,11 @@ static bool ReadLegacySummary(FILE *stream, CityFileSummary *summary) {
   return name && economy;
 }
 
-// Read summary metadata from a native RIFF/Zstandard stream. Returns false for malformed entries and releases temporary
+// Read summary metadata from a native Zstandard/RIFF stream. Returns false for malformed entries and releases temporary
 // archive data; caller retains the stream and output summary.
 static bool ReadExtendedSummary(FILE *stream, CityFileSummary *summary) {
   u32 length;
-  u8 *metadata = ReadRiffMember(stream, "META", CITY_SC2K_METADATA_LIMIT, &length);
+  u8 *metadata = ReadCityArchiveMember(stream, "META", CITY_SC2K_METADATA_LIMIT, &length);
   CitySc2kMetadata info;
   bool valid = metadata && ReadCitySc2kMetadata(&info, metadata, length);
   if (valid) {
@@ -87,7 +90,7 @@ static bool ReadExtendedSummary(FILE *stream, CityFileSummary *summary) {
     summary->height = info.height;
     summary->extended = true;
     summary->format_version = info.format_version;
-    u8 *version = ReadRiffMember(stream, "VERS", 16 + SC2K_GIT_REVISION_CAPACITY, &length);
+    u8 *version = ReadCityArchiveMember(stream, "VERS", 16 + SC2K_GIT_REVISION_CAPACITY, &length);
     summary->has_writer_version = version && ReadCitySc2kVersion(&summary->writer_version, version, length);
     free(version);
     summary->year = info.start_year + (int)(info.tick / 300);
@@ -107,7 +110,7 @@ bool ReadCityFileSummary(const char *native_path, CityFileSummary *summary) {
   if (!stream) return false;
   u8 signature[4];
   bool valid = fread(signature, 1, sizeof(signature), stream) == sizeof(signature) && !fseek(stream, 0, SEEK_SET);
-  if (valid) valid = !memcmp(signature, "RIFF", 4) ?
+  if (valid) valid = !memcmp(signature, "\x28\xb5\x2f\xfd", 4) ?
       ReadExtendedSummary(stream, summary) : ReadLegacySummary(stream, summary);
   fclose(stream);
   return valid;
@@ -132,24 +135,34 @@ typedef struct {
 enum { kTerrainFileNativeTile = -2, kTerrainFileGround, kTerrainFileAltitude, kTerrainFileShape,
     kTerrainFileKind, kTerrainFileFlags, kTerrainFileZone };
 
+// Apply a decoded byte span to prepared output planes. Source dimensions, byte order and plane selection remain
+// fixed during the visit; output axes divide the source axes. Spans may split a tile record or altitude word.
+// A malformed offset retains preceding writes. Kind/water normalization runs only after all required planes load.
 static bool ReadTerrainFileBytes(void *context, const u8 *bytes, u32 offset, u32 size) {
-  TerrainFileReader *reader = context;
-  CityTerrainMap *map = reader->map;
-  u32 cells = reader->width * reader->height;
+  const TerrainFileReader *reader = context;
+  const CityTerrainMap *map = reader->map;
+  int width = reader->width, height = reader->height, output_width = map->width;
+  int step_x = width / output_width, step_y = height / map->height;
+  int source_plane = reader->plane;
+  bool native = reader->native, native_tile = source_plane == kTerrainFileNativeTile;
+  u32 cells = width * height;
+  u16 *altitude = map->altitude;
+  u8 *terrain = map->terrain, *buildings = map->buildings, *flags = map->flags;
   for (u32 i = 0; i < size; ++i) {
     u32 at = offset + i;
-    int plane = reader->plane, component = 0;
-    bool native_tile = plane == kTerrainFileNativeTile;
+    int plane = source_plane, component = 0;
     if (native_tile) {
       component = at % sizeof(TileInfo);
       at /= sizeof(TileInfo);
-      if (component == offsetof(TileInfo, altitude) || component == offsetof(TileInfo, altitude) + 1)
-        plane = kTerrainFileAltitude;
-      else if (component == offsetof(TileInfo, terrain)) plane = kTerrainFileShape;
-      else if (component == offsetof(TileInfo, zone)) plane = kTerrainFileZone;
-      else if (component == offsetof(TileInfo, kind)) plane = kTerrainFileKind;
-      else if (component == offsetof(TileInfo, flags)) plane = kTerrainFileFlags;
-      else continue;
+      switch (component) {
+      case offsetof(TileInfo, altitude):
+      case offsetof(TileInfo, altitude) + 1: plane = kTerrainFileAltitude; break;
+      case offsetof(TileInfo, terrain): plane = kTerrainFileShape; break;
+      case offsetof(TileInfo, zone): plane = kTerrainFileZone; break;
+      case offsetof(TileInfo, kind): plane = kTerrainFileKind; break;
+      case offsetof(TileInfo, flags): plane = kTerrainFileFlags; break;
+      default: continue;
+      }
     }
     if (plane == kTerrainFileGround) {
       if (at >= 6 * cells) continue;
@@ -161,23 +174,29 @@ static bool ReadTerrainFileBytes(void *context, const u8 *bytes, u32 offset, u32
     }
     if (plane == kTerrainFileAltitude && !native_tile) { component = at & 1; at >>= 1; }
     if (at >= cells) return false;
-    int x = reader->native ? at % reader->width : at / reader->height;
-    int y = reader->native ? at / reader->width : at % reader->height;
-    int step_x = reader->width / map->width, step_y = reader->height / map->height;
+    int x = native ? at % width : at / height;
+    int y = native ? at / width : at % height;
     if (x % step_x || y % step_y) continue;
-    TileIndex tile = y / step_y * map->width + x / step_x;
+    TileIndex tile = y / step_y * output_width + x / step_x;
     int value = bytes[i];
-    if (plane == kTerrainFileAltitude) {
-      int shift = (reader->native ? component : 1 - component) * 8;
-      map->altitude[tile] = (map->altitude[tile] & ~(255 << shift)) | value << shift;
-    } else if (plane == kTerrainFileShape)
-      map->terrain[tile] = native_tile ? (map->terrain[tile] & 0xF0) | (value & 15) :
-          reader->native ? value & 15 : value;
-    else if (plane == kTerrainFileZone)
-      map->terrain[tile] = (map->terrain[tile] & 15) |
+    switch (plane) {
+    case kTerrainFileAltitude: {
+      // Preserve the other byte when a streaming span splits this word.
+      int shift = (native ? component : 1 - component) * 8;
+      altitude[tile] = (altitude[tile] & ~(255 << shift)) | value << shift;
+      break;
+    }
+    case kTerrainFileShape:
+      terrain[tile] = native_tile ? (terrain[tile] & 0xF0) | (value & 15) : native ? value & 15 : value;
+      break;
+    case kTerrainFileZone:
+      // The temporary terrain plane keeps native slope separately from ground coverage.
+      terrain[tile] = (terrain[tile] & 15) |
           (value & CITY_TILE_SLOPED ? value & CITY_TERRAIN_SHAPE_MASK : 0) << 4;
-    else if (plane == kTerrainFileKind) map->buildings[tile] = value;
-    else if (plane == kTerrainFileFlags) map->flags[tile] = value;
+      break;
+    case kTerrainFileKind: buildings[tile] = value; break;
+    case kTerrainFileFlags: flags[tile] = value; break;
+    }
   }
   return true;
 }
@@ -253,10 +272,10 @@ bool ReadCityFileTerrain(const char *path, const CityTerrainSettings *settings, 
   TerrainFileReader reader = {.map = map, .width = settings->width, .height = settings->height};
   u8 signature[4];
   bool valid = fread(signature, 1, sizeof(signature), stream) == sizeof(signature) && !fseek(stream, 0, SEEK_SET);
-  if (valid) valid = PrepareCityTerrainMap(map, width, height);
-  if (valid && !memcmp(signature, "RIFF", 4)) {
+  if (valid) valid = ResetCityTerrainMap(map, width, height);
+  if (valid && !memcmp(signature, "\x28\xb5\x2f\xfd", 4)) {
     u32 size;
-    u8 *metadata = ReadRiffMember(stream, "META", CITY_SC2K_METADATA_LIMIT, &size);
+    u8 *metadata = ReadCityArchiveMember(stream, "META", CITY_SC2K_METADATA_LIMIT, &size);
     CitySc2kMetadata info;
     valid = metadata && ReadCitySc2kMetadata(&info, metadata, size) &&
         info.width == settings->width && info.height == settings->height;
@@ -264,7 +283,7 @@ bool ReadCityFileTerrain(const char *path, const CityTerrainSettings *settings, 
     reader.native = true; reader.plane = kTerrainFileNativeTile;
     u32 expected = settings->width * settings->height * sizeof(TileInfo);
     if (valid)
-      valid = VisitRiffMember(stream, "TILE", expected, ReadTerrainFileBytes, &reader, &size) && size == expected;
+      valid = VisitCityArchiveMember(stream, "TILE", expected, ReadTerrainFileBytes, &reader, &size) && size == expected;
   } else if (valid) {
     valid = settings->width == 128 && settings->height == 128 && ReadStockTerrain(stream, &reader);
   }

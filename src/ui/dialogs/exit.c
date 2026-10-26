@@ -17,7 +17,6 @@
 
 // Application Exit
 
-// Native lifecycle UI. The original Quit/Save continuation lives in comparison.
 static void OpenCityLeaveDialog(Game *game, WindowKind kind) {
   CityCanvasDesktop *desktop = &game->ui->desktop;
   CloseCityMenu(desktop);

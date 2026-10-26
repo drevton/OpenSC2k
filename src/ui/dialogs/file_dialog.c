@@ -1,3 +1,5 @@
+#include "ui/dialogs/file_dialog.h"
+
 #include "city/saveload/state.h"
 #include "base/text.h"
 #include "base/utf8.h"
@@ -12,7 +14,6 @@
 #include "city/saveload/runtime.h"
 #include "city/saveload/services.h"
 #include "city/state.h"
-#include "game/application.h"
 #include "game/errors.h"
 #include "game/observation.h"
 #include "game/settings.h"
@@ -46,10 +47,10 @@ struct NativeSaveScope {
   u8 picker;
 };
 
-void RememberCityFileDialogSize(City *city, NativeFileDialog *dialog) {
-  Window *window = FindCityCanvasWindow(city->game->ui->file_dialog.desktop, dialog->window_id);
+void RememberCityFileDialogSize(CityInterfaceState *ui, const NativeFileDialog *dialog) {
+  CityFilePresentation *files = &ui->file_dialog;
+  const Window *window = FindCityCanvasWindow(files->desktop, dialog->window_id);
   if (!window) return;
-  CityFilePresentation *files = &city->game->ui->file_dialog;
   files->browser_width = window->bounds.right - window->bounds.left;
   files->browser_height = window->bounds.bottom - window->bounds.top;
 }
@@ -70,8 +71,9 @@ bool AnswerCityFileDialog(City *city, i32 token, i32 answer, const u8 *path, u32
         FormatText(&selected, "%s%s", selected, extension);
     }
     if (dialog->scope) {
-      SetText(&dialog->scope->destination, selected);
-      free(selected);
+      // The normalized choice becomes scope-owned before destination selection can fail.
+      free(dialog->scope->destination);
+      dialog->scope->destination = selected;
       if (!dialog->browser.open && !SelectCitySaveDestination(city->game->file, dialog->scope->attempt,
           dialog->scope->destination)) return false;
       SetText(&dialog->scope->selected, dialog->scope->destination);
@@ -82,7 +84,7 @@ bool AnswerCityFileDialog(City *city, i32 token, i32 answer, const u8 *path, u32
     }
   }
   dialog->answer = answer;
-  RememberCityFileDialogSize(city, dialog);
+  RememberCityFileDialogSize(city->game->ui, dialog);
   Sc2kCanvasDesktopDismissWindow(files->desktop, dialog->overwrite_id);
   Sc2kCanvasDesktopDismissWindow(files->desktop, dialog->window_id);
   dialog->overwrite_id = dialog->window_id = 0;
@@ -144,7 +146,7 @@ bool BeginCityFileDialog(City *city, NativeFileDialog *dialog, const CityFilePic
 void FinishCityFileDialog(City *city, NativeFileDialog *dialog) {
   CityFilePresentation *files = &city->game->ui->file_dialog;
   CityFileBrowser *browser = &dialog->browser;
-  RememberCityFileDialogSize(city, dialog);
+  RememberCityFileDialogSize(city->game->ui, dialog);
   files->browser_sort_date = browser->sort_date;
   files->browser_descending = browser->descending;
   RefreshCityChartPanels(city);
@@ -186,7 +188,8 @@ static bool OpenCitySaveDialog(City *city, CityFileChoiceCallback *callback, voi
   memcpy(name + length, ".sc2", 5);
   CityPath directory = {0};
   bool directory_ready = GetCitySaveDirectory(city->game, &directory);
-  CityFilePickerOptions options = {name, CityPathText(&directory), "Save Game", false, callback, context};
+  CityFilePickerOptions options = {.name = name, .directory = CityPathText(&directory), .title = "Save Game",
+      .callback = callback, .context = context};
   bool opened = directory_ready && OpenCityFileDialog(city, &options);
   FreeCityPathStorage(&directory);
   return opened;
@@ -203,7 +206,7 @@ i32 ChooseCityCanvasOpenFile(City *city, const char *name, const char *directory
   NativeSaveScope *scope = NativeSaveDialogBegin(city);
   if (scope == NULL) return CITY_DIALOG_CANCEL;
   scope->picker = 1;
-  CityFilePickerOptions options = {name, directory, title, true, NULL, NULL};
+  CityFilePickerOptions options = {.name = name, .directory = directory, .title = title, .open = true};
   i32 answer = ChooseRetainedCityFile(city, &options);
   if (answer == CITY_DIALOG_OK) SetText(selected, scope->selected);
   NativeSaveDialogEnd(city, scope);
@@ -234,17 +237,15 @@ bool BeginCityFileQuestion(City *city, NativeReplacementPrompt *prompt, const ch
   if (files->next_token == 0x7FFFFFFF) files->next_token = 0;
   prompt->token = ++files->next_token;
   prompt->text = DuplicateText(text);
-  prompt->message = DuplicateText(text);
   Window window = {0};
   window.kind = flags == CITY_PROMPT_YES_NO_CANCEL ? CITY_CANVAS_SAVE_QUESTION : CITY_CANVAS_FILE_QUESTION;
   window.bounds = (CityRect){150, 120, 450, 224};
   window.title = "Save city?";
-  window.message = prompt->message;
+  window.message = prompt->text;
   i32 index = OpenCityMessageBox(files->desktop, window, CITY_MESSAGE_ERROR |
       (flags == CITY_PROMPT_YES_NO_CANCEL ? CITY_MESSAGE_YES_NO_CANCEL : CITY_MESSAGE_YES_NO));
   if (index < 0) {
     free(prompt->text);
-    free(prompt->message);
     return false;
   }
   prompt->window_id = files->desktop->windows[index].window_id;
@@ -261,7 +262,6 @@ void FinishCityFileQuestion(City *city, NativeReplacementPrompt *prompt) {
   Sc2kCanvasDesktopDismissWindow(files->desktop, prompt->window_id);
   files->prompt = prompt->parent;
   free(prompt->text);
-  free(prompt->message);
 }
 
 i32 PresentCityReplacementQuestion(City *city, const char *text, u32 flags) {
@@ -338,17 +338,13 @@ void ReportCitySaveError(CityFileRuntime *file, i32 id, const char *path) {
   FillCitySaveFileError(file, exception);
   ShowCityFileException(city, (u32)id, exception, path);
 }
-i32 ChooseCitySaveFile(City *city, const char *name, const char *filter,
-    const char *directory) {
-  CityFilePickerOptions options = {name, directory, "Save city as", false, NULL, NULL};
-  return ChooseRetainedCityFile(city, &options);
-}
-const char *ReadCitySaveSelectedPath(City *city) {
-  CityFilePresentation *files = &city->game->ui->file_dialog;
+const char *ReadCitySaveSelectedPath(const City *city) {
+  const CityFilePresentation *files = &city->game->ui->file_dialog;
   return files->scope->selected;
 }
 
 void ReportCityLoadError(City *city, u32 resource, const char *message) {
+  (void)resource;
   PresentCityFileNotice(city, message, true);
 }
 void ReportCityFileCommandFailure(City *city) {
@@ -382,12 +378,12 @@ void ShowCityLoadWarnings(City *city) {
   PresentCityFileNotice(city, text, false);
 }
 
-bool InitializeCityFileDialogPresentation(City *city, CityCanvasDesktop *desktop, const char *loaded_path) {
-  CityFilePresentation *files = &city->game->ui->file_dialog;
+bool InitializeCityFileDialogPresentation(Game *game, CityCanvasDesktop *desktop, const char *loaded_path) {
+  CityFilePresentation *files = &game->ui->file_dialog;
   if (desktop == NULL || loaded_path == NULL || files->scope != NULL) return false;
   files->desktop = desktop;
   SetText(&files->destination, loaded_path);
-  if (!InitializeCityFileDirectory(city->game)) return false;
+  if (!InitializeCityFileDirectory(game)) return false;
   return true;
 }
 
@@ -517,15 +513,15 @@ void HandleSaveCityCommand(City *city) {
 void HandleSaveCityAsCommand(City *city) {
   CityPath path = {0};
   if (city->game->city_active) {
-    static const char filter[] = "City files (*.sc2; *.sc2k) | *.sc2;*.sc2k ||";
     char default_name[CITY_NAME_LIMIT + sizeof(".sc2")];
     int length = Utf8PrefixBytes(CityNameText(&city->name), CITY_NAME_LIMIT);
     memcpy(default_name, CityNameText(&city->name), (size_t)length);
     memcpy(default_name + length, ".sc2", 5);
     CityPath directory = {0};
     GetCitySaveDirectory(city->game, &directory);
-    int choice = ChooseCitySaveFile(city, default_name, filter,
-        CityPathText(&directory));
+    CityFilePickerOptions options = {.name = default_name, .directory = CityPathText(&directory),
+        .title = "Save city as"};
+    int choice = ChooseRetainedCityFile(city, &options);
     if (choice != CITY_DIALOG_CANCEL) {
       const char *text = ReadCitySaveSelectedPath(city);
       AssignCityNameFromSavePath(city, text);

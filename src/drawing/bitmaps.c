@@ -1,5 +1,4 @@
 #include "drawing/sprites/preparation.h"
-#include "drawing/sprites/surface.h"
 #include "drawing/sprites/sources.h"
 #include "drawing/bitmaps.h"
 
@@ -7,17 +6,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "assets/state.h"
-#include "city/maps/buildings.h"
-#include "city/maps/tile_storage.h"
-#include "city/maps/trees.h"
-#include "city/state.h"
-#include "drawing/maps/map_camera.h"
-#include "drawing/maps/tables.h"
 #include "drawing/raster/canvas_raster_internal.h"
-#include "drawing/raster/screen_damage.h"
 #include "drawing/state.h"
-#include "game/state.h"
 
 void ReleaseCityToolbarIcons(Drawing *drawing) {
   for (int icon = 0; icon < CITY_TOOLBAR_ICON_COUNT; ++icon)
@@ -154,47 +144,4 @@ bool DrawCityInterfaceIcon(Canvas *canvas, SpriteImage *cache, const CityInterfa
       InterfaceSpriteLevel(IntMax(scale, (height * 100 + 31) / 32)));
   return DrawCanvasSpriteImage(canvas, cache, source.image, (CityRect){0, 0, source.image->width, source.image->height},
       bounds, source.flipped ? SPRITE_FLIPPED : 0);
-}
-
-// Every species uses its climate's common crop, keeping tree sizes and ground alignment.
-bool DrawCityTreePreview(const CityAssets *assets, Canvas *canvas, SpriteImage *cache, CityRect bounds,
-    int species) {
-  int art = kCityTreeArtLayouts[species * 4][0];
-  const RunSprite *sprite = assets->landscape[CITY_LANDSCAPE_TREE_FIRST + art * 7 + CITY_TREE_GROWN].sprite;
-  if (!sprite || bounds.right <= bounds.left || bounds.bottom <= bounds.top) return true;
-  CityRect source = assets->tree_preview_bounds[species >= 20 ? 2 : species >= 12 ? 1 : 0];
-  int source_width = source.right - source.left, source_height = source.bottom - source.top;
-  if (source_width <= 0 || source_height <= 0) return true;
-  int width = bounds.right - bounds.left, height = bounds.bottom - bounds.top;
-  if ((i64)width * source_height > (i64)height * source_width) width = height * source_width / source_height;
-  else height = width * source_height / source_width;
-  bounds.left += (bounds.right - bounds.left - width) >> 1;
-  bounds.right = bounds.left + width;
-  bounds.top = bounds.bottom - height;
-  return DrawCanvasSpriteImage(canvas, cache, sprite, source, bounds, 0);
-}
-
-// Construction uses prepared runs and the ordinary sprite renderer.
-bool DrawCityBuildingPreview(const City *city, Canvas *canvas, CityRect bounds, TileKind kind, int orientation) {
-  const Drawing *drawing = city->drawing;
-  int art = CityBuildingSprite(city, kind, orientation);
-  int view = art < 0 ? CITY_CIVIC_VIEWS : (art - CityBuildingSpriteFirst(kind)) & 3;
-  int preview = kCityMapKindSprites[kind] - CITY_CIVIC_KIND_FIRST;
-  const RunSprite *sprite = drawing->sprite_cache.building_previews[preview][view];
-  if (kind == TK_WIND_POWER && art >= 0 &&
-      city->geography.start_year + city->clock.year >= CITY_WIND_MODERN_YEAR)
-    sprite = drawing->sprite_cache.modern_wind_previews[view];
-  if (!sprite) return false;
-  CityRect box = CanvasRasterImageBounds(canvas, bounds);
-  CanvasRaster raster = CanvasRasterView(canvas);
-  SpriteSurface surface = drawing->screen_surface;
-  surface.canvas = *canvas;
-  surface.canvas.width = raster.width;
-  surface.canvas.height = raster.height;
-  surface.canvas.clip = CanvasRasterRect(canvas, IntersectCityRects(canvas->clip, bounds));
-  surface.canvas.raster = (CanvasRaster){0};
-  bool flipped = art < 0 && (orientation & 1);
-  DrawRunSprite(&surface, sprite, box.left + (box.right - box.left - sprite->width) / 2,
-      box.top + (box.bottom - box.top - sprite->height) / 2, SPRITE_COPY | (flipped ? SPRITE_FLIPPED : 0), NULL);
-  return true;
 }

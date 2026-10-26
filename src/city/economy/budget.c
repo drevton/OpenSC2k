@@ -1,21 +1,22 @@
 #include "city/economy/budget.h"
 
+#include "base/integer.h"
 #include "city/economy/facilities.h"
 #include "city/economy/tables.h"
 #include "city/engine/commands.h"
+#include "city/maps/buildings.h"
+#include "city/maps/kinds.h"
+#include "city/maps/map_types.h"
 #include "city/presentation.h"
-#include "city/saveload/map_format.h"
 #include "city/state.h"
 #include "city/tools/tools.h"
 #include "game/observation.h"
 #include "game/state.h"
 
-// Funding, taxes, ordinances and borrowing. Command handlers own admission and TEST behavior;
-// the underlying effects are also used by retained comparison callers at their original commit points.
 
 // Refresh every sector's projected annual total from the live rates, amounts and calendar.
 // Replaces the forecasts and invalidates finance information without booking income or costs.
-void RefreshBudgetDialogEstimates(City *city) {
+void RefreshCityBudgetEstimates(City *city) {
   CityEconomyMonths *economy = &city->economy;
   for (int sector = 0; sector < CITY_ECONOMY_SECTOR_COUNT; ++sector) {
     EconomySector *account = &economy->sector[sector];
@@ -183,7 +184,7 @@ i64 CmdBudgetRate(City *city, u32 flags, TileIndex location, int parameter1, int
   if (flags & CITY_COMMAND_TEST) return 0;
   RestartCityBudgetHelperAfterRateEdit(city, parameter3);
   AdjustCityBudgetRate(city, parameter1, parameter2);
-  RefreshBudgetDialogEstimates(city);
+  RefreshCityBudgetEstimates(city);
   return 1;
 }
 
@@ -220,7 +221,7 @@ i64 CmdSetBudgetRate(City *city, u32 flags, TileIndex location, int kind, int ra
     break;
   default: break;
   }
-  RefreshBudgetDialogEstimates(city);
+  RefreshCityBudgetEstimates(city);
   return 1;
 }
 
@@ -279,6 +280,12 @@ i64 CmdToggleAutoBudget(City *city, u32 flags, TileIndex location,
 // Estimate city assets from tile statistics for bond limits and rates. Requires consistent tile counters; returns the
 // live unsigned valuation and leaves its cached City field unchanged.
 static u64 CalculateCityAssetValue(const City *city) {
+  static const u32 kStockArcologyValues[TK_LAUNCH_ARCOLOGY - TK_PLYMOUTH_ARCOLOGY + 1] = {
+    [TK_PLYMOUTH_ARCOLOGY - TK_PLYMOUTH_ARCOLOGY] = 100000,
+    [TK_FOREST_ARCOLOGY - TK_PLYMOUTH_ARCOLOGY] = 120000,
+    [TK_DARCO_ARCOLOGY - TK_PLYMOUTH_ARCOLOGY] = 150000,
+    [TK_LAUNCH_ARCOLOGY - TK_PLYMOUTH_ARCOLOGY] = 200000,
+  };
   typedef struct {
     u8 statistic;
     u8 divisor;
@@ -303,24 +310,26 @@ static u64 CalculateCityAssetValue(const City *city) {
       {TK_HANGAR_3X3, 1, 250}, {TK_MARINA, 9, 1000}, {TK_DESALINATION_PLANT, 9, 1000}};
   const CityStatistics *statistics = &city->statistics;
   bool repaired = city->fixes & (1ull << CITY_FIX_ASSET_VALUES);
-  u64 asset_value = repaired ? (u64)kCityToolCosts[CITY_TOOL_GROUP_RAIL * CITY_TOOL_VARIANT_CAPACITY + 1] *
-      city->infrastructure.subway_tiles : 0 - (u32)(i16)city->infrastructure.subway_tiles;
+  u64 asset_value = repaired ?
+      (u64)kCityToolCosts[CITY_TOOL_GROUP_RAIL * CITY_TOOL_VARIANT_CAPACITY + CITY_RAIL_SUBWAY] *
+          city->infrastructure.subway_tiles : 0 - (u32)(i16)city->infrastructure.subway_tiles;
 
-  for (int statistic = TKL_POWER_LINE_EAST_WEST; statistic <= TKL_SUBWAY_TO_RAIL_LAST; ++statistic) {
+  for (int statistic = TSTAT_POWER_LINE; statistic <= TSTAT_SUBWAY_TO_RAIL_LAST; ++statistic) {
     int count = statistics->value[statistic];
     u32 multiplier;
-    if (statistic < TKL_ROAD_EAST_WEST)
-      multiplier = kCityToolCosts[CITY_TOOL_GROUP_POWER * CITY_TOOL_VARIANT_CAPACITY + 0];
-    else if (statistic < TKL_RAIL_FIRST)
-      multiplier = kCityToolCosts[CITY_TOOL_GROUP_ROAD * CITY_TOOL_VARIANT_CAPACITY + 0];
-    else if (statistic < TKL_TUNNEL_ENTRANCE_FIRST)
-      multiplier = kCityToolCosts[CITY_TOOL_GROUP_RAIL * CITY_TOOL_VARIANT_CAPACITY + 0];
-    else if (statistic < TKL_SUSPENSION_BRIDGE_FIRST)
+    if (statistic < TSTAT_ROAD)
+      multiplier = kCityToolCosts[CITY_TOOL_GROUP_POWER * CITY_TOOL_VARIANT_CAPACITY + CITY_POWER_LINES];
+    else if (statistic < TSTAT_RAIL)
+      multiplier = kCityToolCosts[CITY_TOOL_GROUP_ROAD * CITY_TOOL_VARIANT_CAPACITY + CITY_ROAD_ROAD];
+    else if (statistic < TSTAT_TUNNEL_ENTRANCE)
+      multiplier = kCityToolCosts[CITY_TOOL_GROUP_RAIL * CITY_TOOL_VARIANT_CAPACITY + CITY_RAIL_RAIL];
+    else if (statistic < TSTAT_ROAD_BRIDGE)
       multiplier = 15;
-    else if (statistic < TKL_HIGHWAY_INCLINE_FIRST)
+    else if (statistic < TSTAT_HIGHWAY_INCLINE)
       multiplier = 100;
-    else if (statistic < TKL_SUBWAY_TO_RAIL_FIRST)
-      multiplier = repaired ? kCityToolCosts[CITY_TOOL_GROUP_ROAD * CITY_TOOL_VARIANT_CAPACITY + 1] : 100;
+    else if (statistic < TSTAT_SUBWAY_TO_RAIL)
+      multiplier = repaired ?
+          kCityToolCosts[CITY_TOOL_GROUP_ROAD * CITY_TOOL_VARIANT_CAPACITY + CITY_ROAD_HIGHWAY] : 100;
     else
       multiplier = 250;
     asset_value += (u64)count * multiplier;
@@ -332,20 +341,15 @@ static u64 CalculateCityAssetValue(const City *city) {
     int divisor = statistic == TK_WATER_TREATMENT_PLANT &&
         (city->fixes & (1ull << CITY_FIX_TREATMENT_VALUE)) ? 4 : rule->divisor;
     u32 multiplier = rule->multiplier;
-    if (repaired && statistic >= TK_HYDRO_POWER && statistic <= TK_COAL_POWER_PLANT) {
-      int variant = statistic == TK_HYDRO_POWER ? CITY_POWER_HYDRO :
-          statistic == TK_WIND_POWER ? CITY_POWER_WIND :
-          kPowerPlantToolVariants[statistic - TK_GAS_POWER_PLANT];
-      multiplier = kCityToolCosts[CITY_TOOL_GROUP_POWER * CITY_TOOL_VARIANT_CAPACITY + variant];
-    }
+    if (repaired && IsTileKindPowerPlant(statistic))
+      multiplier = kCityBuildings[statistic].cost;
     int count = statistics->value[statistic] / divisor;
     asset_value += (u64)count * multiplier;
   }
   for (int statistic = TK_PLYMOUTH_ARCOLOGY; statistic <= TK_LAUNCH_ARCOLOGY; ++statistic) {
     int count = statistics->value[statistic] / 16;
-    u32 cost = repaired ? kCityToolCosts[CITY_TOOL_GROUP_REWARDS * CITY_TOOL_VARIANT_CAPACITY +
-        5 + statistic - TK_PLYMOUTH_ARCOLOGY] :
-        kCityAssetTailWeights.multiplier[statistic - TK_PLYMOUTH_ARCOLOGY];
+    u32 cost = repaired ? kCityBuildings[statistic].cost :
+        kStockArcologyValues[statistic - TK_PLYMOUTH_ARCOLOGY];
     asset_value += (u64)count * cost;
   }
 

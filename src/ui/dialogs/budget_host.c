@@ -5,6 +5,7 @@
 #include "ui/text/text.h"
 
 #include "assets/catalog.h"
+#include "assets/resource_types.h"
 #include "assets/state.h"
 #include "audio/state.h"
 #include "city/economy/economy.h"
@@ -16,7 +17,6 @@
 #include "city/presentation.h"
 #include "city/state.h"
 #include "drawing/raster/canvas_primitives.h"
-#include "drawing/sprites/sprites.h"
 #include "drawing/state.h"
 #include "game/commands.h"
 #include "game/errors.h"
@@ -37,6 +37,9 @@
 #include "ui/windows/controls.h"
 #include "ui/windows/state.h"
 #include "ui/windows/windows.h"
+
+_Static_assert(CITY_BUDGET_CATEGORY_COUNT == CITY_ADVISOR_PORTRAIT_COUNT,
+    "each advisor category has a portrait");
 
 // Budget, bond and ordinance windows retain their own presentation values.
 const char *CityAdvisorName(CityBudgetCategory category) {
@@ -199,7 +202,7 @@ void ShowAnnualBudgetDialog(City *city) {
   if (!PrepareCityAnnualBudget(city)) return;
   CityCanvasBudgetRequest request = {CITY_CANVAS_BUDGET_DIALOG_REQUEST};
   RunPausedCityModalDialog(city, &request);
-  SetCityCursor(city, CITY_CURSOR_ARROW, 0);
+  SetCityCursor(city, CITY_CURSOR_ARROW, CITY_CURSOR_SELECT);
 }
 
 // Observed callers retain the original budget continuation in City; native window controls use UI state.
@@ -207,18 +210,18 @@ static const CityBudgetState *ReadCityBudgetWindowState(const City *city) {
   return city->game->observation ? &city->budget : &city->game->ui->budget_window;
 }
 
-const CityBudgetState *FindCityBudgetWindowState(const City *city, int id) {
+const CityBudgetState *FindCityBudgetWindowState(const City *city, u32 window_id) {
   const CityBudgetState *budget = ReadCityBudgetWindowState(city);
-  return id > 0 && budget->id == id ? budget : NULL;
+  return window_id && window_id <= INT32_MAX && (u32)budget->id == window_id ? budget : NULL;
 }
 
 void ApplicationBudgetBegin(City *city, u32 window, bool manual) {
   bool opened;
-  if (city->game->observation) opened = BeginCityBudget(city, window, manual);
+  if (city->game->observation) opened = BeginCityBudget(city, (i32)window, manual);
   else {
     CityBudgetState *budget = &city->game->ui->budget_window;
     opened = !budget->id;
-    if (opened) *budget = (CityBudgetState){.id = window, .manual = manual,
+    if (opened) *budget = (CityBudgetState){.id = (i32)window, .manual = manual,
         .helper_stage = city->indicators.year_flag && city->clock.month == CITY_MONTH_JANUARY ?
             0 : CITY_BUDGET_HELPER_DISABLED, .timer_running = true, .timer_revision = 1};
   }
@@ -232,9 +235,9 @@ void ApplicationBudgetBegin(City *city, u32 window, bool manual) {
 void CloseCityManualBudget(City *city) {
   const CityBudgetState *budget = ReadCityBudgetWindowState(city);
   if (!budget->id || !budget->manual) return;
-  int id = budget->id;
-  Sc2kCanvasDesktopDismissWindow(&city->game->ui->desktop, id);
-  ApplicationBudgetEnd(city, id);
+  u32 window_id = budget->id;
+  Sc2kCanvasDesktopDismissWindow(&city->game->ui->desktop, window_id);
+  ApplicationBudgetEnd(city, window_id);
   ApplicationUpdateDialogPause(city);
 }
 
@@ -244,10 +247,10 @@ static void ApplyCityBudgetWindowRate(City *city, u32 window, int row, int rate)
   if (kind < 0) return;
   rate = IntClamp(rate, 0, CityBudgetRateMaximum(row));
   if (!RunCityCommand(game, CITY_COMMAND_SET_BUDGET_RATE, INVALID_TILE, kind, rate, 0, NULL, NULL)) return;
-  if (game->observation) RestartCityBudgetHelperAfterRateEdit(city, window);
+  if (game->observation) RestartCityBudgetHelperAfterRateEdit(city, (i32)window);
   else {
     CityBudgetState *budget = &game->ui->budget_window;
-    if (budget->id == window && budget->helper_stage != CITY_BUDGET_HELPER_DISABLED) {
+    if ((u32)budget->id == window && budget->helper_stage != CITY_BUDGET_HELPER_DISABLED) {
       budget->helper_stage = 0;
       budget->timer_running = true;
       ++budget->timer_revision;
@@ -316,7 +319,7 @@ void ApplicationBudgetEnd(City *city, u32 window) {
     if (advisor_window) Sc2kCanvasDesktopDismissWindow(desktop, advisor_window);
   }
   if (city->game->observation) {
-    if (!EndCityBudget(city, window)) city->game->execution_failed = true;
+    if (!EndCityBudget(city, (i32)window)) city->game->execution_failed = true;
   } else city->game->ui->budget_window = (CityBudgetState){0};
   if (manual) RefreshCityChartPanels(city);
 }
@@ -336,7 +339,7 @@ static u32 OpenCityAdvisorWindow(City *city, CityBudgetCategory category, const 
       break;
     }
   }
-  const RunSprite *portrait = ReadCityPicture(city->game->resources, CITY_BUDGET_ADVISOR_PORTRAIT_FIRST + category);
+  const RunSprite *portrait = ReadCityPicture(city->game->resources, CITY_ADVISOR_PORTRAIT_FIRST + category);
   if (advisor) {
     advisor->advisor_category = category + 1;
     advisor->title = kAdvisorTitles[category];
@@ -403,7 +406,7 @@ static void ApplicationBudgetAdvisor(City *city, u32 window, CityBudgetCategory 
   }
   Window *advisor = FindCityCanvasWindow(&city->game->ui->desktop, advisor_window);
   advisor->advisor_question = reply;
-  bool accepted = QueueCityBudgetAdvisorQuestion(city, token, window, category);
+  bool accepted = QueueCityBudgetAdvisorQuestion(city, token, (i32)window, category);
   reply->opening = false;
   if (!accepted) {
     Sc2kCanvasDesktopDismissWindow(&ui->desktop, advisor_window);
@@ -502,13 +505,13 @@ void ApplicationBudgetPoll(City *city) {
   ApplicationBudgetSync(city);
 }
 
-void AdvanceCityBudgetHelper(City *city, int window) {
+void AdvanceCityBudgetHelper(City *city, u32 window_id) {
   if (city->game->observation) {
-    DeliverCityBudgetHelperTimer(city, window, CITY_BUDGET_HELPER_TIMER);
+    DeliverCityBudgetHelperTimer(city, (i32)window_id, CITY_BUDGET_HELPER_TIMER);
     return;
   }
   CityBudgetState *budget = &city->game->ui->budget_window;
-  if (budget->id != window) return;
+  if ((u32)budget->id != window_id) return;
   if (budget->helper_stage == CITY_BUDGET_HELPER_LAST_STAGE) budget->close_requested = true;
   else if (budget->helper_stage != CITY_BUDGET_HELPER_DISABLED) ++budget->helper_stage;
 }
@@ -526,7 +529,7 @@ bool BudgetWindowProcedure(Game *game, const Window *window, const WindowEvent *
   City *city = game->city;
   CityCanvasDesktop *desktop = &game->ui->desktop;
   int x = event->x, y = event->y;
-  const CityBudgetState *session = FindCityBudget(city, window->window_id);
+  const CityBudgetState *session = FindCityBudget(city, (i32)window->window_id);
   int step = Sc2kCanvasBudgetStepAt(window, x, y);
   int advice = Sc2kCanvasBudgetAdviceAt(window, x, y);
   if (session && session->advisor_question && step < 0 && advice < 0) {
@@ -627,7 +630,6 @@ bool PoliciesWindowProcedure(Game *game, const Window *window, const WindowEvent
   if (event->kind != WINDOW_INPUT) return false;
   const CanvasSDLEvent *input = event->input;
   if (input->kind == CANVAS_SDL_POINTER_DOWN && input->button == CANVAS_SDL_BUTTON_LEFT) {
-    CityCanvasDesktop *desktop = &game->ui->desktop;
     int policy = Sc2kCanvasPolicyAt(window, event->x, event->y);
     if (policy < 0) return false;
     RunCityCommand(game, CITY_COMMAND_TOGGLE_CITY_POLICY, INVALID_TILE, policy, 0, 0, NULL, NULL);

@@ -6,23 +6,23 @@
 // This module adds no private tile bits. Heights, slopes, ground and occupant payloads follow tile_storage.h and
 // their owning family modules rather than being repurposed as disaster counters.
 
-#include "city/maps/labels.h"
-#include "city/engine/random.h"
-#include "city/maps/buildings.h"
-#include "audio/types.h"
-#include "city/maps/map_types.h"
-#include "city/maps/tile_storage.h"
-#include "game/audio.h"
-#include "city/presentation.h"
-#include "city/state.h"
 #include "city/disasters/disasters.h"
+
+#include "audio/types.h"
+#include "city/engine/random.h"
 #include "city/events/events.h"
 #include "city/growth/growth.h"
+#include "city/maps/buildings.h"
 #include "city/maps/layers.h"
+#include "city/maps/labels.h"
+#include "city/maps/terrain.h"
+#include "city/maps/map.h"
+#include "city/maps/map_types.h"
 #include "city/maps/tables.h"
-#include "city/tools/tools.h"
-#include "game/state.h"
-#include "assets/state.h"
+#include "city/maps/tile_storage.h"
+#include "city/presentation.h"
+#include "city/state.h"
+#include "game/audio.h"
 
 enum {
   CITY_TILE_SCAN_CHANGED = 1 << 0,
@@ -32,8 +32,8 @@ enum {
   CITY_TILE_SCAN_SAW_POLLUTION = 1 << 4,
 };
 
-// Scan the city map and advance transient disaster and growth markers. Requires initialized map and landscape/disaster
-// state; advances transient overlay and tile effects in simulation order.
+// Advance stationary disaster overlays in live row order. Requires initialized City maps and disaster state;
+// final sound and cleanup work still runs when no qualifying marker is encountered.
 i64 UpdateCityMapTileStates(City *city) {
   static const i8 kNeighborOffset[4][2] = {{0, -1}, {-1, 0}, {0, 1}, {1, 0}};
   u32 flags = 0;
@@ -107,7 +107,7 @@ i64 UpdateCityMapTileStates(City *city) {
           break;
         }
         default:
-          if (ReadFireCoverage(city, MapTileXY(city, (x / 4) * 4, (y / 4) * 4)) + 8 > (u8)Sc2kCrtRand(city)) {
+          if (ReadFireCoverage(city, cell_index) + 8 > (u8)Sc2kCrtRand(city)) {
             flags |= CITY_TILE_SCAN_CHANGED;
             DemolishCityFootprintForDisaster(city, cell_index, 1, 1);
             ResolveDestroyedCityMapCell(city, cell_index);
@@ -128,7 +128,7 @@ i64 UpdateCityMapTileStates(City *city) {
           break;
         }
 
-        WriteTrafficDensity(city, MapTileXY(city, (x / 2) * 2, (y / 2) * 2), 0);
+        city->half[(y >> 1) * (city->map_width >> 1) + (x >> 1)].traffic_density = 0;
         int direction = Sc2kCrtRand(city) & 0x7F;
         if (direction < 4) {
           TileIndex neighbor_tile = GetRelativeTileOrInvalid(city, cell_index,
@@ -141,7 +141,7 @@ i64 UpdateCityMapTileStates(City *city) {
         for (int axis = 0; axis < 2; ++axis) {
           TileIndex neighbor = GetRelativeTileOrInvalid(city, cell_index, axis == 1 ? step : 0, axis == 0 ? step : 0);
           if (neighbor == INVALID_TILE) continue;
-          int kind = ReadTile(city, neighbor);
+          int kind = city->tile[neighbor].kind;
           bool passable = kind == TK_RUBBLE || IsTileKindRoadRoute(kind);
           if (passable)
             neighbors |= 1 << axis;
@@ -239,8 +239,7 @@ i64 UpdateCityMapTileStates(City *city) {
               TileIndex neighbor_tile = GetRelativeTileOrInvalid(city, cell_index,
                   kNeighborOffset[direction][0], kNeighborOffset[direction][1]);
               if (neighbor_tile != INVALID_TILE) {
-                SpreadCityMapFireToCell(city, neighbor_tile,
-                    ReadCityLandHeight(tp));
+                SpreadCityFloodToCell(city, neighbor_tile, ReadCityLandHeight(tp));
                 if (ReadOverlay(city, neighbor_tile) != CITY_OVERLAY_FLOOD)
                   flags |= CITY_TILE_SCAN_CHANGED;
               }
@@ -295,7 +294,7 @@ i64 UpdateCityMapTileStates(City *city) {
       int y = NextCityMapRandomModulo(city, city->map_height);
       int x = NextCityMapRandomModulo(city, city->map_width);
       TileIndex cell_index = MapTileXY(city, x, y);
-      int kind = ReadTile(city, cell_index);
+      int kind = city->tile[cell_index].kind;
       // Stock excludes the first house kind from this cleanup draw.
       if (IsTileKindBuilding(kind) && kind != TK_LOWER_CLASS_HOMES_FIRST) {
         if (city->settings.auto_goto != 0)

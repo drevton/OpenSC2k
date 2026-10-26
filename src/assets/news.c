@@ -605,7 +605,7 @@ static const CityNewspaperArticle kArticles[CITY_NEWS_EVENT_COUNT] = {
 };
 
 // Bind immutable article text directly and initialize the topic groups and ranking inputs without allocating.
-// Stock template buffers, when installed by comparison tools, remain separately owned and are released normally.
+// Installed stock template buffers remain separately owned and are released normally.
 void InitializeCityNewsResources(CityAssets *assets) {
   assets->newspaper.token_expansions = (CityNewspaperTokenExpansions){0};
   assets->newspaper.articles = kArticles;

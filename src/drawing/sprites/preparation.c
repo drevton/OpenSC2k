@@ -59,9 +59,9 @@ static u8 *WriteSpriteRun(u8 *destination, int kind, int count) {
 // Nearest-neighbor expansion happens once per cached scale. The same row
 // encoder sizes and writes the stream, avoiding divergent length decisions.
 static size_t EncodeSpriteRowRange(const SpritePixel *row, int first, int last,
-    int numerator, int denominator, u8 *destination) {
-  while (first < last && PixelKind(row[(i64)first * denominator / numerator]) == SPRITE_RUN_TRANSPARENT) ++first;
-  while (last > first && PixelKind(row[(i64)(last - 1) * denominator / numerator]) == SPRITE_RUN_TRANSPARENT) --last;
+    int scale, u8 *destination) {
+  while (first < last && PixelKind(row[first / scale]) == SPRITE_RUN_TRANSPARENT) ++first;
+  while (last > first && PixelKind(row[(last - 1) / scale]) == SPRITE_RUN_TRANSPARENT) --last;
   if (first == last) return 0;
   size_t size = first < 255 ? 1 : 3;
   if (destination) {
@@ -69,14 +69,14 @@ static size_t EncodeSpriteRowRange(const SpritePixel *row, int first, int last,
     if (first >= 255) { *destination++ = first; *destination++ = first >> 8; }
   }
   for (int x = first; x < last;) {
-    SpriteRunKind kind = PixelKind(row[(i64)x * denominator / numerator]);
+    SpriteRunKind kind = PixelKind(row[x / scale]);
     int next = x + 1, limit = IntMin(last, x + SPRITE_RUN_LIMIT);
-    while (next < limit && PixelKind(row[(i64)next * denominator / numerator]) == kind) ++next;
+    while (next < limit && PixelKind(row[next / scale]) == kind) ++next;
     size += SpriteRunHeaderSize(next - x) + (size_t)(next - x) * SpriteRunPayloadBytes(kind);
     if (destination) {
       destination = WriteSpriteRun(destination, kind, next - x);
       if (kind != SPRITE_RUN_TRANSPARENT) for (int i = x; i < next; ++i) {
-        SpritePixel pixel = row[(i64)i * denominator / numerator];
+        SpritePixel pixel = row[i / scale];
         if (SpriteRunIndexed(kind)) *destination++ = pixel.index;
         else {
           *destination++ = pixel.rgba >> 16;
@@ -91,8 +91,8 @@ static size_t EncodeSpriteRowRange(const SpritePixel *row, int first, int last,
   return size;
 }
 
-static size_t EncodeSpriteRow(const SpritePixel *row, int width, int numerator, int denominator, u8 *destination) {
-  return EncodeSpriteRowRange(row, 0, width, numerator, denominator, destination);
+static size_t EncodeSpriteRow(const SpritePixel *row, int width, int scale, u8 *destination) {
+  return EncodeSpriteRowRange(row, 0, width, scale, destination);
 }
 
 // Sample directly from the packed source. Downscaling skips unused source rows
@@ -233,7 +233,7 @@ RunSprite *ResampleRunSprite(SpritePreparationWorkspace *workspace, const RunSpr
               filter == SPRITE_FILTER_IMAGE);
         // Initial skips and omitted trailing pixels already describe the transparent
         // margins. Neither clear nor scan those pixels in the temporary row.
-        row_size = EncodeSpriteRowRange(row, first, last, 1, 1, data ? data + offset : NULL);
+        row_size = EncodeSpriteRowRange(row, first, last, 1, data ? data + offset : NULL);
       } else if (data) {
         memcpy(data + offset, data + rows[y - 1], row_size);
       }
@@ -273,20 +273,17 @@ static RunSprite *ResizeRunSpriteRegion(const RunSprite *source, CityRect conten
   return sprite;
 }
 
-static RunSprite *EncodeRunSpriteRatio(const SpritePixel *pixels, int width, int height, int stride,
-    int numerator, int denominator) {
-  if (!pixels || width <= 0 || height <= 0 || stride < width || numerator <= 0 || denominator <= 0) return NULL;
-  i64 w = ((i64)width * numerator + denominator - 1) / denominator;
-  i64 h = ((i64)height * numerator + denominator - 1) / denominator;
+RunSprite *EncodeRunSprite(const SpritePixel *pixels, int width, int height, int stride, int scale) {
+  if (!pixels || width <= 0 || height <= 0 || stride < width || scale <= 0) return NULL;
+  i64 w = (i64)width * scale, h = (i64)height * scale;
   // The initial skip and extended run lengths are u16.
   if (w > 65535 || h > INT_MAX) return NULL;
   int output_width = (int)w, output_height = (int)h;
   u64 stream_size = 0;
   size_t row_size = 0;
   for (int y = 0; y < output_height; ++y) {
-    if (!y || (i64)y * denominator / numerator != (i64)(y - 1) * denominator / numerator)
-      row_size = EncodeSpriteRow(pixels + (size_t)((i64)y * denominator / numerator) * stride,
-          output_width, numerator, denominator, NULL);
+    if (!y || y / scale != (y - 1) / scale)
+      row_size = EncodeSpriteRow(pixels + (size_t)(y / scale) * stride, output_width, scale, NULL);
     stream_size += row_size;
     if (stream_size > UINT32_MAX) return NULL;
   }
@@ -300,20 +297,16 @@ static RunSprite *EncodeRunSpriteRatio(const SpritePixel *pixels, int width, int
   u8 *data = (u8 *)(rows + output_height + 1), *destination = data;
   for (int y = 0; y < output_height; ++y) {
     rows[y] = (u32)(destination - data);
-    if (y && (i64)y * denominator / numerator == (i64)(y - 1) * denominator / numerator) {
+    if (y && y / scale == (y - 1) / scale) {
       size_t size = rows[y] - rows[y - 1];
       memcpy(destination, data + rows[y - 1], size);
       destination += size;
-    } else destination += EncodeSpriteRow(pixels + (size_t)((i64)y * denominator / numerator) * stride,
-        output_width, numerator, denominator, destination);
+    } else destination += EncodeSpriteRow(pixels + (size_t)(y / scale) * stride, output_width, scale, destination);
   }
   rows[output_height] = (u32)(destination - data);
   return sprite;
 }
 
-RunSprite *EncodeRunSprite(const SpritePixel *pixels, int width, int height, int stride, int scale) {
-  return EncodeRunSpriteRatio(pixels, width, height, stride, scale, 1);
-}
 // Encode generated straight-alpha pixels without keeping a second decoded image.
 RunSprite *EncodeRgbaRunSprite(const u32 *pixels, int width, int height, int stride) {
   assert(pixels && width > 0 && width <= SPRITE_RUN_LIMIT && height > 0 && stride >= width);
@@ -327,7 +320,7 @@ RunSprite *EncodeRgbaRunSprite(const u32 *pixels, int width, int height, int str
     for (int y = 0; y < height; ++y) {
       for (int x = 0; x < width; ++x) row[x].rgba = pixels[(size_t)y * stride + x];
       if (rows) rows[y] = offset;
-      offset += EncodeSpriteRow(row, width, 1, 1, data ? data + offset : NULL);
+      offset += EncodeSpriteRow(row, width, 1, data ? data + offset : NULL);
       if (offset > UINT32_MAX) { FreeRunSprite(sprite); free(row); return NULL; }
     }
     if (!pass) {
@@ -393,7 +386,7 @@ static bool DrawScaledRunSprite(SpriteSurface *surface, const RunSprite *source,
     if (first == last) continue;
     SmoothSpriteRowColors(source, row, row + width, content, relative_y, numerator, denominator,
         surface->palette, first, last, true);
-    line->stream_size = rows[1] = EncodeSpriteRowRange(row, first, last, 1, 1, data);
+    line->stream_size = rows[1] = EncodeSpriteRowRange(row, first, last, 1, data);
     DrawRunSprite(surface, line, bounds.left, y, flags, NULL);
   }
   FreeRunSprite(line);

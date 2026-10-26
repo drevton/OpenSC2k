@@ -3,17 +3,10 @@
 
 #include "city/types.h"
 
-typedef struct CityTerrainMap CityTerrainMap;
-typedef struct CityTerrainSettings CityTerrainSettings;
-
 // Reset the allocated City's map metadata and gameplay accounts for new-city setup.
 // The simulation initializer retains terrain-editor account state according to Game's current idle mode.
 void InitializeNewCityDocument(City *city);
 void InitializeNewCitySimulationState(City *city);
-
-// Install generated or imported terrain after the caller's City reset. Map dimensions must match allocated storage.
-// Failure sets Game's allocation error and preserves earlier tile writes; success includes statistics/RNG/climate.
-bool InstallCityTerrainMap(City *city, const CityTerrainMap *map, const CityTerrainSettings *settings);
 
 // Initialize year/difficulty, economy, milestones and neighbor accounts after reset. Pass an actual calendar year
 // and CityDifficulty value. economy_year selects the 1900/1950/2000/2050 national-population baseline;

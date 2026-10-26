@@ -10,6 +10,7 @@ typedef struct Game Game;
 // Commands use the existing City command API. Output/errors append to the UI console. After loading/running a
 // chunk, clear its result stack and remove the instruction hook. No window, input or rendering state is retained.
 // Format returned values in a protected call under the same instruction budget; conversion errors use normal cleanup.
+// Bound converted string sizes before copying into console output. Tile/summary queries only read City fields.
 void RunCityLua(Game *game, const char *code, bool file);
 // Close after execution finishes. Lua finalizers run synchronously; clear the Game's interpreter pointer afterward.
 void CloseCityScripting(Game *game);

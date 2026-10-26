@@ -11,14 +11,12 @@
 #include "base/byte_order.h"
 #include "city/state.h"
 #include "city/saveload/map_format.h"
+#include "city/saveload/map_native.h"
 #include <stdlib.h>
-
-static bool SaveCityArchiveNameChunk(City *city, CityFile *archive);
-static bool EnsureSaveChunks(CityFile *archive);
 
 // Rewrite the existing in-memory CNAM chunk from the current City name. Archive must contain its standard name chunk;
 // returns false if unavailable and retains archive ownership.
-static bool SaveCityArchiveNameChunk(City *city, CityFile *archive) {
+static bool SaveCityArchiveNameChunk(const City *city, CityFile *archive) {
   CityFileChunk *name_chunk = NULL;
   for (u32 index = 0; index < archive->count; ++index)
     if (memcmp(archive->chunk[index].tag, "CNAM", 4) == 0)
@@ -118,7 +116,7 @@ fail:
 
 // Replace or append the selected native scalar/ground extension in an in-memory stock archive. Requires valid archive
 // ownership; allocation/encoding failure returns false and unknown tail bytes are retained where supported.
-static bool SaveCityArchiveExtension(City *city, CityFile *archive, bool ground) {
+static bool SaveCityArchiveExtension(const City *city, CityFile *archive, bool ground) {
   const char *tag = ground ? "XGND" : "XNAT";
   u32 known_size = ground ? CityGroundExtensionSize(city) : CITY_SAVE_EXTENSION_SIZE;
   const CityFileChunk *previous = NULL;
@@ -173,10 +171,10 @@ bool SaveCityArchive(City *city, CityFile *archive) {
       WriteBE32(chunk->decoded, CITY_MISC_VERSION); // Original save sets version independently of input.
       if (file->misc_active) {
         if (!SaveCityMiscToBuffer(city)) return false;
-        const CityMiscBuffer *buffer = (file->misc_active ? file->misc : NULL);
+        const CityMiscBuffer *buffer = file->misc;
         for (u32 word = 0; word < CITY_MISC_WORD_COUNT; ++word)
           WriteBE32(chunk->decoded + 4 * word, buffer->words[word]);
-      } else if (!CityFileMiscFields(city, chunk->decoded, CITY_FILE_EXPORT)) return false;
+      } else if (!EncodeCityMiscRecord(city, chunk->decoded)) return false;
       continue;
     }
     if (spec == NULL || spec->storage == CITY_FILE_ONLY)
@@ -185,7 +183,7 @@ bool SaveCityArchive(City *city, CityFile *archive) {
     if (converted == NULL) {
       return false;
     }
-    bool copied = CityFileStateChunkBytes(city, spec, converted, CITY_FILE_EXPORT);
+    bool copied = ExportCityFileStateChunk(city, spec, converted);
     if (copied) {
       if (spec->conversion != CITY_FILE_LABELS) CityFileConvertChunk(converted, spec, CITY_FILE_EXPORT);
       memcpy(chunk->decoded, converted, spec->size);

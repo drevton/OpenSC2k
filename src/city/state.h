@@ -2,33 +2,22 @@
 #define SC2K_SIMULATION_STATE_H
 
 #include "city/disasters/types.h"
-#include "city/economy/facilities.h"
 #include "city/economy/state.h"
-#include "city/economy/tables.h"
 #include "city/engine/city_types.h"
-#include "city/engine/clock.h"
 #include "city/engine/input.h"
-#include "city/engine/questions.h"
-#include "city/engine/random.h"
 #include "city/engine/simulation_state.h"
-#include "city/engine/weather.h"
 #include "city/events/types.h"
-#include "city/events/news.h"
+#include "city/events/news_types.h"
 #include "city/fixes.h"
 #include "city/infrastructure/types.h"
-#include "city/maps/map.h"
-#include "city/maps/labels.h"
 #include "city/maps/map_types.h"
-#include "city/maps/tile_queue.h"
-#include "city/military.h"
-#include "city/terrain/terrain.h"
+#include "city/terrain/types.h"
 #include <assert.h>
 
 // Native simulation ownership, independent of the original executable's layout.
 // Pending command contexts are not serialized by the SC2 save format.
 typedef struct Game Game;
 typedef struct Drawing Drawing;
-typedef struct CityTickContinuation CityTickContinuation;
 typedef struct CityFileExtensions CityFileExtensions;
 
 typedef struct City {
@@ -47,7 +36,6 @@ typedef struct City {
   // a sub-4KiB prefix permit ARM64 base+immediate loads, including byte fields.
   // Do not pack this native type or preserve the original global addresses.
   u64 scheduler_frame;
-  // Optional simulation repairs, disabled for stock comparison by default.
   u64 fixes;
   // Import/export marker; gameplay always uses native records.
   bool native_map_storage;
@@ -84,12 +72,6 @@ typedef struct City {
   i8 unlock_bonus_answer;      // -1 pending, dialog choice otherwise
   u8 command_name_answer;      // CITY_DIALOG_OK/CANCEL
   u8 command_name_active;
-  // Borrowed input lives only for the current command; nested commands restore
-  // their parent's cursor. These pointers are excluded from durable snapshots.
-  const CityZoneDragInput *zone_drag_input;
-  u32 zone_drag_index;
-  TileIndex zone_drag_endpoint; // INVALID_TILE when cancelled
-  CityPointerCommandState pointer_command;
   CityConstructionState construction;
   CityConstructionChoices command_choices; // Transient; nested commands restore the parent values.
   CityNameCommandInput command_name;
@@ -157,7 +139,8 @@ static SC2K_FORCE_INLINE TileIndex MapTileXYOrInvalid(const City *city, int x, i
   return IsMapCoordinateValid(city, x, y) ? MapTileXY(city, x, y) : INVALID_TILE;
 }
 
-static SC2K_FORCE_INLINE int MapTileX(const City *city, TileIndex tile) { return tile & city->map_width - 1; }
+// Bound maps use power-of-two row widths: the mask selects the column and the shift selects the row.
+static SC2K_FORCE_INLINE int MapTileX(const City *city, TileIndex tile) { return tile & (city->map_width - 1); }
 static SC2K_FORCE_INLINE int MapTileY(const City *city, TileIndex tile) { return tile >> city->map_width_shift; }
 
 static SC2K_FORCE_INLINE CityPoint MapTilePt(const City *city, TileIndex tile) {
@@ -219,9 +202,6 @@ _Static_assert(offsetof(City, newspaper) + sizeof(CityNewspaperState) <= 4096,
     "settings and newspaper state fit ARM64 immediate addressing");
 _Static_assert(offsetof(City, route_queue_cursor) + sizeof(CityTileQueueCursor) <= 4096,
     "route cursors fit ARM64 immediate addressing");
-_Static_assert(offsetof(City, zone_drag_input) % sizeof(void *) == 0, "native input pointer alignment");
-_Static_assert(
-    offsetof(City, pointer_command) % _Alignof(CityPointerCommandState) == 0, "native pointer cursor alignment");
 
 // Initial backing must be suitably aligned and hold CityMapStorageSize(CITY_MAP_SIZE, CITY_MAP_SIZE) bytes.
 // Borrowed fixtures may bind live storage; replacing, growing or releasing backing requires heap ownership.

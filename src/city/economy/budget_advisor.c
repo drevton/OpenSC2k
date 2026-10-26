@@ -5,29 +5,26 @@
 #include "city/maps/tile_storage.h"
 #include "city/presentation.h"
 #include "game/audio.h"
-#include "city/economy/history.h"
 #include "city/engine/questions.h"
 #include "game/state.h"
 #include "city/state.h"
 
-// Prepare cursor and music for a due manual annual budget. Retained comparison callers preserve their minimized
-// gate; normal City execution consumes the selection draw independently of local window state.
 bool PrepareCityAnnualBudget(City *city) {
   if (city->indicators.auto_budget_enabled || (city->game->observation && IsCityPresentationMinimized(city)))
     return false;
-  SetCityCursor(city, CITY_CURSOR_REWARDS, 0);
+  SetCityCursor(city, CITY_CURSOR_REWARDS, CITY_CURSOR_SELECT);
   StopAllCitySound(city->game);
   static const u16 kMusicTracks[] = {
     CITY_MUSIC_TRACK_16, CITY_MUSIC_TRACK_05, CITY_MUSIC_TRACK_02, CITY_MUSIC_TRACK_10,
   };
-  PlayCityEventMusicById(city->game, kMusicTracks[NextCityMapRandomModulo(city, 4)]);
+  MaybePlayCityEventMusic(city->game, kMusicTracks[NextCityMapRandomModulo(city, 4)]);
   return true;
 }
 
 // Select advice from current funding and population metrics. Adequate health funding consumes one CRT draw to choose
 // a suggested policy; other branches leave RNG unchanged. Presentation owns loading text and opening the advisor.
 CityBudgetAdvice SelectCityBudgetAdvisorMessage(City *city, CityBudgetCategory category) {
-  CityEconomyMonths *economy = &city->economy;
+  const CityEconomyMonths *economy = &city->economy;
   u32 population = city->indicators.population;
   u32 policies = city->unlocks.ordinance_flags;
   switch (category) {
@@ -42,11 +39,11 @@ CityBudgetAdvice SelectCityBudgetAdvisorMessage(City *city, CityBudgetCategory c
   }
   case CITY_BUDGET_ORDINANCES:
     if (!(policies & CITY_POLICY_FLAG_POLLUTION_CONTROLS) &&
-        (i32)ReadHistorySample(city, CITY_HISTORY_POLLUTION, 0) > 30)
+        (i32)city->history[CITY_HISTORY_POLLUTION].sample[0] > 30)
       return CITY_ADVICE_POLLUTION_CONTROLS;
     if (!(policies & CITY_POLICY_FLAG_ENERGY_CONSERVATION) && city->infrastructure.power_percent > 98)
       return CITY_ADVICE_ENERGY_CONSERVATION;
-    if ((i32)ReadHistorySample(city, CITY_HISTORY_CRIME, 0) > 30) {
+    if ((i32)city->history[CITY_HISTORY_CRIME].sample[0] > 30) {
       if (!(policies & CITY_POLICY_FLAG_NEIGHBORHOOD_WATCH))
         return CITY_ADVICE_NEIGHBORHOOD_WATCH;
       if (!(policies & CITY_POLICY_FLAG_ANTI_DRUG))
@@ -76,7 +73,7 @@ CityBudgetAdvice SelectCityBudgetAdvisorMessage(City *city, CityBudgetCategory c
         CITY_ADVICE_NONE : CITY_ADVICE_BOND_PAYMENTS;
   }
   case CITY_BUDGET_POLICE: {
-    int crime = (i32)ReadHistorySample(city, CITY_HISTORY_CRIME, 0);
+    int crime = (i32)city->history[CITY_HISTORY_CRIME].sample[0];
     if (crime > 40)
       return CITY_ADVICE_HIGH_CRIME;
     if (crime > 30 && !(policies & CITY_POLICY_FLAG_NEIGHBORHOOD_WATCH))
@@ -134,7 +131,7 @@ CityBudgetAdvice SelectCityBudgetAdvisorMessage(City *city, CityBudgetCategory c
 
 // Look up the currently open budget by its positive identity. Returns a borrowed pointer only for the matching live
 // budget, otherwise NULL; callers must not keep it across budget replacement.
-const CityBudgetState *FindCityBudget(City *city, i32 id) {
+const CityBudgetState *FindCityBudget(const City *city, i32 id) {
   return id > 0 && city->budget.id == id ? &city->budget : NULL;
 }
 
@@ -164,11 +161,11 @@ bool BeginCityBudget(City *city, i32 id, bool manual) {
 // Close the matching budget interaction and perform its closing effects. Returns false for a missing identity or a
 // still-open advisor question; callers must dismiss that child before closing its parent.
 bool EndCityBudget(City *city, i32 id) {
-  CityBudgetState *budget = (CityBudgetState *)FindCityBudget(city, id);
-  if (!budget || budget->advisor_question)
+  if (id <= 0 || city->budget.id != id || city->budget.advisor_question)
     return false;
+  CityBudgetState *budget = &city->budget;
   if (budget->manual) {
-    SetCityCursor(city, CITY_CURSOR_ARROW, 0);
+    SetCityCursor(city, CITY_CURSOR_ARROW, CITY_CURSOR_SELECT);
     city->indicators.auto_budget_enabled = budget->saved_auto_budget;
   }
   *budget = (CityBudgetState){0};
@@ -178,8 +175,8 @@ bool EndCityBudget(City *city, i32 id) {
 // Deliver one helper-timer event to the matching open budget. Rejects unrelated timers and closing budgets; a queued
 // event may still be accepted after the timer itself has stopped.
 bool DeliverCityBudgetHelperTimer(City *city, i32 id, i32 timer) {
-  CityBudgetState *budget = (CityBudgetState *)FindCityBudget(city, id);
-  if (!budget || timer != CITY_BUDGET_HELPER_TIMER || budget->close_requested)
+  CityBudgetState *budget = &city->budget;
+  if (id <= 0 || budget->id != id || timer != CITY_BUDGET_HELPER_TIMER || budget->close_requested)
     return false;
   // Accepts an already-delivered timer even after an advisor stopped generation.
   // Inactive helpers receive the timer but have no stage/close effect.
@@ -197,8 +194,8 @@ bool DeliverCityBudgetHelperTimer(City *city, i32 id, i32 timer) {
 // Associate an advisor question with the live budget and suspend its helper. Returns false for a missing or closing
 // budget; the question identity is retained until the matching resume.
 bool SuspendCityBudgetHelperForAdvisor(City *city, i32 id, i32 question) {
-  CityBudgetState *budget = (CityBudgetState *)FindCityBudget(city, id);
-  if (!budget || budget->close_requested)
+  CityBudgetState *budget = &city->budget;
+  if (id <= 0 || budget->id != id || budget->close_requested)
     return false;
   budget->advisor_question = question;
   if (budget->helper_stage != CITY_BUDGET_HELPER_DISABLED)
@@ -209,8 +206,8 @@ bool SuspendCityBudgetHelperForAdvisor(City *city, i32 id, i32 question) {
 // Restore the parent advisor identity and helper after a matching child question closes. Returns false for a stale
 // budget or question; the caller supplies the captured parent and helper choice.
 bool ResumeCityBudgetHelperAfterAdvisor(City *city, i32 id, i32 question, i32 parent_question, bool helper_enabled) {
-  CityBudgetState *budget = (CityBudgetState *)FindCityBudget(city, id);
-  if (!budget || budget->advisor_question != question)
+  CityBudgetState *budget = &city->budget;
+  if (id <= 0 || budget->id != id || budget->advisor_question != question)
     return false;
   budget->advisor_question = parent_question;
   // Each original advisor caller keeps its own stage-enabled branch across the wait.
@@ -225,8 +222,8 @@ bool ResumeCityBudgetHelperAfterAdvisor(City *city, i32 id, i32 question, i32 pa
 // Restart an enabled budget helper after a funding edit. Missing budgets and permanently disabled helpers are left
 // alone; this updates the timer generation rather than delivering a timer event.
 void RestartCityBudgetHelperAfterRateEdit(City *city, i32 id) {
-  CityBudgetState *budget = (CityBudgetState *)FindCityBudget(city, id);
-  if (budget && budget->helper_stage != CITY_BUDGET_HELPER_DISABLED) {
+  CityBudgetState *budget = &city->budget;
+  if (id > 0 && budget->id == id && budget->helper_stage != CITY_BUDGET_HELPER_DISABLED) {
     budget->helper_stage = 0;
     budget->timer_running = true;
     ++budget->timer_revision;

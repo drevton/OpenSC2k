@@ -6,13 +6,16 @@
 #include "city/engine/simulation_state.h"
 #include "city/saveload/events_format.h"
 #include "city/saveload/map_format.h"
+#include "city/saveload/map_native.h"
 #include "city/maps/ground.h"
 #include "city/events/events.h"
 #include "city/maps/map_types.h"
 #include "city/maps/tile_storage.h"
 #include "city/presentation.h"
 #include "city/saveload/legacy_text.h"
+#include "city/economy/facilities.h"
 #include "city/economy/history.h"
+#include "city/state.h"
 #include "city/maps/map.h"
 #include "city/tools/tools.h"
 #include "city/saveload/sc2k.h"
@@ -28,14 +31,14 @@
 typedef struct {
   City *city;
   const CityFileChunkSpec *spec;
-  u8 *bytes;
+  const u8 *bytes;
 } CityTileLoadBuffer;
 
 // Throwing reads retain the partial raw tile or stock name-slot writes. Cleanup context must identify its original
 // staging buffer and target; it must remain alive through the throwing-read unwind lifetime.
 static void ApplyCityTileLoadBuffer(void *context) {
   CityTileLoadBuffer *buffer = context;
-  CopyCityFileChunkBytes(buffer->city, buffer->spec, buffer->bytes, buffer->spec->size, CITY_FILE_IMPORT);
+  WriteCityFileChunkBytes(buffer->city, buffer->spec, buffer->bytes, buffer->spec->size);
 }
 
 // Stream dispatch uses the same format table as round-trip I/O. Requires an active file operation and initialized
@@ -51,7 +54,7 @@ bool LoadCityChunksFromInput(City *city, CityFileInput *input,
     ReportCityFileError(city->game->file, CITY_NOTICE_ERROR_READING_FILE, CITY_FILE_ERROR_WITH_CAUSE);
     return false;
   }
-  if (!memcmp(&signature, "RIFF", 4)) return LoadCitySc2k(city, input);
+  if (!memcmp(&signature, "\x28\xb5\x2f\xfd", 4)) return LoadCitySc2k(city, input);
   input->first_tag = signature;
   input->has_first_tag = true;
   u32 container_length = 0, position = 4, tag = 0, payload_size = 0;
@@ -69,7 +72,7 @@ bool LoadCityChunksFromInput(City *city, CityFileInput *input,
   ReleaseCityFileExtensions(city);
   memset(&city->cheats, 0, sizeof(city->cheats));
   EmptyCityName(city);
-  int has_labels = 0, saw_name = 0, saw_misc = 0;
+  bool has_labels = false, saw_name = false, saw_misc = false;
   bool saw_extension = false, saw_ground = false;
   do {
     if (CityFileInputRead(input, &tag, 4) == 0) {
@@ -112,14 +115,14 @@ bool LoadCityChunksFromInput(City *city, CityFileInput *input,
         PopCityFileCleanup(file, &cleanup);
         FreeCityFileScratch(file, text);
         if (GetGameError(city->game) == SC2K_ERROR_GUEST_ALLOCATION_FAILURE) return false;
-        saw_name = 1;
+        saw_name = true;
       }
     } else if (spec != NULL && memcmp(spec->tag, "MISC", 4) == 0) {
       if (saw_extension) return false;
       // The opaque-file adapter supplies the caller-owned serialization buffer.
       // The original public boundary requires its caller to allocate it.
       if (allocate_misc && !saw_misc && !file->misc_active && !AllocateCityMiscBuffer(file)) return false;
-      saw_misc = 1;
+      saw_misc = true;
       if (!LoadCityMiscFromInput(city, input, payload_size)) return false;
     } else if (!memcmp(tag_bytes, "XNAT", 4) || !memcmp(tag_bytes, "XGND", 4)) {
       bool ground = tag_bytes[1] == 'G';
@@ -149,18 +152,17 @@ bool LoadCityChunksFromInput(City *city, CityFileInput *input,
       // Original map buffers are contiguous behind the first row pointer.
       // Oversized raw writes have a defined bounded failure instead of overflow.
       if (target_size > spec->size) return false;
-      u8 *target = CityFileChunkData(city, spec);
+      u8 *target = CityFileMutableChunkData(city, spec);
       if (target == NULL) return false;
       if (spec->conversion == CITY_FILE_EVENTS) {
         u8 bytes[CITY_STOCK_EVENT_BYTES * CITY_STOCK_EVENT_SLOT_COUNT];
-        for (int slot = 0; slot < CITY_STOCK_EVENT_SLOT_COUNT; ++slot)
-          EncodeStockCityMapEvent(city, bytes + slot * CITY_STOCK_EVENT_BYTES, &city->events.event[slot]);
+        EncodeStockCityMapEvents(city, bytes);
         bool loaded = CityFileReadCompressedCityChunk(file, input, payload_size, bytes, sizeof(bytes));
-        CityFileStateChunkBytes(city, spec, bytes, CITY_FILE_IMPORT);
+        DecodeStockCityMapEvents(city, bytes);
         if (!loaded) return false;
       } else if (memcmp(spec->tag, "ALTM", 4) == 0) {
         u8 bytes[CITY_MAP_CELL_COUNT * sizeof(u16)];
-        CopyCityFileChunkBytes(city, spec, bytes, spec->size, CITY_FILE_EXPORT);
+        ReadCityFileChunkBytes(city, spec, bytes, spec->size);
         CityTileLoadBuffer buffer = {city, spec, bytes};
         CityFileCleanup cleanup = {ApplyCityTileLoadBuffer, &buffer, NULL};
         PushCityFileCleanup(file, &cleanup);
@@ -170,9 +172,9 @@ bool LoadCityChunksFromInput(City *city, CityFileInput *input,
         ApplyCityTileLoadBuffer(&buffer);
         if (!received) return false;
       } else if (spec->conversion == CITY_FILE_LABELS) {
-        has_labels = 1;
+        has_labels = true;
         u8 bytes[CITY_OVERLAY_NAME_COUNT * CITY_OVERLAY_LEGACY_NAME_BYTES];
-        CopyCityFileChunkBytes(city, spec, bytes, spec->size, CITY_FILE_EXPORT);
+        ReadCityFileChunkBytes(city, spec, bytes, spec->size);
         CityTileLoadBuffer buffer = {city, spec, bytes};
         CityFileCleanup cleanup = {ApplyCityTileLoadBuffer, &buffer, NULL};
         PushCityFileCleanup(file, &cleanup);

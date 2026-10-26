@@ -4,20 +4,21 @@
 #include "ui/windows/window_internal.h"
 #include "ui/map.h"
 #include "ui/menus/menu.h"
+#include "ui/menus/catalog.h"
 #include "ui/text/text.h"
 
 #include <stdlib.h>
+#include <stdio.h>
 
 #include "assets/fonts.h"
 #include "assets/state.h"
 #include "audio/state.h"
 #include "base/time.h"
-#include "base/version.h"
-#include "city/disasters/types.h"
-#include "city/economy/types.h"
 #include "city/engine/city_types.h"
+#include "city/engine/command_types.h"
 #include "city/engine/clock.h"
 #include "city/events/emergency.h"
+#include "city/maps/buildings.h"
 #include "city/maps/kinds.h"
 #include "city/maps/tile_storage.h"
 #include "city/maps/trees.h"
@@ -34,24 +35,16 @@
 #include "drawing/raster/canvas_primitives.h"
 #include "drawing/raster/canvas_raster_internal.h"
 #include "drawing/state.h"
-#include "game/commands.h"
 #include "game/state.h"
 #include "game/timing.h"
-#include "ui/city_lifecycle.h"
 #include "ui/commands.h"
-#include "ui/console.h"
-#include "ui/dialogs/budget.h"
 #include "ui/dialogs/dialogs.h"
 #include "ui/dialogs/messages.h"
-#include "ui/dialogs/file_dialog.h"
-#include "ui/dialogs/game_options.h"
 #include "ui/input.h"
-#include "ui/map_views.h"
-#include "ui/news/newspaper.h"
 #include "ui/sdl.h"
-#include "ui/signs.h"
 #include "ui/startup/startup.h"
 #include "ui/state.h"
+#include "ui/text/status.h"
 #include "ui/tools/placement.h"
 #include "ui/tools/tools.h"
 #include "ui/tools/types.h"
@@ -135,372 +128,9 @@ static const CityDropdownColors kTreeDropdownColors = {
 enum { kButtonWidth = 22, kDemandWidth = 2 * kButtonWidth,
     kDefaultStatusWidth = 30 * kButtonWidth + ((6 * kButtonWidth) >> 2),
     kStatusHeight = 12, kDemandBarCount = 3, kDemandBarWidth = 6, kDemandBarPitch = 12,
-    kDisasterMenu = CITY_TOPBAR_COUNT + 1,
-    kResidentialDensityMenu, kCommercialDensityMenu, kIndustrialDensityMenu,
-    kPoliceMenu, kHealthEducationMenu, kRecreationMenu,
     kToolbarSwitch = 127, kStatusDate = 128, kToolbarDemand, kStatusMoney };
 enum { kTreeClimateDropdown = 1 };
 enum { kConstructionPreviewWidth = CITY_BUILDING_PREVIEW_WIDTH + 6 };
-
-static const CityMenuItem kFileItems[] = {
-  {"Save game", (CITY_HOTKEY_CTRL | 'S'), CITY_MENU_ACTION_SAVE, 0, 0},
-  {"Load game", (CITY_HOTKEY_CTRL | 'L'), CITY_MENU_ACTION_LOAD, 0, 0},
-  {"Abandon game", CITY_KEY_NONE, CITY_MENU_ACTION_ABANDON, 0, 0},
-  {"", CITY_KEY_NONE, CITY_MENU_ACTION_SEPARATOR, 0, 0},
-  {"Exit", (CITY_HOTKEY_CTRL | 'Q'), CITY_MENU_ACTION_QUIT, 0, 0}
-};
-static const CityMenuItem kTerrainFileItems[] = {
-  {"Save terrain", (CITY_HOTKEY_CTRL | 'S'), CITY_MENU_ACTION_SAVE, 0, 0},
-  {"Load game", (CITY_HOTKEY_CTRL | 'L'), CITY_MENU_ACTION_LOAD, 0, 0},
-  {"Abandon terrain", CITY_KEY_NONE, CITY_MENU_ACTION_ABANDON, 0, 0},
-  {"", CITY_KEY_NONE, CITY_MENU_ACTION_SEPARATOR, 0, 0},
-  {"Exit", (CITY_HOTKEY_CTRL | 'Q'), CITY_MENU_ACTION_QUIT, 0, 0}
-};
-static const CityMenuItem kSpeedItems[] = {
-  {"Slow", CITY_KEY_NONE, CITY_MENU_ACTION_COMMAND, CITY_COMMAND_SET_SIMULATION_SPEED, CITY_SPEED_SLOW},
-  {"Normal", CITY_KEY_NONE, CITY_MENU_ACTION_COMMAND, CITY_COMMAND_SET_SIMULATION_SPEED, CITY_SPEED_NORMAL},
-  {"Fast", CITY_KEY_NONE, CITY_MENU_ACTION_COMMAND, CITY_COMMAND_SET_SIMULATION_SPEED, CITY_SPEED_FAST},
-  {"Unlimited", CITY_KEY_NONE, CITY_MENU_ACTION_COMMAND, CITY_COMMAND_SET_SIMULATION_SPEED, CITY_SPEED_UNLIMITED}
-};
-static const CityMenuItem kOptionItems[] = {
-  {"Game Options", (CITY_HOTKEY_CTRL | 'P'), CITY_MENU_ACTION_OPTIONS, 0, 0},
-  {"", CITY_KEY_NONE, CITY_MENU_ACTION_SEPARATOR, 0, 0},
-  {"Developer console", (CITY_HOTKEY_CTRL | CITY_KEY_F12), CITY_MENU_ACTION_CONSOLE, 0, 0},
-  {"Auto Budget", CITY_KEY_F6, CITY_MENU_ACTION_COMMAND, CITY_COMMAND_TOGGLE_AUTO_BUDGET, 0},
-  {"Auto Goto", CITY_KEY_F7, CITY_MENU_ACTION_AUTO_GOTO, 0, 0},
-  {"Sound & Music...", CITY_KEY_NONE, CITY_MENU_ACTION_SOUND_OPTIONS, 0, 0},
-  {"Music", CITY_KEY_F9, CITY_MENU_ACTION_MUSIC, 0, 0},
-  {"Jazz Jukebox...", (CITY_HOTKEY_CTRL | 'J'), CITY_MENU_ACTION_JUKEBOX, 0, 0}
-};
-static const CityMenuItem kDisasterItems[] = {
-  {"No Disasters", CITY_KEY_NONE, CITY_MENU_ACTION_COMMAND, CITY_COMMAND_TOGGLE_NO_DISASTERS, 0},
-  {"", CITY_KEY_NONE, CITY_MENU_ACTION_SEPARATOR, 0, 0},
-  {"Fire", CITY_KEY_NONE, CITY_MENU_ACTION_COMMAND, CITY_COMMAND_START_DISASTER,
-      CITY_DISASTER_FIRE},
-  {"Flood", CITY_KEY_NONE, CITY_MENU_ACTION_COMMAND, CITY_COMMAND_START_DISASTER,
-      CITY_DISASTER_FLOOD},
-  {"Riot", CITY_KEY_NONE, CITY_MENU_ACTION_COMMAND, CITY_COMMAND_START_DISASTER,
-      CITY_DISASTER_RIOTS},
-  {"Plane Crash", CITY_KEY_NONE, CITY_MENU_ACTION_COMMAND, CITY_COMMAND_START_DISASTER,
-      CITY_DISASTER_SCHEDULED_PLANE_CRASH},
-  {"Tornado", CITY_KEY_NONE, CITY_MENU_ACTION_COMMAND, CITY_COMMAND_START_DISASTER,
-      CITY_DISASTER_TORNADO},
-  {"Earthquake", CITY_KEY_NONE, CITY_MENU_ACTION_COMMAND, CITY_COMMAND_START_DISASTER,
-      CITY_DISASTER_EARTHQUAKE},
-  {"Monster", CITY_KEY_NONE, CITY_MENU_ACTION_COMMAND, CITY_COMMAND_START_DISASTER,
-      CITY_DISASTER_MONSTER},
-  {"Hurricane", CITY_KEY_NONE, CITY_MENU_ACTION_COMMAND, CITY_COMMAND_START_DISASTER,
-      CITY_DISASTER_HURRICANE},
-  {"", CITY_KEY_NONE, CITY_MENU_ACTION_SEPARATOR, 0, 0},
-  {"Toxic Spill", CITY_KEY_NONE, CITY_MENU_ACTION_COMMAND, CITY_COMMAND_START_DISASTER,
-      CITY_DISASTER_POLLUTION},
-  {"Meltdown", CITY_KEY_NONE, CITY_MENU_ACTION_COMMAND, CITY_COMMAND_START_DISASTER,
-      CITY_DISASTER_MELTDOWN},
-  {"Microwave", CITY_KEY_NONE, CITY_MENU_ACTION_COMMAND, CITY_COMMAND_START_DISASTER,
-      CITY_DISASTER_MICROWAVE},
-  {"Volcano", CITY_KEY_NONE, CITY_MENU_ACTION_COMMAND, CITY_COMMAND_START_DISASTER,
-      CITY_DISASTER_VOLCANO},
-  {"Firestorm", CITY_KEY_NONE, CITY_MENU_ACTION_COMMAND, CITY_COMMAND_START_DISASTER,
-      CITY_DISASTER_FIRE_STORM},
-  {"Mass Riots", CITY_KEY_NONE, CITY_MENU_ACTION_COMMAND, CITY_COMMAND_START_DISASTER,
-      CITY_DISASTER_MASS_RIOTS},
-  {"Mass Floods", CITY_KEY_NONE, CITY_MENU_ACTION_COMMAND, CITY_COMMAND_START_DISASTER,
-      CITY_DISASTER_MAJOR_FLOOD},
-  {"Pollution", CITY_KEY_NONE, CITY_MENU_ACTION_COMMAND, CITY_COMMAND_START_DISASTER,
-      CITY_DISASTER_CHEMICAL_SPILL},
-  {"Air Crash", CITY_KEY_NONE, CITY_MENU_ACTION_COMMAND, CITY_COMMAND_START_DISASTER,
-      CITY_DISASTER_CRASH},
-  {"Helicopter Crash", CITY_KEY_NONE, CITY_MENU_ACTION_COMMAND, CITY_COMMAND_START_DISASTER,
-      CITY_DISASTER_HELICOPTER_CRASH},
-};
-static const CityMenuItem kMapItems[] = {
-  {"Map Data", 'M', CITY_MENU_ACTION_MAP_DATA, 0, 0},
-  {"Extra Viewport", CITY_KEY_F8, CITY_MENU_ACTION_VIEWPORT, 0, 0},
-  {"Sign List", CITY_KEY_F4, CITY_MENU_ACTION_SIGN_LIST, 0, 0},
-  {"Center View", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_CENTER}
-};
-static const CityMenuItem kReviewItems[] = {
-  {"Budget", (CITY_HOTKEY_CTRL | 'B'), CITY_MENU_ACTION_BUDGET, 0, 0},
-  {"Ordinances", (CITY_HOTKEY_CTRL | 'O'), CITY_MENU_ACTION_POLICIES, 0, 0},
-  {"Advisors", CITY_KEY_NONE, CITY_MENU_ACTION_ADVISOR, 0, CITY_BUDGET_PROPERTY_TAX},
-};
-enum { kChartPopulation = 1 };
-static const CityMenuItem kChartItems[] = {
-  {"Graphs", (CITY_HOTKEY_CTRL | 'H'), CITY_MENU_ACTION_PANEL, 0, CITY_PANEL_HISTORY},
-  [kChartPopulation] = {"Population", (CITY_HOTKEY_CTRL | CITY_HOTKEY_SHIFT | 'P'),
-      CITY_MENU_ACTION_PANEL, 0, CITY_PANEL_DEMOGRAPHICS},
-  {"Industry", (CITY_HOTKEY_CTRL | CITY_HOTKEY_SHIFT | 'I'), CITY_MENU_ACTION_PANEL, 0, CITY_PANEL_INDUSTRY},
-  {"Neighbors", (CITY_HOTKEY_CTRL | 'W'), CITY_MENU_ACTION_PANEL, 0,
-      CITY_PANEL_NEIGHBORS},
-  {"Land Use", CITY_KEY_NONE, CITY_MENU_ACTION_LAND_USE, 0, 0}
-};
-static const CityMenuItem kNewspaperItems[] = {
-  {"Latest Edition", 'N', CITY_MENU_ACTION_NEWSPAPER, 0, 0},
-  {"Subscription", CITY_KEY_NONE, CITY_MENU_ACTION_SUBSCRIPTION, 0, 0},
-  {"Extra Editions", CITY_KEY_NONE, CITY_MENU_ACTION_EXTRA_NEWSPAPER, 0, 0}
-};
-static const CityMenuItem kLayersItems[] = {
-  {"Buildings", CITY_KEY_NONE, CITY_MENU_ACTION_MAP_LAYER, 0,
-      CITY_MAP_LAYER_BUILDINGS},
-  {"Networks", CITY_KEY_NONE, CITY_MENU_ACTION_MAP_LAYER, 0,
-      CITY_MAP_LAYER_NETWORKS},
-  {"Water", CITY_KEY_NONE, CITY_MENU_ACTION_MAP_LAYER, 0, CITY_MAP_LAYER_WATER},
-  {"Trees", CITY_KEY_NONE, CITY_MENU_ACTION_MAP_LAYER, 0, CITY_MAP_LAYER_TREES},
-  {"Signs", CITY_KEY_NONE, CITY_MENU_ACTION_MAP_LAYER, 0, CITY_MAP_LAYER_SIGNS},
-  {"Vehicles", CITY_KEY_NONE, CITY_MENU_ACTION_MAP_LAYER, 0, CITY_MAP_LAYER_VEHICLES}
-};
-static const CityMenuItem kBulldozeItems[] = {
-  {"Demolish", 'B', CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_DEMOLISH},
-  {"De-zone", 'V', CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_DEZONE}
-};
-static const CityDropdownItem kTreeClimateItems[] = {
-  {"Temperate", CLIMATE_TEMPERATE, CITY_DROPDOWN_PLAIN},
-  {"Winter", CLIMATE_ARCTIC, CITY_DROPDOWN_PLAIN},
-  {"Tropical", CLIMATE_TROPICAL, CITY_DROPDOWN_PLAIN},
-  {"Desert", CLIMATE_DESERT_50, CITY_DROPDOWN_PLAIN},
-  {"SimCity Classic", CLIMATE_SIMCITY, CITY_DROPDOWN_PLAIN}
-};
-
-static const CityMenuItem kTreeItems[] = {
-  {"Tree type 1", CITY_KEY_NONE, CITY_MENU_ACTION_TREE_SPECIES, 0, 1},
-  {"Tree type 2", CITY_KEY_NONE, CITY_MENU_ACTION_TREE_SPECIES, 0, 2},
-  {"Tree type 3", CITY_KEY_NONE, CITY_MENU_ACTION_TREE_SPECIES, 0, 3},
-  {"Tree type 4", CITY_KEY_NONE, CITY_MENU_ACTION_TREE_SPECIES, 0, 4},
-  {"Tree type 5", CITY_KEY_NONE, CITY_MENU_ACTION_TREE_SPECIES, 0, 5},
-  {"Tree type 6", CITY_KEY_NONE, CITY_MENU_ACTION_TREE_SPECIES, 0, 6},
-  {"Tree type 7", CITY_KEY_NONE, CITY_MENU_ACTION_TREE_SPECIES, 0, 7},
-  {"Tree type 8", CITY_KEY_NONE, CITY_MENU_ACTION_TREE_SPECIES, 0, 8},
-  {"Tree type 9", CITY_KEY_NONE, CITY_MENU_ACTION_TREE_SPECIES, 0, 9},
-  {"Tree type 10", CITY_KEY_NONE, CITY_MENU_ACTION_TREE_SPECIES, 0, 10},
-  {"Tree type 11", CITY_KEY_NONE, CITY_MENU_ACTION_TREE_SPECIES, 0, 11},
-  {"Tree type 12", CITY_KEY_NONE, CITY_MENU_ACTION_TREE_SPECIES, 0, 12},
-  {"Trees of random type", CITY_KEY_NONE, CITY_MENU_ACTION_TREE_SPECIES, 0, CITY_TREE_RANDOM}
-};
-static const CityMenuItem kLandscapeItems[] = {
-  {"Trees", 'U', CITY_MENU_ACTION_CATEGORY, 0, CITY_TOPBAR_TREES},
-  {"Build Canals", (CITY_HOTKEY_SHIFT | 'U'), CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_WATER},
-  {"Lower Terrain", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_LOWER_TERRAIN},
-  {"Raise Terrain", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_RAISE_TERRAIN},
-  {"Stretch Terrain", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_STRETCH_TERRAIN},
-  {"Level Terrain", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_LEVEL_TERRAIN},
-  {"Place Sign", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_SIGN},
-  {"Demolish", 'B', CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_DEMOLISH}
-};
-static const CityMenuItem kResidentialItems[] = {
-  {"Light Residential", 'Q', CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_RESIDENTIAL},
-  {"Dense Residential", 'E', CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_DENSE_RESIDENTIAL}
-};
-static const CityMenuItem kCommercialItems[] = {
-  {"Light Commercial", 'A', CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_COMMERCIAL},
-  {"Dense Commercial", 'D', CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_DENSE_COMMERCIAL}
-};
-static const CityMenuItem kIndustrialItems[] = {
-  {"Light Industrial", 'Z', CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_INDUSTRIAL},
-  {"Dense Industrial", 'C', CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_DENSE_INDUSTRIAL}
-};
-static const CityMenuItem kTransportItems[] = {
-  {"Road", (CITY_HOTKEY_CTRL | 'R'), CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_ROAD},
-  {"Road Bridge", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_ROAD_BRIDGE},
-  {"Tunnel", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_TUNNEL},
-  {"Highway", (CITY_HOTKEY_CTRL | CITY_HOTKEY_SHIFT | 'R'), CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_HIGHWAY},
-  {"Onramp", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_ONRAMP},
-  {"Bus Depot", (CITY_HOTKEY_ALT | 'R'), CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_BUS_DEPOT},
-  {"Railway", 'T', CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_RAIL},
-  {"Rail Bridge", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_RAIL_BRIDGE},
-  {"Subway", (CITY_HOTKEY_SHIFT | 'T'), CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_SUBWAY},
-  {"Rail Station", (CITY_HOTKEY_ALT | 'T'), CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_RAIL_DEPOT},
-  {"Subway Station", (CITY_HOTKEY_ALT | CITY_HOTKEY_SHIFT | 'T'), CITY_MENU_ACTION_TOOL, 0,
-      CITY_CANVAS_TOOL_SUBWAY_STATION},
-  {"Subway-to-Rail Connection", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_SUBWAY_RAIL_CONNECTION},
-  {"Demolish", 'B', CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_DEMOLISH}
-};
-enum { kTransportItemCount = sizeof(kTransportItems) / sizeof(*kTransportItems) };
-static const CityMenuItem kPortsItems[] = {
-  {"Seaport Zone", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_SEAPORT},
-  {"Airport Zone", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_AIRPORT}
-};
-static const CityMenuItem kPowerItems[] = {
-  {"Coal Power Plant", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_COAL},
-  {"Oil Power Plant", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_OIL},
-  {"Gas Power Plant", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_GAS},
-  {"Nuclear Power Plant", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_NUCLEAR},
-  {"Hydroelectric Power", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_HYDRO},
-  {"Wind Turbine", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_WIND},
-  {"Solar Power Plant", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_SOLAR},
-  {"Microwave Power Plant", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_MICROWAVE},
-  {"Fusion Power Plant", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_FUSION}
-};
-static const CityMenuItem kWaterItems[] = {
-  {"Water Pump", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_WATER_PUMP},
-  {"Water Tower", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_WATER_TOWER},
-  {"Water Treatment Plant", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_WATER_TREATMENT},
-  {"Desalination Plant", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_DESALINATION}
-};
-static const CityMenuItem kEducationItems[] = {
-  {"Hospital", 'H', CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_HOSPITAL},
-  {"School", 'K', CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_SCHOOL},
-  {"College", (CITY_HOTKEY_SHIFT | 'K'), CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_COLLEGE},
-  {"Library", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_LIBRARY},
-  {"Museum", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_MUSEUM}
-};
-static const CityMenuItem kServicesItems[] = {
-  {"Police Station", 'P', CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_POLICE},
-  {"Prison", (CITY_HOTKEY_SHIFT | 'P'), CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_PRISON}
-};
-static const CityMenuItem kRecreationItems[] = {
-  {"Small Park", 'J', CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_SMALL_PARK},
-  {"Large Park", (CITY_HOTKEY_SHIFT | 'J'), CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_BIG_PARK},
-  {"Zoo", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_ZOO},
-  {"Stadium", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_STADIUM},
-  {"Marina", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_MARINA}
-};
-static const CityMenuItem kRewardsItems[] = {
-  {"Mayor's House", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_MAYORS_HOUSE},
-  {"City Hall", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_CITY_HALL},
-  {"Statue", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_STATUE},
-  {"Wildlife Dome", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_LLAMA_DOME},
-  {"Terraced Arcology", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_PLYMOUTH_ARCOLOGY},
-  {"Forest Arcology", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_FOREST_ARCOLOGY},
-  {"Tower Arcology", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_DARCO_ARCOLOGY},
-  {"Launch Arcology", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_LAUNCH_ARCOLOGY}
-};
-static const CityMenuItem kEmergencyItems[] = {
-  {"Go to Disaster", CITY_KEY_NONE, CITY_MENU_ACTION_GOTO_DISASTER, 0, 0},
-  {"Dispatch Police", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_DISPATCH_POLICE},
-  {"Dispatch Firefighters", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_DISPATCH_FIRE},
-  {"Dispatch Military", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_DISPATCH_MILITARY},
-  {"Cancel Dispatch", CITY_KEY_NONE, CITY_MENU_ACTION_COMMAND, CITY_COMMAND_RECALL_DISPATCH, 0},
-  {"Start Disaster...", CITY_KEY_NONE, CITY_MENU_ACTION_DISASTERS, 0, 0}
-};
-static const CityMenuItem kHelpItems[] = {
-  {"Inspect Tile", CITY_KEY_F12, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_QUERY},
-  {"Tool Help", CITY_KEY_NONE, CITY_MENU_ACTION_HELP, 0, 0},
-  {"Keyboard Shortcuts", CITY_KEY_NONE, CITY_MENU_ACTION_HELP, 0, 1},
-  {"About", CITY_KEY_NONE, CITY_MENU_ACTION_HELP, 0, 2}
-};
-
-typedef struct {
-  const char *label;
-  const CityMenuItem *items;
-  u8 count;
-  bool category, separator;
-  CityMenuItem direct;
-} CityToolbarDefinition;
-
-static const CityToolbarDefinition kButtons[CITY_TOPBAR_COUNT] = {
-  {"Pause", NULL, 0, false, false, {"Pause", CITY_KEY_SPACE, CITY_MENU_ACTION_PAUSE, 0, 0}},
-  {"Speed", kSpeedItems, 4, false, false, {0}},
-  {"File", kFileItems, sizeof(kFileItems) / sizeof(*kFileItems), false, false, {0}},
-  {"Settings", kOptionItems, sizeof(kOptionItems) / sizeof(*kOptionItems), false, false, {0}},
-  {"Adjust & Review", kReviewItems, sizeof(kReviewItems) / sizeof(*kReviewItems), false, true,
-      {"Budget", (CITY_HOTKEY_CTRL | 'B'), CITY_MENU_ACTION_BUDGET, 0, 0}},
-  {"Ordinances", NULL, 0, false, false, {"Ordinances", (CITY_HOTKEY_CTRL | 'O'), CITY_MENU_ACTION_POLICIES, 0, 0}},
-  {"Charts", kChartItems, sizeof(kChartItems) / sizeof(*kChartItems), false, false, {0}},
-  // Retain the artwork index; advisors are accessed through Adjust & Review.
-  {"Advisors", NULL, 0, false, false, {0}},
-  {"Newspaper", kNewspaperItems, 3, false, false, {0}},
-  {"Map", kMapItems, 4, false, true, {0}},
-  {"Zoom In", NULL, 0, false, false, {"Zoom In", '+', CITY_MENU_ACTION_TOOLBAR, 0, CITY_TOOLBAR_BUTTON_ZOOM_IN}},
-  {"Zoom Out", NULL, 0, false, false, {"Zoom Out", '-', CITY_MENU_ACTION_TOOLBAR, 0, CITY_TOOLBAR_BUTTON_ZOOM_OUT}},
-  // The isometric projection reverses the grid rotation's screen direction.
-  {"Rotate Clockwise", NULL, 0, false, false,
-      {"Rotate Clockwise", CITY_KEY_PAGE_DOWN, CITY_MENU_ACTION_TOOLBAR, 0,
-          CITY_TOOLBAR_BUTTON_ROTATE_COUNTERCLOCKWISE}},
-  {"Layers", kLayersItems, sizeof(kLayersItems) / sizeof(*kLayersItems), false, false, {0}},
-  {"Bulldoze", kBulldozeItems, 2, true, true, {0}},
-  {"Landscape", kLandscapeItems, sizeof(kLandscapeItems) / sizeof(*kLandscapeItems), true, true, {0}},
-  {"Zone", kResidentialItems, 2, true, true, {0}},
-  {"Commercial", kCommercialItems, 2, true, false, {0}},
-  {"Industrial", kIndustrialItems, 2, true, false, {0}},
-  {"Build Transportation", kTransportItems, kTransportItemCount, true, true, {0}},
-  {"Rail", NULL, 0, false, false, {0}},
-  {"Airport & Seaport Zones", kPortsItems, 2, true, false, {0}},
-  {"Utilities", kPowerItems, 9, true, true, {0}},
-  {"Water", kWaterItems, 4, true, false, {0}},
-  {"Civic & Special Buildings", kEducationItems, sizeof(kEducationItems) / sizeof(*kEducationItems), true, false, {0}},
-  {"Police", kServicesItems, sizeof(kServicesItems) / sizeof(*kServicesItems), true, false, {0}},
-  {"Recreation", kRecreationItems, 5, true, false, {0}},
-  {"Rewards", kRewardsItems, 8, true, false, {0}},
-  {"Emergency", kEmergencyItems, sizeof(kEmergencyItems) / sizeof(*kEmergencyItems), true, true, {0}},
-  {"Help", kHelpItems, 4, false, false, {0}},
-  {"Rotate Counterclockwise", NULL, 0, false, false,
-      {"Rotate Counterclockwise", CITY_KEY_PAGE_UP, CITY_MENU_ACTION_TOOLBAR, 0,
-          CITY_TOOLBAR_BUTTON_ROTATE_CLOCKWISE}},
-  {"Trees", kTreeItems, sizeof(kTreeItems) / sizeof(*kTreeItems), true, false, {0}},
-  {"Underworld / Overworld", NULL, 0, false, false,
-      {"Underworld", CITY_KEY_NONE, CITY_MENU_ACTION_TOOLBAR, 0,
-          CITY_TOOLBAR_BUTTON_UNDERGROUND}},
-  {"Raise Terrain", NULL, 0, false, true,
-      {"Raise Terrain", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_RAISE_TERRAIN}},
-  {"Lower Terrain", NULL, 0, false, false,
-      {"Lower Terrain", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_LOWER_TERRAIN}},
-  {"Stretch Terrain", NULL, 0, false, false,
-      {"Stretch Terrain", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_STRETCH_TERRAIN}},
-  {"Level Terrain", NULL, 0, false, false,
-      {"Level Terrain", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_LEVEL_TERRAIN}},
-  {"Place Water", NULL, 0, false, false,
-      {"Place Water", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_WATER}},
-  {"Clear Terrain", NULL, 0, false, false,
-      {"Clear Terrain", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_DEMOLISH}},
-  {"Center View", NULL, 0, false, true,
-      {"Center View", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_CENTER}},
-  {"Place Stream", NULL, 0, false, false,
-      {"Place Stream", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_STREAM}},
-};
-
-static const CityMenuItem kZoningMenu[] = {
-  {"Residential...", CITY_KEY_NONE, CITY_MENU_ACTION_SUBMENU, 0, kResidentialDensityMenu},
-  {"Commercial...", CITY_KEY_NONE, CITY_MENU_ACTION_SUBMENU, 0, kCommercialDensityMenu},
-  {"Industrial...", CITY_KEY_NONE, CITY_MENU_ACTION_SUBMENU, 0, kIndustrialDensityMenu},
-  {"Airport Zone", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_AIRPORT},
-  {"Seaport Zone", CITY_KEY_NONE, CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_SEAPORT},
-  {"De-zone", 'V', CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_DEZONE},
-  {"Demolish", 'B', CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_DEMOLISH}
-};
-enum { kZoningItemCount = sizeof(kZoningMenu) / sizeof(*kZoningMenu) };
-static const CityMenuItem kCivicMenu[] = {
-  {"Police", 'P', CITY_MENU_ACTION_SUBMENU, 0, kPoliceMenu},
-  {"Fire Station", 'F', CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_FIRE},
-  {"Health & Education", CITY_KEY_NONE, CITY_MENU_ACTION_SUBMENU, 0, kHealthEducationMenu},
-  {"Parks & Recreation", CITY_KEY_NONE, CITY_MENU_ACTION_SUBMENU, 0, kRecreationMenu},
-  {"Rewards & Arcologies...", (CITY_HOTKEY_CTRL | CITY_HOTKEY_ALT | 'R'), CITY_MENU_ACTION_CATEGORY,
-      0, CITY_TOPBAR_REWARDS},
-  {"Demolish", 'B', CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_DEMOLISH}
-};
-static const CityMenuItem kUtilitiesMenu[] = {
-  {"Power Lines", 'L', CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_POWER_LINES},
-  {"Power Plants...", (CITY_HOTKEY_CTRL | 'E'), CITY_MENU_ACTION_CATEGORY, 0, CITY_TOPBAR_POWER},
-  {"Water Pipes", 'I', CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_PIPES},
-  {"Water Buildings...", (CITY_HOTKEY_CTRL | 'I'), CITY_MENU_ACTION_CATEGORY, 0, CITY_TOPBAR_WATER},
-  {"Demolish", 'B', CITY_MENU_ACTION_TOOL, 0, CITY_CANVAS_TOOL_DEMOLISH}
-};
-
-static const CityToolbarDefinition kConstructionGroups[CITY_CONSTRUCTION_GROUP_COUNT] = {
-  {"Zone", kZoningMenu, kZoningItemCount, true, false, {0}},
-  {"Build Utilities", kUtilitiesMenu, sizeof(kUtilitiesMenu) / sizeof(*kUtilitiesMenu), true, false, {0}},
-  {"Place Civic/Special Buildings", kCivicMenu, sizeof(kCivicMenu) / sizeof(*kCivicMenu), true, false, {0}},
-  {"Build Transportation", kTransportItems, kTransportItemCount, true, false, {0}},
-  {"Landscape", kLandscapeItems, sizeof(kLandscapeItems) / sizeof(*kLandscapeItems), true, false, {0}}
-};
-static const u8 kConstructionGroupCategories[CITY_CONSTRUCTION_GROUP_COUNT] = {
-  CITY_TOPBAR_RESIDENTIAL, CITY_TOPBAR_POWER, CITY_TOPBAR_EDUCATION, CITY_TOPBAR_ROADS, CITY_TOPBAR_LANDSCAPE
-};
-
-typedef struct {
-  const CityMenuItem *items;
-  u8 count, category;
-} CityToolSubmenu;
-
-_Static_assert(kRecreationMenu - kResidentialDensityMenu + 1 == CITY_TOOL_SUBMENU_COUNT, "tool submenu count");
-
-static const CityToolSubmenu kToolSubmenus[CITY_TOOL_SUBMENU_COUNT] = {
-  {kResidentialItems, sizeof(kResidentialItems) / sizeof(*kResidentialItems), CITY_TOPBAR_RESIDENTIAL},
-  {kCommercialItems, sizeof(kCommercialItems) / sizeof(*kCommercialItems), CITY_TOPBAR_COMMERCIAL},
-  {kIndustrialItems, sizeof(kIndustrialItems) / sizeof(*kIndustrialItems), CITY_TOPBAR_INDUSTRIAL},
-  {kServicesItems, sizeof(kServicesItems) / sizeof(*kServicesItems), CITY_TOPBAR_PUBLIC_SERVICES},
-  {kEducationItems, sizeof(kEducationItems) / sizeof(*kEducationItems), CITY_TOPBAR_EDUCATION},
-  {kRecreationItems, sizeof(kRecreationItems) / sizeof(*kRecreationItems), CITY_TOPBAR_RECREATION}
-};
 
 static bool IsToolSubmenu(int menu) {
   return menu >= kResidentialDensityMenu && menu <= kRecreationMenu;
@@ -533,7 +163,7 @@ static int ConstructionGroupIndex(int category) {
 }
 
 static const CityToolbarDefinition *ConstructionCategoryDefinition(int category, bool group) {
-  return group ? &kConstructionGroups[ConstructionGroupIndex(category - 1)] : &kButtons[category - 1];
+  return group ? &kConstructionGroups[ConstructionGroupIndex(category - 1)] : &kCityToolbarDefinitions[category - 1];
 }
 
 static const CityToolbarDefinition *ConstructionWindowDefinition(const Window *window) {
@@ -545,7 +175,7 @@ static bool ToolbarIsZoneCategory(int index) {
 }
 
 static bool ToolbarUsesDropdown(int index) {
-  return !kButtons[index].category && kButtons[index].count;
+  return !kCityToolbarDefinitions[index].category && kCityToolbarDefinitions[index].count;
 }
 
 // Art IDs stay stable; consolidated categories each have one visible button.
@@ -587,7 +217,7 @@ static int ToolbarButtonWidth(const CityCanvasDesktop *desktop, int index) {
 
 static int ToolbarButtonIcon(int index) {
   if (index >= CITY_TOPBAR_TERRAIN_RAISE) {
-    int tool = kButtons[index].direct.parameter;
+    int tool = kCityToolbarDefinitions[index].direct.parameter;
     if (tool == CITY_CANVAS_TOOL_STRETCH_TERRAIN) return CITY_TOOLBAR_STRETCH_TERRAIN_ICON;
     if (tool == CITY_CANVAS_TOOL_STREAM) tool = CITY_CANVAS_TOOL_WATER;
     return CITY_TOPBAR_ICON_COUNT + tool;
@@ -603,7 +233,7 @@ static void DrawTerrainStreamIcon(Canvas *canvas, CityRect bounds, bool pressed)
   int left = bounds.left + (bounds.right - bounds.left - size) / 2 + pressed;
   int top = bounds.top + (bounds.bottom - bounds.top - size) / 2 + pressed;
   for (int pass = 0; pass < 2; ++pass)
-    for (int i = 1; i < sizeof(kCourse) / sizeof(*kCourse); ++i)
+    for (size_t i = 1; i < sizeof(kCourse) / sizeof(*kCourse); ++i)
       DrawCanvasLine(canvas, left + kCourse[i - 1].x * size / 18, top + kCourse[i - 1].y * size / 18,
           left + kCourse[i].x * size / 18, top + kCourse[i].y * size / 18,
           pass ? 0xFF70D0EC : 0xFF245878, IntMax(1, size * (pass ? 2 : 5) / 18));
@@ -631,7 +261,7 @@ static CityToolbarLayout ToolbarLayout(const CityCanvasDesktop *desktop) {
       IntMin(kDemandWidth, IntMax(0, desktop->canvas_width - 2 * kButtonWidth));
   int extra_width = ToolbarButtonWidth(desktop, CITY_TOPBAR_PAUSE) - kButtonWidth;
   int full_width = count * kButtonWidth + demand_width + extra_width;
-  for (int i = 1; i < count; ++i) full_width += kButtons[order[i]].separator ? 3 : 0;
+  for (int i = 1; i < count; ++i) full_width += kCityToolbarDefinitions[order[i]].separator ? 3 : 0;
   int bar_width = IntMin(desktop->canvas_width, IntMax(kDefaultStatusWidth, full_width));
   int bar_left = (desktop->canvas_width - bar_width) >> 1;
   layout.status_bounds = (CityRect){bar_left, 0, bar_left + bar_width, CITY_MENU_BAR_HEIGHT};
@@ -642,7 +272,7 @@ static CityToolbarLayout ToolbarLayout(const CityCanvasDesktop *desktop) {
         layout.bounds.right, CITY_MENU_BAR_HEIGHT};
     for (int position = 0; position < count; ++position) {
       int i = order[position];
-      if (position && kButtons[i].separator) left += 3;
+      if (position && kCityToolbarDefinitions[i].separator) left += 3;
       int width = ToolbarButtonWidth(desktop, i);
       layout.buttons[i] = (CityRect){left, 0, left + width, CITY_MENU_BAR_HEIGHT};
       left += width;
@@ -816,25 +446,6 @@ static CityRect ContextButtonBounds(const Window *window, int item) {
   return ConstructionGridButtonBounds(ConstructionWindowDefinition(window), window->bounds, item);
 }
 
-static const char *const kConstructionTitles[CITY_TOPBAR_COUNT] = {
-  [CITY_TOPBAR_BULLDOZE] = "Demolition",
-  [CITY_TOPBAR_LANDSCAPE] = "Landscaping",
-  [CITY_TOPBAR_TREES] = "Trees",
-  [CITY_TOPBAR_RESIDENTIAL] = "Residential Zones",
-  [CITY_TOPBAR_COMMERCIAL] = "Commercial Zones",
-  [CITY_TOPBAR_INDUSTRIAL] = "Industrial Zones",
-  [CITY_TOPBAR_ROADS] = "Transport Construction",
-  [CITY_TOPBAR_RAIL] = "Rail Construction",
-  [CITY_TOPBAR_PORTS] = "Air & Sea Ports",
-  [CITY_TOPBAR_POWER] = "Select a Power Plant",
-  [CITY_TOPBAR_WATER] = "Select a Water Building",
-  [CITY_TOPBAR_EDUCATION] = "Education",
-  [CITY_TOPBAR_PUBLIC_SERVICES] = "Public Services",
-  [CITY_TOPBAR_RECREATION] = "Recreation",
-  [CITY_TOPBAR_REWARDS] = "Select a Reward or Arcology",
-  [CITY_TOPBAR_EMERGENCY] = "Emergency Services"
-};
-
 // Try eight edge/corner positions around visible windows. Work in physical
 // pixels so adjoining borders meet even after dragging or fractional scaling.
 static CityPoint PlaceConstructionWindow(const CityCanvasDesktop *desktop, const Window *opening) {
@@ -965,8 +576,8 @@ static void OpenConstructionWindow(CityCanvasDesktop *desktop, int category, boo
   window.title = group ? ConstructionCategoryDefinition(category, true)->label : kConstructionTitles[category - 1];
   if (ConstructionUsesList(category, group)) {
     int selected = desktop->menu.remembered[category - 1];
-    for (int i = 0; i < kButtons[category - 1].count; ++i)
-      if (kButtons[category - 1].items[i].parameter + 1 == selected) {
+    for (int i = 0; i < kCityToolbarDefinitions[category - 1].count; ++i)
+      if (kCityToolbarDefinitions[category - 1].items[i].parameter + 1 == selected) {
         window.toolbar_selection = i;
         window.toolbar_scroll = IntMax(0, i - ConstructionVisibleRows(&window) + 1);
       }
@@ -994,8 +605,8 @@ static const CityMenuItem *DropdownItems(const CityCanvasDesktop *desktop, int *
     return submenu->items;
   }
   if (menu && menu <= CITY_TOPBAR_COUNT && ToolbarUsesDropdown(menu - 1)) {
-    *count = kButtons[menu - 1].count;
-    return kButtons[menu - 1].items;
+    *count = kCityToolbarDefinitions[menu - 1].count;
+    return kCityToolbarDefinitions[menu - 1].items;
   }
   return NULL;
 }
@@ -1286,7 +897,7 @@ static bool PressCityMenu(CityCanvasDesktop *desktop, int x, int y) {
     if (control <= CITY_TOPBAR_COUNT) {
       if (ToolbarUsesDropdown(control - 1)) {
         if (previous != control) desktop->menu.selected = control;
-      } else if (kButtons[control - 1].category)
+      } else if (kCityToolbarDefinitions[control - 1].category)
         OpenConstructionWindow(desktop, control, ConstructionGroupIndex(control - 1) >= 0);
     }
     DirtyMenu(desktop);
@@ -1352,9 +963,9 @@ static const CityMenuItem *ActivateMenuItem(CityCanvasDesktop *desktop, const Ci
   if (item->action == CITY_MENU_ACTION_TOOL) {
     desktop->menu.category = 0;
     for (int category = 0; category < CITY_TOPBAR_COUNT; ++category)
-      if (kButtons[category].category)
-        for (int i = 0; i < kButtons[category].count; ++i)
-          if (&kButtons[category].items[i] == item) {
+      if (kCityToolbarDefinitions[category].category)
+        for (int i = 0; i < kCityToolbarDefinitions[category].count; ++i)
+          if (&kCityToolbarDefinitions[category].items[i] == item) {
             desktop->menu.remembered[category] = item->parameter + 1;
             desktop->menu.category = ToolbarIsZoneCategory(category) ? CITY_TOPBAR_RESIDENTIAL + 1 : category + 1;
           }
@@ -1409,7 +1020,7 @@ static void ScrollConstructionWindow(CityCanvasDesktop *desktop, Window *window,
 static bool CityToolSupportsPlacementRotation(int tool) {
   if (tool == CITY_CANVAS_TOOL_HIGHWAY) return true;
   int tools = Sc2kCanvasMapPointerTools(tool, 0);
-  return tools >= 0 && IsTileKindBuilding(GetCityFacilityTile(tools & 255, (tools >> 8) & 255));
+  return tools >= 0 && IsTileKindBuilding(CityToolFacilityKind(tools & 255, (tools >> 8) & 255));
 }
 
 static bool ConstructionWindowCanRotate(const Window *window) {
@@ -1483,7 +1094,7 @@ void CityConstructionTooltipAt(const Game *game, const Window *window, int x, in
     char status[256];
     char shortcut[48];
     CityHotkeyToString(game->ui->desktop.menu.show_shortcuts ? item->shortcut : 0, shortcut, sizeof(shortcut));
-    FormatCityToolStatusText(game->resources, status, sizeof(status), item->parameter);
+    FormatCityToolStatusText(status, sizeof(status), item->parameter);
     bool bridge_hint = item->parameter == CITY_CANVAS_TOOL_ROAD || item->parameter == CITY_CANVAS_TOOL_RAIL;
     snprintf(text, capacity, "%s%s%s%s%s", status, shortcut[0] ? " (" : "", shortcut, shortcut[0] ? ")" : "",
         bridge_hint ? ". Drag from a bank toward water to choose a bridge." : "");
@@ -1520,11 +1131,11 @@ static const CityMenuItem *ReleaseCityMenu(CityCanvasDesktop *desktop, int x, in
     DirtyMenu(desktop);
     return NULL;
   }
-  if (control == kStatusDate) return &kButtons[CITY_TOPBAR_PAUSE].direct;
-  if (control == kStatusMoney) return TerrainToolbar(desktop) ? NULL : &kButtons[CITY_TOPBAR_BUDGET].direct;
+  if (control == kStatusDate) return &kCityToolbarDefinitions[CITY_TOPBAR_PAUSE].direct;
+  if (control == kStatusMoney) return TerrainToolbar(desktop) ? NULL : &kCityToolbarDefinitions[CITY_TOPBAR_BUDGET].direct;
   if (control == kToolbarDemand) return &kChartItems[kChartPopulation];
   if (control <= CITY_TOPBAR_COUNT) {
-    const CityToolbarDefinition *button = &kButtons[control - 1];
+    const CityToolbarDefinition *button = &kCityToolbarDefinitions[control - 1];
     if (ToolbarUsesDropdown(control - 1)) return NULL;
     if (!button->category) return &button->direct;
     return NULL;
@@ -1605,7 +1216,7 @@ bool HandleCityToolbarShortcut(Game *game, CityHotkey key) {
     RevealToolbarButton(desktop, kMenuShortcuts[i].button);
     if (ConstructionGroupIndex(kMenuShortcuts[i].button) >= 0) {
       OpenConstructionWindow(desktop, kMenuShortcuts[i].button + 1, true);
-    } else if (kButtons[kMenuShortcuts[i].button].category) {
+    } else if (kCityToolbarDefinitions[kMenuShortcuts[i].button].category) {
       OpenConstructionWindow(desktop, kMenuShortcuts[i].button + 1, false);
     } else {
       desktop->menu.selected = kMenuShortcuts[i].button + 1;
@@ -1638,8 +1249,8 @@ bool HandleCityToolbarShortcut(Game *game, CityHotkey key) {
   }
   const CityMenuItem *selected = NULL;
   if (key == '=' || key == (CITY_HOTKEY_SHIFT | '=') || key == CITY_KEY_KEYPAD_PLUS)
-    selected = &kButtons[CITY_TOPBAR_ZOOM_IN].direct;
-  if (key == CITY_KEY_KEYPAD_MINUS) selected = &kButtons[CITY_TOPBAR_ZOOM_OUT].direct;
+    selected = &kCityToolbarDefinitions[CITY_TOPBAR_ZOOM_IN].direct;
+  if (key == CITY_KEY_KEYPAD_MINUS) selected = &kCityToolbarDefinitions[CITY_TOPBAR_ZOOM_OUT].direct;
   static const struct { const CityMenuItem *items; int count; } kPopupMenus[] = {
     {kZoningMenu, kZoningItemCount},
     {kUtilitiesMenu, sizeof(kUtilitiesMenu) / sizeof(*kUtilitiesMenu)},
@@ -1653,7 +1264,7 @@ bool HandleCityToolbarShortcut(Game *game, CityHotkey key) {
           item->shortcut == key) selected = item;
     }
   for (int i = 0; !selected && i < CITY_TOPBAR_COUNT; ++i) {
-    const CityToolbarDefinition *button = &kButtons[i];
+    const CityToolbarDefinition *button = &kCityToolbarDefinitions[i];
     if (!button->category && !button->count && button->direct.shortcut &&
         button->direct.shortcut == key) selected = &button->direct;
     for (int j = 0; !selected && j < button->count; ++j)
@@ -1742,7 +1353,7 @@ void CityMenuTooltipAt(const Game *game, int x, int y, char *text, size_t capaci
       CopyText(text, capacity, "Start City on the edited terrain (Space).");
       return;
     }
-    const CityToolbarDefinition *button = &kButtons[control - 1];
+    const CityToolbarDefinition *button = &kCityToolbarDefinitions[control - 1];
     snprintf(text, capacity, "%s%s", button->label, !ButtonEnabled(desktop, control) ? " (unavailable)" :
         ToolbarUsesDropdown(control - 1) ? " menu" :
         button->category ? ": open or reset its construction window." : "");
@@ -2185,20 +1796,6 @@ static void DrawStatusField(Canvas *canvas, CityRect b, const char *text, u32 co
   DrawCityInterfaceTextSized(canvas->interface_font, &label, x, y, text, color, true, 20);
 }
 
-// Keep the dark-red stipple at framebuffer detail at every interface scale.
-static void DrawToolbarSeparator(Canvas *canvas, CityRect bounds) {
-  CanvasRaster raster = CanvasRasterView(canvas);
-  Canvas physical = *canvas;
-  physical.clip = CanvasRasterRect(canvas, canvas->clip);
-  physical.width = raster.width; physical.height = raster.height;
-  physical.raster = (CanvasRaster){0};
-  CityRect b = IntersectCityRects(CanvasRasterRect(canvas, bounds), physical.clip);
-  CanvasFill(&physical, b.left, b.top, b.right, b.bottom, 0xFF3C0001);
-  for (int y = b.top; y < b.bottom; ++y)
-    for (int x = b.left + ((b.left + y) & 1); x < b.right; x += 2)
-      CanvasFill(&physical, x, y, x + 1, y + 1, 0xFF800000);
-}
-
 void DrawCityMenu(Game *game, Canvas *canvas, const CityCanvasDesktop *desktop) {
   if (!game->city_active) return;
   Canvas ui_canvas = *canvas;
@@ -2215,11 +1812,11 @@ void DrawCityMenu(Game *game, Canvas *canvas, const CityCanvasDesktop *desktop) 
   for (int i = 0; i < CITY_TOPBAR_COUNT; ++i) {
     CityRect b = layout.buttons[i];
     if (b.right <= b.left) continue;
-    if (layout.pages == 1 && kButtons[i].separator && b.left > bar.left)
-      DrawToolbarSeparator(canvas, (CityRect){b.left - 3, b.top, b.left, b.bottom});
+    if (layout.pages == 1 && kCityToolbarDefinitions[i].separator && b.left > bar.left)
+      DrawCanvasStipple(canvas, (CityRect){b.left - 3, b.top, b.left, b.bottom}, 0xFF3C0001, 0xFF800000);
     bool pressed = (!menu->pressed_window && menu->pressed == i + 1) || menu->selected == i + 1 ||
         (i == CITY_TOPBAR_PAUSE && menu->last_paused && !editing) ||
-        (i >= CITY_TOPBAR_TERRAIN_RAISE && IsCityMenuItemChecked(game, &kButtons[i].direct)) ||
+        (i >= CITY_TOPBAR_TERRAIN_RAISE && IsCityMenuItemChecked(game, &kCityToolbarDefinitions[i].direct)) ||
         (editing && i == CITY_TOPBAR_TREES && desktop->selected_tool == CITY_CANVAS_TOOL_TREES) ||
         (i == CITY_TOPBAR_UNDERWORLD && menu->last_underworld);
     if (ButtonEnabled(desktop, i + 1))
@@ -2478,173 +2075,6 @@ bool ConstructionWindowProcedure(Game *game, const Window *window, const WindowE
   return false;
 }
 
-static void OpenCityPanel(Game *game, int panel) {
-  CityCanvasDesktop *desktop = &game->ui->desktop;
-  for (int i = 0; i < desktop->count; ++i) {
-    WindowKind kind = desktop->windows[i].kind;
-    if ((panel == CITY_PANEL_MAP_DATA && kind == CITY_CANVAS_MAP_DATA) || Sc2kCanvasChartCode(kind) == panel) {
-      FocusCityCanvasWindowKind(desktop, kind);
-      return;
-    }
-  }
-  SetCityPanelVisibilityByCode(game->city, panel);
-  if (panel == CITY_PANEL_MAP_DATA) UpdateCityMapDataWindows(game->city);
-}
-
-void ExecuteCityMenuItem(Game *game, const CityMenuItem *item) {
-  if (!item) return;
-  PlayCityButtonBeep(game);
-  City *city = game->city;
-  CityInterfaceState *ui = game->ui;
-  switch (item->action) {
-  case CITY_MENU_ACTION_TREE_SPECIES:
-  case CITY_MENU_ACTION_TOOL: {
-    int tool = item->action == CITY_MENU_ACTION_TREE_SPECIES ? CITY_CANVAS_TOOL_TREES : item->parameter;
-    int packed = Sc2kCanvasMapPointerTools(tool, 0);
-    int button = tool == CITY_CANVAS_TOOL_CENTER ? CITY_TOOLBAR_BUTTON_CENTER : packed & 255;
-    if (SelectCityToolWithModifiers(game, button, (packed >> 8) & 255, 0)) {
-      ui->desktop.selected_tool = tool;
-      if (tool == CITY_CANVAS_TOOL_STRETCH_TERRAIN) ui->terrain_tool = CITY_TERRAIN_TOOL_STRETCH;
-      if (tool == CITY_CANVAS_TOOL_STREAM) ui->terrain_tool = CITY_TERRAIN_TOOL_RIVER;
-    }
-    break;
-  }
-  case CITY_MENU_ACTION_PAUSE:
-    if (city->settings.timer_mode == CITY_TIMER_STOPPED) {
-      if (!city->name.length) {
-        RequestCityConfiguration(game);
-        break;
-      }
-      RunCityCommand(game, CITY_COMMAND_START_CITY, INVALID_TILE, 0, 0, 0, NULL, NULL);
-      break;
-    }
-    if (ui->dialog_pause_requested) break;
-    if (city->settings.speed > CITY_SPEED_PAUSED) ui->resume_speed = city->settings.speed;
-    RunCityCommand(game, CITY_COMMAND_SET_SIMULATION_SPEED,
-        INVALID_TILE, city->settings.speed == CITY_SPEED_PAUSED ? ui->resume_speed : CITY_SPEED_PAUSED, 0, 0, NULL, NULL);
-    break;
-  case CITY_MENU_ACTION_SOUND_OPTIONS:
-    game->ui->settings.tab = GAME_OPTIONS_TAB_SOUND;
-    OpenCityGameOptions(game);
-    DirtyCityMusicWindows(game);
-    break;
-  case CITY_MENU_ACTION_HELP: {
-    static const char *const kTitles[] = {"Tool Help", "Keyboard Shortcuts", "About"};
-    static const char *const kText[] = {
-      "Use the icon toolbar at the top of the screen. Hover a button to see its name. "
-      "Click a construction category to open its choices, then select a tool or variant. "
-      "Power, water and reward choosers show previews, names and prices. "
-      "Pin a window to keep it when opening another category. Each category remembers its last-used tool. "
-      "Click its toolbar button again to reset the window position. Drag on the map to build. "
-      "Zoning includes all zone types. Transport includes roads, rail and subway. Both include Demolish. "
-      "Utilities contains power and water. Civic & Special Buildings contains schools, services, parks and rewards. "
-      "Landscape, Zone, Transportation, Utilities, Civic and Emergency open green movable toolbars. "
-      "Adjust & Review contains the budget, ordinances and advisors. Charts contains graphs and city statistics. "
-      "Settings contains preferences and music. File contains Save, Load, Abandon and Exit.",
-      "R/Shift+R: rotate placement clockwise/counterclockwise. Shift+click reverses the rotation button. "
-      "Ctrl+R: road. Ctrl+Shift+R: highway. T: rail. Shift+T: subway. L: power lines. I: pipes. "
-      "B: demolish. V: de-zone. Q/E: light/dense residential. A/D: commercial. Z/C: industrial. "
-      "U/Shift+U: trees/water. K/Shift+K: school/college. P/Shift+P: police/prison. F: fire. H: hospital. "
-      "J/Shift+J: small/large park. Ctrl+E: power. Ctrl+I: water. Ctrl+Alt+R: rewards. "
-      "Ctrl+B: budget. Ctrl+O: ordinances. Ctrl+P: settings. Ctrl+L: load. Ctrl+S: save. "
-      "Space: pause. +/-: zoom. PageUp/PageDown: rotate. F10: menus, arrows/Enter: choose. "
-      "Alt+F/S/H: file/settings/help. Alt+Z/N/U/C: zoning/transport/utilities/civic. "
-      "Alt+L/E/M/A: landscape/emergency/meet/review. F8: viewport. F12: inspect.",
-      "Software-rendered city, construction tools and canvas windows."
-    };
-    char about[SC2K_BUILD_VERSION_CAPACITY + 96];
-    const char *text = kText[item->parameter];
-    if (item->parameter == 2) {
-      char version[SC2K_BUILD_VERSION_CAPACITY];
-      FormatBuildVersion(version, sizeof(version));
-      snprintf(about, sizeof(about), "%s. %s", version, text);
-      text = about;
-    }
-    Sc2kCanvasDesktopOpenNotice(&ui->desktop, (CityRect){40, 45, 540, 300},
-        kTitles[item->parameter], text, CITY_MESSAGE_INFORMATION | CITY_MESSAGE_OK);
-    break;
-  }
-  case CITY_MENU_ACTION_CATEGORY: case CITY_MENU_ACTION_SUBMENU:
-  case CITY_MENU_ACTION_DISASTERS: break; // Opens a UI dropdown before dispatch.
-  case CITY_MENU_ACTION_SEPARATOR: break;
-  case CITY_MENU_ACTION_ABANDON: OpenCityAbandonDialog(game); break;
-  case CITY_MENU_ACTION_CONSOLE: OpenCityDeveloperConsole(game); break;
-  case CITY_MENU_ACTION_SAVE: RequestCitySave(game); break;
-  case CITY_MENU_ACTION_LOAD:
-    ui->restore_frame_tools = true;
-    RequestCityFileOpen(game);
-    break;
-  case CITY_MENU_ACTION_QUIT:
-    ui->exit_cancel_enabled = true;
-    HandleCityExitCommand(city);
-    break;
-  case CITY_MENU_ACTION_PANEL: OpenCityPanel(game, item->parameter); break;
-  case CITY_MENU_ACTION_AUTO_GOTO:
-    ui->auto_goto_disabled = !ui->auto_goto_disabled;
-    StoreGameSettings(game);
-    break;
-  case CITY_MENU_ACTION_SUBSCRIPTION:
-    ui->newspaper_delivery_disabled = !ui->newspaper_delivery_disabled;
-    StoreGameSettings(game);
-    break;
-  case CITY_MENU_ACTION_EXTRA_NEWSPAPER:
-    ui->extra_newspaper_disabled = !ui->extra_newspaper_disabled;
-    StoreGameSettings(game);
-    break;
-  case CITY_MENU_ACTION_MAP_LAYER: ToggleCityMapLayer(game, item->parameter); break;
-  case CITY_MENU_ACTION_TOOLBAR: SelectCityToolWithModifiers(game, item->parameter, 0, 0); break;
-  case CITY_MENU_ACTION_COMMAND:
-    RunCityCommand(game, item->command, INVALID_TILE, item->parameter, 0, 0, NULL, NULL);
-    break;
-  case CITY_MENU_ACTION_GOTO_DISASTER:
-    if (city->disasters.pending_type != CITY_DISASTER_NONE || city->disasters.map_update_pending ||
-        city->disaster_work.type != CITY_DISASTER_NONE) {
-      TileIndex tile = MapTileXYOrInvalid(city, city->disasters.location.x, city->disasters.location.y);
-      if (tile != INVALID_TILE)
-        CenterCityMapViewAtTile(city, NULL, MapTileX(city, tile), MapTileY(city, tile));
-    }
-    break;
-  case CITY_MENU_ACTION_ADVISOR:
-    OpenCityAdvisor(city, item->parameter);
-    break;
-  case CITY_MENU_ACTION_BUDGET:
-    OpenCityBudget(city);
-    break;
-  case CITY_MENU_ACTION_POLICIES:
-    if (FocusCityCanvasWindowKind(&ui->desktop, CITY_CANVAS_POLICIES) >= 0) break;
-    InitializeCityOrdinancesDialog(game->city);
-    Sc2kCanvasDesktopOpenPolicies(&ui->desktop, (CityRect){70, 18, 530, 472}, city->unlocks.ordinance_flags);
-    ApplicationUpdateDialogPause(city);
-    break;
-  case CITY_MENU_ACTION_MAP_DATA:
-    OpenCityPanel(game, CITY_PANEL_MAP_DATA);
-    break;
-  case CITY_MENU_ACTION_MUSIC:
-    ApplyCityMusicAction(game, game->audio->jukebox.playing ? JUKEBOX_STOP : JUKEBOX_PLAY, NULL);
-    break;
-  case CITY_MENU_ACTION_JUKEBOX:
-    OpenCityMusicWindow(game, 0);
-    break;
-  case CITY_MENU_ACTION_OPTIONS:
-    OpenCityGameOptions(game);
-    break;
-  case CITY_MENU_ACTION_VIEWPORT:
-    OpenCityMapView(city);
-    break;
-  case CITY_MENU_ACTION_SIGN_LIST:
-    OpenCitySignList(city);
-    break;
-  case CITY_MENU_ACTION_LAND_USE:
-    Sc2kCanvasDesktopOpenLandUse(&ui->desktop, (CityRect){110, 18, 450, 305},
-        &city->statistics);
-    break;
-  case CITY_MENU_ACTION_NEWSPAPER:
-    if (FocusCityCanvasWindowKind(&ui->desktop, CITY_CANVAS_NEWSPAPER) < 0)
-      OpenCityManualNewspaper(city, city->newspaper.edition_index);
-    break;
-  }
-}
-
 bool HandleCityMainMenuPointer(Game *game, const CanvasSDLEvent *event) {
   CityInterfaceState *ui = game->ui;
   CityCanvasDesktop *desktop = &ui->desktop;
@@ -2653,23 +2083,22 @@ bool HandleCityMainMenuPointer(Game *game, const CanvasSDLEvent *event) {
       (desktop->input_capture_window && !desktop->menu.selected) ||
       NativeStartupMenuWaiting(game->city) || ui->startup_waiting) return false;
   UpdateCityToolbar(game);
-  int x, y;
-  CityInterfacePixels(game, event, &x, &y);
+  CityPoint point = CityInterfacePointerPixels(game, event);
   int scale = desktop->pixel_state.scale ? desktop->pixel_state.scale : 100;
   // Do not use window-relative hit testing: menus are anchored to the screen.
-  x = (int)((i64)x * 100 / scale);
-  y = (int)((i64)y * 100 / scale);
+  point.x = (int)((i64)point.x * 100 / scale);
+  point.y = (int)((i64)point.y * 100 / scale);
   bool handled = false;
   if (event->kind == CANVAS_SDL_POINTER_DOWN) {
-    if (!desktop->menu.selected && !CityMenuContains(desktop, x, y)) return false;
+    if (!desktop->menu.selected && !CityMenuContains(desktop, point.x, point.y)) return false;
     RecordGameInput(game);
-    handled = PressCityMenu(desktop, x, y);
+    handled = PressCityMenu(desktop, point.x, point.y);
     if (handled && desktop->menu.held) PlayCityButtonBeep(game);
   } else if (event->kind == CANVAS_SDL_POINTER_MOVE)
-    handled = MoveCityMenu(desktop, x, y);
+    handled = MoveCityMenu(desktop, point.x, point.y);
   else if (event->kind == CANVAS_SDL_POINTER_UP) {
     handled = desktop->menu.held || desktop->menu.selected;
-    ExecuteCityMenuItem(game, ReleaseCityMenu(desktop, x, y));
+    ExecuteCityMenuItem(game, ReleaseCityMenu(desktop, point.x, point.y));
     ReleaseCityToolbarFeedback(desktop, (u32)(u64)(MonotonicSeconds() * 1000));
   }
   if (handled) {

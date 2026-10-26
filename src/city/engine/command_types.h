@@ -90,8 +90,9 @@ typedef struct {
   int parameter3;
 } CommandArguments;
 
-// Tile-valued record parameters carry TileIndex directly. The command stream has
-// no backwards compatibility requirement.
+// Record fields follow each command's schema. Some locations use TileIndex, others x/y fields;
+// use EncodeCityCommand and DecodeCityCommand to cross between records and native tile arguments.
+// The command stream has no backwards compatibility requirement.
 typedef CommandRecord CityCommand;
 typedef CommandArguments CityCommandArguments;
 _Static_assert(sizeof(CityCommand) == 16, "city commands have four 32-bit fields");

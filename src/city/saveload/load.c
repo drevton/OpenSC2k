@@ -52,19 +52,18 @@ bool AllocateCityMiscBuffer(CityFileRuntime *file) {
   return true;
 }
 
-// Destroys the local CFile, whose destructor closes an owned handle. Close has already invalidated the handle if its
-// explicit call throws. Cleanup context must remain alive while unwinding; the stream's explicit close state prevents
-// a second close after an earlier throwing close.
+// Close the captured owned input during unwinding. Explicit closes clear the capture first, so a throwing close
+// is never repeated by this cleanup. Its pointer slot must remain alive until the cleanup is popped or unwound.
 static void DestroyLoadFile(void *context) {
-  void **stream = context;
+  CityLoadStream **stream = context;
   if (*stream != NULL)
     CloseCityLoadStream(*stream);
 }
 
 // Decode City chunks from an already opened load stream using the common input adapter. Caller owns and closes the
 // stream; failure retains partial writes and does not run successful-load rebuilding.
-static bool LoadCityFileChunks(City *city, void *stream, const char *path) {
-  CityFileInput input = {.kind = CITY_FILE_INPUT_PLATFORM, .stream = stream};
+static bool LoadCityFileChunks(City *city, CityLoadStream *stream, const char *path) {
+  CityFileInput input = {.kind = CITY_FILE_INPUT_PLATFORM, .load_stream = stream};
   return LoadCityChunksFromInput(city, &input, path, false);
 }
 
@@ -72,13 +71,13 @@ static bool LoadCityFileChunks(City *city, void *stream, const char *path) {
 // including a false result. Throwing reads/closes instead follow the operation's cleanup stack with partial writes.
 bool LoadCityFile(City *city, const char *path) {
   CityFileRuntime *file = city->game->file;
-  void *input = OpenCityLoadStream(file, path);
+  CityLoadStream *input = OpenCityLoadStream(file, path);
   if (input == NULL) {
     FillCityLoadOpenError(file, &file->error);
     ShowCityFileException(city, CITY_NOTICE_ERROR_OPENING_FILE, (&file->error), path);
     return false;
   }
-  void *owned_stream = input;
+  CityLoadStream *owned_stream = input;
   CityFileCleanup cleanup = {DestroyLoadFile, &owned_stream, NULL};
   PushCityFileCleanup(city->game->file, &cleanup);
   if (!AllocateCityMiscBuffer(file)) {
@@ -137,11 +136,11 @@ bool ReadCityCompressedChunkStrided(CityFileRuntime *file, CityFileInput *input,
   }
   u8 *decoded = destination;
   u32 source = 0, target = 0;
-  int bounded = 1;
+  bool bounded = true;
   while ((int)source < (int)encoded_size &&
          (int)target < (int)decoded_size) {
     if (!DecodeCityRlePacket(encoded, encoded_size, &source, decoded, decoded_size, &target, stride)) {
-      bounded = 0;
+      bounded = false;
       break;
     }
   }

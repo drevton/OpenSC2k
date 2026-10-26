@@ -29,6 +29,30 @@
 
 // Bridge chooser state, layout, drawing and input.
 
+// Chooser labels indexed by command style; the same text drives name sorting and row drawing.
+static const char *const kCitySpanNames[CITY_SPAN_STYLE_COUNT] = {
+  [CITY_SPAN_POWER] = "Raised power lines",
+  [CITY_SPAN_RAIL] = "Rail bridge",
+  [CITY_SPAN_CAUSEWAY] = "Causeway",
+  [CITY_SPAN_RAISING_BRIDGE] = "Raising bridge",
+  [CITY_SPAN_SUSPENSION] = "Suspension bridge",
+  [CITY_SPAN_HIGHWAY] = "Highway bridge",
+  [CITY_SPAN_REINFORCED_HIGHWAY] = "Reinforced highway",
+  [CITY_SPAN_WOOD] = "Wooden",
+  [CITY_SPAN_CONCRETE] = "Concrete",
+  [CITY_SPAN_ARCH_STEEL] = "Girder, steel (arched)",
+  [CITY_SPAN_SUSPENSION_CONCRETE] = "Suspension, concrete",
+  [CITY_SPAN_SUSPENSION_STEEL] = "Suspension, steel",
+  [CITY_SPAN_SUSPENSION_YELLOW] = "Suspension, yellow steel",
+  [CITY_SPAN_CANTILEVER_STEEL] = "Cantilever, steel",
+  [CITY_SPAN_CANTILEVER_BROWN] = "Cantilever, brown steel",
+  [CITY_SPAN_CANTILEVER_RED] = "Cantilever, red steel",
+  [CITY_SPAN_GIRDER_STEEL] = "Girder, steel",
+  [CITY_SPAN_TUBULAR_STEEL] = "Tubular, steel",
+  [CITY_SPAN_TUBULAR_YELLOW] = "Tubular, yellow steel",
+  [CITY_SPAN_TUBULAR_SILICON] = "Tubular, silicon",
+};
+
 enum CitySpanSort { CITY_SPAN_SORT_COST, CITY_SPAN_SORT_NAME };
 
 static i32 Sc2kCanvasDesktopOpenSpanChoices(CityCanvasDesktop *desktop, CityRect bounds,
@@ -360,6 +384,7 @@ bool SpanWindowProcedure(Game *game, const Window *window, const WindowEvent *ev
     else Sc2kCanvasDrawSpanStyle(canvas, window->bounds, window->title, window->message);
     return true;
   }
+  if (event->kind != WINDOW_INPUT && event->kind != WINDOW_DROPDOWN) return false;
   Window *target = FindCityCanvasWindow(&game->ui->desktop, window->window_id);
   if (event->kind == WINDOW_DROPDOWN) {
     target->span_sort = event->selection->value;
@@ -367,7 +392,6 @@ bool SpanWindowProcedure(Game *game, const Window *window, const WindowEvent *ev
     DirtySpanList(&game->ui->span, target);
     return true;
   }
-  if (event->kind != WINDOW_INPUT) return false;
   NativeSpanDialog *dialog = game->ui->span.active;
   while (dialog && dialog->window_id != window->window_id) dialog = dialog->parent;
   if (!dialog || dialog->answered) return false;

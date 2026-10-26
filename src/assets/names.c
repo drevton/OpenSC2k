@@ -1,13 +1,11 @@
-#include "assets/resource_types.h"
-#include "city/tools/types.h"
-#include <stdio.h>
-#include <string.h>
-
-#include "city/engine/city_types.h"
-#include "assets/catalog.h"
 #include "assets/resources.h"
+
+#include "assets/resource_types.h"
 #include "assets/state.h"
 #include "base/text.h"
+#include "city/engine/city_types.h"
+
+#include <string.h>
 
 static const char *const kMonthNames[] = {
   "January",
@@ -37,113 +35,6 @@ static const char *const kShortMonthNames[] = {
   "Nov",
   "Dec",
 };
-static const char *const kToolNames[CITY_TOOL_GROUP_COUNT][CITY_TOOL_VARIANT_CAPACITY] = {
-  {
-    "Clear / Demolish",
-    "Level Terrain",
-    "Raise Terrain",
-    "Lower Terrain",
-    "Remove Zoning"
-  },
-  {
-    "Trees",
-    "Water"
-  },
-  {
-    "Dispatch Police",
-    "Dispatch Firefighters",
-    "Dispatch Military"
-  },
-  {
-    "Power Lines",
-    "Power Plant",
-    "Coal Power",
-    "Hydroelectric Power",
-    "Oil Power",
-    "Natural Gas Power",
-    "Nuclear Power",
-    "Wind Power",
-    "Solar Power",
-    "Microwave Power",
-    "Fusion Power"
-  },
-  {
-    "Pipes",
-    "Water Pump",
-    "Water Tower",
-    "Water Treatment",
-    "Desalination"
-  },
-  {
-    "Mayor's House",
-    "City Hall",
-    "Statue",
-    "Wildlife Dome",
-    "Arcologies",
-    "Terraced Arcology",
-    "Forest Arcology",
-    "Tower Arcology",
-    "Launch Arcology"
-  },
-  {
-    "Road",
-    "Highway",
-    "Tunnel",
-    "Highway Ramp",
-    "Bus Depot"
-  },
-  {
-    "Rail",
-    "Subway",
-    "Rail Depot",
-    "Subway Station",
-    "Subway-Rail Link"
-  },
-  {
-    "Seaport",
-    "Airport"
-  },
-  {
-    "Light Residential",
-    "Dense Residential"
-  },
-  {
-    "Light Commercial",
-    "Dense Commercial"
-  },
-  {
-    "Light Industrial",
-    "Dense Industrial"
-  },
-  {
-    "School",
-    "College",
-    "Library",
-    "Museum"
-  },
-  {
-    "Police Station",
-    "Fire Station",
-    "Hospital",
-    "Prison"
-  },
-  {
-    "Small Park",
-    "Large Park",
-    "Zoo",
-    "Stadium",
-    "Marina"
-  },
-  {
-    "Place Sign"
-  },
-  {
-    "Inspect Tile"
-  },
-  {
-    "Center View"
-  },
-};
 const char *const kCityTeamNames[] = {
   "Foxes",
   "Falcons",
@@ -162,9 +53,8 @@ const char *const kCitySports[] = {
 // Names
 
 // These are presentation resources, not saved simulation strings.
-bool InitializeCityResourceNames(CityAssets *resources) {
+bool InitializeCityCalendarNames(CityAssets *resources) {
   memset(&resources->calendar_names, 0, sizeof(resources->calendar_names));
-  memset(&resources->tool_names, 0, sizeof(resources->tool_names));
   for (int month = 0; month < CITY_MONTH_COUNT; ++month) {
     const char *full = kMonthNames[month];
     const char *abbreviated = kShortMonthNames[month];
@@ -174,15 +64,6 @@ bool InitializeCityResourceNames(CityAssets *resources) {
     CopyText(resources->calendar_names.full[month], CITY_RESOURCE_NAME_CAPACITY, full);
     CopyText(resources->calendar_names.abbreviated[month], CITY_RESOURCE_NAME_CAPACITY, abbreviated);
   }
-  for (int group = 0; group < CITY_TOOL_GROUP_COUNT; ++group)
-    for (int variant = 0; variant < CITY_TOOL_VARIANT_CAPACITY; ++variant) {
-      const char *name = kToolNames[group][variant];
-      if (!name) continue;
-      if (strlen(name) >= CITY_RESOURCE_NAME_CAPACITY) {
-        return false;
-      }
-      CopyText(resources->tool_names.name[group][variant], CITY_RESOURCE_NAME_CAPACITY, name);
-    }
   return true;
 }
 
@@ -207,7 +88,7 @@ static const char *const kTileNames[] = {
   "Highway Ramp",
   "Highway",
   "Highway Bridge",
-  "Subway-Rail Connection",
+  "Subway-to-Rail Connection",
   "Modest Homes",
   "Standard Homes",
   "Luxury Homes",
@@ -339,9 +220,9 @@ static const char *const kTileNames[] = {
   "Missile Silo",
   "Desalination Plant",
   "Terraced Arcology",
-  "Forest Arcology",
+  "Woodland Arcology",
   "Tower Arcology",
-  "Launch Arcology",
+  "Spaceport Arcology",
   "Wildlife Dome",
   "",
   "",

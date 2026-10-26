@@ -7,7 +7,7 @@
 typedef struct CityBudgetState CityBudgetState;
 
 // Replace projected annual totals without booking income or costs, and invalidate finance information.
-void RefreshBudgetDialogEstimates(City *city);
+void RefreshCityBudgetEstimates(City *city);
 
 // Signed monthly income/cost, independent of whether the policy is enabled. Unsupported policies cost zero.
 int CityPolicyMonthlyCost(const City *city, int policy);
@@ -47,16 +47,14 @@ enum {
   CITY_BUDGET_HELPER_LAST_STAGE = 7,
   CITY_BUDGET_HELPER_TIMER = 0x8095,
   CITY_BUDGET_HELPER_INTERVAL_MS = 6000,
-  CITY_BUDGET_HELPER_BITMAP_FIRST = 189,
-  CITY_BUDGET_ADVISOR_PORTRAIT_FIRST = 197,
-  CITY_BUDGET_HELP_CONTEXT = 0x20066,
 };
 
 // Prepare annual-budget presentation once before entering its retained interaction.
 bool PrepareCityAnnualBudget(City *city);
 // Selecting health advice can advance the CRT RNG.
 CityBudgetAdvice SelectCityBudgetAdvisorMessage(City *city, CityBudgetCategory category);
-const CityBudgetState *FindCityBudget(City *city, i32 id);
+// Read-only lookup by positive identity; NULL means no matching live budget. Borrow until it ends or is replaced.
+const CityBudgetState *FindCityBudget(const City *city, i32 id);
 bool BeginCityBudget(City *city, i32 id, bool manual);
 bool EndCityBudget(City *city, i32 id);
 bool DeliverCityBudgetHelperTimer(City *city, i32 id, i32 timer);

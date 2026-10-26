@@ -1,43 +1,75 @@
 // Environment passes derive coarse pollution, land value, density and service coverage from City tiles.
 // Their stages share City scratch storage; an incremental scan must finish before another scratch user runs.
-#include "city/saveload/map_format.h"
 #include "city/maps/environment.h"
 #include "city/maps/map.h"
 
 #include "city/economy/types.h"
 #include "city/maps/buildings.h"
-#include "city/maps/layers.h"
+#include "city/maps/kinds.h"
+#include "city/maps/terrain.h"
 #include "city/state.h"
 
-// Add signed influence to a quarter-resolution coverage field, saturating at byte bounds. The field pointer
-// selects a member of CityQuarterMapStatistics; adjacent entries retain that record stride.
-static void AddFacilityInfluenceCell(City *city, u8 *layer, int x, int y, int amount) {
-  if (y < 0 || x < 0 || y >= city->map_height / 4 || x >= city->map_width / 4)
-    return;
-  u8 *coverage = &layer[(y * city->map_width / 4 + x) * sizeof(CityQuarterMapStatistics)];
-  *coverage = IntClamp(*coverage + amount, 0, 255);
+// Environment passes interpret the shared words as signed 16-bit samples, with map_width words per row.
+// Active rows use only half/quarter that width. Land and industrial influence occupy separate vertical bands;
+// preserve the full stride when switching stages. Writes keep their existing 16-bit wrapping.
+static inline int ReadScratch(const City *city, int x, int y) {
+  const i16 *cells = (const i16 *)city->scratch;
+  return cells[y * city->map_width + x];
 }
 
-// Spread one facility's influence through the stock radius-three footprint. Requires the selected coarse layer and
-// admitted facility radius; reuses caller storage and clips at map boundaries.
-static void SpreadFacilityInfluence(City *city, u8 *layer, int x, int y, int amount) {
-  static const i8 kInfluenceYOffset[37] = {
-      0, -1, 1, 0, 0, -1, 1, -1, 1, -1, 0, 1, -1, 0, 1, -2, -2, -2, 2, 2, 2, -1, 0, 1, -1,
-      0, 1, -3, -3, -3, 3, 3, 3, -2, -2, 2, 2};
-  static const i8 kInfluenceXOffset[37] = {
-      0, 0, 0, -1, 1, -1, -1, 1, 1, -2, -2, -2, 2, 2, 2, -1, 0, 1, -1, 0, 1, -3, -3, -3, 3,
-      3, 3, -1, 0, 1, -1, 0, 1, -2, 2, -2, 2};
-  static const u8 kInfluenceLevel[37] = {
-      0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4};
+static inline void WriteScratch(City *city, int x, int y, int value) {
+  city->scratch[y * city->map_width + x] = value;
+}
+
+// Add signed influence to an admitted coverage record, saturating at byte bounds.
+// The spreading loop clips coordinates and supplies a constant police/fire choice.
+static inline void AddFacilityInfluenceCell(CityQuarterMapStatistics *stats, bool police, int amount) {
+  if (police)
+    stats->police_coverage = IntClamp(stats->police_coverage + amount, 0, 255);
+  else
+    stats->fire_coverage = IntClamp(stats->fire_coverage + amount, 0, 255);
+}
+
+// Spread police or fire coverage through the stock radius-three footprint, in quarter-resolution coordinates.
+// Select the member once so each loop uses typed record writes. Negative offsets wrap to unsigned for clipping.
+static void SpreadFacilityInfluence(City *city, bool police, int x, int y, int amount) {
+  typedef struct { i8 dx, dy; u8 level; } InfluenceOffset;
+  static const InfluenceOffset kInfluenceOffsets[] = {
+    {0, 0, 0}, {0, -1, 1}, {0, 1, 1}, {-1, 0, 1},
+    {1, 0, 1}, {-1, -1, 2}, {-1, 1, 2}, {1, -1, 2},
+    {1, 1, 2}, {-2, -1, 3}, {-2, 0, 3}, {-2, 1, 3},
+    {2, -1, 3}, {2, 0, 3}, {2, 1, 3}, {-1, -2, 3},
+    {0, -2, 3}, {1, -2, 3}, {-1, 2, 3}, {0, 2, 3},
+    {1, 2, 3}, {-3, -1, 4}, {-3, 0, 4}, {-3, 1, 4},
+    {3, -1, 4}, {3, 0, 4}, {3, 1, 4}, {-1, -3, 4},
+    {0, -3, 4}, {1, -3, 4}, {-1, 3, 4}, {0, 3, 4},
+    {1, 3, 4}, {-2, -2, 4}, {2, -2, 4}, {-2, 2, 4},
+    {2, 2, 4},
+  };
   int level[5];
   level[0] = amount;
   level[1] = 4 * level[0] / 5;
   level[2] = 3 * level[1] / 4;
   level[3] = 2 * level[2] / 3;
   level[4] = level[3] / 2;
-  for (int index = 0; index < 37; ++index)
-    AddFacilityInfluenceCell(city, layer, x + kInfluenceXOffset[index], y + kInfluenceYOffset[index],
-        level[kInfluenceLevel[index]]);
+  u32 width = city->map_width / 4, height = city->map_height / 4;
+  CityQuarterMapStatistics *quarter = city->quarter;
+  const InfluenceOffset *end = kInfluenceOffsets + sizeof(kInfluenceOffsets) / sizeof(kInfluenceOffsets[0]);
+  if (police) {
+    for (const InfluenceOffset *offset = kInfluenceOffsets; offset != end; ++offset) {
+      u32 cell_x = x + offset->dx, cell_y = y + offset->dy;
+      if (cell_y >= height || cell_x >= width) continue;
+      CityQuarterMapStatistics *stats = &quarter[cell_y * width + cell_x];
+      AddFacilityInfluenceCell(stats, true, level[offset->level]);
+    }
+  } else {
+    for (const InfluenceOffset *offset = kInfluenceOffsets; offset != end; ++offset) {
+      u32 cell_x = x + offset->dx, cell_y = y + offset->dy;
+      if (cell_y >= height || cell_x >= width) continue;
+      CityQuarterMapStatistics *stats = &quarter[cell_y * width + cell_x];
+      AddFacilityInfluenceCell(stats, false, level[offset->level]);
+    }
+  }
 }
 
 enum CityEnvironmentStage {
@@ -55,10 +87,12 @@ static inline void BuildPollutionRow(City *city, int y) {
     for (int dy = 0; dy < 2; ++dy)
       for (int dx = 0; dx < 2; ++dx) {
         TileIndex cell = (2 * y + dy) * width + 2 * x + dx;
-        int tile = CityTileStatisticAt(city, cell);
-        if (IsTileKindBuilding(tile))
-          value += kTilePollutionContribution[tile - TK_RESIDENTIAL_FIRST];
-        if (tile == TK_RADIOACTIVE_WASTE)
+        const TileInfo *tp = &city->tile[cell];
+        if (IsTileKindBuilding(tp->kind)) {
+          int statistic = ReadCityTileStatisticsKey(city, tp);
+          value += kTilePollutionContribution[statistic - TK_RESIDENTIAL_FIRST];
+        }
+        if (tp->kind == TK_RADIOACTIVE_WASTE)
           value += 200;
       }
     WriteScratch(city, x, y, value);
@@ -109,8 +143,7 @@ static inline void AccumulateCityCenterRow(City *city, CityEnvironmentScan *scan
   for (int x = 0; x < width; ++x) {
     const TileIndex cell_index = y * width + x;
     TileInfo *tp = &city->tile[cell_index];
-    int tile = CityTileStatisticAt(city, cell_index);
-    if (IsTileKindBuilding(tile)) {
+    if (IsTileKindBuilding(tp->kind)) {
       scan->sum_y += y;
       scan->sum_x += x;
       WriteScratch(city, x, y, 40);
@@ -133,22 +166,22 @@ static inline void AccumulateCityInfluenceRow(City *city, int y) {
     int industrial_influence = ReadScratch(city, scratch_x, height / 4 + scratch_y);
     for (int x = group_x; x < group_x + 4; ++x) {
       const TileIndex cell_index = y * width + x;
-      int tile = CityTileStatisticAt(city, cell_index);
       const TileInfo *tp = &city->tile[cell_index];
+      int kind = tp->kind;
       int flags = tp->flags;
-      if (tile != TK_CLEAR) {
-        if (tile == TK_LARGE_PARK)
+      if (kind != TK_CLEAR && !IsTileKindExposedWater(kind)) {
+        if (kind == TK_LARGE_PARK)
           land_influence += 40;
-        else if (IsTileKindTreeOrPark(tile))
+        else if (IsTileKindTreeOrPark(kind))
           land_influence += 20;
-        else if (IsTileKindBareGround(tile))
+        else if (IsTileKindBareGround(kind))
           land_influence -= 20;
-      } else if (HasTileWater(tp)) {
+      } else if (IsTileKindExposedWater(kind)) {
         land_influence += 12;
         industrial_influence += 12;
       } else
         land_influence += 4;
-      if (IsTileKindTransportOrBuilding(tile) || ReadCityZoneKind(tp)) {
+      if (IsTileKindTransportOrBuilding(kind) || IsTileKindWaterPowerLine(tp->kind) || ReadCityZoneKind(tp)) {
         city->tile[(y >> 1) * width + (x >> 1)].flags |= TF_VISITED;
         ++city->indicators.zone_count;
       }
@@ -165,6 +198,13 @@ static inline void AccumulateCityInfluenceRow(City *city, int y) {
   }
 }
 
+// Reuse the scheduled pass's tile order and contribution rules when rebuilding loaded-map influence.
+// Existing scratch values are inputs; only the occupied/zoned tile count is reset.
+void AccumulateCityLandInfluence(City *city) {
+  city->indicators.zone_count = 0;
+  for (int y = 0; y < city->map_height; ++y) AccumulateCityInfluenceRow(city, y);
+}
+
 // Compute one coarse land-value row from the prepared environment metrics. Requires the matching scan state and prior
 // source stages; writes the land-value layer in place.
 static inline void UpdateLandValueRow(City *city, const CityEnvironmentScan *scan, int y) {
@@ -176,12 +216,13 @@ static inline void UpdateLandValueRow(City *city, const CityEnvironmentScan *sca
     if (city->tile[y * width + x].flags & TF_VISITED) {
       int tile_x = 2 * x;
       int tile_y = 2 * y;
-      int category = ReadCityZoneKind(&city->tile[tile_y * width + tile_x]);
-      if (category == ZONE_NONE)
-        category = ReadCityZoneKind(&city->tile[(tile_y + 1) * width + tile_x + 1]);
+      const TileInfo *tp = &city->tile[tile_y * width + tile_x];
+      int zone = ReadCityZoneKind(tp);
+      if (zone == ZONE_NONE)
+        zone = ReadCityZoneKind(&city->tile[(tile_y + 1) * width + tile_x + 1]);
       int scratch_x = x / 2;
       int scratch_y = y / 2;
-      bool industrial = category == ZONE_INDUSTRIAL_LOW || category == ZONE_INDUSTRIAL_HIGH;
+      bool industrial = zone == ZONE_INDUSTRIAL_LOW || zone == ZONE_INDUSTRIAL_HIGH;
       int source_y = industrial ? height / 4 + scratch_y : scratch_y;
       int sum = ReadScratch(city, scratch_x, source_y);
       int divisor = 1;
@@ -211,13 +252,13 @@ static inline void UpdateLandValueRow(City *city, const CityEnvironmentScan *sca
       int pollution_value = stats->pollution;
       int crime_value = stats->crime;
       int density_value = city->quarter[scratch_y * width / 4 + scratch_x].density;
-      if (category == ZONE_COMMERCIAL_LOW || category == ZONE_COMMERCIAL_HIGH) {
+      if (zone == ZONE_COMMERCIAL_LOW || zone == ZONE_COMMERCIAL_HIGH) {
         score = sum / divisor;
         if (distance > 0)
           score += distance;
         score += density_value / 3 - (pollution_value >> 2) - crime_value / 3;
-      } else if (category == ZONE_INDUSTRIAL_LOW || category == ZONE_INDUSTRIAL_HIGH) {
-        score = sum / divisor + (category == ZONE_INDUSTRIAL_HIGH ? 21 : 0);
+      } else if (zone == ZONE_INDUSTRIAL_LOW || zone == ZONE_INDUSTRIAL_HIGH) {
+        score = sum / divisor + (zone == ZONE_INDUSTRIAL_HIGH ? 21 : 0);
         if (distance / 4 > 0)
           score += distance / 4;
         score -= (pollution_value >> 4) + (crime_value >> 2);
@@ -227,9 +268,9 @@ static inline void UpdateLandValueRow(City *city, const CityEnvironmentScan *sca
           score += distance / 2;
         score -= pollution_value / 5 + crime_value / 3;
       }
-      int tile = city->tile[tile_y * width + tile_x].kind;
-      if (IsTileKindBuilding(tile) &&
-          kTileZoneCategory[tile - TK_RESIDENTIAL_FIRST] == CITY_BUILDING_ABANDONED)
+      int kind = tp->kind;
+      if (IsTileKindBuilding(kind) &&
+          kTileZoneCategory[kind - TK_RESIDENTIAL_FIRST] == CITY_BUILDING_ABANDONED)
         score -= score / 2;
       score = IntClamp(score, 0, 255);
       city->indicators.city_land_value += (u32)score;
@@ -257,40 +298,41 @@ static inline void AccumulateFacilityRow(City *city, int y) {
   u32 options = city->unlocks.ordinance_flags;
   for (int x = 1; x < width - 1; ++x) {
     const TileIndex cell_index = y * width + x;
-    int tile = CityTileStatisticAt(city, cell_index);
-    if (!IsTileKindBuilding(tile))
+    const TileInfo *tp = &city->tile[cell_index];
+    int kind = tp->kind;
+    if (!IsTileKindBuilding(kind))
       continue;
     int scratch_x = x / 4;
     int scratch_y = y / 4;
-    if (IsTileKindFacility(tile)) {
-      int density = !IsTileKindArcology(tile) || tile == TK_BRAUN_LLAMA_DOME ? 2 : 12;
+    if (IsTileKindFacility(kind)) {
+      int density = !IsTileKindArcology(kind) || kind == TK_BRAUN_LLAMA_DOME ? 2 : 12;
       WriteScratch(city, scratch_x, scratch_y, ReadScratch(city, scratch_x, scratch_y) + density);
-      if ((tile == TK_POLICE_STATION || tile == TK_FIRE_STATION) &&
+      if ((kind == TK_POLICE_STATION || kind == TK_FIRE_STATION) &&
           IsCityBuildingCorner(city, cell_index, (CITY_BUILDING_CORNER_TOP_RIGHT - city->geography.rotation) & 3)) {
         int value;
-        if (tile == TK_POLICE_STATION)
+        if (kind == TK_POLICE_STATION)
           value = (i32)((i64)(i32)city->economy.sector[CITY_ECONOMY_POLICE].current_rate *
               (city->infrastructure.facility_ratio + 5) / 2);
         else
           value = (i32)((i64)5 * (i32)city->economy.sector[CITY_ECONOMY_FIRE].current_rate / 2);
-        if (!(city->tile[cell_index].flags & TF_POWERED))
+        if (!(tp->flags & TF_POWERED))
           value /= 2;
-        SpreadFacilityInfluence(
-            city, tile == TK_POLICE_STATION ? &city->quarter[0].police_coverage : &city->quarter[0].fire_coverage,
-            x / 4, y / 4, value);
+        SpreadFacilityInfluence(city, kind == TK_POLICE_STATION, x / 4, y / 4, value);
       }
     } else {
+      int statistic = ReadCityTileStatisticsKey(city, tp);
       WriteScratch(city, scratch_x, scratch_y,
-          ReadScratch(city, scratch_x, scratch_y) + kTileDensityContribution[tile - TK_RESIDENTIAL_FIRST]);
+          ReadScratch(city, scratch_x, scratch_y) + kTileDensityContribution[statistic - TK_RESIDENTIAL_FIRST]);
+      CityQuarterMapStatistics *stats = &city->quarter[scratch_y * width / 4 + scratch_x];
       if (options & CITY_POLICY_FLAG_NEIGHBORHOOD_WATCH) {
-        int current = city->quarter[scratch_y * width / 4 + scratch_x].police_coverage;
+        int current = stats->police_coverage;
         if (current < 254)
-          city->quarter[scratch_y * width / 4 + scratch_x].police_coverage = current + 2;
+          stats->police_coverage = current + 2;
       }
       if (options & CITY_POLICY_FLAG_VOLUNTEER_FIRE) {
-        int current = city->quarter[scratch_y * width / 4 + scratch_x].fire_coverage;
+        int current = stats->fire_coverage;
         if (current < 254)
-          city->quarter[scratch_y * width / 4 + scratch_x].fire_coverage = current + 2;
+          stats->fire_coverage = current + 2;
       }
     }
   }
@@ -319,9 +361,8 @@ static inline void BuildCrimeRow(City *city, int y) {
   for (int x = 0; x < width / 2; ++x) {
     int value = 0;
     if (city->tile[y * width + x].flags & TF_VISITED) {
-      value = city->quarter[(y / 2) * width / 4 + x / 2].density -
-          (city->half[y * width / 2 + x].land_value >> 2) -
-          (city->quarter[(y / 2) * width / 4 + x / 2].police_coverage >> 1);
+      const CityQuarterMapStatistics *stats = &city->quarter[(y / 2) * width / 4 + x / 2];
+      value = stats->density - (city->half[y * width / 2 + x].land_value >> 2) - (stats->police_coverage >> 1);
       if (options & CITY_POLICY_FLAG_LEGALIZED_GAMBLING)
         value += 16;
     }

@@ -24,7 +24,6 @@
 #include "drawing/cursors.h"
 #include "drawing/maps/map_view.h"
 #include "drawing/state.h"
-#include "game/application.h"
 #include "game/errors.h"
 #include "game/scripting.h"
 #include "game/state.h"
@@ -38,7 +37,6 @@ static bool LoadInitialGameCity(Game *game, const char *path) {
   Drawing *drawing = game->drawing;
   CityResourceState *resources = game->resources;
   CityAudioState *audio = game->audio;
-  // Initialize City independently of the comparison image's initial values.
   InitializeCityDefaults(city);
   InitializeDrawingDefaults(drawing);
   game->city->construction = (CityConstructionState){0};
@@ -51,7 +49,7 @@ static bool LoadInitialGameCity(Game *game, const char *path) {
   InitializeCityAudioState(audio);
   FreeCityPathStorage(&game->city_working_directory);
   // Resource text is owned native storage; reference descriptors are diagnostic transport.
-  if (!InitializeCityResourceNames(resources)) {
+  if (!InitializeCityCalendarNames(resources)) {
     SetGameError(game, SC2K_ERROR_GUEST_BUFFER_TOO_SMALL);
     return false;
   }

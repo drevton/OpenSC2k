@@ -1,3 +1,5 @@
+#include "ui/input.h"
+
 #include "game/update.h"
 #include "city/infrastructure/lines.h"
 #include "city/infrastructure/spans.h"
@@ -10,11 +12,12 @@
 #include "audio/state.h"
 #include "base/time.h"
 #include "city/economy/economy.h"
+#include "city/engine/commands.h"
 #include "city/infrastructure/bridges.h"
 #include "city/infrastructure/highways.h"
+#include "city/infrastructure/surface_lines.h"
 #include "city/infrastructure/types.h"
 #include "city/maps/buildings.h"
-#include "city/maps/layers.h"
 #include "city/maps/tile_storage.h"
 #include "city/maps/trees.h"
 #include "city/maps/water.h"
@@ -31,13 +34,13 @@
 #include "ui/cursor/cursor.h"
 #include "ui/charts/charts.h"
 #include "ui/commands.h"
+#include "ui/city_lifecycle.h"
 #include "ui/console.h"
 #include "ui/dialogs/dialogs.h"
-#include "ui/dialogs/file_dialog.h"
 #include "ui/dialogs/information.h"
 #include "ui/dialogs/scenario.h"
 #include "ui/dialogs/spans.h"
-#include "ui/input.h"
+#include "ui/cursor/input.h"
 #include "ui/map.h"
 #include "ui/map_views.h"
 #include "ui/menus/menu.h"
@@ -56,15 +59,8 @@
 static u32 CityPointerModifiers(const CanvasSDLEvent *event);
 static void TrackCityPointerEndpoint(CityInterfaceState *ui, const CanvasSDLEvent *event, bool released);
 static void TrackCityPlacementPointer(CityInterfaceState *ui, const CanvasSDLEvent *event);
-static void FinishCityPointerStroke(City *city, const CanvasSDLEvent *event);
-static void HandleCityCanvasContentPress(City *city, const CanvasSDLEvent *map_event);
-
-void UpdateCityToolStatus(City *city) {
-  Game *game = city->game;
-  CityInterfaceState *ui = game->ui;
-  FormatCityToolStatusText(game->resources, ui->status.tool_text, sizeof(ui->status.tool_text),
-      ui->desktop.selected_tool);
-}
+static void FinishCityPointerStroke(Game *game, const CanvasSDLEvent *event);
+static void HandleCityCanvasContentPress(Game *game, const CanvasSDLEvent *map_event);
 
 static u32 CityPointerModifiers(const CanvasSDLEvent *event) {
   return (u32)event->alt * CITY_POINTER_MODIFIER_ALT |
@@ -79,8 +75,11 @@ static void TrackCityPointerEndpoint(CityInterfaceState *ui, const CanvasSDLEven
   ui->pointer_stroke_count = index + 1;
 }
 
-static int CityStretchTargetHeight(City *city, int pointer_y) {
-  CityInterfaceState *ui = city->game->ui;
+// Read the captured drag origin and current terrain without changing either. Active stretches have a positive
+// pointer_terrain_pixels step; an invalid anchor retains the captured height.
+static int CityStretchTargetHeight(const Game *game, int pointer_y) {
+  const City *city = game->city;
+  const CityInterfaceState *ui = game->ui;
   if (!IsMapTileValid(city, ui->pointer_terrain_tile)) return ui->pointer_terrain_height;
   int pixels = ui->pointer_terrain_pixels;
   int delta = ui->pointer_stroke[0].point.y - pointer_y;
@@ -93,7 +92,7 @@ static bool IsLiveCityPlacementStroke(const Game *game) {
   if (game->observation || !ui->pointer_stroke_count ||
       (ui->pointer_stroke_flags & (CITY_POINTER_MODIFIER_CONTROL | CITY_POINTER_UNDERGROUND))) return false;
   int group = ui->pointer_stroke_tools & 255, variant = (ui->pointer_stroke_tools >> 8) & 255;
-  return GetCityFacilityTile(group, variant) != TK_CLEAR ||
+  return CityToolFacilityKind(group, variant) != TK_CLEAR ||
       (group == CITY_TOOL_GROUP_POWER && variant == CITY_POWER_HYDRO) ||
       (group == CITY_TOOL_GROUP_ROAD && variant == CITY_ROAD_ONRAMP) ||
       (group == CITY_TOOL_GROUP_RAIL && variant == CITY_RAIL_SUBWAY_RAIL_CONNECTION);
@@ -101,14 +100,14 @@ static bool IsLiveCityPlacementStroke(const Game *game) {
 
 // Follow the screen path between mouse samples, including fast motion across several tiles.
 // Keep the last attempted tile in UI; City still owns placement rules and payment.
-static void ApplyLiveCityPlacements(City *city, const CanvasSDLEvent *event) {
-  Game *game = city->game;
+static void ApplyLiveCityPlacements(Game *game, const CanvasSDLEvent *event) {
+  City *city = game->city;
   CityInterfaceState *ui = game->ui;
   if (event->shift || event->ctrl) return;
   int tools = ui->pointer_stroke_tools;
   int group = tools & 255, variant = (tools >> 8) & 255;
   int building = group == CITY_TOOL_GROUP_POWER && variant == CITY_POWER_HYDRO ?
-      TK_HYDRO_POWER : GetCityFacilityTile(group, variant);
+      TK_HYDRO_POWER : CityToolFacilityKind(group, variant);
   CityPoint first = ui->pointer_stroke[ui->pointer_stroke_count - 1].point;
   int dx = event->x - first.x, dy = event->y - first.y;
   int steps = IntMax(1, IntMax(abs(dx), abs(dy)));
@@ -123,7 +122,9 @@ static void ApplyLiveCityPlacements(City *city, const CanvasSDLEvent *event) {
     ui->pointer_terrain_tile = tile;
     if (building != TK_CLEAR) {
       if (GetCityBuildingCost(city, tile, building).error != CITY_COMMAND_COST_OK) continue;
-    } else if (!CanPlaceCityToolCell(city, tile, group, variant, 0)) continue;
+    } else if (group == CITY_TOOL_GROUP_ROAD) {
+      if (!CanPlaceCityOnramp(city, tile)) continue;
+    } else if (!CanPlaceCitySubwayRailConnection(city, tile)) continue;
     CityPlacementIntent intent = ResolveCityPlacementIntent(game, tools, tile, tile, CityPointerModifiers(event));
     u32 previous_window = ui->desktop.next_window_id;
     bool placed = RunCityMapToolAction(game, &intent);
@@ -139,25 +140,25 @@ static void ApplyLiveCityPlacements(City *city, const CanvasSDLEvent *event) {
 
 // Mouse motion resolves absolute heights from the original grab point. Only new target heights enter the shared
 // command stream; returning toward the starting height submits a new edit, and release cannot repeat the last one.
-static void ApplyLiveCityStretch(City *city, const CanvasSDLEvent *event) {
-  CityInterfaceState *ui = city->game->ui;
+static void ApplyLiveCityStretch(Game *game, const CanvasSDLEvent *event) {
+  CityInterfaceState *ui = game->ui;
   if (event->shift || event->ctrl) return;
-  int height = CityStretchTargetHeight(city, event->y);
+  int height = CityStretchTargetHeight(game, event->y);
   if (height == ui->pointer_terrain_last_height) return;
   TileIndex tile = ui->pointer_terrain_tile;
   ui->pointer_terrain_last_height = height;
   int options = ui->terrain_no_seawater ? CITY_TERRAIN_NO_SEAWATER : 0;
-  if (!RunCityCommand(city->game, CITY_COMMAND_STRETCH_TERRAIN_TILE, tile, height, options, 0, NULL, NULL)) {
+  if (!RunCityCommand(game, CITY_COMMAND_STRETCH_TERRAIN_TILE, tile, height, options, 0, NULL, NULL)) {
     ui->pointer_stroke_count = 0;
     ui->pointer_terrain_stretch = false;
-    ReleaseCityMapMouseCapture(city->game);
+    ReleaseCityMapMouseCapture(game);
   }
 }
 
 // Level newly included strips as the selection changes. Keep only the last rectangle and pointer position;
 // neither mouse motion within the same tile nor release rescans an already completed area.
-static void ApplyLiveCityLevel(City *city, const CanvasSDLEvent *event) {
-  Game *game = city->game;
+static void ApplyLiveCityLevel(Game *game, const CanvasSDLEvent *event) {
+  City *city = game->city;
   CityInterfaceState *ui = game->ui;
   if (event->shift || event->ctrl || !IsCityMainMapInteractiveAt(city, event->x, event->y)) return;
   CityRect previous = ui->pointer_level_bounds;
@@ -202,8 +203,8 @@ static void TrackCityPlacementPointer(CityInterfaceState *ui, const CanvasSDLEve
   ui->placement_hover_valid = 1;
 }
 
-static void FinishCityPointerStroke(City *city, const CanvasSDLEvent *event) {
-  Game *game = city->game;
+static void FinishCityPointerStroke(Game *game, const CanvasSDLEvent *event) {
+  City *city = game->city;
   CityInterfaceState *ui = game->ui;
   if (!ui->pointer_stroke_count)
     return;
@@ -213,7 +214,7 @@ static void FinishCityPointerStroke(City *city, const CanvasSDLEvent *event) {
     release.y = ui->pointer_stroke[ui->pointer_stroke_count - 1].point.y;
   }
   if (IsLiveCityPlacementStroke(game)) {
-    ApplyLiveCityPlacements(city, &release);
+    ApplyLiveCityPlacements(game, &release);
     bool captured = ui->pointer_stroke_count != 0;
     ui->pointer_stroke_count = 0;
     if (captured) ReleaseCityMapMouseCapture(game);
@@ -221,8 +222,8 @@ static void FinishCityPointerStroke(City *city, const CanvasSDLEvent *event) {
   }
   TrackCityPointerEndpoint(ui, &release, true);
   if (!game->observation && (ui->pointer_terrain_stretch || ui->pointer_terrain_level)) {
-    if (ui->pointer_terrain_stretch) ApplyLiveCityStretch(city, &release);
-    else ApplyLiveCityLevel(city, &release);
+    if (ui->pointer_terrain_stretch) ApplyLiveCityStretch(game, &release);
+    else ApplyLiveCityLevel(game, &release);
     bool captured = ui->pointer_stroke_count != 0;
     ui->pointer_stroke_count = 0;
     ui->pointer_terrain_stretch = ui->pointer_terrain_level = false;
@@ -267,14 +268,14 @@ static void FinishCityPointerStroke(City *city, const CanvasSDLEvent *event) {
   }
   if (!game->observation && !release.shift && !release.ctrl &&
       !(ui->pointer_stroke_flags & CITY_POINTER_UNDERGROUND) &&
-      IsTileKindBuilding(GetCityFacilityTile(group, variant))) {
+      IsTileKindBuilding(CityToolFacilityKind(group, variant))) {
     TileIndex tile = end;
     ui->pointer_stroke_count = 0;
     ReleaseCityMapMouseCapture(game);
     if (IsMapTileValid(city, tile)) {
       int orientation = intent.facility_facing;
       RunCityCommand(game, CITY_COMMAND_PLACE_BUILDING, tile,
-          GetCityFacilityTile(group, variant), orientation, 0, NULL, NULL);
+          CityToolFacilityKind(group, variant), orientation, 0, NULL, NULL);
     }
     return;
   }
@@ -347,7 +348,11 @@ static void FinishCityPointerStroke(City *city, const CanvasSDLEvent *event) {
   }
   if (!game->observation && intent.span_tool && !release.shift && !release.ctrl &&
       !(ui->pointer_stroke_flags & CITY_POINTER_UNDERGROUND)) {
-    CityInfrastructureSpan span = GetCityConstructionSpan(city, start, end, group, variant);
+    CityInfrastructureKind kind = intent.highway ? CITY_INFRASTRUCTURE_HIGHWAY :
+        group == CITY_TOOL_GROUP_ROAD ? CITY_INFRASTRUCTURE_ROAD :
+        group == CITY_TOOL_GROUP_RAIL ? CITY_INFRASTRUCTURE_RAIL : CITY_INFRASTRUCTURE_POWER;
+    CityInfrastructureSpan span;
+    GetCityInfrastructureCost(city, start, end, kind, -1, &span);
     CityCommandId id = group == CITY_TOOL_GROUP_ROAD ?
         (variant == CITY_ROAD_HIGHWAY ? CITY_COMMAND_PLACE_TRANSPORT_LINE : CITY_COMMAND_PLACE_ROAD) :
         group == CITY_TOOL_GROUP_RAIL ? CITY_COMMAND_PLACE_RAIL : CITY_COMMAND_PLACE_POWER_LINE;
@@ -398,8 +403,8 @@ static void FinishCityPointerStroke(City *city, const CanvasSDLEvent *event) {
   ReleaseCityMapMouseCapture(game);
 }
 
-static void HandleCityCanvasContentPress(City *city, const CanvasSDLEvent *map_event) {
-  Game *game = city->game;
+static void HandleCityCanvasContentPress(Game *game, const CanvasSDLEvent *map_event) {
+  City *city = game->city;
   CityInterfaceState *ui = game->ui;
   const CanvasSDLEvent *event = map_event;
   if (NativeSpanDialogWaiting(ui) || CityConnectionQuestionWaiting(ui) || CityMissionNoticeWaiting(ui)) return;
@@ -455,21 +460,20 @@ static void HandleCityCanvasContentPress(City *city, const CanvasSDLEvent *map_e
   ui->pointer_terrain_level = !event->ctrl && ui->desktop.selected_tool == CITY_CANVAS_TOOL_LEVEL_TERRAIN;
   ui->pointer_level_bounds = (CityRect){0};
   TrackCityPointerEndpoint(ui, event, false);
-  if (!game->observation && ui->pointer_terrain_level) ApplyLiveCityLevel(city, event);
+  if (!game->observation && ui->pointer_terrain_level) ApplyLiveCityLevel(game, event);
   if (IsLiveCityPlacementStroke(game)) {
     ui->pointer_terrain_tile = INVALID_TILE;
-    ApplyLiveCityPlacements(city, event);
+    ApplyLiveCityPlacements(game, event);
   }
 }
 
 void BeginCityCanvasButtonFeedback(Game *game, const CanvasSDLEvent *event) {
-  int x, y;
-  CityInterfacePixels(game, event, &x, &y);
-  BeginCityButtonFeedback(game, x, y, MonotonicSeconds());
+  CityPoint point = CityInterfacePointerPixels(game, event);
+  BeginCityButtonFeedback(game, point.x, point.y, MonotonicSeconds());
 }
 
-void HandleCityCanvasPointerDown(City *city, const CanvasSDLEvent *event) {
-  Game *game = city->game;
+void HandleCityCanvasPointerDown(Game *game, const CanvasSDLEvent *event) {
+  City *city = game->city;
   CityInterfaceState *ui = game->ui;
   if (HandleCityMainMenuPointer(game, event)) return;
   RecordGameInput(game);
@@ -477,16 +481,16 @@ void HandleCityCanvasPointerDown(City *city, const CanvasSDLEvent *event) {
   if (DispatchCityWindowInput(game, event)) return;
   if (HandleCityMapSignInput(city, NULL, event) || HandleCityMainMapPan(city, event)) return;
   if (IsCityMainMapInteractiveAt(city, event->x, event->y)) ui->map_view_focus_window = 0;
-  HandleCityCanvasContentPress(city, event);
+  HandleCityCanvasContentPress(game, event);
   UpdateCityPlacementPreview(city);
 }
 
-void HandleCityCanvasPointerMove(City *city, const CanvasSDLEvent *event) {
-  Game *game = city->game;
+void HandleCityCanvasPointerMove(Game *game, const CanvasSDLEvent *event) {
+  City *city = game->city;
   CityInterfaceState *ui = game->ui;
   if (IsLiveCityPlacementStroke(game)) {
     TrackCityPlacementPointer(ui, event);
-    ApplyLiveCityPlacements(city, event);
+    ApplyLiveCityPlacements(game, event);
     if (ui->pointer_stroke_count) TrackCityPointerEndpoint(ui, event, false);
     UpdateCityPlacementPreview(city);
     return;
@@ -496,8 +500,8 @@ void HandleCityCanvasPointerMove(City *city, const CanvasSDLEvent *event) {
     TrackCityPlacementPointer(ui, event);
     if (ui->pointer_terrain_stretch || IsCityMainMapInteractiveAt(city, event->x, event->y))
       TrackCityPointerEndpoint(ui, event, false);
-    if (ui->pointer_terrain_stretch) ApplyLiveCityStretch(city, event);
-    else ApplyLiveCityLevel(city, event);
+    if (ui->pointer_terrain_stretch) ApplyLiveCityStretch(game, event);
+    else ApplyLiveCityLevel(game, event);
     UpdateCityPlacementPreview(city);
     return;
   }
@@ -517,8 +521,8 @@ void HandleCityCanvasPointerMove(City *city, const CanvasSDLEvent *event) {
   HandleCityMainMapPan(city, event);
 }
 
-void HandleCityCanvasPointerUp(City *city, const CanvasSDLEvent *event) {
-  Game *game = city->game;
+void HandleCityCanvasPointerUp(Game *game, const CanvasSDLEvent *event) {
+  City *city = game->city;
   CityInterfaceState *ui = game->ui;
   bool live_placement = IsLiveCityPlacementStroke(game) || (!game->observation && ui->pointer_stroke_count &&
       (ui->pointer_terrain_stretch || ui->pointer_terrain_level));
@@ -529,7 +533,7 @@ void HandleCityCanvasPointerUp(City *city, const CanvasSDLEvent *event) {
   }
   TrackCityPlacementPointer(ui, event);
   if (ui->pointer_stroke_count || ui->pointer_query_capture) {
-    FinishCityPointerStroke(city, event);
+    FinishCityPointerStroke(game, event);
     if (ui->pointer_query_capture) {
       ui->pointer_query_capture = false;
       ReleaseCityMapMouseCapture(game);
@@ -539,9 +543,9 @@ void HandleCityCanvasPointerUp(City *city, const CanvasSDLEvent *event) {
   UpdateCityPlacementPreview(city);
 }
 
-static void ZoomCityCanvasAt(City *city, int x, int y, int steps) {
+static void ZoomCityCanvasAt(Game *game, int x, int y, int steps) {
   if (!steps) return;
-  Game *game = city->game;
+  City *city = game->city;
   Window *window = FindCityWindowAtPixels(&game->ui->desktop, x, y);
   if (window) {
     CityPoint point = CityWindowPointFromPixels(&game->ui->desktop, window->window_id, x, y);
@@ -560,8 +564,7 @@ static void ZoomCityCanvasAt(City *city, int x, int y, int steps) {
   UpdateCityPlacementPreview(city);
 }
 
-static void PinchCityCanvas(City *city, const CanvasSDLEvent *event) {
-  Game *game = city->game;
+static void PinchCityCanvas(Game *game, const CanvasSDLEvent *event) {
   CityInterfaceState *ui = game->ui;
   if (event->kind != CANVAS_SDL_ZOOM) {
     ui->pinch_remainder = 0;
@@ -578,13 +581,12 @@ static void PinchCityCanvas(City *city, const CanvasSDLEvent *event) {
   int steps = ui->pinch_remainder / 16384;
   ui->pinch_remainder %= 16384;
   if (!steps) return;
-  int x, y;
-  CityInterfacePixels(game, event, &x, &y);
-  ZoomCityCanvasAt(city, x, y, steps);
+  CityPoint point = CityInterfacePointerPixels(game, event);
+  ZoomCityCanvasAt(game, point.x, point.y, steps);
 }
 
-void ScrollCityCanvas(City *city, const CanvasSDLEvent *event) {
-  Game *game = city->game;
+void ScrollCityCanvas(Game *game, const CanvasSDLEvent *event) {
+  City *city = game->city;
   CityInterfaceState *ui = game->ui;
   if (ui->desktop.menu.selected || ui->desktop.menu.held) return;
   int pointer_x = ui->desktop.tooltip.pointer_x, pointer_y = ui->desktop.tooltip.pointer_y;
@@ -605,7 +607,7 @@ void ScrollCityCanvas(City *city, const CanvasSDLEvent *event) {
     ui->wheel_zoom_remainder += map_scroll.y;
     int steps = ui->wheel_zoom_remainder / 1024;
     ui->wheel_zoom_remainder %= 1024;
-    ZoomCityCanvasAt(city, pointer_x, pointer_y, steps);
+    ZoomCityCanvasAt(game, pointer_x, pointer_y, steps);
     return;
   }
   PanCityMapWithScroll(city, NULL, event);
@@ -624,8 +626,8 @@ static bool HandleCityRedrawDebugKey(Game *game, CityHotkey key) {
   return true;
 }
 
-static void HandleGameKey(City *city, CityHotkey key) {
-  Game *game = city->game;
+static void HandleGameKey(Game *game, CityHotkey key) {
+  City *city = game->city;
   CityInterfaceState *ui = game->ui;
   ui->button_feedback.beeped = false;
   Drawing *drawing = game->drawing;
@@ -651,8 +653,8 @@ static void HandleGameKey(City *city, CityHotkey key) {
     OffsetCityMapPixels(city, NULL, 0, -20 * drawing->map_pixel_scale);
 }
 
-static void DispatchCityCanvasInput(City *city, CanvasSDLEvent *event) {
-  Game *game = city->game;
+static void DispatchCityCanvasInput(Game *game, CanvasSDLEvent *event) {
+  City *city = game->city;
   CityInterfaceState *ui = game->ui;
   if (event->kind == CANVAS_SDL_KEY_DOWN) {
     ui->button_feedback.beeped = false;
@@ -670,9 +672,8 @@ static void DispatchCityCanvasInput(City *city, CanvasSDLEvent *event) {
   if (HandleCityDeveloperShortcut(game, event)) return;
   CityTooltip *tooltip = &ui->desktop.tooltip;
   if (event->kind == CANVAS_SDL_POINTER_MOVE) {
-    int x, y;
-    CityInterfacePixels(game, event, &x, &y);
-    MoveCityTooltipPointer(game, x, y, MonotonicSeconds());
+    CityPoint point = CityInterfacePointerPixels(game, event);
+    MoveCityTooltipPointer(game, point.x, point.y, MonotonicSeconds());
   } else if (event->kind != CANVAS_SDL_NONE) {
     HideCityTooltip(game);
     if (event->kind == CANVAS_SDL_POINTER_DOWN && event->button < 8)
@@ -684,7 +685,7 @@ static void DispatchCityCanvasInput(City *city, CanvasSDLEvent *event) {
   }
   if (event->kind == CANVAS_SDL_ZOOM_BEGIN || event->kind == CANVAS_SDL_ZOOM ||
       event->kind == CANVAS_SDL_ZOOM_END) {
-    PinchCityCanvas(city, event);
+    PinchCityCanvas(game, event);
     UpdateCityToolCursor(city);
     return;
   }
@@ -693,14 +694,13 @@ static void DispatchCityCanvasInput(City *city, CanvasSDLEvent *event) {
     bool handled = false;
     if (event->kind == CANVAS_SDL_POINTER_MOVE || event->kind == CANVAS_SDL_POINTER_DOWN ||
         event->kind == CANVAS_SDL_POINTER_UP) {
-      int x, y;
-      CityInterfacePixels(game, event, &x, &y);
+      CityPoint point = CityInterfacePointerPixels(game, event);
       CityDropdownPointer kind = event->kind == CANVAS_SDL_POINTER_MOVE ? CITY_DROPDOWN_MOVE :
           event->kind == CANVAS_SDL_POINTER_DOWN ? CITY_DROPDOWN_DOWN : CITY_DROPDOWN_UP;
       if (event->kind != CANVAS_SDL_POINTER_MOVE && event->button != CANVAS_SDL_BUTTON_LEFT) {
         CloseCityDropdown(&ui->desktop);
         handled = true;
-      } else handled = HandleCityDropdownPointer(&ui->desktop, kind, x, y, &selection);
+      } else handled = HandleCityDropdownPointer(&ui->desktop, kind, point.x, point.y, &selection);
     } else if (event->kind == CANVAS_SDL_KEY_DOWN) {
       handled = HandleCityDropdownKey(&ui->desktop, event->key, &selection);
     } else if (event->kind == CANVAS_SDL_SCROLL) {
@@ -763,21 +763,21 @@ static void DispatchCityCanvasInput(City *city, CanvasSDLEvent *event) {
     RecordGameInput(game);
     CanvasSDLEvent key_event = *event;
     key_event.key = key;
-    if (ui->desktop.menu.selected || key == CITY_KEY_F10) HandleGameKey(city, key);
-    else if (!DispatchCityWindowInput(game, &key_event)) HandleGameKey(city, key);
+    if (ui->desktop.menu.selected || key == CITY_KEY_F10) HandleGameKey(game, key);
+    else if (!DispatchCityWindowInput(game, &key_event)) HandleGameKey(game, key);
   }
   else if (event->kind == CANVAS_SDL_KEY_UP)
     DispatchCityWindowInput(game, event);
   else if (event->kind == CANVAS_SDL_TEXT_INPUT && !ui->pointer_stroke_count)
     DispatchCityWindowInput(game, event);
   else if (event->kind == CANVAS_SDL_POINTER_DOWN && event->button == CANVAS_SDL_BUTTON_LEFT)
-    HandleCityCanvasPointerDown(city, event);
+    HandleCityCanvasPointerDown(game, event);
   else if (event->kind == CANVAS_SDL_POINTER_MOVE)
-    HandleCityCanvasPointerMove(city, event);
+    HandleCityCanvasPointerMove(game, event);
   else if (event->kind == CANVAS_SDL_POINTER_UP && event->button == CANVAS_SDL_BUTTON_LEFT)
-    HandleCityCanvasPointerUp(city, event);
+    HandleCityCanvasPointerUp(game, event);
   else if (event->kind == CANVAS_SDL_SCROLL)
-    ScrollCityCanvas(city, event);
+    ScrollCityCanvas(game, event);
   else if (event->kind == CANVAS_SDL_FOCUS_LOST) {
     SetCityAudioFocus(game->audio, false);
     ui->pinch_remainder = 0;
@@ -799,7 +799,7 @@ static void DispatchCityCanvasInput(City *city, CanvasSDLEvent *event) {
       event->alt = !!(last.flags & CITY_POINTER_MODIFIER_ALT);
       event->shift = !!(last.flags & CITY_POINTER_MODIFIER_SHIFT);
       event->ctrl = !!(last.flags & CITY_POINTER_MODIFIER_CONTROL);
-      FinishCityPointerStroke(city, event);
+      FinishCityPointerStroke(game, event);
     }
     Sc2kCanvasDesktopPointerUp(&ui->desktop);
     HandleApplicationActivation(game, 0);
@@ -811,38 +811,28 @@ static void DispatchCityCanvasInput(City *city, CanvasSDLEvent *event) {
 }
 
 // Each real input owns its command feedback scope, including input pumped by a retained caller.
-void DispatchCityCanvasEvent(City *city, CanvasSDLEvent *event) {
-  CityInterfaceState *ui = city->game->ui;
+void DispatchCityCanvasEvent(Game *game, CanvasSDLEvent *event) {
+  CityInterfaceState *ui = game->ui;
   bool previous_enabled = ui->command_errors_enabled;
   u32 previous_depth = ui->command_error_depth;
   ui->command_errors_enabled = event->kind == CANVAS_SDL_KEY_DOWN || event->kind == CANVAS_SDL_TEXT_INPUT ||
       event->kind == CANVAS_SDL_POINTER_DOWN || event->kind == CANVAS_SDL_POINTER_UP ||
       event->kind == CANVAS_SDL_POINTER_MOVE || event->kind == CANVAS_SDL_SCROLL;
-  ui->command_error_depth = city->game->command_depth;
-  DispatchCityCanvasInput(city, event);
-  CompleteCityWindowCallbacks(city);
-  CompleteCityScenarioSelection(city);
-  CompleteCityCreationWindow(city);
-  CompleteCityFileDialogs(city);
+  ui->command_error_depth = game->command_depth;
+  DispatchCityCanvasInput(game, event);
+  CompleteCityPendingWindows(game);
   ui->command_error_depth = previous_depth;
   ui->command_errors_enabled = previous_enabled;
-}
-
-void CityInterfacePixels(Game *game, const CanvasSDLEvent *event, int *x, int *y) {
-  Drawing *drawing = game->drawing;
-  *x = event->x * drawing->map_pixel_scale; *y = event->y * drawing->map_pixel_scale;
-  if (game->ui->display) Sc2kSDLFramebufferPointer(game->ui->display, x, y);
 }
 
 CanvasSDLEvent TransformCityInterfaceEvent(Game *game, const CanvasSDLEvent *event) {
   CityInterfaceState *ui = game->ui;
   CanvasSDLEvent transformed = *event;
-  int x, y;
-  CityInterfacePixels(game, event, &x, &y);
+  CityPoint pixels = CityInterfacePointerPixels(game, event);
   u32 capture = ui->options_slider ? ui->options_slider_window : ui->jukebox_slider ?
       ui->jukebox_slider_window :
       ui->jukebox_pressed_window;
-  CityPoint point = CityWindowPointFromPixels(&ui->desktop, capture, x, y);
+  CityPoint point = CityWindowPointFromPixels(&ui->desktop, capture, pixels.x, pixels.y);
   transformed.x = point.x; transformed.y = point.y;
   return transformed;
 }

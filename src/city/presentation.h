@@ -67,7 +67,7 @@ typedef enum CityNoticeId {
   CITY_NOTICE_ACTION_FAILED = 61705,
 } CityNoticeId;
 
-// Cursor handles use these original indices in the application object.
+// Stable cursor artwork IDs. UI owns selection and installation.
 typedef enum CityCursorId {
   CITY_CURSOR_ARROW = 0, CITY_CURSOR_BUSY = 1,
   CITY_CURSOR_DEMOLISH = 2, CITY_CURSOR_TREE = 3,
@@ -83,6 +83,12 @@ typedef enum CityCursorId {
   CITY_CURSOR_RECREATION = 26, CITY_CURSOR_SIGN = 27, CITY_CURSOR_DISPATCH = 28,
   CITY_CURSOR_HANDLE_COUNT = 30,
 } CityCursorId;
+
+typedef enum CityCursorAction {
+  CITY_CURSOR_SELECT = 0,
+  CITY_CURSOR_RESTORE = 1,
+} CityCursorAction;
+_Static_assert(sizeof(CityCursorAction) == sizeof(i32), "cursor action ABI width");
 
 typedef struct Game Game;
 typedef struct CityNameCommandInput CityNameCommandInput;
@@ -122,6 +128,18 @@ void ReportCityTileInspection(City *city, TileIndex tile);
 void ReportCityCommandBlocker(City *city, TileIndex blocker);
 void CancelCityCommandFeedback(City *city);
 
+// City sound requests. Game applies local playback policy through Audio.
+// One-way request: local preferences, focus and playback policy may suppress, queue or replace the sound.
+// Tile is the sound source; city-wide/UI sounds use INVALID_TILE. No playback-success result is reported.
+void PlayCitySound(City *city, TileIndex tile, int sound_id);
+// Reset the shared helicopter cue deadline to the current simulation frame time after city creation or spawning.
+void ResetCityHelicopterSoundTiming(City *city);
+// Routine city activity; shares recordings with tool sounds but has its own local preference. Helicopter flight
+// cues share a five-second cooldown, advanced even when ambient sounds are muted.
+void PlayCityAmbientSound(City *city, TileIndex tile, int sound_id);
+// Aircraft cues additionally require a visible plane in the live presentation.
+void PlayCityAirplaneSound(City *city, int slot, int sound_id);
+
 // Tool and window presentation. Resolved command options never come from these notifications.
 void RebuildCityToolbar(City *city);
 void DisableCityToolbarItem(City *city, int index);
@@ -134,15 +152,19 @@ void RestoreCityCursorAfterDialog(City *city);
 // Retained pointer callers collect their local input here; shared commands supply explicit endpoints.
 TileIndex TrackInfrastructureLinePlacement(Game *game, TileIndex start, int unit_cost);
 TileIndex TrackCityMapZonePlacementDrag(Game *game, TileIndex start, int unit_cost);
-u32 BeginCityVolcanoPresentation(Game *game, TileIndex location);
 
 // Nonmodal presentation retains each caller until its own completion boundary.
+// Game clears the mission after its outcome notice returns. A win keeps the city active; every other outcome
+// returns to startup. Pass the captured outcome, but apply completion to live City/Game state after dismissal.
+void FinishCityMissionOutcome(City *city, int outcome);
 void PresentCityCheatNotice(City *city, const char *text);
 bool BeginCityDialogPause(City *city, int token);
 bool EndCityDialogPause(City *city, int token);
 int ChooseCityConnectionQuestion(City *city, int kind, int cost);
 int SelectInfrastructureSpan(City *city, int distance, int enabled_styles);
 void ShowCityResourceAlertDialog(City *city, i32 bitmap_id, i32 text_id);
+// The event is already recorded; native presentation opens City's current edition.
+// Preserve event identity for retained callers through the same paused presentation lifetime.
 void ShowRankedCityEventModal(City *city, u32 event_code, u32 event_data);
 void PresentCityDisasterUnlockOffer(City *city);
 const char *CityNoticeText(int notice);
@@ -153,7 +175,10 @@ void ShowCityTileInformationDialog(City *city, TileIndex tile);
 void RefreshCityDrawing(City *city);
 void RefreshCityMapTiles(City *city);
 void RefreshCityMapViews(Game *game);
-u32 SetCityCursor(City *city, int cursor_id, int restore);
+// SELECT remembers cursor_id; RESTORE reinstalls the remembered selection. A wait cursor takes precedence.
+// When ranked events are suppressed, either action remembers cursor_id without installing it.
+// Preserve the host leaf's result: a previous handle, wait visibility result or suppression value.
+u32 SetCityCursor(City *city, int cursor_id, CityCursorAction action);
 void ApplyCityNewspaperPageEffects(City *city, int edition);
 
 // Local presentation state never supplies shared command choices.
@@ -165,11 +190,17 @@ void RestoreCityMapControls(City *city);
 void InitializeCityOrdinancesDialog(City *city);
 void UpdateCityPolicyControls(City *city, int policy, int cost);
 void EnableCityDeveloperTools(City *city);
+// Set local demolition-effect suppression and return its previous value for command-scope restoration.
+// Without Drawing, this returns false and retains no state.
 bool SetCityDemolitionSuppressed(City *city, bool suppressed);
 bool IsCityOutcomeNoticeActive(const City *city);
 bool IsCityPresentationMinimized(const City *city);
-void SetCityProblemNotice(City *city, const char *text);
+// Publish one CityProblem code; UI chooses status wording, including warnings from the current City weather.
+// CITY_PROBLEM_NONE clears the notice. This does not change City or perform problem selection.
+void SetCityProblemNotice(City *city, int problem);
 void SetCityTileScanPresentation(City *city, int direction_mask);
+// Suppress labels, center the main camera and zoom in if needed; return the previous labels for later restoration.
+u32 BeginCityVolcanoPresentation(Game *game, TileIndex location);
 void RestoreCityVolcanoPresentation(City *city, u32 labels);
 void StartCityEarthquakePresentation(City *city);
 
@@ -197,7 +228,7 @@ CityNewspaperInitialization BeginCityNewspaperOpeningPresentation(City *city, in
 i32 CenterCityMapViewAndResetOverlays(City *city, int x, int y, int zoom);
 // The tile painter selects the layer; UI resolves the local placement/error selection and asks Drawing to paint it.
 // Requires a valid tile and the bound map target. Leaves City and selection state unchanged.
-void DrawCityMapPlacementTile(City *city, TileIndex tile);
+void DrawCityMapPlacementTile(const City *city, TileIndex tile);
 // Synchronously project one valid tile into every visible map view, without changing City map-change flags.
 // Missing Game/Drawing/UI or disabled tile-damage presentation has no drawing effect. City owns batch bookkeeping.
 void PublishCityMapTileDamage(City *city, TileIndex tile);

@@ -47,6 +47,6 @@ i32 CityMapOverlayDepth(const City *city, TileIndex tile);
 // Event renderer operations. The camera, sprite cache and target must already match zoom.
 // Train artwork uses the sampled path/heading or the canonical tile pose when interpolation is disabled.
 // tile is the dispatcher's valid world tile, and slot identifies a live train event.
-void DrawCityMapTrain(City *city, TileIndex tile, int zoom, int slot);
+void DrawCityMapTrain(const City *city, TileIndex tile, int zoom, int slot);
 
 #endif

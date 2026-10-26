@@ -1,9 +1,8 @@
-#include "city/economy/facilities.h"
-#include "assets/resource_types.h"
-
 #include "assets/resources.h"
 
+#include "assets/resource_types.h"
 #include "assets/state.h"
+#include "city/economy/types.h"
 
 static const char *const kFacilityTemplates[] = {
   "",
@@ -92,34 +91,34 @@ static const char *const kFacilityTemplates[] = {
 };
 // Facility Information
 
-// Original facility classes and five resource selections per class.
+// Each facility class selects five template slots; -1 suppresses a line.
 static const i8 kFacilityInformationTemplates[CITY_FACILITY_INFO_COUNT][CITY_FACILITY_INFO_LINE_COUNT] = {
-  {-1, -1, -1, -1, -1},
-  {60, 72, 16, -1, -1},
-  {45, 29, -1, -1, -1},
-  {25, 65, 43, 52, 20},
-  {62, 41, 22, -1, 19},
-  {51, 50, 70, -1, 19},
-  {35, 74, 76, 52, 20},
-  {36, 24, 58, 10, 82},
-  {34, 56, 53, 48, 11},
-  {38, 24, 76, 52, 20},
-  {66, 18, 17, 63, -1},
-  {54, 59, 28, 67, -1},
-  {21, 28, 47, 44, -1},
-  {37, -1, 78, 77, -1},
-  {71, 73, 46, -1, -1},
-  {42, 69, 30, -1, 40},
-  {80, 79, 57, 39, 31},
-  {32, 33, 64, 12, 1},
-  {68, 64, -1, 12, 3},
-  {75, 64, -1, 12, 4},
-  {81, 61, -1, 13, 9},
-  {55, 61, -1, 13, 8},
-  {23, 15, 47, 12, 2},
-  {23, 49, -1, 14, 7},
-  {24, 27, 52, 14, 5},
-  {26, -1, -1, 14, 6},
+  [CITY_FACILITY_INFO_DEFAULT] = {-1, -1, -1, -1, -1},
+  [CITY_FACILITY_INFO_POWER_PLANT] = {60, 72, 16, -1, -1},
+  [CITY_FACILITY_INFO_CITY_HALL] = {45, 29, -1, -1, -1},
+  [CITY_FACILITY_INFO_HOSPITAL] = {25, 65, 43, 52, 20},
+  [CITY_FACILITY_INFO_POLICE] = {62, 41, 22, -1, 19},
+  [CITY_FACILITY_INFO_FIRE] = {51, 50, 70, -1, 19},
+  [CITY_FACILITY_INFO_SCHOOL] = {35, 74, 76, 52, 20},
+  [CITY_FACILITY_INFO_STADIUM] = {36, 24, 58, 10, 82},
+  [CITY_FACILITY_INFO_PRISON] = {34, 56, 53, 48, 11},
+  [CITY_FACILITY_INFO_COLLEGE] = {38, 24, 76, 52, 20},
+  [CITY_FACILITY_INFO_ZOO] = {66, 18, 17, 63, -1},
+  [CITY_FACILITY_INFO_STATUE] = {54, 59, 28, 67, -1},
+  [CITY_FACILITY_INFO_MAYORS_HOUSE] = {21, 28, 47, 44, -1},
+  [CITY_FACILITY_INFO_WATER_TREATMENT] = {37, -1, 78, 77, -1},
+  [CITY_FACILITY_INFO_DESALINATION] = {71, 73, 46, -1, -1},
+  [CITY_FACILITY_INFO_ARCOLOGY] = {42, 69, 30, -1, 40},
+  [CITY_FACILITY_INFO_LLAMA_DOME] = {80, 79, 57, 39, 31},
+  [CITY_FACILITY_INFO_BUS_DEPOT] = {32, 33, 64, 12, 1},
+  [CITY_FACILITY_INFO_RAIL_DEPOT] = {68, 64, -1, 12, 3},
+  [CITY_FACILITY_INFO_SUBWAY_STATION] = {75, 64, -1, 12, 4},
+  [CITY_FACILITY_INFO_WIND_POWER] = {81, 61, -1, 13, 9},
+  [CITY_FACILITY_INFO_HYDRO_POWER] = {55, 61, -1, 13, 8},
+  [CITY_FACILITY_INFO_LARGE_PARK] = {23, 15, 47, 12, 2},
+  [CITY_FACILITY_INFO_MUSEUM] = {23, 49, -1, 14, 7},
+  [CITY_FACILITY_INFO_LIBRARY] = {24, 27, 52, 14, 5},
+  [CITY_FACILITY_INFO_MARINA] = {26, -1, -1, 14, 6},
 };
 
 static bool IsFacilityLocale(const char *locale, const char *expected) {

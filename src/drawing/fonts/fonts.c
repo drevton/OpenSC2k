@@ -1,4 +1,3 @@
-#include "base/byte_order.h"
 #include "drawing/fonts/fonts.h"
 #include "base/text.h"
 
@@ -53,6 +52,21 @@ static void CanvasTextScaled(Canvas *canvas, i32 x, i32 y, const char *text, u32
 
 void CanvasTextAt(Canvas *canvas, i32 x, i32 y, const char *text, u32 color) {
   CanvasTextScaled(canvas, x, y, text, color, 1);
+}
+
+void CanvasTextSized(Canvas *canvas, int x, int y, const char *text, u32 color, int size) {
+  if (canvas->interface_font && canvas->interface_font->ready) {
+    DrawCityInterfaceTextSized(canvas->interface_font, canvas, x, y, text, color, false, size);
+    return;
+  }
+  Canvas glyph_canvas = *canvas;
+  glyph_canvas.raster = CanvasRasterView(canvas);
+  glyph_canvas.raster.origin_x *= 10; glyph_canvas.raster.origin_y *= 10;
+  glyph_canvas.raster.denominator *= 10;
+  glyph_canvas.width *= 10; glyph_canvas.height *= 10;
+  glyph_canvas.clip = (CityRect){canvas->clip.left * 10, canvas->clip.top * 10,
+      canvas->clip.right * 10, canvas->clip.bottom * 10};
+  CanvasTextFont(&glyph_canvas, x * 10, y * 10, text, color, size, kCanvasFont);
 }
 
 i32 CanvasTextWrappedScaled(Canvas *canvas, i32 x, i32 y, i32 right, i32 bottom,
@@ -242,22 +256,7 @@ static void DrawCityCoverageText(const CityInterfaceFont *font, Canvas *canvas, 
               alpha = IntMax(alpha, coverage[row * glyph->width + sample]);
           if (!canvas->font_antialias) alpha = alpha >= 128 ? 255 : 0;
           if (!alpha) continue;
-          int px = dx + col, py = dy + row;
-          size_t index = (size_t)py * canvas->stride + px;
-          u32 value = ink;
-          if (alpha != 255) {
-            u32 background = canvas->pixels[index];
-            if (canvas->palette_indices)
-              RecordCanvasPaletteComposite(canvas, py, px, px + 1,
-                  CanvasPaletteIndexMask(canvas->palette_indices[(size_t)py * canvas->index_stride + px]));
-            value = 0xFF000000;
-            for (int shift = 0; shift <= 16; shift += 8)
-              value |= (((ink >> shift & 255) * alpha + (background >> shift & 255) * (255 - alpha) + 127) / 255)
-                  << shift;
-          }
-          canvas->pixels[index] = value;
-          if (canvas->palette_indices && (!canvas->palette_rows || canvas->palette_rows[py]))
-            canvas->palette_indices[(size_t)py * canvas->index_stride + px] = 0;
+          CanvasRasterBlendPixel(canvas, dx + col, dy + row, ink, alpha);
         }
       position += font->glyphs[0][code].advance * size;
     }
@@ -353,12 +352,21 @@ const CityOverlayGlyph *CityOverlayFontGlyphs(const CityOverlayFont *font, int z
   return font->glyphs + zoom * CITY_OVERLAY_GLYPH_COUNT;
 }
 
-// Publication typography uses baked coverage at the final framebuffer scale.
-// Advances come from the 32-pixel master so wrapping is independent of display scale.
-static const u8 *PublicationGlyph(const CityInterfaceFont *font, CityPublicationFace face, int variant, int code) {
-  return font->newspaper_atlas + ((face * kPublicationSizeCount + variant) * 256 + code) * kPublicationGlyphBytes;
+// Palette overlay labels use byte-indexed glyphs and stored advances. Ignore unsupported bytes exactly as the
+// painter does; glyph ink extents and target scaling remain the caller's responsibility.
+int CityOverlayTextWidth(const CityOverlayFont *font, int zoom, const char *text) {
+  const CityOverlayGlyph *glyphs = CityOverlayFontGlyphs(font, zoom);
+  int width = 0;
+  for (int index = 0; text[index]; ++index) {
+    int code = (u8)text[index];
+    if (code >= CITY_OVERLAY_FONT_FIRST && code < CITY_OVERLAY_FONT_FIRST + CITY_OVERLAY_GLYPH_COUNT)
+      width += glyphs[code - CITY_OVERLAY_FONT_FIRST].advance;
+  }
+  return width;
 }
 
+// Publication typography uses baked coverage at the final framebuffer scale.
+// Advances come from the 32-pixel master so wrapping is independent of display scale.
 int CityPublicationTextWidth(const CityInterfaceFont *font, const char *text, int bytes,
     CityPublicationFace face, int size) {
   if (!font || !font->newspaper_atlas)
@@ -368,10 +376,9 @@ int CityPublicationTextWidth(const CityInterfaceFont *font, const char *text, in
   while (*text && (bytes < 0 || text - start < bytes)) {
     int code = ReadCityFontCharacter(&text);
     if (bytes >= 0 && text - start > bytes) break;
-    const u8 *glyph = PublicationGlyph(font, face, 10, code);
-    width += glyph[10] | glyph[11] << 8;
+    width += ReadCityPublicationGlyph(font, face, CITY_PUBLICATION_MASTER_VARIANT, code).advance;
   }
-  return (width * size + 2047) / 2048;
+  return (width * size + CITY_PUBLICATION_MASTER_UNITS - 1) / CITY_PUBLICATION_MASTER_UNITS;
 }
 
 void DrawCityPublicationText(const CityInterfaceFont *font, Canvas *canvas, int x, int y,
@@ -408,35 +415,20 @@ void DrawCityPublicationText(const CityInterfaceFont *font, Canvas *canvas, int 
   while (*text && (bytes < 0 || text - start < bytes)) {
     int code = ReadCityFontCharacter(&text);
     if (bytes >= 0 && text - start > bytes) break;
-    const u8 *glyph = PublicationGlyph(font, face, variant, code);
-    int left = CanvasRasterEdge(x * 2048 + position * size, r.origin_x * 2048,
-        r.numerator, r.denominator * 2048) + r.offset_x + (i16)(glyph[6] | glyph[7] << 8) * pixels / source_size;
-    int top = baseline + (i16)(glyph[8] | glyph[9] << 8) * pixels / source_size;
-    int width = (glyph[4] * pixels + source_size - 1) / source_size;
-    int height = (glyph[5] * pixels + source_size - 1) / source_size;
-    const u8 *coverage = font->newspaper_atlas + kPublicationMetadataBytes + ReadLE32(glyph);
+    CityPublicationGlyph glyph = ReadCityPublicationGlyph(font, face, variant, code);
+    int left = CanvasRasterEdge(x * CITY_PUBLICATION_MASTER_UNITS + position * size,
+        r.origin_x * CITY_PUBLICATION_MASTER_UNITS, r.numerator, r.denominator * CITY_PUBLICATION_MASTER_UNITS) +
+        r.offset_x + glyph.offset_x * pixels / source_size;
+    int top = baseline + glyph.offset_y * pixels / source_size;
+    int width = (glyph.width * pixels + source_size - 1) / source_size;
+    int height = (glyph.height * pixels + source_size - 1) / source_size;
+    const u8 *coverage = glyph.coverage;
     for (int row = IntMax(0, clip.top - top); row < IntMin(height, clip.bottom - top); ++row)
       for (int col = IntMax(0, clip.left - left); col < IntMin(width, clip.right - left); ++col) {
-        int alpha = coverage[(row * source_size / pixels) * glyph[4] + col * source_size / pixels];
+        int alpha = coverage[(row * source_size / pixels) * glyph.width + col * source_size / pixels];
         if (!alpha) continue;
-        size_t index = (size_t)(top + row) * canvas->stride + left + col;
-        u32 result = color;
-        if (alpha != 255) {
-          u32 background = canvas->pixels[index];
-          if (canvas->palette_indices)
-            RecordCanvasPaletteComposite(canvas, top + row, left + col, left + col + 1,
-                CanvasPaletteIndexMask(canvas->palette_indices[
-                    (size_t)(top + row) * canvas->index_stride + left + col]));
-          result = 0xFF000000;
-          for (int shift = 0; shift <= 16; shift += 8)
-            result |= (((color >> shift & 255) * alpha + (background >> shift & 255) * (255 - alpha) + 127) / 255)
-                << shift;
-        }
-        canvas->pixels[index] = result;
-        if (canvas->palette_indices && (!canvas->palette_rows || canvas->palette_rows[top + row]))
-          canvas->palette_indices[(size_t)(top + row) * canvas->index_stride + left + col] = 0;
+        CanvasRasterBlendPixel(canvas, left + col, top + row, color, alpha);
       }
-    const u8 *advance = PublicationGlyph(font, face, 10, code);
-    position += advance[10] | advance[11] << 8;
+    position += ReadCityPublicationGlyph(font, face, CITY_PUBLICATION_MASTER_VARIANT, code).advance;
   }
 }

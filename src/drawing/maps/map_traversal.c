@@ -6,15 +6,16 @@
 #include "city/events/events.h"
 #include "city/growth/growth.h"
 #include "city/maps/buildings.h"
-#include "city/maps/layers.h"
+#include "city/maps/terrain.h"
 #include "city/maps/map_types.h"
 #include "city/maps/tile_storage.h"
-#include "drawing/fonts/fonts.h"
+#include "city/state.h"
 #include "drawing/maps/map_animation.h"
 #include "drawing/maps/map_events.h"
 #include "drawing/maps/map_depth.h"
 #include "drawing/maps/map_labels.h"
 #include "drawing/maps/map_render.h"
+#include "drawing/maps/map_sprites.h"
 #include "drawing/maps/map_view.h"
 #include "drawing/maps/tables.h"
 #include "drawing/state.h"
@@ -66,10 +67,7 @@ static void PrepareCityMapTileBounds(const City *city, int zoom, bool labels) {
   traversal->left_extent = 8 * scale;
   if (labels && drawing->map_state.label_display && drawing->label_style) {
     const CityInterfaceFont *font = &city->game->resources->interface_font;
-    int advance = 0;
-    for (int glyph = 0; glyph < CITY_INTERFACE_FONT_GLYPHS; ++glyph)
-      advance = IntMax(advance, font->glyphs[0][glyph].advance);
-    int width = ((advance * CITY_OVERLAY_NAME_MAX_LENGTH + 4) * drawing->options.scale + 99) / 100;
+    int width = ((font->max_advance * CITY_OVERLAY_NAME_MAX_LENGTH + 4) * drawing->options.scale + 99) / 100;
     int height = (12 * drawing->options.scale + 99) / 100;
     // Interface text is sized in physical pixels; traversal uses logical map pixels.
     width = (width * 100 + drawing->target_scale - 1) / drawing->target_scale;
@@ -78,15 +76,10 @@ static void PrepareCityMapTileBounds(const City *city, int zoom, bool labels) {
     traversal->width = IntMax(traversal->width, (width + 1) / 2 + 4 * scale + 2);
     traversal->height = IntMax(traversal->height, height + 2 * scale + 2);
   } else if (labels && drawing->map_state.label_display) {
-    const CityOverlayGlyph *font = CityOverlayFontGlyphs(&city->game->resources->overlay_font, zoom);
-    int advance = 0;
-    for (int glyph = 0; glyph < CITY_OVERLAY_GLYPH_COUNT; ++glyph)
-      advance = IntMax(advance, font[glyph].advance);
+    int advance = city->game->resources->overlay_font.max_advance[zoom];
     const CityInterfaceFont *interface = &city->game->resources->interface_font;
-    int native_advance = 0;
-    for (int glyph = 0; glyph < CITY_INTERFACE_FONT_GLYPHS; ++glyph)
-      native_advance = IntMax(native_advance, interface->glyphs[0][glyph].advance);
-    int native_width = ((native_advance * CITY_OVERLAY_NAME_MAX_LENGTH + 4) * drawing->options.scale + 99) / 100;
+    int native_width = ((interface->max_advance * CITY_OVERLAY_NAME_MAX_LENGTH + 4) *
+        drawing->options.scale + 99) / 100;
     traversal->left_extent = IntMax(traversal->left_extent, (native_width >> 1) + 4);
     traversal->width = IntMax(traversal->width, (native_width >> 1) + 4 * scale);
     traversal->height = IntMax(traversal->height, (12 * drawing->options.scale + 99) / 100 + 4 * scale);
@@ -98,13 +91,13 @@ static void PrepareCityMapTileBounds(const City *city, int zoom, bool labels) {
 }
 
 // Retain sprite bounds and event anchors, without a map-wide index or rebuild after tile edits.
-static void PrepareMapTileTraversal(City *city, const CityMapViewConfig *view, int zoom) {
+static void PrepareMapTileTraversal(const City *city, const CityMapViewConfig *view, int zoom) {
   Drawing *drawing = city->drawing;
   MapTileTraversal *traversal = &drawing->tile_traversal;
   // Object collection also paints ground and captures signs in this traversal.
   bool labels = drawing->animation.mode != ANIMATION_CAPTURE;
   PrepareCityMapTileBounds(city, zoom, labels);
-  if (!PrepareCityEventDrawingStorage(city)) { traversal->event_count = 0; return; }
+  if (!PrepareDrawingEventStorage(drawing, city->events.capacity)) { traversal->event_count = 0; return; }
   int rotation = CityMapViewRotation(view);
   drawing->map_state.zone_display_mask = kTileScanMaskTable[city->geography.rotation];
   traversal->event_count = 0;
@@ -134,30 +127,32 @@ static void PrepareMapTileTraversal(City *city, const CityMapViewConfig *view, i
   }
 }
 
-CityRect VisibleCityMapTileBounds(const City *city, int origin_x, int origin_y, int zoom, int rotation, CityRect area) {
+CityRect VisibleCityMapTileBounds(const City *city, CityMapCamera camera, CityRect area) {
   Drawing *drawing = city->drawing;
-  PrepareCityMapTileBounds(city, zoom, true);
+  PrepareCityMapTileBounds(city, camera.zoom, true);
   const MapTileTraversal *traversal = &drawing->tile_traversal;
-  int scale = 1 << zoom;
-  int first = CeilDivide(area.top - origin_y - (traversal->width >> 2) - 20 * scale, 2 * scale);
-  int last = FloorDivide(area.bottom - origin_y +
+  int scale = 1 << camera.zoom;
+  int first = CeilDivide(area.top - camera.origin_y - (traversal->width >> 2) - 20 * scale, 2 * scale);
+  int last = FloorDivide(area.bottom - camera.origin_y +
       CITY_ALTITUDE_LAND_MASK * CITY_MAP_HEIGHT_UNIT * scale + traversal->height + 20 * scale, 2 * scale);
-  int left = CeilDivide(area.left - origin_x - traversal->width - 20 * scale, 4 * scale);
-  int right = FloorDivide(area.right - origin_x + traversal->left_extent + 20 * scale, 4 * scale);
-  CityPoint size = CityMapCameraSize(city, rotation);
+  int left = CeilDivide(area.left - camera.origin_x - traversal->width - 20 * scale, 4 * scale);
+  int right = FloorDivide(area.right - camera.origin_x + traversal->left_extent + 20 * scale, 4 * scale);
+  CityPoint size = CityMapCameraSize(city, camera.rotation);
   CityRect bounds = {IntMax(0, CeilDivide(first - right, 2)), IntMax(0, CeilDivide(first + left, 2)),
       IntMin(size.x, FloorDivide(last - left, 2) + 1), IntMin(size.y, FloorDivide(last + right, 2) + 1)};
   if (bounds.left >= bounds.right || bounds.top >= bounds.bottom) return (CityRect){0};
-  CityPoint a = CityMapWorldPoint(city, rotation, bounds.left, bounds.top);
-  CityPoint b = CityMapWorldPoint(city, rotation, bounds.right - 1, bounds.bottom - 1);
+  CityPoint a = CityMapWorldPoint(city, camera.rotation, bounds.left, bounds.top);
+  CityPoint b = CityMapWorldPoint(city, camera.rotation, bounds.right - 1, bounds.bottom - 1);
   return (CityRect){IntMin(a.x, b.x), IntMin(a.y, b.y), IntMax(a.x, b.x) + 1, IntMax(a.y, b.y) + 1};
 }
 
-static CityRect TilePaintBounds(City *city, Drawing *drawing, int zoom, TileIndex cell) {
+static CityRect TilePaintBounds(const City *city, int zoom, TileIndex cell) {
+  Drawing *drawing = city->drawing;
   int scale = 1 << zoom;
-  int x = MapTileX(city, cell), y = MapTileY(city, cell), tile = CityMapViewTileSpriteIndex(city, cell);
+  int x = MapTileX(city, cell), y = MapTileY(city, cell);
+  int sprite = CityMapViewTileSpriteIndex(city, cell);
   CityPoint point = CityMapViewTilePoint(city, cell);
-  CityPoint extent = CityBuildingSpriteExtent(city, tile, zoom);
+  CityPoint extent = CityBuildingSpriteExtent(city, sprite, zoom);
   int width = extent.x, height = extent.y;
   width = IntMax(width, 16 * scale);
   height = IntMax(height, 32 * scale);
@@ -206,7 +201,7 @@ static CityRect TilePaintBounds(City *city, Drawing *drawing, int zoom, TileInde
   return bounds;
 }
 
-void PaintVisibleCityMapTiles(City *city, const CityMapViewConfig *view, int zoom) {
+void PaintVisibleCityMapTiles(const City *city, const CityMapViewConfig *view, int zoom) {
   Drawing *drawing = city->drawing;
   bool capture = drawing->animation.mode == ANIMATION_CAPTURE;
   CityRect area = capture ? drawing->map_state.scan_clip : drawing->map_state.paint_rect;
@@ -255,11 +250,11 @@ void PaintVisibleCityMapTiles(City *city, const CityMapViewConfig *view, int zoo
       if (capture) {
         if (!IsCityMapOverlayAnimated(city, ReadOverlay(city, cell)) &&
             (!(city->fixes & (1ull << CITY_FIX_NATIVE_LANDSCAPE)) ||
-                (CityBuildingSmokeIndex(ReadTile(city, cell)) < 0 &&
-                    ReadTile(city, cell) != TK_WIND_POWER))) continue;
+                (CityBuildingSmokeIndex(city->tile[cell].kind) < 0 &&
+                    city->tile[cell].kind != TK_WIND_POWER))) continue;
       } else if (!(screen_x >= area.left && screen_x < area.right &&
           screen_y >= area.top && screen_y < area.bottom) &&
-          !Intersects(area, TilePaintBounds(city, drawing, zoom, cell))) {
+          !Intersects(area, TilePaintBounds(city, zoom, cell))) {
         continue;
       }
       if (drawing->frame_stats.calls.active) ++drawing->frame_stats.tile_visible_visits;

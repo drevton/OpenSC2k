@@ -5,7 +5,6 @@
 #include "city/saveload/types.h"
 #include "city/presentation.h"
 #include "game/state.h"
-#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -17,23 +16,17 @@
 #include "city/saveload/legacy_text.h"
 #include "city/state.h"
 
-// Scenario
-
-static const u8 kScenarioWordOffsets[] = {0, 4, 30, 32, 48, 50};
-
-static const u8 kScenarioDwordOffsets[] = {6, 10, 14, 18, 22, 26, 34, 38, 42};
-
 // Close the scenario input captured by a registered cleanup record. Context must remain alive until cleanup; this
 // follows the stream's real close/unwind path rather than suppressing errors.
 static void CloseScenarioMetadataInput(void *context) {
-  void **input = context;
+  CityLoadStream **input = context;
   if (*input != NULL) CityFileCloseStream(*input);
 }
 
-// Load a city, read a version-128 SCEN block, and activate the mission. Owns its opened stream and registered cleanup;
-// false retains load failure state and must not activate a partially decoded mission.
+// Load a city, then its version-128 SCEN block. A successful City load sets the mission flag even if metadata fails.
+// Own the input through registered cleanup; only successful decoding and close reach the pending-disaster updates.
 bool LoadCityScenarioMetadata(City *city, const char *path) {
-  void *input = NULL;
+  CityLoadStream *input = NULL;
   bool loaded = false;
   CityFileCleanup cleanup = {CloseScenarioMetadataInput, &input, NULL};
   PushCityFileCleanup(city->game->file, &cleanup);
@@ -56,18 +49,9 @@ bool LoadCityScenarioMetadata(City *city, const char *path) {
         CITY_NOTICE_ERROR_EXTRACTING_SCENARIO_RESOURCE, CITY_FILE_ERROR_RESOURCE_ONLY);
     goto done; // The registered cleanup closes the stream.
   }
-  for (size_t index = 0; index < sizeof(kScenarioWordOffsets) / sizeof(kScenarioWordOffsets[0]);
-      ++index) {
-    int offset = kScenarioWordOffsets[index];
-    WriteLE16(metadata + offset, ReadBE16(metadata + offset));
-  }
-  for (size_t index = 0; index < sizeof(kScenarioDwordOffsets) / sizeof(kScenarioDwordOffsets[0]);
-      ++index) {
-    int offset = kScenarioDwordOffsets[index];
-    WriteLE32(metadata + offset, ReadBE32(metadata + offset));
-  }
+  ConvertStockCityScenarioRecord(metadata);
   DecodeCityScenarioMetadata(scenario_metadata, metadata);
-  void *completed_input = input;
+  CityLoadStream *completed_input = input;
   input = NULL; // Close consumes the wrapper even when its OS close throws.
   CityFileCloseStream(completed_input);
   city->disasters.pending_type = scenario_metadata->disaster_type;
@@ -79,99 +63,28 @@ done:
   return loaded;
 }
 
-// Scenario Format
-
-typedef struct {
-  u16 state_offset;
-  u8 record_offset;
-  u8 width;
-  u8 count;
-} ScenarioField;
-
-#define FIELD(member, record_offset, width, count) \
-    {offsetof(CityScenarioMetadata, member), record_offset, width, count}
-static const ScenarioField kScenarioFields[] = {
-  FIELD(disaster_type, 0, 2, 1),
-  FIELD(disaster_y, 2, 1, 1),
-  FIELD(disaster_x, 3, 1, 1),
-  FIELD(criteria.remaining_ticks, 4, 2, 1),
-  FIELD(criteria.minimum_population, 6, 4, 1),
-  FIELD(criteria.minimum_sector_metric, 10, 4, 3),
-  FIELD(criteria.minimum_net_funds, 22, 4, 1),
-  FIELD(criteria.minimum_city_metric, 26, 4, 1),
-  FIELD(criteria.minimum_service_metric, 30, 2, 2),
-  FIELD(criteria.maximum_environment_metric, 34, 4, 3),
-  FIELD(criteria.statistic_index, 46, 1, 2),
-  FIELD(criteria.minimum_statistic, 48, 2, 2),
-};
-#undef FIELD
-
-// Encode mission state into the canonical little-endian scenario record. Output must hold CITY_SCENARIO_RECORD_SIZE
-// writable bytes; input state remains unchanged.
-void EncodeCityScenarioMetadata(const CityScenarioMetadata *state, u8 record[CITY_SCENARIO_RECORD_SIZE]) {
-  for (int field_index = 0; field_index < sizeof(kScenarioFields) / sizeof(kScenarioFields[0]); ++field_index) {
-    const ScenarioField *field = &kScenarioFields[field_index];
-    for (int index = 0; index < field->count; ++index) {
-      const u8 *source = (const u8 *)state + field->state_offset + index * field->width;
-      u32 value = 0;
-      if (field->width == 4) {
-        memcpy(&value, source, sizeof(value));
-      } else if (field->width == 2) {
-        u16 word;
-        memcpy(&word, source, sizeof(word));
-        value = word;
-      } else {
-        value = *source;
-      }
-      for (int byte = 0; byte < field->width; ++byte)
-        record[field->record_offset + index * field->width + byte] = value >> (8 * byte);
-    }
-  }
-}
-
-// Decode one complete canonical little-endian scenario record into caller-owned mission metadata. Input must hold
-// CITY_SCENARIO_RECORD_SIZE readable bytes; this does not activate a mission or read a file itself.
-void DecodeCityScenarioMetadata(CityScenarioMetadata *state, const u8 record[CITY_SCENARIO_RECORD_SIZE]) {
-  for (int field_index = 0; field_index < sizeof(kScenarioFields) / sizeof(kScenarioFields[0]); ++field_index) {
-    const ScenarioField *field = &kScenarioFields[field_index];
-    for (int index = 0; index < field->count; ++index) {
-      u32 value = 0;
-      for (int byte = 0; byte < field->width; ++byte)
-        value |= (u32)record[field->record_offset + index * field->width + byte] << (8 * byte);
-      u8 *destination = (u8 *)state + field->state_offset + index * field->width;
-      if (field->width == 4) {
-        memcpy(destination, &value, sizeof(value));
-      } else if (field->width == 2) {
-        u16 word = value;
-        memcpy(destination, &word, sizeof(word));
-      } else {
-        *destination = value;
-      }
-    }
-  }
-}
-
 // Preview
 
 // Open a scenario input through the active file runtime's load-stream service. Returns an owned wrapper or NULL;
 // matching CityFileCloseStream and operation cleanup retain the usual observed I/O/error behavior.
-void *CityFileOpenStream(CityFileRuntime *file, const char *path) {
+CityLoadStream *CityFileOpenStream(CityFileRuntime *file, const char *path) {
   return OpenCityLoadStream(file, path);
 }
 
 // Close a scenario/load stream through the shared throwing close service. Stream must be an open wrapper from the
 // matching file runtime and becomes invalid even when close throws.
-void CityFileCloseStream(void *stream) {
+void CityFileCloseStream(CityLoadStream *stream) {
   CloseCityLoadStream(stream);
 }
 
-// Read a versioned stock chunk through the selected borrowed input. Output must hold capacity writable bytes;
+// Read a versioned stock chunk through the selected borrowed input. Tag provides exactly four bytes;
+// output must hold capacity writable bytes;
 // returns NULL for rejected/missing data and restores the initial stream position through its backend's seek path.
-static u8 *ReadTaggedChunk(CityFileInput *input, const char *tag, int version, u8 *output, size_t capacity) {
+static u8 *ReadTaggedChunk(CityFileInput *input, const char tag[4], int version, u8 *output, size_t capacity) {
   int initial = CityFileInputPosition(input);
   if (initial == -1)
     return NULL;
-  char header[5] = {0};
+  char header[4] = {0};
   u8 word[4];
   u8 *result = NULL;
   if (CityFileInputRead(input, header, 4) != 4 || memcmp(header, "FORM", 4) != 0 ||
@@ -183,7 +96,7 @@ static u8 *ReadTaggedChunk(CityFileInput *input, const char *tag, int version, u
     if (CityFileInputRead(input, header, 4) != 4)
       break;
     position += 4;
-    if (strcmp(header, tag) != 0) {
+    if (memcmp(header, tag, sizeof(header)) != 0) {
       if (CityFileInputRead(input, word, 4) != 4)
         break;
       position += 4 + ReadBE32(word);
@@ -201,15 +114,18 @@ static u8 *ReadTaggedChunk(CityFileInput *input, const char *tag, int version, u
     if (CityFileInputRead(input, word, 4) != 4)
       break;
     position += 4;
-    if (ReadLE32(word) != (u32)(int)version) {
+    if (ReadLE32(word) != (u32)version) {
       if (CityFileInputSeek(input, (int)bytes, SEEK_CUR) != 0)
         break;
       continue;
     }
-    if (strncmp(tag, "TEXT", 4) == 0) {
-      if ((int)bytes < 0)
+    bool text = memcmp(tag, "TEXT", 4) == 0;
+    bool scenario = memcmp(tag, "SCEN", 4) == 0;
+    bool picture = memcmp(tag, "PICT", 4) == 0;
+    if (text) {
+      if (bytes > INT32_MAX)
         break; // A signed-negative byte count bypasses the stock output cap.
-      if ((int)bytes > CITY_SCENARIO_INSTRUCTION_BYTES)
+      if (bytes > CITY_SCENARIO_INSTRUCTION_BYTES)
         bytes = CITY_SCENARIO_INSTRUCTION_BYTES;
       if ((size_t)bytes + 1 <= capacity && CityFileInputRead(input, output, bytes) == bytes) {
         output[bytes] = 0;
@@ -217,14 +133,14 @@ static u8 *ReadTaggedChunk(CityFileInput *input, const char *tag, int version, u
       }
       break;
     }
-    if (strncmp(tag, "SCEN", 4) == 0 || strncmp(tag, "PICT", 4) == 0) {
-      if ((int)bytes < 0)
+    if (scenario || picture) {
+      if (bytes > INT32_MAX)
         break;
-      if (strncmp(tag, "PICT", 4) == 0 && (int)bytes > 4300)
-        bytes = 4300;
+      if (picture && bytes > CITY_SCENARIO_PICTURE_BYTES)
+        bytes = CITY_SCENARIO_PICTURE_BYTES;
       if ((size_t)bytes <= capacity) {
         if (CityFileInputRead(input, output, bytes) == bytes) result = output;
-      } else if (strncmp(tag, "SCEN", 4) == 0) {
+      } else if (scenario) {
         // Retain the existing defined SCEN overflow replacement: accept the
         // first destination-sized prefix and consume the tail without writing past
         // the destination. Ordinary stock-sized reads stay identical.
@@ -246,23 +162,17 @@ done:
   return result;
 }
 
-// Find a versioned stock chunk through a borrowed stdio input and decode it into caller storage. Tag must provide four
-// bytes and output must hold capacity writable bytes; returns the payload pointer or NULL.
-static u8 *ReadCityFileChunkByTag(FILE *input, const char *tag, int version, u8 *output, size_t capacity) {
-  CityFileInput file = {.kind = CITY_FILE_INPUT_STDIO, .stream = input};
-  return ReadTaggedChunk(&file, tag, version, output, capacity);
-}
 // Find and decode a tagged chunk through an already opened observed-load stream. Output must provide capacity writable
 // bytes; returns its payload pointer or NULL and propagates throwing backend errors.
-u8 *CityFileReadTaggedStream(void *input, const char *tag, int version, u8 *output, size_t capacity) {
-  CityFileInput file = {.kind = CITY_FILE_INPUT_PLATFORM, .stream = input};
+u8 *CityFileReadTaggedStream(CityLoadStream *input, const char tag[4], int version, u8 *output, size_t capacity) {
+  CityFileInput file = {.kind = CITY_FILE_INPUT_PLATFORM, .load_stream = input};
   return ReadTaggedChunk(&file, tag, version, output, capacity);
 }
 
 // Canvas previews use bounded buffers and do not mutate City state. Picture/text must provide their stated capacities;
 // returns a read-only preview result and preserves backend seek/error semantics.
 bool ReadCityPreview(FILE *stream, u8 *picture, size_t picture_capacity, char *description, size_t text_capacity) {
-  CityFileInput input = {.kind = CITY_FILE_INPUT_STDIO, .stream = stream};
+  CityFileInput input = {.kind = CITY_FILE_INPUT_STDIO, .stdio_stream = stream};
   bool found = ReadTaggedChunk(&input, "PICT", CITY_SCENARIO_PREVIEW_VERSION, picture, picture_capacity) != NULL;
   ReadTaggedChunk(&input, "TEXT", CITY_SCENARIO_PREVIEW_VERSION, (u8 *)description, text_capacity);
   if (text_capacity != 0) description[text_capacity - 1] = 0;
@@ -276,12 +186,13 @@ bool ReadCityPreview(FILE *stream, u8 *picture, size_t picture_capacity, char *d
 // its own input and returns false without changing live City state on invalid data.
 bool ReadCityScenarioInstructions(const char *path, char text[CITY_SCENARIO_INSTRUCTION_BYTES + 1]) {
   text[0] = '\0';
-  FILE *input = fopen(path, "rb");
-  if (input == NULL)
+  FILE *stream = fopen(path, "rb");
+  if (stream == NULL)
     return false;
-  u8 *result = ReadCityFileChunkByTag(input, "TEXT", CITY_SCENARIO_INSTRUCTIONS_VERSION, (u8 *)text,
+  CityFileInput input = {.kind = CITY_FILE_INPUT_STDIO, .stdio_stream = stream};
+  u8 *result = ReadTaggedChunk(&input, "TEXT", CITY_SCENARIO_INSTRUCTIONS_VERSION, (u8 *)text,
       CITY_SCENARIO_INSTRUCTION_BYTES + 1);
-  fclose(input);
+  fclose(stream);
   if (result == NULL)
     return false;
   for (i32 index = 0; text[index] != '\0'; ++index)

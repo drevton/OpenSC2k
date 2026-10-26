@@ -2,7 +2,6 @@
 #define SC2K_RENDER_BITMAPS_H
 
 #include "city/infrastructure/types.h"
-#include "city/maps/tile_storage.h"
 #include "drawing/types.h"
 #include "drawing/sprites/preparation.h"
 #include "assets/graphics.h"
@@ -68,14 +67,5 @@ const struct RunSprite *FindCityToolbarIcon(const Drawing *drawing, int icon, in
 // independent eviction ranges. Failure retains existing entries; returned sprites are borrowed from Drawing.
 const struct RunSprite *PrepareCityToolbarIcon(Drawing *drawing, int icon, int width, int height, bool button);
 void ReleaseCityToolbarIcons(Drawing *drawing);
-// Draw the species' common climate crop using immutable Assets. Missing artwork/empty bounds are no-ops;
-// false reports sprite preparation failure. The caller owns application error handling.
-bool DrawCityTreePreview(const CityAssets *assets, Canvas *canvas, SpriteImage *cache, CityRect bounds,
-    int species);
-enum { CITY_BUILDING_PREVIEW_WIDTH = 144, CITY_BUILDING_PREVIEW_HEIGHT = 150 };
-// kind must have a prepared construction-chooser preview; orientation is the resolved artwork facing in 0..3.
-// UI resolves tool selection and camera/placement rotation before this draw, which does not read the active tool.
-// City supplies artwork policy/year without mutation. False reports a missing prepared sprite to the caller.
-bool DrawCityBuildingPreview(const City *city, Canvas *canvas, CityRect bounds, TileKind kind, int orientation);
 
 #endif

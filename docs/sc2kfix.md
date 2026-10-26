@@ -5,24 +5,6 @@ registry; the text filter searches names, descriptions and categories. Groups ex
 mouse wheel, scrollbar and arrow/Page Up/Page Down keys scroll the list. Tooltips describe scope
 and delayed effects. Reset all values restores interface defaults and turns optional fixes off.
 
-Settings remain with City, Drawing, UI or Audio according to ownership. Changes to City fixes
-use command133 (`CITY_COMMAND_SET_FIX`), not UI writes. Interface interaction state belongs to UI.
-Preferences retain defaults for future cities; SC2X retains the active city's fix flags in metadata
-and native resume data. Legacy SC2 has no field for these flags and uses the current preferences.
-Older SC2X native resumes remain readable and retain stock behavior. Unrecognized fix bits fail
-validation. Stock checkpoint export rejects enabled optional City fixes; no oracle equality is
-claimed for repaired behavior.
-
-## Comparison hydro valuation repair
-
-The comparison baseline explicitly repairs stock hydro kind198 asset value from $4000 to $400,
-matching kind199. `NativeStockVerifier` and the isolated valuation check select
-`call_stdcall(..., repair_hydro_value=True)`; generic Unicorn calls remain unpatched by default.
-The guarded hook replaces only the hydro multiply result at `0x46A378`. It leaves the on-disk
-executable, x86 code bytes and shared $4000 coal construction price unchanged. Reports record
-`original_bug_repairs.hydro_asset_value`; these runs are repaired-oracle evidence, not pristine
-stock valuation equality. Native hydro valuation is now $400 even with the broader asset fix off.
-
 ## Source and current support
 
 Research baseline: [sc2kfix](https://github.com/sc2kfix/sc2kfix/tree/bc1a7cfca505ed73d005ad3401df8cdbad368027),
@@ -148,7 +130,6 @@ Diagnostic log appends native errors and console output to `sc2k.log` beside con
 Crash diagnostics independently records fatal signals and fault addresses, then leaves the full
 crash report to the operating system. Both switches take effect immediately and restore the prior
 stderr destination and signal handlers when disabled or on normal shutdown. No telemetry is sent.
-
 
 Custom MIDI soundfont accepts SF2/DLS banks through the native CoreAudio instrument.
 Set a path with `soundfont /path/to/bank.sf2` in the developer console; `soundfont default`

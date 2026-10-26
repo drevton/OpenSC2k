@@ -7,7 +7,7 @@
 #include <stdlib.h>
 
 #include "assets/state.h"
-#include "city/maps/layers.h"
+#include "city/maps/terrain.h"
 #include "city/maps/map.h"
 #include "city/state.h"
 #include "drawing/fonts/fonts.h"
@@ -144,15 +144,7 @@ static void DrawOverlayLabelSoftware(const City *city, int zoom, int screen_x, i
     label_y -= 8;
   }
 
-  const CityOverlayGlyph *font = CityOverlayFontGlyphs(&city->game->resources->overlay_font, zoom);
-  int text_width = 0;
-  int length = (int)strlen(text);
-  for (int index = 0; index < length; ++index) {
-    int code = (u8)text[index];
-    if (code >= CITY_OVERLAY_FONT_FIRST &&
-        code < CITY_OVERLAY_FONT_FIRST + CITY_OVERLAY_GLYPH_COUNT)
-      text_width += font[code - CITY_OVERLAY_FONT_FIRST].advance;
-  }
+  int text_width = CityOverlayTextWidth(&city->game->resources->overlay_font, zoom, text);
 
   CityRect rect;
   rect.bottom = label_y - 15 * zoom - 20;
@@ -184,13 +176,7 @@ static void DrawOverlayLabelSoftware(const City *city, int zoom, int screen_x, i
 static CityRect CityOverlayLabelBounds(const City *city, int zoom, int screen_x, int screen_y,
     const char *text) {
   const Drawing *drawing = city->drawing;
-  const CityOverlayGlyph *font = CityOverlayFontGlyphs(&city->game->resources->overlay_font, zoom);
-  int text_width = 0;
-  for (int index = 0; text[index]; ++index) {
-    int code = (u8)text[index];
-    if (code >= CITY_OVERLAY_FONT_FIRST && code < CITY_OVERLAY_FONT_FIRST + CITY_OVERLAY_GLYPH_COUNT)
-      text_width += font[code - CITY_OVERLAY_FONT_FIRST].advance;
-  }
+  int text_width = CityOverlayTextWidth(&city->game->resources->overlay_font, zoom, text);
   int label_x = screen_x + (4 << zoom), label_y = screen_y - (2 << zoom);
   return (CityRect){label_x - (text_width >> 1) - 9,
       label_y - 15 * zoom - 26 - drawing->map_state.label_heights[zoom],
@@ -285,7 +271,7 @@ static void FormatCityConnectionSign(const City *city, int x, int y, char text[C
   if (y > city->map_height - 3) { direction = 0; position = x; }
   if (x > city->map_width - 3) { direction = 1; position = city->map_height - 1 - y; }
   if (y < 2) { direction = 2; position = city->map_width - 1 - x; }
-  const char *name = (const char *)city->geography.neighbor_names.name[(direction + city->geography.rotation) & 3];
+  const char *name = city->geography.neighbor_names.name[(direction + city->geography.rotation) & 3];
   snprintf(text, CITY_OVERLAY_NAME_BYTES, "%.20s %c", name, position % 5 + '5');
 }
 
@@ -296,8 +282,9 @@ static void DrawCityConnectionSigns(const City *city) {
   if (!drawing->label_style || !drawing->map_state.label_display || drawing->map_state.events_suppressed ||
       (drawing->map_state.data_overlay_enabled && drawing->map_state.data_mode != CITY_DATA_MODE_NONE)) return;
   int zoom = drawing->default_map_view->zoom, scale = 1 << zoom;
-  CityRect area = VisibleCityMapTileBounds(city, drawing->map_state.origin_x, drawing->map_state.origin_y,
-      zoom, CityMapCameraRotation(drawing), drawing->map_state.paint_rect);
+  CityMapCamera camera = {.origin_x = drawing->map_state.origin_x, .origin_y = drawing->map_state.origin_y,
+      .zoom = zoom, .rotation = CityMapCameraRotation(drawing)};
+  CityRect area = VisibleCityMapTileBounds(city, camera, drawing->map_state.paint_rect);
   int width = city->map_width, height = city->map_height;
   CityRect edges[] = {
     {area.left, area.top, area.right, IntMin(area.bottom, 2)},
@@ -342,7 +329,7 @@ void DrawCapturedCitySigns(const City *city) {
 }
 
 // City-map overlay dispatch.
-void DrawCityMapOverlay(City *city, TileIndex tile, int zoom, CityPoint screen) {
+void DrawCityMapOverlay(const City *city, TileIndex tile, int zoom, CityPoint screen) {
   Drawing *drawing = city->drawing;
   int x = MapTileX(city, tile), y = MapTileY(city, tile);
   int screen_x = screen.x, screen_y = screen.y;
@@ -380,5 +367,5 @@ void DrawCityMapOverlay(City *city, TileIndex tile, int zoom, CityPoint screen) 
         slot = NextCityMapEventOnTile(city, slot))
       DrawCityMapEventOverlay(city, tile, zoom, slot);
   }
-  if (animated) EndCityMapSpriteAnimation(city);
+  if (animated) EndCityMapSpriteAnimation(drawing);
 }

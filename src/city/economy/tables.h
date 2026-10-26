@@ -7,31 +7,6 @@
 
 extern const u16 kCityMilestoneBaseYears[CITY_MILESTONE_COUNT];
 
-// Fixed native storage for saved economy records. The three demand offsets
-// alias the first three signed words of the eight-word transport-bonus table.
-typedef struct {
-  i16 rate[50];
-} CityBondRates;
-
-typedef struct {
-  i16 due_year[17];
-} CityMilestoneYears;
-
-typedef struct {
-  i16 value[3];
-} CitySectorRateOffsets;
-
-typedef union {
-  CitySectorRateOffsets offsets;
-  i16 value[8];
-} CitySectorRates;
-
-typedef struct {
-  CityBondRates bond_rates;
-  CityMilestoneYears milestone_years;
-  CitySectorRates sector_rates;
-} CityEconomicTables;
-
 // Coefficients
 
 enum {
@@ -39,28 +14,23 @@ enum {
   CITY_ECONOMY_VALUE_CENTER = 3500000
 };
 
-typedef struct { i16 factor[16]; } CityAnnualSettlementFactors;
-typedef struct { i16 value[16]; } CityBudgetSectorDivisors;
-typedef struct { i16 value[16]; } CityDefaultEconomyRates;
-typedef struct { u32 multiplier[4]; } CityAssetTailWeights;
-
-extern const CityAnnualSettlementFactors kAnnualSettlementFactors;
-extern const CityBudgetSectorDivisors kBudgetSectorDivisors;
-extern const CityDefaultEconomyRates kCityDefaultEconomyRates;
-extern const CityAssetTailWeights kCityAssetTailWeights;
+// Convert sector rate/activity totals into money; negative factors denote expenses.
+// Annual amounts use 12 times the factor. Each caller preserves its own accumulation and rounding order.
+extern const i16 kCityEconomySectorDivisors[CITY_ECONOMY_SECTOR_COUNT];
 extern const CityHistoryMaxima kCityHistoryMaximumDefaults;
 // Ten population thresholds followed by a zero sentinel.
 extern const u32 kDisasterUnlockPopulationThresholds[11];
 
-typedef struct {
-  u8 value[11];
-} CityIndustryYearWeights;
-
-extern const CityIndustryYearWeights kIndustryYearWeights[5];
+// Successive era weights, with columns in CityIndustryCategory order. The last era remains in effect afterward.
+enum {
+  CITY_INDUSTRY_WEIGHT_BASE_YEAR = 1900,
+  CITY_INDUSTRY_WEIGHT_INTERVAL_YEARS = 50,
+  CITY_INDUSTRY_WEIGHT_ERA_COUNT = 5,
+};
+extern const u8 kIndustryYearWeights[CITY_INDUSTRY_WEIGHT_ERA_COUNT][CITY_INDUSTRY_COUNT];
 extern const i16 kEconomyRateAdjustments[23];
 extern const u8 kDifficultyPolicyPercent[4];
 extern const i8 kPolicyDriftByPolicy[4];
-extern const u8 kIndustryGraphMinimum[3];
 
 enum {
   CITY_DEMAND_GROWTH_PERCENT = 90,

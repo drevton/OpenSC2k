@@ -30,10 +30,10 @@ typedef struct Game {
   bool backup_saves, diagnostic_log, crash_diagnostics, save_extended, repair_save_headers;
   struct Diagnostics *diagnostics;
   struct GameSettings *settings;
-  u32 path_open_flag;
+  CityPathOpenMode path_open_flag;
   u32 idle_blocked;
   u32 idle_entry;
-  u32 idle_state;
+  CityApplicationIdleState idle_state;
   u32 idle_input;
   bool city_active;
   bool exit_requested;
@@ -86,6 +86,16 @@ typedef struct Game {
   const struct GameObservation *observation;
   void *observer;
   void (*command_completed)(void *observer, City *city, const CityCommand *command, i64 result);
+  // Borrowed raw input belongs to this host execution scope, outside deterministic City and save data.
+  // Nested pointer commands restore their parent cursor; zone drags reject overlapping staged input.
+  const CityZoneDragInput *zone_drag_input;
+  u32 zone_drag_index;
+  TileIndex zone_drag_endpoint; // INVALID_TILE when cancelled
+  CityPointerCommandState pointer_command;
 } Game;
+
+_Static_assert(offsetof(Game, zone_drag_input) % sizeof(void *) == 0, "host input pointer alignment");
+_Static_assert(offsetof(Game, pointer_command) % _Alignof(CityPointerCommandState) == 0,
+    "host pointer cursor alignment");
 
 #endif

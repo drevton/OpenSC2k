@@ -13,7 +13,6 @@
 #include "drawing/maps/map_view.h"
 #include "drawing/maps/road_cars.h"
 #include "drawing/state.h"
-#include "game/application.h"
 #include "game/errors.h"
 #include "game/graphics.h"
 #include "game/palette.h"
@@ -22,15 +21,16 @@
 #include "ui/cursor/cursor.h"
 #include "ui/dialogs/game_options.h"
 #include "ui/map_views.h"
+#include "ui/menus/menu.h"
 #include "ui/sdl.h"
 #include "ui/state.h"
+#include "ui/text/status.h"
 #include "ui/tools/placement.h"
-#include "ui/tools/tools.h"
 #include "ui/updates.h"
 #include "ui/windows/windows.h"
 
-// Game sequences presentation updates before painting with a scoped City copy.
-// Paint-time scalar changes stay in that copy; Drawing retains pixels and caches.
+// Game sequences presentation updates before painting with read-only City data.
+// Drawing owns painting randomness, pixels and caches.
 
 static bool PrepareCityCanvasFrame(City *city, CanvasSDL *display) {
   Drawing *drawing = city->drawing;
@@ -61,11 +61,10 @@ static bool PrepareCityCanvasFrame(City *city, CanvasSDL *display) {
   UpdateCityToolbar(city->game);
   PublishCityMapChanges(city);
   double started = (drawing->benchmark_redraw || drawing->profile_redraw) ? MonotonicSeconds() : 0;
-  City paint_city = *city;
-  paint_city.map_changes.enabled = false;
-  CityMapPaint paint_context = {.city = &paint_city};
+  drawing->animation.random = city->random;
+  CityMapPaint paint_context = {.city = city};
   if (!PrepareCityMapSprites(city->game) || !BindCityMapTarget(&paint_context)) return false;
-  double snapshotted = (drawing->benchmark_redraw || drawing->profile_redraw) ? MonotonicSeconds() : 0;
+  double prepared = (drawing->benchmark_redraw || drawing->profile_redraw) ? MonotonicSeconds() : 0;
   ClearGameError(city->game);
   if (drawing->disable_map_cache) drawing->main_cache.valid = 0;
   PrepareCityMapSpriteDamage(&paint_context, MarkCityMapSpriteDamage);
@@ -79,13 +78,13 @@ static bool PrepareCityCanvasFrame(City *city, CanvasSDL *display) {
           cache->target_x != drawing->target_x || cache->target_y != drawing->target_y))
     InvalidateCityMapRect(drawing, drawing->default_map_view, drawing->map_state.zone_cost_label_rect);
   PublishCityPlacementDamage(city);
-  if (!RenderCityMapViews(&paint_city)) return false;
+  if (!RenderCityMapViews(city)) return false;
   double mapped = (drawing->benchmark_redraw || drawing->profile_redraw) ? MonotonicSeconds() : 0;
   ComposeCityDesktopFrame(city);
   if (drawing->benchmark_redraw || drawing->profile_redraw) {
     ++drawing->profiled_redraws;
-    drawing->snapshot_seconds += snapshotted - started;
-    drawing->map_seconds += mapped - snapshotted;
+    drawing->prepare_seconds += prepared - started;
+    drawing->map_seconds += mapped - prepared;
     drawing->canvas_seconds += MonotonicSeconds() - mapped;
   }
   return true;
@@ -146,7 +145,7 @@ bool ApplicationPresentMap(Game *game) {
   Drawing *drawing = game->drawing;
   if (!drawing->framebuffer.pixels)
     return true;
-  if (city->settings.speed == CITY_SPEED_PAUSED && game->idle_state == (u32)CITY_IDLE_PLAY &&
+  if (city->settings.speed == CITY_SPEED_PAUSED && game->idle_state == CITY_IDLE_PLAY &&
       !PrepareCityCanvasDamage(city))
     return true;
   // Publish dirty city tiles and compose all visible map views at this exact

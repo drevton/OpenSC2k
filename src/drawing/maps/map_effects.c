@@ -11,7 +11,7 @@
 
 #include "assets/state.h"
 #include "city/engine/city_types.h"
-#include "city/maps/layers.h"
+#include "city/maps/terrain.h"
 #include "city/state.h"
 #include "drawing/maps/map_camera.h"
 #include "drawing/maps/map_view.h"
@@ -182,7 +182,7 @@ static CityCostTextLayout LayoutCityCostText(const City *city, const CityCostTex
       .width = width, .height = height};
 }
 
-void DrawCityCostTexts(City *city) {
+void DrawCityCostTexts(const City *city) {
   Drawing *drawing = city->drawing;
   Canvas *canvas = &drawing->map_target.canvas;
   CityRect clip = IntersectCityRects(canvas->clip, (CityRect){0, 0, canvas->width, canvas->height});
@@ -226,12 +226,9 @@ void DrawCityCostTexts(City *city) {
         for (int x = visible.left; x < visible.right; ++x) {
           size_t pixel = (size_t)y * canvas->stride + x;
           u32 before = background[(y - top) * band_width + x - visible.left];
-          u32 color = canvas->pixels[pixel], value = 0xFF000000;
+          u32 color = canvas->pixels[pixel];
           if (before == color) continue;
-          for (int shift = 0; shift <= 16; shift += 8)
-            value |= (((color >> shift & 255) * alpha + (before >> shift & 255) * (255 - alpha) + 127) / 255)
-                << shift;
-          canvas->pixels[pixel] = value;
+          canvas->pixels[pixel] = 0xFF000000 | BlendRGB(color, before, alpha);
         }
     }
   }
@@ -261,7 +258,7 @@ static CityRect DemolitionBounds(const City *city, const CityDemolitionEffect *e
   return (CityRect){left, top, left + sprite->width, top + sprite->height};
 }
 
-void DrawCityDemolitionEffects(City *city) {
+void DrawCityDemolitionEffects(const City *city) {
   Drawing *drawing = city->drawing;
   for (int i = 0; i < CITY_DEMOLITION_EFFECT_COUNT; ++i) {
     const CityDemolitionEffect *effect = &drawing->demolition_effects[i];

@@ -2,6 +2,7 @@
 #define SC2K_GAME_GRAPHICS_H
 
 #include "city/types.h"
+#include "drawing/startup.h"
 
 typedef struct Game Game;
 typedef struct CanvasSDL CanvasSDL;
@@ -26,6 +27,11 @@ bool PresentCityMapView(Game *game);
 
 // Resolve the display size (or default canvas size without a display), prepare Drawing and dirty resized UI.
 bool PrepareCityScreenBuffer(Game *game, CanvasSDL *display);
+// Paint the loading artwork after preparing the shared framebuffer, then upload only its damaged area.
+// Painter failures set execution_failed; framebuffer or host presentation errors return false directly.
+bool DrawCityLoadingScreen(Game *game, CanvasSDL *display, CityIntroStage stage,
+    int completed, int total, bool initial);
+
 // Save the whole prepared framebuffer as PPM. Physical uses every pixel; logical samples once per map pixel scale.
 // Include partial logical edge pixels. An unprepared framebuffer fails before opening the host file.
 bool ScreenshotCityCanvas(const Game *game, const char *path, bool physical);

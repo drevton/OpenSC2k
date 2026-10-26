@@ -5,7 +5,7 @@
 
 #include "city/types.h"
 #include "city/saveload/types.h"
-#include "city/terrain/terrain.h"
+#include "city/terrain/types.h"
 
 typedef struct {
   char name[256];

@@ -1760,12 +1760,12 @@
       ],
       "category": "Civic, utility, transport or special",
       "artwork_status": "installed_four_views_128px_per_tile",
-      "artwork_name": "Plymouth Arcology",
+      "artwork_name": "Terraced Arcology",
       "manifest": "assets/landscape/civic/251-plymouth-arcology/sprites.json"
     },
     {
       "kind": 252,
-      "tile_info_description": "Forest Arcology",
+      "tile_info_description": "Woodland Arcology",
       "tile_info_resource": 743,
       "footprint_tiles": [
         4,
@@ -1773,12 +1773,12 @@
       ],
       "category": "Civic, utility, transport or special",
       "artwork_status": "installed_four_views_128px_per_tile",
-      "artwork_name": "Forest Arcology",
+      "artwork_name": "Woodland Arcology",
       "manifest": "assets/landscape/civic/252-forest-arcology/sprites.json"
     },
     {
       "kind": 253,
-      "tile_info_description": "Darco Arcology",
+      "tile_info_description": "Tower Arcology",
       "tile_info_resource": 744,
       "footprint_tiles": [
         4,
@@ -1786,7 +1786,7 @@
       ],
       "category": "Civic, utility, transport or special",
       "artwork_status": "installed_four_views_128px_per_tile",
-      "artwork_name": "Darco Arcology",
+      "artwork_name": "Tower Arcology",
       "manifest": "assets/landscape/civic/253-darco-arcology/sprites.json"
     },
     {
@@ -1799,12 +1799,12 @@
       ],
       "category": "Civic, utility, transport or special",
       "artwork_status": "installed_four_views_128px_per_tile",
-      "artwork_name": "Launch Arcology",
+      "artwork_name": "Spaceport Arcology",
       "manifest": "assets/landscape/civic/254-launch-arcology/sprites.json"
     },
     {
       "kind": 255,
-      "tile_info_description": "Braun Llama-dome",
+      "tile_info_description": "Wildlife Dome",
       "tile_info_resource": 746,
       "footprint_tiles": [
         4,
@@ -1812,7 +1812,7 @@
       ],
       "category": "Civic, utility, transport or special",
       "artwork_status": "installed_four_views_128px_per_tile",
-      "artwork_name": "Braun Llama Dome",
+      "artwork_name": "Wildlife Dome",
       "manifest": "assets/landscape/civic/255-braun-llama-dome/sprites.json"
     }
   ]

@@ -1,7 +1,7 @@
 #ifndef SC2K_UI_SIGNS_H
 #define SC2K_UI_SIGNS_H
 
-#include "city/maps/labels.h"
+#include "city/maps/map_types.h"
 
 typedef struct CityExtraMapView CityExtraMapView;
 typedef struct CanvasSDLEvent CanvasSDLEvent;
@@ -41,7 +41,11 @@ typedef struct {
   int scroll_grab;
 } CitySignState;
 
+// Synchronize an already indexed UI cache when City's sign revision changes. Text and tile values are copied;
+// no City record pointers are retained. Allocation failure preserves the previous cache/revision for retry.
 void RefreshCitySignEntries(City *city);
+// Force synchronization and refresh a still-live editor's tile. This changes UI state only; a failed cache growth
+// leaves its revision stale so a later refresh retries. Existing sign records and names remain unchanged.
 void RebuildCitySigns(City *city);
 
 // Borrowed caption/content help in logical desktop coordinates; NULL requests generic window help.

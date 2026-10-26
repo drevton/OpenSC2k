@@ -39,6 +39,14 @@ typedef struct CityUtilityTraversal {
   u8 stage; // CityUtilityStage
 } CityUtilityTraversal;
 
+// Utility-owned whole-map progress. Zero starts section clearing; the private stage selects sources/components.
+// The cursor counts sections during clearing and source positions afterward. Network retains the active component.
+typedef struct CityUtilityScan {
+  int cursor;
+  u8 stage;
+  CityUtilityTraversal network;
+} CityUtilityScan;
+
 // Shared span-query result. Dry approaches are included in native water crossings.
 typedef struct CityInfrastructureSpan {
   TileIndex start, end; // Includes dry approaches for native water crossings.

@@ -32,27 +32,15 @@ typedef struct CityButtonFeedback {
   bool repeating, shift;
 } CityButtonFeedback;
 
-typedef struct Game Game;
 typedef struct CityInterfaceState CityInterfaceState;
 typedef struct CityFileBrowser CityFileBrowser;
 typedef struct CityTileInformationSnapshot CityTileInformationSnapshot;
 
-// A close transfers these records from Window to UI. The desktop releases each record before invoking its
-// callback outside the outer command. Context stays caller-owned through delivery.
-typedef struct CityWindowCompletion {
-  struct CityWindowCompletion *next;
-  CityWindowCallback *callback;
-  void *context;
-} CityWindowCompletion;
 typedef struct CityAdvisorWindowState {
   struct CityAdvisorWindowState *next;
   i32 token;
   bool opening;
 } CityAdvisorWindowState;
-
-// Return true to consume the event. Only unhandled input proceeds to common chrome handling;
-// the dispatcher reacquires the window by ID first, since the procedure may have closed it.
-typedef bool WindowProcedure(Game *game, const Window *window, const WindowEvent *event);
 
 typedef struct Window {
   WindowKind kind;
@@ -97,7 +85,7 @@ typedef struct Window {
   u32 stadium_team_choices;
   i32 stadium_team_selection;
   int text_caret, text_select_all, text_scroll;
-  const char *stadium_team_labels[5];
+  const char *stadium_team_labels[CITY_TEAM_NAME_COUNT];
   const u32 *viewport_pixels;
   int viewport_width, viewport_height, viewport_stride;
   int restore_height;

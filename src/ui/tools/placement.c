@@ -7,6 +7,7 @@
 #include "city/infrastructure/lines.h"
 #include "city/infrastructure/spans.h"
 #include "city/infrastructure/tunnels.h"
+#include "city/maps/map.h"
 #include "city/presentation.h"
 #include "city/state.h"
 #include "drawing/display.h"
@@ -15,14 +16,121 @@
 #include "drawing/raster/canvas_primitives.h"
 #include "drawing/state.h"
 #include "game/state.h"
+#include "ui/cursor/cursor.h"
 #include "ui/input.h"
-#include "ui/map.h"
 #include "ui/map_visibility.h"
 #include "ui/state.h"
 #include "ui/tools/tools.h"
 
+// Validate and normalize an inclusive selection footprint before publishing tile damage.
+static void InvalidateCityMapSelectionRectangle(City *city, int first_x, int first_y,
+    int last_x, int last_y) {
+  if (!IsMapCoordinateValid(city, first_x, first_y) || !IsMapCoordinateValid(city, last_x, last_y))
+    return;
+  if (last_y < first_y) {
+    int swap = first_y;
+    first_y = last_y;
+    last_y = swap;
+  }
+  if (last_x < first_x) {
+    int swap = first_x;
+    first_x = last_x;
+    last_x = swap;
+  }
+  InvalidateTileRange(city, MapTileXY(city, first_x, first_y), last_x - first_x + 1, last_y - first_y + 1);
+}
+
+// Schedule erasure of the previous selection footprint.
+void FlushCityMapSelectionRedraw(City *city) {
+  Drawing *drawing = city->drawing;
+  if (drawing->map_state.redraw_state == 0)
+    return;
+  CityMapSelectionBounds *bounds = &drawing->map_state.selection_bounds;
+  InvalidateCityMapSelectionRectangle(city, bounds->min_x, bounds->min_y, bounds->max_x, bounds->max_y);
+  drawing->map_state.redraw_state = 0;
+}
+
+// Retained drag presentation owns the temporary drawing target. City owns the counters and traversal;
+// prepare the clip before publishing damage and clear it after the complete City update.
+void UpdateCityHighwayDragPreview(City *city, CityMapViewConfig *view, TileIndex start, TileIndex end) {
+  Drawing *drawing = city->drawing;
+  CityCompactHighwayPlan compact;
+  bool compact_preview = PlanCityCompactHighway(city, start, end, -1, &compact);
+  if (!compact_preview && GetTransportSpanCompatibilityMask(city, start) == CITY_SPAN_COMPATIBILITY_INVALID)
+    return;
+  PrepareCityMapPaintClip(drawing, view->view_rect);
+  UpdateCityHighwayPreview(city, start, end, compact_preview ? &compact : NULL);
+  ResetCityMapPaintClip(drawing);
+}
+
+// Update the tool footprint at the view's saved pointer position.
+void UpdateCityMapToolPreview(Game *game) {
+  City *city = game->city;
+  Drawing *drawing = game->drawing;
+  CityMapViewConfig *view = drawing->default_map_view;
+  CityInterfaceState *ui = game->ui;
+  UpdateCityMapCursor(game);
+  if (ui->pointer_mode != CITY_MAP_POINTER_HOVER) {
+    if (drawing->map_state.redraw_state != 0)
+      FlushCityMapSelectionRedraw(city);
+    return;
+  }
+  if (city->disasters.monster_count != 0)
+    return;
+  int size = city->settings.timer_mode != CITY_TIMER_STOPPED ?
+      kCityToolFootprintSizes[CITY_TOOL_VARIANT_CAPACITY * ui->tool_group +
+          (i16)ui->selection.value[ui->tool_group]] :
+      ui->terrain_tool != CITY_TERRAIN_TOOL_CENTER;
+  int align_even = city->settings.timer_mode != CITY_TIMER_STOPPED &&
+      ui->tool_group == CITY_TOOL_GROUP_ROAD &&
+      ui->selection.value[CITY_TOOL_GROUP_ROAD] == CITY_ROAD_HIGHWAY;
+  if (size == 0)
+    return;
+  int half = size >> 1;
+  int third = size / 3;
+  int pointer_x = view->pointer_x;
+  int pointer_y = view->pointer_y;
+  if (view->magnified_large_zoom != 0) {
+    pointer_x >>= 1;
+    pointer_y >>= 1;
+  }
+  if (pointer_x < view->view_rect.left || pointer_x >= view->view_rect.right ||
+      pointer_y < view->view_rect.top || pointer_y >= view->view_rect.bottom) {
+    FlushCityMapSelectionRedraw(city);
+    return;
+  }
+  TileIndex tile = PickCityMapTile(city, view, view->pointer_x, view->pointer_y);
+  if (!IsMapTileValid(city, tile)) {
+    FlushCityMapSelectionRedraw(city);
+    return;
+  }
+  int y = MapTileY(city, tile);
+  int x = MapTileX(city, tile);
+  if (align_even) {
+    y &= ~1;
+    x &= ~1;
+  }
+  if (y < third || x < third || y > city->map_height - half || x > city->map_width - half) {
+    FlushCityMapSelectionRedraw(city);
+    return;
+  }
+  if (y == drawing->map_state.selection_redraw_state && x == drawing->map_state.preview_x)
+    return;
+  CityMapSelectionBounds *bounds = &drawing->map_state.selection_bounds;
+  if (drawing->map_state.redraw_state != 0)
+    InvalidateCityMapSelectionRectangle(city, bounds->min_x, bounds->min_y, bounds->max_x, bounds->max_y);
+  drawing->map_state.selection_redraw_state = y;
+  drawing->map_state.preview_x = x;
+  bounds->min_y = y - third;
+  bounds->min_x = x - third;
+  bounds->max_y = y + half;
+  bounds->max_x = x + half;
+  InvalidateCityMapSelectionRectangle(city, bounds->min_x, bounds->min_y, bounds->max_x, bounds->max_y);
+  drawing->map_state.redraw_state = 1;
+}
+
 // The tile renderer chooses this marker's layer; later tiles still occlude it in painter order.
-void DrawCityMapPlacementTile(City *city, TileIndex tile) {
+void DrawCityMapPlacementTile(const City *city, TileIndex tile) {
   Drawing *drawing = city->drawing;
   if (!drawing->paint_placement || drawing->sprite_damage_bounds) return;
   const CityCanvasPlacementSelection *placement = &city->game->ui->desktop.placement;
@@ -39,17 +147,17 @@ void DrawCityMapPlacementTile(City *city, TileIndex tile) {
     DrawCityMapPlacementMarker(city, tile, placement->point, false);
 }
 
-// UI owns the retained selection and scratch array; Drawing supplies exact marker bounds.
-static bool ReserveCityPlacementCells(CityCanvasDesktop *desktop, int count) {
-  CityCanvasPlacementSelection *placement = &desktop->placement;
-  if (count <= placement->capacity) return true;
-  int capacity = IntMax(count, IntMax(64, placement->capacity * 2));
+// Grow UI's paired arrays, preserving the committed selection and the populated scratch prefix.
+// Failure leaves both arrays intact; unused scratch capacity has no contents to preserve.
+static bool ReserveCityPlacementCells(CityCanvasPlacementSelection *placement, int scratch_count, int required_count) {
+  if (required_count <= placement->capacity) return true;
+  int capacity = IntMax(required_count, IntMax(64, placement->capacity * 2));
   CityCanvasPlacementCell *cells = malloc((size_t)capacity * 2 * sizeof(*cells));
   if (!cells) return false;
   if (placement->count)
     memcpy(cells, placement->cells, (size_t)placement->count * sizeof(*cells));
-  if (placement->capacity)
-    memcpy(cells + capacity, placement->scratch, (size_t)placement->capacity * sizeof(*cells));
+  if (scratch_count)
+    memcpy(cells + capacity, placement->scratch, (size_t)scratch_count * sizeof(*cells));
   free(placement->cells);
   placement->cells = cells;
   placement->scratch = cells + capacity;
@@ -81,13 +189,12 @@ static void SortCityPlacementCells(CityCanvasPlacementCell *cells, int count) {
   }
 }
 
-// Returns whether the visible selection changed. Cells use the City TileIndex layout.
-// Frame preparation damages the last painted preview and final pointer position once.
-static bool SetCityCanvasPlacementCells(const City *city, const CityCanvasPlacementCell *cells, int count,
-    bool point) {
-  CityCanvasDesktop *desktop = &city->game->ui->desktop;
-  if (count < 0 || count > city->map_cell_count || (count && !cells)) return false;
-  if (!ReserveCityPlacementCells(desktop, count)) return false;
+// Commit the prefix prepared by AppendCityPlacementRectangle, without allocating or borrowing another array.
+// Returns whether the visible selection changed; frame preparation publishes its old/new damage once.
+static bool CommitCityPlacementPreview(const City *city, int count, bool point) {
+  CityCanvasPlacementSelection *placement = &city->game->ui->desktop.placement;
+  CityCanvasPlacementCell *cells = placement->scratch;
+  if ((u32)count > city->map_cell_count) return false;
   const Drawing *drawing = city->drawing;
   CityRect bounds = {0};
   bool ordered = true;
@@ -96,51 +203,44 @@ static bool SetCityCanvasPlacementCells(const City *city, const CityCanvasPlacem
     if (i && cells[i - 1].tile > cells[i].tile) ordered = false;
     CityRect cell = CityMapPlacementBounds(city, cells[i].tile, point);
     if (!i) bounds = cell;
-    else {
-      bounds = UnionCityRects(bounds, cell);
-    }
+    else bounds = UnionCityRects(bounds, cell);
   }
-  // Reuse the input scratch; sorted cells allow bounded tile rendering to use binary lookup.
-  if (count) {
-    if (cells != desktop->placement.scratch)
-      memcpy(desktop->placement.scratch, cells, (size_t)count * sizeof(*cells));
-    cells = desktop->placement.scratch;
-    if (!ordered) SortCityPlacementCells(desktop->placement.scratch, count);
-  }
-  bool same_cells = count == desktop->placement.count;
+  // Sorted cells allow bounded tile rendering to use binary lookup. Keep duplicate keys.
+  if (!ordered) SortCityPlacementCells(cells, count);
+  bool same_cells = count == placement->count;
   for (int i = 0; same_cells && i < count; ++i)
-    same_cells = cells[i].tile == desktop->placement.cells[i].tile;
+    same_cells = cells[i].tile == placement->cells[i].tile;
   const CityMapViewConfig *view = count ? drawing->default_map_view : NULL;
-  if (count == desktop->placement.count && (!count ||
-      (same_cells && desktop->placement.point == point &&
-       !memcmp(&bounds, &desktop->placement.bounds, sizeof(bounds)) &&
-       desktop->placement.origin_x == drawing->map_state.origin_x &&
-       desktop->placement.origin_y == drawing->map_state.origin_y &&
-       desktop->placement.zoom == view->zoom &&
-       desktop->placement.magnified == view->magnified_large_zoom &&
-       desktop->placement.underground == drawing->map_state.events_suppressed))) return false;
-  desktop->placement.count = count;
-  desktop->placement.bounds = bounds;
-  desktop->placement.point = point;
+  if (same_cells && (!count ||
+      (placement->point == point &&
+       !memcmp(&bounds, &placement->bounds, sizeof(bounds)) &&
+       placement->origin_x == drawing->map_state.origin_x &&
+       placement->origin_y == drawing->map_state.origin_y &&
+       placement->zoom == view->zoom &&
+       placement->magnified == view->magnified_large_zoom &&
+       placement->underground == drawing->map_state.events_suppressed))) return false;
+  placement->count = count;
+  placement->bounds = bounds;
+  placement->point = point;
   if (count) {
-    memcpy(desktop->placement.cells, cells, (size_t)count * sizeof(*cells));
-    desktop->placement.origin_x = drawing->map_state.origin_x;
-    desktop->placement.origin_y = drawing->map_state.origin_y;
-    desktop->placement.zoom = view->zoom;
-    desktop->placement.magnified = view->magnified_large_zoom;
-    desktop->placement.underground = drawing->map_state.events_suppressed;
+    memcpy(placement->cells, cells, (size_t)count * sizeof(*cells));
+    placement->origin_x = drawing->map_state.origin_x;
+    placement->origin_y = drawing->map_state.origin_y;
+    placement->zoom = view->zoom;
+    placement->magnified = view->magnified_large_zoom;
+    placement->underground = drawing->map_state.events_suppressed;
   }
   return true;
 }
 
-static bool AppendCityPlacementRectangle(City *city, CityRect rectangle, CityRect visible, int *count) {
+static bool AppendCityPlacementRectangle(const City *city, CityRect rectangle, CityRect visible, int *count) {
   rectangle = IntersectCityRects(rectangle,
       (CityRect){IntMax(0, visible.left), IntMax(0, visible.top),
           IntMin(city->map_width, visible.right), IntMin(city->map_height, visible.bottom)});
   if (rectangle.left >= rectangle.right || rectangle.top >= rectangle.bottom) return true;
   int added = (rectangle.right - rectangle.left) * (rectangle.bottom - rectangle.top);
   CityCanvasDesktop *desktop = &city->game->ui->desktop;
-  if (!ReserveCityPlacementCells(desktop, *count + added)) return false;
+  if (!ReserveCityPlacementCells(&desktop->placement, *count, *count + added)) return false;
   for (int y = rectangle.top; y < rectangle.bottom; ++y) {
     TileIndex tile = MapTileXY(city, rectangle.left, y);
     for (int x = rectangle.left; x < rectangle.right; ++x)
@@ -149,7 +249,7 @@ static bool AppendCityPlacementRectangle(City *city, CityRect rectangle, CityRec
   return true;
 }
 
-static bool AppendCityPlacementSpan(City *city, TileIndex start, int direction, bool choose_direction,
+static bool AppendCityPlacementSpan(const City *city, TileIndex start, int direction, bool choose_direction,
     CityRect visible, int *count) {
   CityInfrastructureSpan span = FindCityInfrastructureSpan(city, start, direction, choose_direction);
   if (span.end == INVALID_TILE) return true;
@@ -159,7 +259,7 @@ static bool AppendCityPlacementSpan(City *city, TileIndex start, int direction, 
       IntMax(x, end_x) + 1, IntMax(y, end_y) + 1}, visible, count);
 }
 
-static bool AppendCityPlacementHighwaySpan(City *city, TileIndex start, int direction, bool choose_direction,
+static bool AppendCityPlacementHighwaySpan(const City *city, TileIndex start, int direction, bool choose_direction,
     CityRect visible, int *count) {
   TileIndex anchor = CityHighwayPlacementAnchor(city, start);
   if (anchor == INVALID_TILE) return true;
@@ -173,13 +273,13 @@ static bool AppendCityPlacementHighwaySpan(City *city, TileIndex start, int dire
       IntMax(position.x, end_x) + 2, IntMax(position.y, end_y) + 2}, visible, count);
 }
 
-TileIndex PickCityPlacementTile(City *city, int x, int y) {
+TileIndex PickCityPlacementTile(const City *city, int x, int y) {
   const CityMapViewConfig *view = city->drawing->default_map_view;
   return city->game->ui->desktop.selected_tool == CITY_CANVAS_TOOL_LEVEL_TERRAIN ?
       PickCityMapTerrainPoint(city, view, x, y) : PickCityMapTile(city, view, x, y);
 }
 
-void UpdateCityPlacementPreview(City *city) {
+void UpdateCityPlacementPreview(const City *city) {
   CityInterfaceState *ui = city->game->ui;
   Drawing *drawing = city->drawing;
   int count = 0;
@@ -214,8 +314,9 @@ void UpdateCityPlacementPreview(City *city) {
   if (group > CITY_TOOL_GROUP_SIGN || group == CITY_TOOL_GROUP_DISPATCH) goto done;
   int x = MapTileX(city, tile), y = MapTileY(city, tile);
   int magnify = drawing->default_map_view->magnified_large_zoom ? 2 : 1;
-  CityRect visible = VisibleCityMapTileBounds(city, drawing->map_state.origin_x, drawing->map_state.origin_y,
-      drawing->default_map_view->zoom, CityMapViewRotation(drawing->default_map_view),
+  CityMapCamera camera = {.origin_x = drawing->map_state.origin_x, .origin_y = drawing->map_state.origin_y,
+      .zoom = drawing->default_map_view->zoom, .rotation = CityMapViewRotation(drawing->default_map_view)};
+  CityRect visible = VisibleCityMapTileBounds(city, camera,
       (CityRect){0, 0, drawing->map_width / magnify, drawing->map_height / magnify});
   bool stretch = ui->desktop.selected_tool == CITY_CANVAS_TOOL_STRETCH_TERRAIN && !ui->placement_hover_ctrl;
   bool level = group == CITY_TOOL_GROUP_DEMOLISH && variant == CITY_DEMOLISH_LEVEL && !ui->placement_hover_ctrl;
@@ -395,7 +496,7 @@ void UpdateCityPlacementPreview(City *city) {
   // Show the in-map footprint even when the command will reject an edge placement.
   if (!AppendCityPlacementRectangle(city, (CityRect){first_x, first_y, last_x, last_y}, visible, &count)) count = 0;
 done:
-  ui->placement_dirty |= SetCityCanvasPlacementCells(city, ui->desktop.placement.scratch, count, intent.point);
+  ui->placement_dirty |= CommitCityPlacementPreview(city, count, intent.point);
 }
 
 CityRect CityPlacementPixelBounds(const City *city) {
@@ -409,7 +510,7 @@ CityRect CityPlacementPixelBounds(const City *city) {
       (CityRect){0};
 }
 
-void PublishCityPlacementDamage(City *city) {
+void PublishCityPlacementDamage(const City *city) {
   Drawing *drawing = city->drawing;
   CityInterfaceState *ui = city->game->ui;
   // Ignore intermediate hover positions that never reached the framebuffer.

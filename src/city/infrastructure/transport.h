@@ -3,12 +3,11 @@
 
 #include "city/types.h"
 
-// Shared transport admission data; offset order and zone matching are fixed algorithm inputs.
+// Shared transport access pattern. Offset order is fixed; both growth admission and route-start search use it.
+enum { CITY_TRANSPORT_NEIGHBOR_COUNT = 24 };
 typedef struct { i8 x, y; } TransportNeighborOffset;
-typedef struct { TransportNeighborOffset offset[24]; } TransportNeighborOffsets;
+typedef struct { TransportNeighborOffset offset[CITY_TRANSPORT_NEIGHBOR_COUNT]; } TransportNeighborOffsets;
 extern const TransportNeighborOffsets kTransportNeighborOffsets;
-
-extern const u16 kZoneCompatibilityMask[16];
 
 // Commuter route states use byte arrays. Bus boarding switches
 // from states 0..3 to 4..7; stations 8/10/11 tally separate facility traffic.
@@ -39,8 +38,14 @@ void RecountCityIndustryConnections(City *city);
 u32 DecayTrafficDensitySection(City *city, int section);
 void DecayTrafficDensity(City *city);
 
-// Routing borrows stable map storage and requires exclusive use of City's shared coordinate queue and scratch.
-// It consumes City RNG, applies traffic and usage counters, and returns success; it does not create moving map events.
-int FindTransportRouteAndApplyTraffic(City *city, int x, int y, int source_zone, int size, int maximum_cost);
+// Read-only growth admission for a valid source tile: the fixed 24-offset pattern accepts road-class tiles or
+// bus/rail/subway stations. It does not accept every rail/highway kind or resolve bridge geometry like route search.
+// This does not search for a destination or guarantee a successful route; no RNG or presentation effects.
+bool TileHasTransportAccess(const City *city, TileIndex tile);
+
+// Routing requires a valid source tile/zone, nonnegative traffic size and maximum_cost in 0..127. The cost bound
+// keeps the fixed path stack within capacity. It borrows stable maps and exclusive use of City's shared queue.
+// Consumes City RNG, applies traffic and usage counters, and returns success; it does not create moving map events.
+bool FindTransportRouteAndApplyTraffic(City *city, TileIndex source, int source_zone, int size, int maximum_cost);
 
 #endif

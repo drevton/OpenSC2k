@@ -12,6 +12,7 @@
 #include "game/state.h"
 #include "drawing/state.h"
 #include "ui/state.h"
+#include "ui/cursor/input.h"
 #include "ui/map.h"
 #include "ui/cursor/cursor.h"
 #include "drawing/cursors.h"
@@ -22,7 +23,7 @@
 #include "ui/macos.h"
 #endif
 
-// Presentation and input only. All game and window pixels are drawn by drawing.c.
+// Drawing rasterizes game and window pixels; this backend presents them and translates host input.
 
 typedef struct {
   CanvasSDLEvent event;
@@ -290,7 +291,7 @@ i32 Sc2kSDLPresent(CanvasSDL *display, const u32 *pixels, i32 stride) {
   return 0;
 }
 
-i32 Sc2kSDLPixelScale(CanvasSDL *display) {
+i32 Sc2kSDLPixelScale(const CanvasSDL *display) {
   i32 width, height;
   SDL_GetRendererOutputSize(display->renderer, &width, &height);
   i32 x = width / display->width, y = height / display->height;
@@ -399,12 +400,12 @@ void Sc2kSDLCursorTool(CanvasSDL *display, i32 tool, i32 over_map) {
   display->cursor_badge = over_map && display->cursor_tool >= 0;
   UpdateCursor(display);
 }
-bool Sc2kSDLUIPointer(CanvasSDL *display, i32 *x, i32 *y) {
+bool Sc2kSDLUIPointer(const CanvasSDL *display, i32 *x, i32 *y) {
   if (!display->ui_valid) return false;
   *x = display->ui_x; *y = display->ui_y;
   return true;
 }
-bool Sc2kSDLFramebufferPointer(CanvasSDL *display, i32 *x, i32 *y) {
+bool Sc2kSDLFramebufferPointer(const CanvasSDL *display, i32 *x, i32 *y) {
   if (!display->ui_valid) return false;
   *x = display->pixel_x; *y = display->pixel_y;
   return true;
@@ -433,14 +434,14 @@ static void FramebufferPointer(CanvasSDL *display, CanvasSDLEvent *event) {
   event->x = (i32)(x / map_scale - (x % map_scale < 0));
   event->y = (i32)(y / map_scale - (y % map_scale < 0));
 }
-void Sc2kSDLDisplayOptions(CanvasSDL *display, DrawingOptions *options) {
+void Sc2kSDLDisplayOptions(const CanvasSDL *display, DrawingOptions *options) {
   SDL_GetRendererOutputSize(display->renderer, &options->window_width, &options->window_height);
   SDL_DisplayMode mode;
   options->refresh_rate = SDL_GetCurrentDisplayMode(SDL_GetWindowDisplayIndex(display->window),
       &mode) ? 0 : mode.refresh_rate;
   options->fullscreen = !!(SDL_GetWindowFlags(display->window) & SDL_WINDOW_FULLSCREEN);
-  SDL_strlcpy(options->driver, SDL_GetCurrentVideoDriver() ? SDL_GetCurrentVideoDriver() : "SDL",
-      sizeof(options->driver));
+  const char *driver = SDL_GetCurrentVideoDriver();
+  SDL_strlcpy(options->driver, driver ? driver : "SDL", sizeof(options->driver));
 }
 i32 Sc2kSDLFullscreen(CanvasSDL *display, i32 enabled) {
   return SDL_SetWindowFullscreen(display->window, enabled ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
@@ -468,7 +469,9 @@ static CityHotkey SDLHotkey(SDL_Keycode key, SDL_Keymod modifiers) {
     case SDLK_KP_MINUS: code = CITY_KEY_KEYPAD_MINUS; break;
     case SDLK_LALT: code = CITY_KEY_LEFT_ALT; break;
     case SDLK_RALT: code = CITY_KEY_RIGHT_ALT; break;
-    default: if (key >= SDLK_F1 && key <= SDLK_F12) code = CITY_KEY_F1 + key - SDLK_F1; break;
+    default:
+      if (key >= SDLK_F1 && key <= SDLK_F12) code = CITY_KEY_F1 + key - SDLK_F1;
+      break;
   }
   if (!code) return CITY_KEY_NONE;
   return code | (modifiers & KMOD_SHIFT ? CITY_HOTKEY_SHIFT : 0) |
@@ -543,28 +546,26 @@ static bool PollSDLEvent(CanvasSDL *display, CanvasSDLEvent *event, i32 wait_ms)
       break;
     case SDL_MOUSEBUTTONDOWN:
     case SDL_MOUSEBUTTONUP:
-      if (input.button.windowID != window_id)
-        break;
-      event->kind = input.type == SDL_MOUSEBUTTONDOWN ? CANVAS_SDL_POINTER_DOWN : CANVAS_SDL_POINTER_UP;
-      event->x = input.button.x;
-      event->y = input.button.y;
-      event->button = input.button.button;
+    case SDL_MOUSEMOTION: {
+      if (input.type == SDL_MOUSEMOTION) {
+        if (input.motion.windowID != window_id) break;
+        event->kind = CANVAS_SDL_POINTER_MOVE;
+        event->x = input.motion.x;
+        event->y = input.motion.y;
+      } else {
+        if (input.button.windowID != window_id) break;
+        event->kind = input.type == SDL_MOUSEBUTTONDOWN ? CANVAS_SDL_POINTER_DOWN : CANVAS_SDL_POINTER_UP;
+        event->x = input.button.x;
+        event->y = input.button.y;
+        event->button = input.button.button;
+      }
       FramebufferPointer(display, event);
-      event->alt = (SDL_GetModState() & KMOD_ALT) != 0;
-      event->shift = (SDL_GetModState() & KMOD_SHIFT) != 0;
-      event->ctrl = (SDL_GetModState() & KMOD_CTRL) != 0;
+      SDL_Keymod modifiers = SDL_GetModState();
+      event->alt = (modifiers & KMOD_ALT) != 0;
+      event->shift = (modifiers & KMOD_SHIFT) != 0;
+      event->ctrl = (modifiers & KMOD_CTRL) != 0;
       break;
-    case SDL_MOUSEMOTION:
-      if (input.motion.windowID != window_id)
-        break;
-      event->kind = CANVAS_SDL_POINTER_MOVE;
-      event->x = input.motion.x;
-      event->y = input.motion.y;
-      FramebufferPointer(display, event);
-      event->alt = (SDL_GetModState() & KMOD_ALT) != 0;
-      event->shift = (SDL_GetModState() & KMOD_SHIFT) != 0;
-      event->ctrl = (SDL_GetModState() & KMOD_CTRL) != 0;
-      break;
+    }
     case SDL_MOUSEWHEEL:
       if (input.wheel.windowID != window_id)
         break;
@@ -704,7 +705,7 @@ int PollCanvasActivation(CanvasSDL *display, bool *active) {
   return 0;
 }
 
-i32 Sc2kSDLOutputSize(CanvasSDL *display, i32 *width, i32 *height) {
+i32 Sc2kSDLOutputSize(const CanvasSDL *display, i32 *width, i32 *height) {
   return SDL_GetRendererOutputSize(display->renderer, width, height);
 }
 
@@ -731,11 +732,11 @@ void Sc2kSDLResize(CanvasSDL *display, i32 width, i32 height) {
   SDL_SetWindowSize(display->window, width, height);
 }
 
-u32 Sc2kSDLWindowId(CanvasSDL *display) {
+u32 Sc2kSDLWindowId(const CanvasSDL *display) {
   return SDL_GetWindowID(display->window);
 }
 
-bool Sc2kSDLIsMinimized(CanvasSDL *display) {
+bool Sc2kSDLIsMinimized(const CanvasSDL *display) {
   return (SDL_GetWindowFlags(display->window) & SDL_WINDOW_MINIMIZED) != 0;
 }
 

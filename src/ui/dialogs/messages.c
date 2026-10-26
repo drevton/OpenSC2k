@@ -353,11 +353,23 @@ int OpenCityCommandErrorWindow(Game *game, const char *summary, const char *deta
   return index;
 }
 
-// Handles this window's painting and input; paint coordinates are local to the window.
+// Message windows own their painting, input and ordinary-error expiration.
+// Paint coordinates are local to the window; retained notices have no automatic timeout.
 bool MessageWindowProcedure(Game *game, const Window *window, const WindowEvent *event) {
   if (event->kind == WINDOW_PAINT) {
     DrawCityMessageBox(event->canvas, window);
     return true;
+  }
+  if (event->kind == WINDOW_TIMER) {
+    if (window->kind != CITY_CANVAS_COMMAND_ERROR) return false;
+    // Ordinary errors expire five real-time seconds after their first timer delivery.
+    if (!game->ui->command_error_close_at) game->ui->command_error_close_at = event->now + 5;
+    if (event->now >= game->ui->command_error_close_at) {
+      game->ui->command_error_close_at = 0;
+      Sc2kCanvasDesktopDismissWindow(&game->ui->desktop, window->window_id);
+      return true;
+    }
+    return false;
   }
   if (event->kind != WINDOW_INPUT) return false;
   const CanvasSDLEvent *input = event->input;

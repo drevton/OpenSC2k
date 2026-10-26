@@ -16,7 +16,6 @@
 #include "drawing/maps/map_view.h"
 #include "drawing/raster/canvas_primitives.h"
 #include "drawing/state.h"
-#include "game/application.h"
 #include "game/errors.h"
 #include "game/state.h"
 #include "ui/windows/window_internal.h"
@@ -27,12 +26,22 @@
 #include "ui/dialogs/map_data.h"
 #include "ui/dialogs/messages.h"
 #include "ui/map.h"
+#include "ui/input.h"
+#include "ui/text/status.h"
 #include "ui/sdl.h"
 #include "ui/state.h"
 #include "ui/text/text.h"
 #include "ui/tools/tools.h"
 #include "ui/tools/types.h"
 #include "ui/windows/windows.h"
+
+u32 Sc2kCurrentCityMapPointerTools(const CityInterfaceState *ui) {
+  int group = (ui->tool_group);
+  u32 variant = group >= CITY_TOOL_GROUP_DEMOLISH && group < CITY_TOOL_GROUP_BUILD_COUNT
+      ? ui->selection.value[group]
+      : CITY_TOOL_VARIANT_DEFAULT;
+  return (u16)group | (variant << 8) | ((u32)(ui->selection.value[0]) << 16);
+}
 
 // Toolbar
 
@@ -112,24 +121,17 @@ void SelectCityToolGroupAndMode(Game *game, u32 group, u32 variant) {
   Drawing *drawing = game->drawing;
   CityMapViewConfig *view = drawing->default_map_view;
   CityInterfaceState *ui = game->ui;
-  CityResourceState *resources = game->resources;
-  static const u8 cursors[CITY_TOOL_GROUP_BUILD_COUNT] = {CITY_CURSOR_DEMOLISH, CITY_CURSOR_TREE, CITY_CURSOR_DISPATCH,
-      CITY_CURSOR_POWER, CITY_CURSOR_WATER_UTILITY, CITY_CURSOR_REWARDS, CITY_CURSOR_ROAD, CITY_CURSOR_RAIL,
-      CITY_CURSOR_PORT, CITY_CURSOR_RESIDENTIAL, CITY_CURSOR_COMMERCIAL, CITY_CURSOR_INDUSTRIAL, CITY_CURSOR_EDUCATION,
-      CITY_CURSOR_CIVIC, CITY_CURSOR_RECREATION};
-  static const u8 panels[5] = {
+  static const u8 kPanels[5] = {
       CITY_PANEL_MAP_DATA, CITY_PANEL_DEMOGRAPHICS, CITY_PANEL_NEIGHBORS, CITY_PANEL_HISTORY, CITY_PANEL_INDUSTRY};
   if (group < CITY_TOOL_GROUP_SIGN) {
     u32 name_index = group == CITY_TOOL_GROUP_REWARDS && variant > CITY_REWARD_ARCOLOGY_PICKER
         ? CITY_REWARD_ARCOLOGY_PICKER
         : variant;
-    const char *name = group == CITY_TOOL_GROUP_ROAD && variant == CITY_ROAD_BRIDGE ? "Road bridge" :
-        group == CITY_TOOL_GROUP_RAIL && variant == CITY_RAIL_BRIDGE ? "Rail bridge" :
-        resources->tool_names.name[group][name_index];
+    const char *name = CityToolName(group, name_index);
     CopyText(ui->tool_labels[group], sizeof(ui->tool_labels[group]), name);
     ui->tool_indices[group] = (int)name_index;
-    ui->selected_cursor =
-        group == CITY_TOOL_GROUP_TREE_WATER && variant != CITY_TREE_WATER_TREES ? CITY_CURSOR_WATER : cursors[group];
+    ui->selected_cursor = group == CITY_TOOL_GROUP_TREE_WATER && variant != CITY_TREE_WATER_TREES ?
+        CITY_CURSOR_WATER : kCityToolCursors[group];
     ui->tool_group = group;
     ui->selection.value[group] = variant;
     if (group == CITY_TOOL_GROUP_REWARDS)
@@ -177,7 +179,7 @@ void SelectCityToolGroupAndMode(Game *game, u32 group, u32 variant) {
     case CITY_TOOLBAR_BUTTON_NEIGHBORS:
     case CITY_TOOLBAR_BUTTON_GRAPHS:
     case CITY_TOOLBAR_BUTTON_INDUSTRY:
-      SetCityPanelVisibilityByCode(city, panels[group - CITY_TOOLBAR_BUTTON_MAP]);
+      SetCityPanelVisibilityByCode(city, kPanels[group - CITY_TOOLBAR_BUTTON_MAP]);
       break;
     case CITY_TOOLBAR_BUTTON_BUDGET: {
       ShowBudgetDialogManually(city);
@@ -226,6 +228,28 @@ void SelectCityToolGroupAndMode(Game *game, u32 group, u32 variant) {
       }
     }
   }
+}
+
+bool SelectCityToolWithModifiers(Game *game, int group, int variant, u32 modifiers) {
+  ClearGameError(game);
+  CityInterfaceState *ui = game->ui;
+  SetCityAltKeyPressed(ui, (modifiers & CITY_POINTER_MODIFIER_ALT) != 0);
+  SetCityShiftKeyPressed(ui, (modifiers & CITY_POINTER_MODIFIER_SHIFT) != 0);
+  SetCityCtrlKeyPressed(ui, (modifiers & CITY_POINTER_MODIFIER_CONTROL) != 0);
+  SelectCityToolGroupAndMode(game, group, variant);
+  if (game->city->settings.timer_mode == CITY_TIMER_STOPPED) {
+    if (group == CITY_TOOL_GROUP_TREE_WATER) {
+      ui->terrain_tool = variant == CITY_TREE_WATER_WATER ? CITY_TERRAIN_TOOL_WATER : CITY_TERRAIN_TOOL_TREE;
+    } else if (group == CITY_TOOL_GROUP_DEMOLISH) {
+      switch (variant) {
+      case CITY_DEMOLISH_RAISE: ui->terrain_tool = CITY_TERRAIN_TOOL_RAISE; break;
+      case CITY_DEMOLISH_LOWER: ui->terrain_tool = CITY_TERRAIN_TOOL_LOWER; break;
+      case CITY_DEMOLISH_LEVEL: ui->terrain_tool = CITY_TERRAIN_TOOL_LEVEL; break;
+      default: ui->terrain_tool = CITY_TERRAIN_TOOL_NONE; break;
+      }
+    } else ui->terrain_tool = CITY_TERRAIN_TOOL_CENTER;
+  }
+  return !GetGameError(game);
 }
 
 // SAR r16 masks the count to five bits, then saturates its sign for counts >= 16.
@@ -277,7 +301,6 @@ void ResetCityRewardSelection(City *city) {
   SelectCityToolGroupAndMode(city->game, CITY_TOOLBAR_BUTTON_CENTER, CITY_TOOL_VARIANT_DEFAULT);
 }
 
-// Rebuild native tool choices; original menu receivers are comparison-only.
 void RebuildCityToolbar(City *city) {
   Game *game = city->game;
   CityInterfaceState *ui = game->ui;
@@ -313,8 +336,8 @@ void RebuildCityToolbar(City *city) {
     if ((available & (1 << variant)) == 0)
       continue;
     ui->tool_indices[CITY_TOOL_GROUP_REWARDS] = variant;
-    memcpy(ui->tool_labels[CITY_TOOL_GROUP_REWARDS], game->resources->tool_names.name[CITY_TOOL_GROUP_REWARDS][variant],
-        sizeof(ui->tool_labels[CITY_TOOL_GROUP_REWARDS]));
+    CopyText(ui->tool_labels[CITY_TOOL_GROUP_REWARDS], sizeof(ui->tool_labels[CITY_TOOL_GROUP_REWARDS]),
+        CityToolName(CITY_TOOL_GROUP_REWARDS, variant));
     break;
   }
 }
@@ -498,44 +521,6 @@ void ShowCityMapControls(City *city, bool visible) {
 
 void RestoreCityMapControls(City *city) {
   if (city->drawing->map_state.scroll_redraw) ShowCityMapControls(city, true);
-}
-
-// Format tool help or the selected name and construction cost.
-void FormatCityToolStatusText(const CityResourceState *assets, char *text, u32 capacity, int tool) {
-  if (tool == CITY_CANVAS_TOOL_RAISE_TERRAIN || tool == CITY_CANVAS_TOOL_LOWER_TERRAIN) {
-    CopyText(text, capacity, tool == CITY_CANVAS_TOOL_RAISE_TERRAIN ?
-        "Raise terrain: drag to select a range of tiles, then release to raise them" :
-        "Lower terrain: drag to select a range of tiles, then release to lower them");
-    return;
-  }
-  if (tool == CITY_CANVAS_TOOL_STREAM) {
-    CopyText(text, capacity, "Place stream: click a source to grow a gently winding downhill stream");
-    return;
-  }
-  if (tool == CITY_CANVAS_TOOL_LEVEL_TERRAIN || tool == CITY_CANVAS_TOOL_STRETCH_TERRAIN) {
-    CopyText(text, capacity, tool == CITY_CANVAS_TOOL_LEVEL_TERRAIN ?
-        "Level terrain: drag an area to flatten it to the starting elevation" :
-        "Stretch terrain: grab a tile and drag up or down to change its height");
-    return;
-  }
-  if (tool == CITY_CANVAS_TOOL_ROAD_BRIDGE || tool == CITY_CANVAS_TOOL_RAIL_BRIDGE) {
-    CopyText(text, capacity, tool == CITY_CANVAS_TOOL_ROAD_BRIDGE ?
-        "Road bridge: drag between two endpoints" : "Rail bridge: drag between two endpoints");
-    return;
-  }
-  i32 packed = Sc2kCanvasMapPointerTools(tool, 0);
-  if (packed < 0) {
-    snprintf(text, capacity, "%s", "Centering Tool");
-    return;
-  }
-  i32 group = packed & 255;
-  i32 variant = (packed >> 8) & 255;
-  const char *name = assets->tool_names.name[group][variant];
-  u32 cost = group < CITY_TOOL_GROUP_QUERY ? kCityToolCosts[group * CITY_TOOL_VARIANT_CAPACITY + variant] : 0;
-  if (cost)
-    snprintf(text, capacity, "%s $%u", name, cost);
-  else
-    snprintf(text, capacity, "%s", name);
 }
 
 static void CanvasDrawToolStatus(Canvas *canvas, const Window *window) {

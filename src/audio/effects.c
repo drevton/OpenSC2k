@@ -16,6 +16,12 @@
 
 typedef struct { int left, right; } CityMixedFrame;
 
+enum {
+  kSelectionSoundGain = 7183,
+  kLimiterReleaseFrames = CITY_SOUND_SAMPLE_RATE / 10,
+  kEffectDuplicateWindowFrames = CITY_SOUND_SAMPLE_RATE / 10,
+};
+
 static inline void AdvanceCityEffectVoice(CityEffectVoice *voice, int frames) {
   voice->position += frames;
   if (voice->position == voice->frames) {
@@ -32,10 +38,13 @@ static inline int ReadCityEffectVoice(CityEffectVoice *voice) {
 }
 
 static inline CityMixedFrame MixCityAudioFrame(CityAudioState *audio, int click_volume) {
-  int single = ReadCityEffectVoice(&audio->effect) * audio->effect_volume / 100;
-  if (audio->effect.samples && !audio->effect.repetitions) atomic_store(&audio->effect_finished, 1);
-  int left = single * (audio->effect.pan > 128 ? 255 - audio->effect.pan : 128) / 128;
-  int right = single * (audio->effect.pan < 128 ? audio->effect.pan : 128) / 128;
+  CityEffectVoice *effect = &audio->effect;
+  int repetitions = effect->repetitions;
+  int single = ReadCityEffectVoice(effect) * audio->effect_volume / 100;
+  // Publish the finishing transition once. The callback's source scan handles an already-finished voice.
+  if (repetitions && !effect->repetitions) atomic_store(&audio->effect_finished, 1);
+  int left = single * (effect->pan > 128 ? 255 - effect->pan : 128) / 128;
+  int right = single * (effect->pan < 128 ? effect->pan : 128) / 128;
   int effects_left = 0, effects_right = 0;
   for (int index = 0; index < CITY_EFFECT_VOICES; ++index) {
     CityEffectVoice *voice = &audio->effect_voices[index];
@@ -66,7 +75,7 @@ static bool MixSingleCityAudioSource(CityAudioState *audio, u8 *stream, int byte
   }
   if (count != 1 || !unity_gain) return false;
   bool click = voice == &audio->click;
-  int volume = click ? 7183 * audio->effect_volume / 100 : audio->effect_volume;
+  int volume = click ? kSelectionSoundGain * audio->effect_volume / 100 : audio->effect_volume;
   int left_gain = voice->pan > 128 ? 255 - voice->pan : 128;
   int right_gain = voice->pan < 128 ? voice->pan : 128;
   int frames = bytes / (2 * sizeof(i16)), written = 0;
@@ -101,7 +110,6 @@ static void EffectMix(void *context, u8 *stream, int bytes) {
   i16 *output = (i16 *)stream;
   int frames = bytes / (2 * sizeof(i16)), frame = 0;
   // OpenTTD selection beep's centered gain; independent of game-effect voices.
-  const int kSelectionSoundGain = 7183;
   int click_volume = kSelectionSoundGain * audio->effect_volume / 100;
   float gain = audio->mix_gain > 0 ? audio->mix_gain : 1;
   if (MixSingleCityAudioSource(audio, stream, bytes, gain == 1)) return;
@@ -127,7 +135,7 @@ static void EffectMix(void *context, u8 *stream, int bytes) {
       // attenuating. Snap back to unity within 0.009 dB, then resume the fast loop.
       for (; frame < frames; ++frame) {
         CityMixedFrame mixed = MixCityAudioFrame(audio, click_volume);
-        gain += (1 - gain) / 4410;
+        gain += (1 - gain) / kLimiterReleaseFrames;
         int peak = IntMax(abs(mixed.left), abs(mixed.right));
         if (peak * gain > 32760) gain = 32760.0f / peak;
         output[frame * 2] = mixed.left * gain;
@@ -150,7 +158,7 @@ void NativeAudioClick(CityAudioState *audio) {
   SDL_UnlockAudioDevice(audio->effects_device);
 }
 
-static CityEffectVoice CityAssetEffectVoice(CityAudioState *audio, int sound_id, int repetitions) {
+static CityEffectVoice CityAssetEffectVoice(const CityAudioState *audio, int sound_id, int repetitions) {
   if (!audio->assets || !IsCitySoundEffectId(sound_id)) return (CityEffectVoice){0};
   ByteSpan source = GetAsset(audio->assets, CITY_ASSET_SOUND_FIRST + sound_id - CITY_SOUND_FIRST);
   return (CityEffectVoice){.samples = source.data, .frames = source.size / sizeof(i16),
@@ -164,14 +172,10 @@ static void LoadCitySelectionSound(CityAudioState *audio) {
   audio->click.position = audio->click.frames;
 }
 
-// Caller holds SDL's device lock. The recording remains owned by Assets.
-static void ReleaseCityEffectVoice(CityAudioState *audio, int index) {
-  audio->effect_voices[index] = (CityEffectVoice){0};
-}
-
+// Caller holds SDL's device lock. Clearing records leaves the recordings owned by Assets.
 static void ReapCityEffectVoices(CityAudioState *audio) {
   for (int index = 0; index < CITY_EFFECT_VOICES; ++index)
-    if (!audio->effect_voices[index].repetitions) ReleaseCityEffectVoice(audio, index);
+    if (!audio->effect_voices[index].repetitions) audio->effect_voices[index] = (CityEffectVoice){0};
 }
 
 bool IsCityMixedEffectPlaying(const CityAudioState *audio, int sound_id) {
@@ -193,7 +197,7 @@ void StopCityMixedEffect(CityAudioState *audio, int sound_id) {
   if (!audio->effects_device) return;
   SDL_LockAudioDevice(audio->effects_device);
   for (int index = 0; index < CITY_EFFECT_VOICES; ++index)
-    if (audio->effect_voices[index].sound_id == sound_id) ReleaseCityEffectVoice(audio, index);
+    if (audio->effect_voices[index].sound_id == sound_id) audio->effect_voices[index] = (CityEffectVoice){0};
   SDL_UnlockAudioDevice(audio->effects_device);
 }
 
@@ -218,7 +222,7 @@ bool PlayCityMixedEffect(CityAudioState *audio, int sound_id, int repetitions, u
       SDL_UnlockAudioDevice(audio->effects_device);
       return true;
     }
-    if (voice->position < 4410 || ++same >= 2) {
+    if (voice->position < kEffectDuplicateWindowFrames || ++same >= 2) {
       SDL_UnlockAudioDevice(audio->effects_device);
       return false;
     }
@@ -244,7 +248,7 @@ static void StopEffect(CityAudioState *audio) {
   SDL_LockAudioDevice(audio->effects_device);
   audio->effect = (CityEffectVoice){0};
   atomic_store(&audio->effect_finished, 0);
-  for (int index = 0; index < CITY_EFFECT_VOICES; ++index) ReleaseCityEffectVoice(audio, index);
+  memset(audio->effect_voices, 0, sizeof(audio->effect_voices));
   SDL_UnlockAudioDevice(audio->effects_device);
 }
 
@@ -307,7 +311,7 @@ void OpenCityEffectMixer(CityAudioState *audio) {
   audio->effect_volume = 80;
   if (!SDL_InitSubSystem(SDL_INIT_AUDIO)) {
     SDL_AudioSpec desired = {0};
-    desired.freq = 44100; desired.format = AUDIO_S16SYS; desired.channels = 2;
+    desired.freq = CITY_SOUND_SAMPLE_RATE; desired.format = AUDIO_S16SYS; desired.channels = 2;
     desired.samples = 1024; desired.callback = EffectMix; desired.userdata = audio;
     SDL_AudioSpec obtained;
     audio->effects_device = SDL_OpenAudioDevice(NULL, 0, &desired, &obtained, 0);

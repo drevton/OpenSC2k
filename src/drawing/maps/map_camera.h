@@ -23,12 +23,6 @@ CityPoint CityMapViewTilePoint(const City *city, TileIndex tile);
 TileIndex CityMapViewNeighbor(const City *city, TileIndex tile, int dx, int dy);
 int CityMapCameraShape(int shape, int rotation);
 SC2K_PRESERVE_MOST int CityMapCameraMask(int mask, int rotation);
-typedef struct CityResourceState CityResourceState;
-int CityMapCameraSprite(const CityResourceState *assets, int layout, int rotation);
-int CityMapViewTileFlip(const City *city, TileIndex tile);
-// Resolve source cache slots in world space or the active view, independently of zoom.
-int CityMapTileSpriteIndex(const City *city, TileIndex tile);
-int CityMapViewTileSpriteIndex(const City *city, TileIndex tile);
 CityTileGeometry ReadCityMapViewGeometry(const City *city, TileIndex tile);
 // Underground drawing, picking and selection share the stored land/bed in the active camera.
 // Elevation is in map levels; u/v span one tile from 0 to 1. Selection can construct fractional profiles from pixels,
@@ -44,8 +38,8 @@ int CityMapViewTerrainCode(const City *city, TileIndex tile);
 // Raw stock records retain their combined-code interpretation, with water codes normalized to -1.
 int CityMapDryGroundShape(const City *city, TileIndex tile, const CityTileGeometry *geometry);
 int CityMapViewUnderground(const City *city, TileIndex tile);
-int CityMapViewOrientation(const City *city, TileIndex tile);
 // The leftmost visible footprint corner, used to paint shared building artwork once.
+// Requires a valid world tile; reads the bound view's camera and each family's footprint without changing state.
 bool IsCityMapViewFootprintAnchor(const City *city, TileIndex tile);
 // Pick logical camera pixels or transfer the world point at its center. Neither operation binds or modifies a view.
 // Terrain, layer visibility and underground mode come from the supplied City and its Drawing options.

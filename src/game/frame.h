@@ -7,7 +7,7 @@ typedef struct Game Game;
 typedef struct CanvasSDL CanvasSDL;
 
 // Sequence presentation clocks, UI updates, map painting and composition for this City.
-// Map painting uses a scoped scalar copy; borrowed map storage remains read-only.
+// Map painting borrows City read-only; Drawing and UI retain mutable presentation state.
 // A NULL display uses UI's attached display; without one the framebuffer is still prepared.
 // Preparation does not upload pixels. Failure retains completed owner updates and partial drawing work.
 bool PrepareCityCanvas(City *city, CanvasSDL *display);

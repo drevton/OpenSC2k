@@ -13,7 +13,6 @@ Source artwork, source WAVs and intermediate bake formats remain authoring input
 runtime resource files. Native startup never selects loose checkout files when a pack is missing
 or corrupt. Explicit graphics/audio development overrides retain their existing startup-only behavior.
 The retired `SC2KRES1` extracted-executable archive loader has been removed from native code.
-Original resources for diagnostic comparison remain confined to the optional comparison adapters.
 
 ## Shared format and loader
 

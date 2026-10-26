@@ -8,7 +8,6 @@
 
 #include "city/engine/city_name.h"
 #include "city/engine/commands.h"
-#include "city/maps/layers.h"
 #include "city/state.h"
 #include "game/errors.h"
 #include "game/state.h"
@@ -18,6 +17,7 @@
 
 static Game *LuaGame(lua_State *state) { return *(Game **)lua_getextraspace(state); }
 
+// Keep each converted string on the Lua stack until copied; its size may exceed the native int range.
 static int LuaPrint(lua_State *state) {
   char line[2048] = {0};
   size_t length = 0;
@@ -25,7 +25,8 @@ static int LuaPrint(lua_State *state) {
     size_t size;
     const char *text = luaL_tolstring(state, i, &size);
     if (i > 1 && length + 1 < sizeof(line)) line[length++] = '\t';
-    size = IntMin(size, sizeof(line) - length - 1);
+    size_t available = sizeof(line) - length - 1;
+    if (size > available) size = available;
     memcpy(line + length, text, size);
     length += size;
     lua_pop(state, 1);
@@ -54,25 +55,27 @@ static int LuaCityCommand(lua_State *state) {
 }
 
 static int LuaTile(lua_State *state) {
-  City *city = LuaGame(state)->city;
+  const City *city = LuaGame(state)->city;
   const char *layer = luaL_checkstring(state, 1);
-  int tile = LuaInteger(state, 2, -1);
-  if (tile < 0 || tile >= city->map_cell_count) return luaL_argerror(state, 2, "invalid tile index");
+  // Unsigned admission rejects negative Lua integers as out-of-map indexes.
+  TileIndex tile = LuaInteger(state, 2, -1);
+  if (tile >= city->map_cell_count) return luaL_argerror(state, 2, "invalid tile index");
+  const TileInfo *tp = &city->tile[tile];
   int value;
-  if (!strcmp(layer, "tiles")) value = city->tile[tile].kind;
-  else if (!strcmp(layer, "terrain")) value = city->tile[tile].terrain;
-  else if (!strcmp(layer, "flags")) value = city->tile[tile].flags;
-  else if (!strcmp(layer, "zones")) value = ReadTileZoneByte(&city->tile[tile]);
-  else if (!strcmp(layer, "underground")) value = city->tile[tile].underground;
-  else if (!strcmp(layer, "altitude")) value = city->tile[tile].altitude;
-  else if (!strcmp(layer, "overlays")) value = city->tile[tile].overlay;
+  if (!strcmp(layer, "tiles")) value = tp->kind;
+  else if (!strcmp(layer, "terrain")) value = tp->terrain;
+  else if (!strcmp(layer, "flags")) value = tp->flags;
+  else if (!strcmp(layer, "zones")) value = ReadTileZoneByte(tp);
+  else if (!strcmp(layer, "underground")) value = tp->underground;
+  else if (!strcmp(layer, "altitude")) value = tp->altitude;
+  else if (!strcmp(layer, "overlays")) value = tp->overlay;
   else return luaL_argerror(state, 1, "unknown map layer");
   lua_pushinteger(state, value);
   return 1;
 }
 
 static int LuaTileXY(lua_State *state) {
-  City *city = LuaGame(state)->city;
+  const City *city = LuaGame(state)->city;
   int x = LuaInteger(state, 1, -1), y = LuaInteger(state, 2, -1);
   TileIndex tile = MapTileXYOrInvalid(city, x, y);
   if (tile == INVALID_TILE) return luaL_error(state, "coordinates outside the city");
@@ -86,7 +89,7 @@ static void LuaNumber(lua_State *state, const char *name, lua_Integer value) {
 }
 
 static int LuaCitySummary(lua_State *state) {
-  City *city = LuaGame(state)->city;
+  const City *city = LuaGame(state)->city;
   lua_newtable(state);
   LuaNumber(state, "width", city->map_width);
   LuaNumber(state, "height", city->map_height);
@@ -163,7 +166,8 @@ void RunCityLua(Game *game, const char *code, bool file) {
     AppendCityConsoleOutput(game, "The current script is still running.");
     return;
   }
-  if (file && (strlen(code) < 4 || strcmp(code + strlen(code) - 4, ".lua"))) {
+  size_t length = strlen(code);
+  if (file && (length < 4 || strcmp(code + length - 4, ".lua"))) {
     AppendCityConsoleOutput(game, "Scripts must have a .lua filename.");
     return;
   }
@@ -175,7 +179,7 @@ void RunCityLua(Game *game, const char *code, bool file) {
   game->script_running = true;
   game->script_instructions = 1000000;
   lua_sethook(state, LuaBudget, LUA_MASKCOUNT, 1000);
-  int result = file ? luaL_loadfilex(state, code, "t") : luaL_loadbufferx(state, code, strlen(code), "console", "t");
+  int result = file ? luaL_loadfilex(state, code, "t") : luaL_loadbufferx(state, code, length, "console", "t");
   if (!result) result = lua_pcall(state, 0, LUA_MULTRET, 0);
   if (!result && lua_gettop(state)) {
     // Result conversion can invoke __tostring or exhaust the still-active instruction budget.
