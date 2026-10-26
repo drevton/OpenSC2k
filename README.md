@@ -1,6 +1,7 @@
 # OpenSC2k
 
-**OpenSC2k is an open-source SimCity 2000 clone**, with new graphics, music and sound effects.
+**OpenSC2k is an open-source SimCity 2000 clone**, featuring **4× resolution graphics
+in 32-bit color (32 bpp)**, plus new music and sound effects.
 Build residential, commercial and industrial districts, connect them with roads and rail,
 supply power and water, and manage city services and finances.
 
@@ -18,7 +19,7 @@ OpenSC2k is under active development.
 
 *The same district at a closer zoom, using the game's native artwork and interface.*
 
-OpenSC2k is written in C, with integer simulation, software rendering and SDL2 presentation.
+OpenSC2k is written in C and uses software rendering with SDL2 presentation.
 This repository includes the standalone game, its artwork and audio, and the tools used to bake resource packs.
 
 ## Build and play
