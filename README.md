@@ -1,9 +1,25 @@
 # OpenSC2k
 
-A native city simulator written in C, with integer simulation, software rendering and SDL2 presentation.
-This repository contains the standalone game, native artwork and audio, and the tools that bake its resource packs.
-It includes no original SimCity game files, comparison adapters, executable extracts or development captures.
-Existing SC2 city files can still be imported through the game's file codecs.
+**OpenSC2k is an open-source SimCity 2000 clone**, with new graphics, music and sound effects.
+Build residential, commercial and industrial districts, connect them with roads and rail,
+supply power and water, and manage city services and finances.
+
+The game runs on its own, without an original SimCity 2000 installation or game data files.
+You can import existing `.SC2` cities or generate a new landscape and build your own.
+OpenSC2k is under active development.
+
+[Download releases](https://github.com/drevton/OpenSC2k/releases) · [Build from source](#build-and-play)
+
+![OpenSC2k city overview showing a downtown district, neighborhoods, roads and parks](docs/screenshots/city-overview.png)
+
+*A showcase city rendered in OpenSC2k.*
+
+![OpenSC2k at a closer zoom, showing skyscrapers, apartments, trees and parks](docs/screenshots/city-detail.png)
+
+*The same district at a closer zoom, using the game's native artwork and interface.*
+
+OpenSC2k is written in C, with integer simulation, software rendering and SDL2 presentation.
+This repository includes the standalone game, its artwork and audio, and the tools used to bake resource packs.
 
 ## Build and play
 
